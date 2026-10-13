@@ -144,6 +144,7 @@ async def propose_plans(candidates: list[dict[str, Any]], runtime: ToolRuntime[R
                 "rationale": candidate.get("rationale", ""),
                 "source": source,
                 "document": document,
+                "calls": plan_format.review(document, values, skills, tools),
                 "input_slots": [s | {"value": values.get(s["key"])} for s in slots],
                 "input_values": values,
             }
@@ -166,10 +167,16 @@ async def propose_plans(candidates: list[dict[str, Any]], runtime: ToolRuntime[R
     if choice.get("action") == "revise":
         return _reply(runtime, f"사용자가 계획 수정을 요청했습니다: {choice.get('feedback', '')}")
     chosen = prepared[int(choice.get("index", 0))]
-    values = {**chosen["input_values"], **(choice.get("input_values") or {})}
+    edits = {**(choice.get("input_values") or {}), **(choice.get("overrides") or {})}
+    document, values = plan_format.apply_overrides(chosen["document"], chosen["input_values"], edits)
+    errors = spec.validate(document, skills, tools)
+    if errors:
+        return _reply(runtime, "사용자가 수정한 값으로 계획이 맞지 않습니다:\n" + "\n".join(errors))
+    chosen = {**chosen, "document": document}
     missing = [s["key"] for s in chosen["input_slots"] if s["required"] and values.get(s["key"]) is None]
     if missing:
         return _reply(runtime, f"필수 입력값이 비어 있습니다: {missing}. ask_user로 받은 뒤 다시 제안하세요.")
+    changed = [k for k in (choice.get("overrides") or {}) if k not in chosen["input_values"]]
     plan = {
         "id": new_id(),
         "title": chosen["title"],
@@ -181,7 +188,8 @@ async def propose_plans(candidates: list[dict[str, Any]], runtime: ToolRuntime[R
     }
     await ctx.emit("plan_approved", {"plan_id": plan["id"], "title": plan["title"], "document": plan["document"]})
     calls = ", ".join(f"#{i} {c.tool}" for i, c in enumerate(spec.calls(plan["document"])))
-    return _reply(runtime, f"계획 승인됨: {plan['title']} ({calls}). run_plan으로 실행하세요.", plan=plan)
+    note = f" 사용자가 값을 바꾼 파라미터: {changed}." if changed else ""
+    return _reply(runtime, f"계획 승인됨: {plan['title']} ({calls}).{note} run_plan으로 실행하세요.", plan=plan)
 
 
 def _by_call_index(errors: list[str], keys: list[str]) -> list[str]:

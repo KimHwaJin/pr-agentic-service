@@ -13,6 +13,7 @@ anything else is a literal. Consecutive calls of one skill become one Workflow s
 always/conditional comes from the skill's Tool list.
 """
 
+import json
 import re
 from typing import Any
 
@@ -97,3 +98,80 @@ def describe(document: dict[str, Any]) -> list[dict[str, Any]]:
                     args[param] = arg["value"]
             calls.append({"skill": step["skill"], "tool": tool["tool"], "execution": tool["execution"], "args": args})
     return calls
+
+
+def review(document: dict[str, Any], input_values: dict[str, Any], skills: SkillCatalog, tools) -> list[dict[str, Any]]:
+    """What the approval screen shows per call: skill, tool and every parameter with where its value comes from.
+
+    source: literal (decided by the agent), input (the user fills it; prefilled when the request said it),
+    tool_output (an earlier call's result) or default (left to the tool's default).
+    """
+    flat = spec.calls(document)
+    number = {c.key: i for i, c in enumerate(flat)}
+    views = []
+    for i, call in enumerate(flat):
+        tool = tools.tools.get(call.tool)
+        skill = skills.skills.get(call.skill)
+        rule = next((t for t in skill.tools if t.tool == call.tool), None) if skill else None
+        params = []
+        for p in tool.params if tool else ():
+            arg = call.arguments.get(p.name)
+            view = {
+                "name": p.name,
+                "type": p.annotation,
+                "required": p.required,
+                "doc": tool.param_docs.get(p.name, ""),
+                "key": f"{call.key}.{p.name}",
+            }
+            if arg is None:
+                view |= {"source": "default", "value": None, "default": p.default}
+            elif arg["source"] == "literal":
+                view |= {"source": "literal", "value": arg["value"]}
+            elif arg["source"] == "input":
+                view |= {"source": "input", "value": input_values.get(view["key"])}
+            else:
+                ref = f"{arg['step_index']}.{arg['tool_index']}"
+                view |= {
+                    "source": "tool_output",
+                    "ref": {
+                        "call": number.get(ref),
+                        "tool": flat[number[ref]].tool if ref in number else None,
+                        "output": arg["output"],
+                    },
+                }
+            params.append(view)
+        views.append(
+            {
+                "index": i,
+                "key": call.key,
+                "skill": call.skill,
+                "skill_description": skill.description if skill else "",
+                "tool": call.tool,
+                "summary": tool.summary if tool else "",
+                "execution": call.execution,
+                "condition": rule.condition if rule and call.execution == "conditional" else None,
+                "params": params,
+            }
+        )
+    return views
+
+
+def apply_overrides(
+    document: dict[str, Any], input_values: dict[str, Any], overrides: dict[str, Any]
+) -> tuple[dict, dict]:
+    """User edits on the approval screen: an input key fills the input, any other parameter becomes a fixed value."""
+    document = json.loads(json.dumps(document))
+    values = dict(input_values)
+    steps = document["workflow"]["steps"]
+    for key, value in overrides.items():
+        try:
+            si, ti, param = key.split(".", 2)
+            call = steps[int(si)]["tools"][int(ti)]
+        except (ValueError, IndexError):
+            continue
+        arg = call.get("arguments", {}).get(param)
+        if arg and arg["source"] == "input":
+            values[key] = value
+        elif not arg or arg["source"] == "literal":
+            call.setdefault("arguments", {})[param] = {"source": "literal", "value": value}
+    return document, values

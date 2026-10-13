@@ -196,6 +196,47 @@
   .usage .bar { height: 5px; background: var(--hover); border-radius: 99px; margin-top: 5px; overflow: hidden; }
   .usage .bar i { display: block; height: 100%; background: var(--accent); }
 
+  /* HITL side panel */
+  .hitl { width: 520px; flex: none; border-left: 1px solid var(--line); background: var(--panel); display: none; flex-direction: column; min-height: 0; }
+  .hitl.open { display: flex; }
+  @media (max-width: 1200px) { .hitl { position: fixed; top: 0; right: 0; bottom: 0; width: min(520px, 94vw); z-index: 15; box-shadow: -12px 0 40px rgba(0,0,0,.18); } }
+  .hitl-head { padding: 16px 20px 10px; border-bottom: 1px solid var(--line); }
+  .hitl-head .kicker { font-size: 12px; color: var(--accent); font-weight: 600; letter-spacing: .02em; }
+  .hitl-head h3 { margin: 4px 0 0; font-size: 17px; }
+  .hitl-head .sub { color: var(--muted); font-size: 13px; margin-top: 4px; }
+  .hitl-body { flex: 1; overflow: auto; padding: 14px 20px 20px; }
+  .hitl-foot { border-top: 1px solid var(--line); padding: 12px 20px; display: flex; flex-direction: column; gap: 8px; }
+  .hitl-foot .row { display: flex; gap: 8px; align-items: center; }
+  .hitl-foot input { flex: 1; border: 1px solid var(--line); border-radius: 10px; padding: 8px 12px; background: var(--bg); outline: none; }
+  .cand-tabs { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
+  .cand-tab { border: 1px solid var(--line); border-radius: 10px; padding: 7px 12px; font-size: 13px; text-align: left; background: var(--bg); max-width: 100%; }
+  .cand-tab b { font-weight: 600; margin-right: 4px; }
+  .cand-tab.on { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; background: var(--panel); }
+  .rationale { font-size: 13px; color: var(--muted); background: var(--bg); border-radius: 10px; padding: 10px 12px; margin-bottom: 14px; }
+  .skill-group { margin-bottom: 14px; }
+  .skill-head { font-size: 12px; color: var(--muted); margin: 0 0 6px; display: flex; gap: 6px; align-items: baseline; }
+  .skill-head b { color: var(--ink); font-size: 13px; }
+  .tool-card { border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; margin-bottom: 8px; }
+  .tool-card .tname { display: flex; gap: 8px; align-items: center; font-weight: 600; font-size: 14px; }
+  .tool-card .tname .no { color: var(--faint); font-weight: 500; font-size: 12px; }
+  .tool-card .tsum { color: var(--muted); font-size: 12.5px; margin: 2px 0 8px; }
+  .cond { font-size: 12px; background: #fdf3e7; color: #8a5a12; border-radius: 8px; padding: 6px 9px; margin-bottom: 8px; }
+  .param { display: grid; grid-template-columns: 150px 1fr; gap: 6px 10px; align-items: center; padding: 5px 0; }
+  .param .pl { font-size: 12.5px; }
+  .param .pl code { font-size: 12.5px; }
+  .param .pl small { display: block; color: var(--faint); font-size: 11px; }
+  .param input { width: 100%; border: 1px solid var(--line); border-radius: 8px; padding: 6px 9px; background: var(--bg); font-size: 13px; outline: none; }
+  .param input:focus { border-color: var(--faint); }
+  .param.need input { background: #fff8f3; border-color: #f0c9b3; }
+  .param.need input:not(:placeholder-shown) { background: var(--bg); border-color: var(--line); }
+  .param .help { grid-column: 2; font-size: 11.5px; color: var(--faint); margin-top: -2px; }
+  .tag { font-size: 10.5px; padding: 1px 6px; border-radius: 6px; margin-left: 4px; vertical-align: 1px; }
+  .tag.agent { background: #e8eef7; color: #3b5c8c; } .tag.user { background: #fde9df; color: var(--accent); } .tag.opt { background: var(--code); color: var(--muted); }
+  .ref { font-size: 12.5px; color: var(--muted); background: var(--code); border-radius: 8px; padding: 5px 9px; }
+  .defaults > summary { font-size: 12px; color: var(--faint); cursor: pointer; padding: 4px 0; }
+  .hitl-note { display: flex; align-items: center; gap: 10px; margin: 12px 0; padding: 10px 14px; border: 1px dashed var(--accent); border-radius: 12px; color: var(--accent); font-size: 14px; cursor: pointer; background: var(--panel); }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .cond { background: #3a2f1f; color: #e3b46b; } :root:not([data-theme="light"]) .tag.agent { background: #2b3546; color: #9fb7dc; } :root:not([data-theme="light"]) .param.need input { background: #3a2c25; border-color: #6b4535; } }
+
   .lightbox { position: fixed; inset: 0; background: rgba(0,0,0,.7); display: none; place-items: center; z-index: 10; cursor: zoom-out; }
   .lightbox img { max-width: 92vw; max-height: 92vh; border-radius: 8px; background: #fff; }
 </style>
@@ -242,6 +283,11 @@
   </div>
 </main>
 
+<div class="hitl" id="hitl">
+  <div class="hitl-head"><div class="kicker" id="hitlKicker">확인 필요</div><h3 id="hitlTitle"></h3><div class="sub" id="hitlSub"></div></div>
+  <div class="hitl-body" id="hitlBody"></div>
+  <div class="hitl-foot" id="hitlFoot"></div>
+</div>
 <div class="drawer" id="drawer">
   <h3>워크플로우 <span style="font-weight:400">· 공개된 것과 내가 저장한 것</span></h3>
   <div id="workflows"></div>
@@ -424,10 +470,10 @@ function emptyState() {
 }
 function useIdea(b) { $('input').value = b.textContent; autosize(); $('input').focus(); }
 
-function newSession() { showChat(); S.session = null; S.run = null; closeStream(); setBusy(false); $('title').textContent = '새 대화'; $('level').value = ''; emptyState(); loadSessions(); }
+function newSession() { showChat(); closeHitl(); S.session = null; S.run = null; closeStream(); setBusy(false); $('title').textContent = '새 대화'; $('level').value = ''; emptyState(); loadSessions(); }
 
 async function openSession(id) {
-  showChat(); S.session = id; closeStream(); $('log').innerHTML = ''; S.answerEl = S.activity = null;
+  showChat(); closeHitl(); S.session = id; closeStream(); $('log').innerHTML = ''; S.answerEl = S.activity = null;
   const session = await api(`/sessions/${id}`);
   $('title').textContent = session.title; $('level').value = session.code_level ?? '';
   for (const m of await api(`/sessions/${id}/messages`)) m.role === 'user' ? addUser(m.content) : addAnswer(m.content, m.attachments);
@@ -498,7 +544,7 @@ function openStream() {
   on('execution_progress', e => { if (e.data.event_type === 'execution.step_completed') step(e.data.status === 'SUCCEEDED' ? 'ok' : 'bad', `단계 ${e.data.step?.sequence ?? ''} ${e.data.status === 'SUCCEEDED' ? '완료' : '실패'}`); });
   on('execution_completed', e => renderResults(e.data));
   on('hitl_request', e => renderHitl(e.run_id, e.data));
-  on('hitl_resolved', e => document.querySelectorAll(`[data-interrupt="${e.data.interrupt_id}"]`).forEach(n => n.remove()));
+  on('hitl_resolved', e => closeHitl(e.data.interrupt_id));
   on('artifact', e => addFiles([e.data]));
   on('memory_updated', e => { step('ok', `메모리 ${e.data.action === 'deleted' ? '삭제' : '업데이트'} · ${e.data.item.title || ''}`); });
   on('workflow_saved', e => { step('ok', `워크플로우 저장 · ${e.data.name}`); loadWorkflows(); });
@@ -559,54 +605,120 @@ function renderResults(data) {
 }
 function zoom(src) { $('lightboxImg').src = src; $('lightbox').style.display = 'grid'; }
 
+/* HITL: everything the user has to answer opens in the right panel ---------------- */
+const fmt = v => v === null || v === undefined ? '' : (typeof v === 'string' ? v : JSON.stringify(v));
+const parse = t => { const v = t.trim(); if (v === '') return null; try { return JSON.parse(v); } catch { return v; } };
+function closeHitl(id) { if (!id || $('hitl').dataset.interrupt === id) { $('hitl').classList.remove('open'); $('hitl').dataset.interrupt = ''; } document.querySelectorAll(`.hitl-note[data-interrupt="${id}"]`).forEach(n => n.remove()); }
+function openHitlPanel(w, kicker, title, sub) {
+  $('hitl').dataset.interrupt = w.interrupt_id; $('hitl').classList.add('open');
+  $('hitlKicker').textContent = kicker; $('hitlTitle').textContent = title; $('hitlSub').textContent = sub || '';
+  $('hitlBody').innerHTML = ''; $('hitlFoot').innerHTML = '';
+  const note = document.createElement('div'); note.className = 'hitl-note'; note.dataset.interrupt = w.interrupt_id;
+  note.innerHTML = `<span>●</span><span>${esc(title)} · 오른쪽 패널에서 확인해 주세요</span>`;
+  note.onclick = () => $('hitl').classList.add('open');
+  logEl().appendChild(note); scrollDown();
+}
+
 function renderHitl(runId, w) {
-  const card = document.createElement('div'); card.className = 'card'; card.dataset.interrupt = w.interrupt_id;
-  const resume = async value => { await api(`/runs/${runId}/resume`, { method: 'POST', body: { interrupt_id: w.interrupt_id, value } }); card.remove(); };
+  const resume = async value => { await api(`/runs/${runId}/resume`, { method: 'POST', body: { interrupt_id: w.interrupt_id, value } }); closeHitl(w.interrupt_id); };
+  const body = $('hitlBody'), foot = $('hitlFoot');
+  if (w.type === 'plan_approval') return renderPlanApproval(w, resume);
   if (w.type === 'question') {
-    card.innerHTML = `<h4>${esc(w.question)}</h4><div class="actions">${(w.options || []).map((o, i) => `<button class="opt" data-i="${i}">${esc(o)}</button>`).join('')}</div>
-      ${(w.fields || []).map(f => `<div class="field"><label>${esc(f.label || f.key)}</label><input data-key="${esc(f.key)}"></div>`).join('')}
-      <div class="actions"><input class="wide" id="free" placeholder="직접 입력" style="flex:1"><button class="btn primary" id="ok">답변</button></div>`;
-    card.querySelectorAll('[data-i]').forEach(b => b.onclick = () => resume(w.options[+b.dataset.i]));
-    card.querySelector('#ok').onclick = () => {
-      const fields = Object.fromEntries([...card.querySelectorAll('input[data-key]')].map(i => [i.dataset.key, i.value]));
-      const free = card.querySelector('#free').value;
+    openHitlPanel(w, '질문', w.question, 'Agent가 진행에 필요한 정보를 묻고 있습니다.');
+    body.innerHTML = `${(w.options || []).length ? `<div class="actions">${w.options.map((o, i) => `<button class="opt" data-i="${i}">${esc(o)}</button>`).join('')}</div>` : ''}
+      ${(w.fields || []).map(f => `<div class="param"><div class="pl">${esc(f.label || f.key)}${f.required ? '<span class="tag user">필수</span>' : ''}</div><input data-key="${esc(f.key)}"></div>`).join('')}`;
+    foot.innerHTML = `<div class="row"><input id="free" placeholder="직접 답변 입력"><button class="btn primary" id="ok">답변</button></div>`;
+    body.querySelectorAll('[data-i]').forEach(b => b.onclick = () => resume(w.options[+b.dataset.i]));
+    foot.querySelector('#ok').onclick = () => {
+      const fields = Object.fromEntries([...body.querySelectorAll('input[data-key]')].map(i => [i.dataset.key, i.value]));
+      const free = foot.querySelector('#free').value;
       resume(Object.keys(fields).length ? { ...fields, text: free } : free);
     };
-  } else if (w.type === 'plan_approval') {
-    card.innerHTML = `<h4>실행 계획을 골라 주세요</h4><div class="sub">선택한 계획의 입력값을 확인하고 승인하면 코드가 실행됩니다.</div>` + w.candidates.map((c, i) => `
-      <label class="cand"><div><input type="radio" name="cand-${w.interrupt_id}" value="${i}" ${i === 0 ? 'checked' : ''}><b>${esc(c.title)}</b>
-        <span class="badge">${c.source ? '등록된 워크플로우' : '새 계획'}</span></div>
-        <div class="sub" style="margin:4px 0 0">${esc(c.rationale)}</div>
-        <div class="flow">${c.document.workflow.steps.flatMap(s => s.tools.map(t => `<span>${esc(t.tool)}${t.execution === 'conditional' ? ' ?' : ''}</span>`)).join('→')}</div>
-        ${c.input_slots.map(s => `<div class="field"><label title="${esc(s.key)}">${s.required ? '* ' : ''}${esc(s.tool)} · ${esc(s.param)}</label><input data-cand="${i}" data-key="${esc(s.key)}" value='${esc(s.value == null ? '' : JSON.stringify(s.value))}' placeholder="${esc(s.type || '')}"></div>`).join('')}
-      </label>`).join('') + `<div class="actions"><button class="btn primary" id="ok">승인하고 실행</button><input class="wide" id="fb" placeholder="수정 요청 (예: 표본을 500개로)" style="flex:1"><button class="btn" id="rev">수정 요청</button><button class="btn" id="no">취소</button></div>`;
-    card.querySelector('#ok').onclick = () => {
-      const index = +card.querySelector(`input[name="cand-${w.interrupt_id}"]:checked`).value; const input_values = {};
-      for (const el of card.querySelectorAll(`input[data-cand="${index}"]`)) if (el.value.trim()) { try { input_values[el.dataset.key] = JSON.parse(el.value); } catch { input_values[el.dataset.key] = el.value; } }
-      resume({ action: 'approve', index, input_values });
-    };
-    card.querySelector('#rev').onclick = () => resume({ action: 'revise', feedback: card.querySelector('#fb').value });
-    card.querySelector('#no').onclick = () => resume({ action: 'cancel' });
   } else if (w.type === 'code_approval') {
-    card.innerHTML = `<h4>Agent가 작성한 코드를 실행할까요?</h4><div class="sub">${esc(w.purpose)} · 코드 레벨 ${w.code_level}</div><textarea id="code" rows="10">${esc(w.code)}</textarea>
-      <div class="actions"><button class="btn primary" id="ok">실행</button><input class="wide" id="fb" placeholder="거절 사유" style="flex:1"><button class="btn" id="no">거절</button></div>`;
-    card.querySelector('#ok').onclick = () => resume({ approve: true, code: card.querySelector('#code').value });
-    card.querySelector('#no').onclick = () => resume({ approve: false, feedback: card.querySelector('#fb').value });
+    openHitlPanel(w, '코드 실행 승인', 'Agent가 작성한 코드를 실행할까요?', `${w.purpose} · 코드 레벨 ${w.code_level}`);
+    body.innerHTML = `<textarea id="code" style="width:100%;min-height:360px;border:1px solid var(--line);border-radius:10px;padding:12px;background:var(--code);font:13px/1.5 'SF Mono',Menlo,monospace">${esc(w.code)}</textarea>`;
+    foot.innerHTML = `<div class="row"><input id="fb" placeholder="거절 사유 (선택)"><button class="btn" id="no">거절</button><button class="btn primary" id="ok">실행</button></div>`;
+    foot.querySelector('#ok').onclick = () => resume({ approve: true, code: body.querySelector('#code').value });
+    foot.querySelector('#no').onclick = () => resume({ approve: false, feedback: foot.querySelector('#fb').value });
   } else if (w.type === 'memory_change') {
-    card.innerHTML = `<h4>직접 작성하신 메모리를 바꿀까요?</h4><div class="sub">${esc(w.reason)}</div>
-      <table><tr><th>현재</th><td>${esc(w.item.title)} — ${esc(w.item.content)}</td></tr><tr><th>제안</th><td>${esc(w.proposed.title)} — ${esc(w.proposed.content)}</td></tr></table>
-      <div class="actions"><button class="btn primary" id="ok">변경</button><button class="btn" id="no">유지</button></div>`;
-    card.querySelector('#ok').onclick = () => resume({ approve: true });
-    card.querySelector('#no').onclick = () => resume({ approve: false });
+    openHitlPanel(w, '메모리 변경', '직접 작성하신 메모리를 바꿀까요?', w.reason);
+    body.innerHTML = `<div class="tool-card"><div class="tsum">현재</div><b>${esc(w.item.title)}</b><p>${esc(w.item.content)}</p></div><div class="tool-card"><div class="tsum">제안</div><b>${esc(w.proposed.title)}</b><p>${esc(w.proposed.content)}</p></div>`;
+    foot.innerHTML = `<div class="row" style="justify-content:flex-end"><button class="btn" id="no">유지</button><button class="btn primary" id="ok">변경</button></div>`;
+    foot.querySelector('#ok').onclick = () => resume({ approve: true });
+    foot.querySelector('#no').onclick = () => resume({ approve: false });
   } else if (w.type === 'workflow_save') {
-    card.innerHTML = `<h4>이 분석을 워크플로우로 저장할까요?</h4><div class="sub">저장하면 나중에 비슷한 요청에서 추천됩니다.${w.excluded_custom_steps ? ` Agent가 작성한 코드 ${w.excluded_custom_steps}개는 제외됩니다.` : ''}</div>
-      <div class="field"><label>이름</label><input id="name" value="${esc(w.name)}"></div>
-      <div class="field"><label>예시 질문 (줄마다 하나)</label><textarea id="q" rows="3" style="font-family:inherit">${esc(w.user_queries.join('\n'))}</textarea></div>
-      <div class="actions"><button class="btn primary" id="ok">저장</button><button class="btn" id="no">저장 안 함</button></div>`;
-    card.querySelector('#ok').onclick = () => resume({ approve: true, name: card.querySelector('#name').value, user_queries: card.querySelector('#q').value.split('\n').filter(Boolean) });
-    card.querySelector('#no').onclick = () => resume({ approve: false });
+    openHitlPanel(w, '워크플로우 저장', '이 분석을 워크플로우로 저장할까요?', `저장하면 비슷한 요청에서 추천됩니다.${w.excluded_custom_steps ? ` Agent가 작성한 코드 ${w.excluded_custom_steps}개는 제외됩니다.` : ''}`);
+    body.innerHTML = `<div class="form-row"><label>이름</label><input id="name" value="${esc(w.name)}"></div>
+      <div class="form-row"><label>예시 질문 (줄마다 하나)</label><textarea id="q">${esc(w.user_queries.join('\n'))}</textarea><div class="help">검색할 때 이 질문들과 비교해 추천합니다.</div></div>`;
+    foot.innerHTML = `<div class="row" style="justify-content:flex-end"><button class="btn" id="no">저장 안 함</button><button class="btn primary" id="ok">저장</button></div>`;
+    foot.querySelector('#ok').onclick = () => resume({ approve: true, name: body.querySelector('#name').value, user_queries: body.querySelector('#q').value.split('\n').filter(Boolean) });
+    foot.querySelector('#no').onclick = () => resume({ approve: false });
   }
-  logEl().appendChild(card); scrollDown();
+}
+
+function renderPlanApproval(w, resume) {
+  openHitlPanel(w, '실행 계획 확인', '실행 계획을 확인해 주세요', `후보 ${w.candidates.length}개 · 비어 있는 값을 채우고, Agent가 정한 값도 고칠 수 있습니다.`);
+  const body = $('hitlBody'), foot = $('hitlFoot');
+  const tabs = w.candidates.map((c, i) => `<button class="cand-tab ${i === 0 ? 'on' : ''}" data-i="${i}"><b>${i + 1}</b>${esc(c.title)} <span class="badge">${c.source ? '워크플로우' : '새 계획'}</span></button>`).join('');
+  const panes = w.candidates.map((c, i) => {
+    const groups = [];
+    for (const call of c.calls) { if (!groups.length || groups.at(-1).skill !== call.skill) groups.push({ skill: call.skill, desc: call.skill_description, calls: [] }); groups.at(-1).calls.push(call); }
+    return `<div class="cand-pane" data-i="${i}" style="${i ? 'display:none' : ''}">
+      ${c.rationale ? `<div class="rationale">${esc(c.rationale)}</div>` : ''}
+      ${groups.map(g => `<div class="skill-group"><div class="skill-head"><b>${esc(g.skill)}</b><span>${esc(g.desc)}</span></div>
+        ${g.calls.map(call => {
+          const shown = call.params.filter(p => p.source !== 'default'), defaults = call.params.filter(p => p.source === 'default');
+          return `<div class="tool-card"><div class="tname"><span class="no">#${call.index}</span>${esc(call.tool)}${call.execution === 'conditional' ? '<span class="badge">조건부</span>' : ''}</div>
+            <div class="tsum">${esc(call.summary)}</div>
+            ${call.condition ? `<div class="cond">실행 조건: ${esc(call.condition)} — 앞 단계 결과를 보고 Agent가 판단합니다.</div>` : ''}
+            ${shown.map(p => paramRow(p)).join('')}
+            ${defaults.length ? `<details class="defaults"><summary>기본값 사용 ${defaults.length}개 · ${defaults.map(p => esc(p.name)).join(', ')}</summary>${defaults.map(p => paramRow(p)).join('')}</details>` : ''}
+          </div>`;
+        }).join('')}</div>`).join('')}
+    </div>`;
+  }).join('');
+  body.innerHTML = `<div class="cand-tabs">${tabs}</div>${panes}`;
+  foot.innerHTML = `<div class="row"><input id="fb" placeholder="수정 요청 (예: 표본을 500개로, 상관분석도 추가)"><button class="btn" id="rev">수정 요청</button></div>
+    <div class="row" style="justify-content:flex-end"><span id="need" style="flex:1;font-size:12px;color:var(--accent)"></span><button class="btn" id="no">취소</button><button class="btn primary" id="ok">승인하고 실행</button></div>`;
+  let current = 0;
+  const pane = () => body.querySelector(`.cand-pane[data-i="${current}"]`);
+  const check = () => {
+    const missing = [...pane().querySelectorAll('input[data-required="1"]')].filter(i => !i.value.trim()).length;
+    foot.querySelector('#need').textContent = missing ? `입력이 필요한 값 ${missing}개` : '';
+    foot.querySelector('#ok').disabled = !!missing; foot.querySelector('#ok').style.opacity = missing ? .45 : 1;
+  };
+  body.querySelectorAll('.cand-tab').forEach(t => t.onclick = () => {
+    current = +t.dataset.i;
+    body.querySelectorAll('.cand-tab').forEach(x => x.classList.toggle('on', x === t));
+    body.querySelectorAll('.cand-pane').forEach(p => p.style.display = +p.dataset.i === current ? '' : 'none');
+    check();
+  });
+  body.addEventListener('input', check); check();
+  foot.querySelector('#ok').onclick = () => {
+    const input_values = {}, overrides = {};
+    for (const el of pane().querySelectorAll('input[data-key]')) {
+      const value = parse(el.value);
+      if (el.dataset.source === 'input') { if (value !== null) input_values[el.dataset.key] = value; }
+      else if (el.value !== el.dataset.initial && value !== null) overrides[el.dataset.key] = value;
+    }
+    resume({ action: 'approve', index: current, input_values, overrides });
+  };
+  foot.querySelector('#rev').onclick = () => resume({ action: 'revise', feedback: foot.querySelector('#fb').value });
+  foot.querySelector('#no').onclick = () => resume({ action: 'cancel' });
+}
+
+function paramRow(p) {
+  const label = `<div class="pl"><code>${esc(p.name)}</code>${p.type ? ` <small>${esc(p.type)}</small>` : ''}</div>`;
+  const help = p.doc ? `<div class="help">${esc(p.doc)}</div>` : '';
+  if (p.source === 'tool_output') return `<div class="param">${label}<div class="ref">← #${p.ref.call} ${esc(p.ref.tool)} · ${esc(p.ref.output)}</div>${help}</div>`;
+  const initial = fmt(p.value);
+  if (p.source === 'input') {
+    const need = p.required && p.value == null;
+    return `<div class="param ${need ? 'need' : ''}">${label.replace('</div>', `${p.required ? '<span class="tag user">입력 필요</span>' : '<span class="tag opt">선택 입력</span>'}</div>`)}
+      <input data-key="${esc(p.key)}" data-source="input" data-required="${p.required ? 1 : 0}" data-initial="${esc(initial)}" value="${esc(initial)}" placeholder="${p.required ? '값을 입력하세요' : '비워두면 기본값'}">${help}</div>`;
+  }
+  if (p.source === 'literal') return `<div class="param">${label.replace('</div>', '<span class="tag agent">Agent</span></div>')}<input data-key="${esc(p.key)}" data-source="literal" data-initial="${esc(initial)}" value="${esc(initial)}">${help}</div>`;
+  return `<div class="param">${label}<input data-key="${esc(p.key)}" data-source="default" data-initial="" value="" placeholder="기본값 ${esc(p.default ?? '')}">${help}</div>`;
 }
 
 /* drawer ------------------------------------------------------------------- */

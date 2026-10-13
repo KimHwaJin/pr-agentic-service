@@ -60,6 +60,11 @@ class Tool:
     params: tuple[Param, ...]
     outputs: tuple[str, ...]  # dict keys returned, or ("result",)
     code: str  # function source without docstring
+    param_docs: dict[str, str] = field(default_factory=dict)  # Google-style "Args:" lines
+
+    @property
+    def summary(self) -> str:
+        return self.docstring.strip().splitlines()[0] if self.docstring.strip() else ""
 
     def output_expr(self, var: str, output: str) -> str:
         return var if self.outputs == ("result",) else f"{var}[{output!r}]"
@@ -128,7 +133,33 @@ def _parse_tool(path: Path) -> Tool:
         if isinstance(node, ast.Return) and isinstance(node.value, ast.Dict):
             keys += [k.value for k in node.value.keys if isinstance(k, ast.Constant) and k.value not in keys]
     signature = f"{fn.name}({ast.unparse(fn.args)})" + (f" -> {ast.unparse(fn.returns)}" if fn.returns else "")
-    return Tool(fn.name, path.parent.name, signature, docstring, tuple(params), tuple(keys) or ("result",), code)
+    return Tool(
+        fn.name,
+        path.parent.name,
+        signature,
+        docstring,
+        tuple(params),
+        tuple(keys) or ("result",),
+        code,
+        _arg_docs(docstring),
+    )
+
+
+def _arg_docs(docstring: str) -> dict[str, str]:
+    docs, inside = {}, False
+    for line in docstring.splitlines():
+        stripped = line.strip()
+        if stripped in {"Args:", "Arguments:", "Parameters:"}:
+            inside = True
+            continue
+        if inside:
+            if not stripped or (not line.startswith((" ", "\t")) and stripped.endswith(":")):
+                if stripped.endswith(":"):
+                    break
+                continue
+            if match := re.match(r"(\w+)\s*(?:\([^)]*\))?:\s*(.*)", stripped):
+                docs[match.group(1)] = match.group(2)
+    return docs
 
 
 @dataclass
