@@ -51,7 +51,7 @@
 | `agent_switched` | `{agent: main\|analyst, task?}` | 담당 전환 표시 |
 | `plan_approved`, `plan_auto_approved`, `plan_revised` | 계획 정보 | 백그라운드 메시지 |
 | `execution_progress` | `{event_type, status, step, error}` | executor 단계별 진행 |
-| `execution_completed` | `{execution_id, results: {"<step>.<tool> <tool>": {status, observations, stdout, images[], error}}, error}` | 단계 결과. 이미지는 5장 참고 |
+| `execution_completed` | `{execution_id, results: [{call, tool, status, observations, stdout, images[], error}], error}` | 실행 순서대로 담긴 단계 결과. `call`은 계획의 tool 번호(사용자 코드는 null, 대신 `id`). 이미지는 5장 참고 |
 | `hitl_request` | `{interrupt_id, type, ...}` | 사용자 입력 카드 (4장) |
 | `hitl_resolved` | `{interrupt_id}` | 카드 닫기 |
 | `artifact` | `{kind: report\|notebook, artifact_id, title, lab_url}` | 링크 `/view/artifacts/{artifact_id}`, 노트북은 `lab_url`로 JupyterLab에서 열기 (5장) |

@@ -711,8 +711,14 @@ function step(kind, text) {
   S.activity.querySelector('.steps').appendChild(d); setActivityTitle(text);
 }
 
+// results: [{call, tool, status, ...}] in execution order (older events: {"#n tool": view})
+function resultEntries(results) {
+  if (Array.isArray(results)) return results.map(r => [r.call == null ? '사용자 코드' : `#${r.call} ${r.tool}`, r]);
+  const num = k => parseInt((k.match(/^#(\d+)/) || [])[1] ?? '1e9', 10);
+  return Object.entries(results).sort((a, b) => num(a[0]) - num(b[0]));
+}
 function resultCard(data, n) {
-  const entries = Object.entries(data.results);
+  const entries = resultEntries(data.results);
   const ok = entries.filter(([, v]) => v.status === 'SUCCEEDED').length;
   const d = document.createElement('details'); d.className = 'result';
   const label = n === 1 ? '실행 결과' : `실행 결과 ${n} · 이어서 실행 (같은 커널)`;
@@ -728,7 +734,7 @@ function resultCard(data, n) {
 function renderResults(data) {
   S.resultCount = (S.resultCount || 0) + 1;
   const d = resultCard(data, S.resultCount);
-  d.open = Object.values(data.results).some(v => v.images?.length);
+  d.open = resultEntries(data.results).some(([, v]) => v.images?.length);
   // keep result blocks in execution order, right after the work log of this turn
   if (S.resultAnchor && S.resultAnchor.isConnected && S.activity && !S.activity.dataset.done) S.resultAnchor.after(d);
   else logEl().appendChild(d);

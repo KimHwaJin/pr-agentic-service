@@ -711,6 +711,7 @@ async def run_plan(
         label: step_id for step_id, label in execution["steps"].items()
     }
     report: dict[str, Any] = {}
+    ordered: list[dict[str, Any]] = []  # event payload: jsonb drops key order
     for call in segment:
         step_id = by_label.get(call.key)
         view = _step_view(runtime, results.get(step_id))
@@ -719,9 +720,10 @@ async def run_plan(
         )
         plan["calls"][call.key] = {"status": status, "step_id": step_id}
         report[f"#{number[call.key]} {call.tool}"] = view
+        ordered.append({"call": number[call.key], "tool": call.tool, **view})
     await ctx.emit(
         "execution_completed",
-        {"execution_id": execution["id"], "results": report, "error": error},
+        {"execution_id": execution["id"], "results": ordered, "error": error},
     )
     _, undecided = _segment(json.loads(json.dumps(plan)), {})
     summary = {
@@ -818,7 +820,7 @@ async def run_custom_code(
         "execution_completed",
         {
             "execution_id": execution["id"],
-            "results": {custom_id: view},
+            "results": [{"call": None, "tool": None, "id": custom_id, **view}],
             "error": error,
         },
     )
