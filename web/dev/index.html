@@ -609,7 +609,7 @@ function startActivity() {
   if (S.activity && !S.activity.dataset.done) return;
   const d = document.createElement('details'); d.className = 'activity';
   d.innerHTML = `<summary><span class="spinner"></span><span class="t">생각하는 중</span><span class="chev">›</span></summary><div class="steps"></div>`;
-  logEl().appendChild(d); S.activity = d; scrollDown();
+  logEl().appendChild(d); S.activity = d; S.resultAnchor = d; S.resultCount = 0; scrollDown();
 }
 function setActivityTitle(text) { if (S.activity && !S.activity.dataset.done) S.activity.querySelector('.t').textContent = text; }
 function finishActivity(failed) {
@@ -631,7 +631,9 @@ function renderResults(data) {
   const entries = Object.entries(data.results);
   const ok = entries.filter(([, v]) => v.status === 'SUCCEEDED').length;
   const d = document.createElement('details'); d.className = 'result';
-  d.innerHTML = `<summary>📊 <b>실행 결과</b><span class="badge ${ok === entries.length ? 'ok' : 'bad'}">${ok}/${entries.length} 성공</span></summary><div class="body">` +
+  S.resultCount = (S.resultCount || 0) + 1;
+  const label = S.resultCount === 1 ? '실행 결과' : `실행 결과 ${S.resultCount} · 이어서 실행 (같은 커널)`;
+  d.innerHTML = `<summary>📊 <b>${label}</b><span class="badge ${ok === entries.length ? 'ok' : 'bad'}">${ok}/${entries.length} 성공</span></summary><div class="body">` +
     entries.map(([k, v]) => {
       const imgs = (v.images || []).map(p => `<img src="${API}/sessions/${S.session}/outputs?execution_id=${data.execution_id}&path=${encodeURIComponent(p)}" onclick="zoom(this.src)">`).join('');
       const cls = v.status === 'SUCCEEDED' ? 'ok' : (v.status === 'NOT_RUN' ? '' : 'bad');
@@ -639,7 +641,10 @@ function renderResults(data) {
       return `<div class="res-step"><div class="head"><b>${esc(k)}</b><span class="badge ${cls}">${esc(v.status)}</span></div>${out ? `<pre>${esc(out.slice(-1500))}</pre>` : ''}${imgs ? `<div class="imgs">${imgs}</div>` : ''}</div>`;
     }).join('') + '</div>';
   d.open = entries.some(([, v]) => v.images?.length);
-  (S.activity && !S.activity.dataset.done ? S.activity.after(d) : logEl().appendChild(d)); scrollDown();
+  // keep result blocks in execution order, right after the work log of this turn
+  if (S.resultAnchor && S.resultAnchor.isConnected && S.activity && !S.activity.dataset.done) S.resultAnchor.after(d);
+  else logEl().appendChild(d);
+  S.resultAnchor = d; scrollDown();
 }
 function zoom(src) { $('lightboxImg').src = src; $('lightbox').style.display = 'grid'; }
 
