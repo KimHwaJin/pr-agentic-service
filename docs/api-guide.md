@@ -125,6 +125,20 @@
 - 프론트가 다른 origin이면 `CORS_ORIGINS=["https://front.example"]`, 사이트가 다르면 `COOKIE_SAMESITE=none` + HTTPS(`COOKIE_SECURE=true`).
 - `FRONTEND_ORIGIN`: 로그인 후 돌아갈 프론트 주소, `SSO_ALLOWED_RETURN_ROOTS`: 허용할 경로.
 
+## executor 조회 (중계)
+
+`/api/v1/executor/<경로>` → executor `/api/v1/<경로>`. 응답 본문은 executor 것을 그대로 돌려줍니다(형식은 executor API 문서). 아래 경로만 열려 있고, 그 밖은 404입니다.
+
+| Method | Path (`/api/v1/executor` 아래) | 권한 |
+| --- | --- | --- |
+| GET | `/executions?project_id=&session_id=&status=&cursor=&limit=` | 내 실행만 (`user_id`는 서버가 로그인 사용자로 고정). `project_id`·`session_id`는 내가 속한 것만 |
+| GET | `/executions/{id}`, `/result`, `/steps`, `/steps/{step_id}`, `/events`, `/artifacts`, `/notebook` | 그 실행의 프로젝트 멤버 (관리자는 전부) |
+| GET | `/executions/{id}/diagnostics`, `/attempts`, `/attempts/{id}`, `/attempts/{id}/steps` | 관리자 |
+| GET | `/runtime-targets`, `/runtime-targets/{id}`, `/runtime-pools`, `/maintenance` | 관리자 |
+| POST | `/runtime-targets` | 관리자. 런타임 등록·수정(바로 probe). `actor`는 서버가 요청한 관리자로 채웁니다 |
+
+executor가 응답하지 않으면 502 `executor_unavailable`입니다.
+
 ## 6. 프로젝트 공유 메모리
 
 | Method | Path | 설명 |
