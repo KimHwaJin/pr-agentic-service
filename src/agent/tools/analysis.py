@@ -573,7 +573,6 @@ async def write_report(title: str, focus: str, runtime: ToolRuntime[RunContext, 
             "kind": "report",
             "artifact_id": links["report"],
             "title": title,
-            "lab_url": lab_url(settings, artifact["storage"].get("relative_path"), ctx.employee_id),
         },
     )
     if notebook:

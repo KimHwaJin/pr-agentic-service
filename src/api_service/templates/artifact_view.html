@@ -1,0 +1,168 @@
+<!doctype html><html lang="ko"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>__TITLE__</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.1.6/purify.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<style>
+:root {
+  --bg: #faf9f5; --panel: #ffffff; --ink: #1f1e1d; --muted: #6f6b63; --faint: #a19d94; --line: #e6e2d8;
+  --code: #f6f5f0; --accent: #c96442; --bad: #b42318; --bad-bg: #fdf0ee; --shadow: 0 1px 2px rgba(0,0,0,.04), 0 4px 16px rgba(0,0,0,.05);
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.65 -apple-system, BlinkMacSystemFont, "Pretendard", "Apple SD Gothic Neo", system-ui, sans-serif; }
+.top { position: sticky; top: 0; z-index: 5; background: rgba(250,249,245,.92); backdrop-filter: blur(8px); border-bottom: 1px solid var(--line); }
+.top .in { max-width: 980px; margin: 0 auto; padding: 12px 16px; display: flex; align-items: center; gap: 12px; }
+.badge { font-size: 11px; font-weight: 600; letter-spacing: .04em; padding: 3px 8px; border-radius: 6px; background: #f1e3dc; color: var(--accent); }
+.top h1 { flex: 1; min-width: 0; margin: 0; font-size: 15px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.btn { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); color: var(--ink); font-size: 13px; text-decoration: none; white-space: nowrap; }
+.btn:hover { border-color: var(--faint); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+main { max-width: 980px; margin: 0 auto; padding: 24px 16px 80px; }
+.toc { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 20px; }
+.toc a { font-size: 12px; color: var(--muted); text-decoration: none; padding: 3px 9px; border: 1px solid var(--line); border-radius: 999px; background: var(--panel); }
+.toc a:hover { color: var(--ink); }
+.toc a.err { color: var(--bad); border-color: #f1c4bd; }
+.cell { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow); margin: 0 0 16px; overflow: hidden; scroll-margin-top: 70px; }
+.cell-head { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-bottom: 1px solid var(--line); }
+.num { font: 600 12px ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--faint); min-width: 44px; }
+.cell-head .name { font-weight: 600; font-size: 14px; }
+.cell-head .kind { font-size: 12px; color: var(--muted); }
+.cell-head .sp { flex: 1; }
+.status { font-size: 12px; color: var(--muted); }
+.status.err { color: var(--bad); font-weight: 600; }
+pre, code { font: 12.5px/1.55 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+.src { margin: 0; padding: 12px 14px; background: var(--code); overflow: auto; }
+.src code.hljs { background: transparent; padding: 0; }
+details.def { border-top: 1px solid var(--line); }
+details.def summary { cursor: pointer; padding: 8px 14px; font-size: 12px; color: var(--muted); list-style: none; user-select: none; }
+details.def summary::before { content: "▸ "; }
+details.def[open] summary::before { content: "▾ "; }
+details.def pre { max-height: 420px; }
+.outs { border-top: 1px solid var(--line); }
+.out { padding: 10px 14px; }
+.out + .out { border-top: 1px dashed var(--line); }
+.out pre { margin: 0; white-space: pre; overflow: auto; max-height: 360px; }
+.out.err pre { color: var(--bad); }
+.out.err { background: var(--bad-bg); }
+.out img { display: block; max-width: 100%; height: auto; margin: 4px auto; border-radius: 6px; }
+.out .html { overflow: auto; max-height: 420px; }
+.out table, .md table { border-collapse: collapse; font-size: 13px; }
+.out th, .out td, .md th, .md td { border: 1px solid var(--line); padding: 4px 10px; text-align: right; }
+.out th, .md th { background: var(--code); }
+.md td, .md th { text-align: left; }
+.more { display: block; width: 100%; border: 0; border-top: 1px solid var(--line); background: var(--code); color: var(--muted); font-size: 12px; padding: 6px; cursor: pointer; }
+.empty { padding: 8px 14px; font-size: 12px; color: var(--faint); }
+.md { padding: 6px 28px 18px; }
+.md h1 { font-size: 24px; margin: 20px 0 8px; } .md h2 { font-size: 19px; margin: 24px 0 8px; padding-bottom: 6px; border-bottom: 1px solid var(--line); }
+.md h3 { font-size: 16px; margin: 18px 0 6px; }
+.md pre { background: var(--code); padding: 12px; border-radius: 8px; overflow: auto; }
+.md code { background: var(--code); padding: 1px 5px; border-radius: 4px; }
+.md pre code { padding: 0; background: none; }
+.md blockquote { margin: 0; padding: 2px 14px; border-left: 3px solid var(--line); color: var(--muted); }
+.md img { max-width: 100%; }
+.report { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow); padding: 8px 12px; }
+.state { color: var(--muted); padding: 40px 0; text-align: center; }
+@media (max-width: 640px) { .md { padding: 4px 14px 14px; } .num { min-width: 0; } .top .btn span { display: none; } }
+</style></head>
+<body>
+<div class="top"><div class="in">
+  <span class="badge">__BADGE__</span><h1>__TITLE__</h1>
+  __LAB__
+  <a class="btn" href="/api/v1/artifacts/__ID__/content" download>⬇<span> 다운로드</span></a>
+</div></div>
+<main id="doc"><div class="state">불러오는 중…</div></main>
+<script>
+const KIND = '__KIND__';
+// The observation helper agent/codegen.py appends to every executor cell.
+const OBSERVE = /try: {2}# render figures[\s\S]*?print\("AGENTIC_OBSERVATION "[^\n]*\n?/;
+const doc = document.getElementById('doc');
+const txt = s => Array.isArray(s) ? s.join('') : (s || '');
+const esc = s => String(s).replace(/[&<>"]/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[c]));
+const md = s => DOMPurify.sanitize(marked.parse(s));
+const ansi = s => s.replace(/\x1b\[[0-9;]*[A-Za-z]/g, '');
+const tidy = s => s.replace(/[ \t]+$/gm, '').replace(/\n{3,}/g, '\n\n').trim();
+const py = s => { try { return hljs.highlight(s, {language: 'python'}).value; } catch (e) { return esc(s); } };
+
+// Executor cells are "tool function + observation helper + call". Show the call up front and fold the rest.
+function splitCode(source) {
+  let code = source.replace(OBSERVE, '');
+  code = code.split('\n').filter(l => !/^_agentic_observe\(/.test(l)).join('\n');
+  const lines = tidy(code).split('\n');
+  const call = lines.length ? lines[lines.length - 1].match(/^(_r_s\d+_t\d+) = ([A-Za-z_]\w*)\(/) : null;
+  if (!call) return {name: null, main: tidy(code), def: ''};
+  return {name: call[2], main: lines[lines.length - 1], def: tidy(lines.slice(0, -1).join('\n'))};
+}
+
+function outputs(cell) {
+  const parts = [];
+  for (const o of cell.outputs || []) {
+    const d = o.data || {};
+    if (o.output_type === 'error') {
+      parts.push(`<div class="out err"><pre>${esc(ansi((o.traceback || []).join('\n')) || `${o.ename}: ${o.evalue}`)}</pre></div>`);
+    } else if (o.output_type === 'stream') {
+      const text = tidy(txt(o.text).split('\n').filter(l => !l.startsWith('AGENTIC_OBSERVATION ')).join('\n'));
+      if (text) parts.push(`<div class="out${o.name === 'stderr' ? ' err' : ''}"><pre>${esc(ansi(text))}</pre></div>`);
+    } else if (d['image/png'] || d['image/jpeg']) {
+      const type = d['image/png'] ? 'image/png' : 'image/jpeg';
+      parts.push(`<div class="out"><img alt="" src="data:${type};base64,${txt(d[type]).replace(/\s/g, '')}"></div>`);
+    } else if (d['image/svg+xml']) {
+      parts.push(`<div class="out">${DOMPurify.sanitize(txt(d['image/svg+xml']), {USE_PROFILES: {svg: true}})}</div>`);
+    } else if (d['text/html']) {
+      parts.push(`<div class="out"><div class="html">${DOMPurify.sanitize(txt(d['text/html']))}</div></div>`);
+    } else if (d['text/markdown']) {
+      parts.push(`<div class="out md">${md(txt(d['text/markdown']))}</div>`);
+    } else if (d['text/plain']) {
+      parts.push(`<div class="out"><pre>${esc(ansi(txt(d['text/plain'])))}</pre></div>`);
+    }
+  }
+  return parts;
+}
+
+function renderNotebook(nb) {
+  let html = '', toc = '', step = 0;
+  for (const cell of nb.cells || []) {
+    const source = txt(cell.source);
+    if (cell.cell_type === 'markdown') {
+      html += `<section class="cell"><div class="md">${md(source)}</div></section>`;
+      continue;
+    }
+    if (cell.cell_type !== 'code') continue;
+    step += 1;
+    const id = `step-${step}`;
+    const {name, main, def} = splitCode(source);
+    const outs = outputs(cell);
+    const failed = (cell.outputs || []).some(o => o.output_type === 'error');
+    const label = name || '사용자 코드';
+    toc += `<a href="#${id}" class="${failed ? 'err' : ''}">${step}. ${esc(label)}</a>`;
+    const count = cell.execution_count == null ? ' ' : cell.execution_count;
+    html += `<section class="cell" id="${id}">
+      <div class="cell-head"><span class="num">[${count}]</span><span class="name">${esc(label)}</span>
+        <span class="kind">${name ? '분석 도구' : ''}</span><span class="sp"></span>
+        <span class="status ${failed ? 'err' : ''}">${failed ? '실패' : (outs.length ? `출력 ${outs.length}` : '')}</span></div>
+      <pre class="src"><code class="hljs">${py(main)}</code></pre>
+      ${def ? `<details class="def"><summary>함수 코드 보기 (${def.split('\n').length}줄)</summary><pre class="src"><code class="hljs">${py(def)}</code></pre></details>` : ''}
+      ${outs.length ? `<div class="outs">${outs.join('')}</div>` : ''}
+    </section>`;
+  }
+  doc.innerHTML = (step > 1 ? `<nav class="toc">${toc}</nav>` : '') + (html || '<div class="state">빈 노트북입니다.</div>');
+  doc.querySelectorAll('.out pre').forEach(pre => {
+    if (pre.scrollHeight <= 380) return;
+    const more = document.createElement('button');
+    more.className = 'more'; more.textContent = '전체 보기';
+    more.onclick = () => { const open = pre.style.maxHeight === 'none'; pre.style.maxHeight = open ? '' : 'none'; more.textContent = open ? '전체 보기' : '접기'; };
+    pre.after(more);
+  });
+}
+
+fetch('/api/v1/artifacts/__ID__/content', {credentials: 'include'})
+  .then(r => { if (!r.ok) throw new Error(r.status); return r.text(); })
+  .then(body => {
+    if (KIND === 'notebook') renderNotebook(JSON.parse(body));
+    else {
+      doc.innerHTML = `<article class="report md">${md(body)}</article>`;
+      doc.querySelectorAll('pre code').forEach(el => hljs.highlightElement(el));
+    }
+  })
+  .catch(e => { doc.innerHTML = `<div class="state">불러오지 못했습니다 (${esc(e.message)})</div>`; });
+</script></body></html>
