@@ -3,140 +3,282 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Agentic 테스트 콘솔</title>
+<title>Analysis Agent</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js"></script>
 <style>
-  :root { --line:#d0d7de; --muted:#59636e; --bg:#f6f8fa; --accent:#0969da; }
+  :root {
+    --bg: #faf9f5; --side: #f3f1ea; --panel: #ffffff; --ink: #1f1e1d; --muted: #6f6b63; --faint: #a19d94;
+    --line: #e6e2d8; --user: #efeae0; --accent: #c96442; --accent-ink: #ffffff; --hover: #ece8de; --code: #f4f2ec;
+    --ok: #2f7d4f; --bad: #b42318; --shadow: 0 1px 2px rgba(0,0,0,.04), 0 4px 16px rgba(0,0,0,.05);
+  }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+    --bg: #262624; --side: #1f1e1d; --panel: #30302e; --ink: #f2f0e9; --muted: #b5b1a8; --faint: #8a867e;
+    --line: #3d3d3a; --user: #3a3936; --hover: #353532; --code: #2b2b29; --shadow: 0 1px 2px rgba(0,0,0,.3);
+  } }
   * { box-sizing: border-box; }
-  body { margin:0; font:14px/1.5 system-ui, sans-serif; color:#1f2328; display:grid; grid-template-columns:260px 1fr 320px; height:100vh; }
-  aside, main, section { overflow:auto; padding:12px; }
-  aside { border-right:1px solid var(--line); background:var(--bg); }
-  section { border-left:1px solid var(--line); background:var(--bg); }
-  main { display:flex; flex-direction:column; padding:0; }
-  h3 { margin:12px 0 6px; font-size:13px; color:var(--muted); text-transform:uppercase; }
-  button { cursor:pointer; border:1px solid var(--line); background:#fff; border-radius:6px; padding:4px 10px; }
-  button.primary { background:var(--accent); color:#fff; border-color:var(--accent); }
-  select, input, textarea { width:100%; border:1px solid var(--line); border-radius:6px; padding:4px 6px; font:inherit; }
-  .item { padding:4px 6px; border-radius:6px; cursor:pointer; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-  .item.active { background:#ddf4ff; }
-  #log { flex:1; overflow:auto; padding:16px; }
-  .msg { margin:10px 0; padding:10px 12px; border-radius:8px; max-width:900px; }
-  .user { background:#ddf4ff; margin-left:auto; }
-  .assistant { background:#fff; border:1px solid var(--line); }
-  .bg { color:var(--muted); font-size:12px; margin:2px 0; white-space:pre-wrap; }
-  .card { border:1px solid #d4a72c; background:#fff8c5; border-radius:8px; padding:10px; margin:10px 0; max-width:900px; }
-  .card pre, .msg pre { background:var(--bg); padding:8px; overflow:auto; }
-  .row { display:flex; gap:6px; align-items:center; margin:4px 0; }
-  .row label { min-width:160px; font-size:12px; }
-  #composer { display:flex; gap:8px; padding:12px; border-top:1px solid var(--line); }
-  #composer textarea { height:60px; }
-  #status { padding:4px 16px; font-size:12px; color:var(--muted); border-bottom:1px solid var(--line); }
-  img.out { max-width:420px; border:1px solid var(--line); margin:4px; }
+  html, body { height: 100%; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.6 -apple-system, BlinkMacSystemFont, "Pretendard", "Apple SD Gothic Neo", "Noto Sans KR", system-ui, sans-serif; display: flex; overflow: hidden; }
+  button { font: inherit; color: inherit; cursor: pointer; border: 0; background: none; }
+  input, select, textarea { font: inherit; color: inherit; }
+  a { color: var(--accent); }
+
+  /* sidebar */
+  aside { width: 272px; flex: none; background: var(--side); border-right: 1px solid var(--line); display: flex; flex-direction: column; padding: 14px 10px; gap: 6px; }
+  .brand { display: flex; align-items: center; gap: 10px; padding: 4px 8px 12px; font-weight: 600; font-size: 16px; }
+  .brand .mark { width: 26px; height: 26px; border-radius: 8px; background: var(--accent); display: grid; place-items: center; color: #fff; font-size: 14px; }
+  .new { display: flex; align-items: center; gap: 8px; padding: 9px 10px; border-radius: 10px; font-weight: 500; }
+  .new:hover, .item:hover { background: var(--hover); }
+  .new .plus { width: 22px; height: 22px; border-radius: 50%; background: var(--accent); color: #fff; display: grid; place-items: center; font-size: 15px; }
+  .label { font-size: 12px; color: var(--faint); padding: 10px 10px 4px; }
+  .project { margin: 0 4px; padding: 7px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); width: calc(100% - 8px); }
+  #sessions { flex: 1; overflow: auto; }
+  .item { display: block; width: 100%; text-align: left; padding: 7px 10px; border-radius: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 14px; }
+  .item.active { background: var(--hover); font-weight: 500; }
+  .item .dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); margin-right: 6px; vertical-align: middle; }
+  .me { display: flex; align-items: center; gap: 10px; padding: 10px; border-top: 1px solid var(--line); }
+  .avatar { width: 30px; height: 30px; border-radius: 50%; background: #d9cfc0; display: grid; place-items: center; font-weight: 600; font-size: 13px; color: #5a4a35; }
+
+  /* main */
+  main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+  header { height: 52px; flex: none; display: flex; align-items: center; gap: 10px; padding: 0 20px; }
+  header .title { font-weight: 500; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .chip { display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px; border: 1px solid var(--line); border-radius: 999px; font-size: 13px; color: var(--muted); background: var(--panel); }
+  .chip select { border: 0; background: transparent; outline: none; }
+  .ghost { padding: 6px 10px; border-radius: 8px; color: var(--muted); font-size: 13px; }
+  .ghost:hover { background: var(--hover); color: var(--ink); }
+  #scroll { flex: 1; overflow: auto; }
+  #log { max-width: 780px; margin: 0 auto; padding: 16px 24px 40px; }
+  .empty { text-align: center; padding-top: 18vh; }
+  .empty h1 { font-family: Georgia, "Noto Serif KR", serif; font-weight: 400; font-size: 34px; margin: 0 0 22px; }
+  .suggest { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
+  .suggest button { border: 1px solid var(--line); background: var(--panel); border-radius: 999px; padding: 7px 14px; font-size: 13px; color: var(--muted); }
+  .suggest button:hover { color: var(--ink); border-color: var(--faint); }
+
+  .turn-user { display: flex; justify-content: flex-end; margin: 22px 0 6px; }
+  .bubble { background: var(--user); padding: 10px 16px; border-radius: 18px; max-width: 80%; white-space: pre-wrap; }
+  .answer { margin: 8px 0 18px; font-size: 15.5px; line-height: 1.75; }
+  .answer > :first-child { margin-top: 0; }
+  .answer table, .card table { border-collapse: collapse; margin: 10px 0; font-size: 14px; display: block; overflow-x: auto; }
+  .answer th, .answer td, .card th, .card td { border: 1px solid var(--line); padding: 6px 10px; }
+  .answer th { background: var(--code); font-weight: 600; }
+  .answer pre, .card pre { background: var(--code); padding: 12px 14px; border-radius: 10px; overflow: auto; font-size: 13px; line-height: 1.5; }
+  code { font-family: "SF Mono", Menlo, Consolas, monospace; font-size: .9em; }
+  .answer :not(pre) > code { background: var(--code); padding: 1px 5px; border-radius: 5px; }
+
+  /* activity (collapsed work log) */
+  .activity { margin: 10px 0; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); overflow: hidden; }
+  .activity > summary { list-style: none; display: flex; align-items: center; gap: 10px; padding: 10px 14px; cursor: pointer; font-size: 14px; color: var(--muted); }
+  .activity > summary::-webkit-details-marker { display: none; }
+  .activity > summary .chev { margin-left: auto; transition: transform .15s; }
+  .activity[open] > summary .chev { transform: rotate(90deg); }
+  .steps { border-top: 1px solid var(--line); padding: 8px 14px 12px; font-size: 13px; color: var(--muted); }
+  .step { display: flex; gap: 8px; padding: 4px 0; align-items: baseline; }
+  .step .ico { width: 16px; flex: none; text-align: center; }
+  .step b { color: var(--ink); font-weight: 500; }
+  .spinner { width: 14px; height: 14px; border: 2px solid var(--line); border-top-color: var(--accent); border-radius: 50%; animation: spin .8s linear infinite; flex: none; }
+  .done-ico { width: 14px; height: 14px; border-radius: 50%; background: var(--ok); flex: none; position: relative; }
+  .done-ico::after { content: ""; position: absolute; left: 4px; top: 2px; width: 4px; height: 7px; border: solid #fff; border-width: 0 2px 2px 0; transform: rotate(45deg); }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* results, artifacts, cards */
+  .result { border: 1px solid var(--line); border-radius: 12px; background: var(--panel); margin: 10px 0; }
+  .result > summary { cursor: pointer; padding: 10px 14px; font-size: 14px; display: flex; gap: 8px; align-items: center; list-style: none; }
+  .result > summary::-webkit-details-marker { display: none; }
+  .result .body { padding: 0 14px 14px; }
+  .res-step { border-top: 1px solid var(--line); padding: 10px 0; }
+  .res-step .head { font-size: 13px; display: flex; gap: 8px; align-items: center; }
+  .badge { font-size: 11px; padding: 1px 8px; border-radius: 999px; background: var(--code); color: var(--muted); }
+  .badge.ok { background: #e3f1e7; color: var(--ok); } .badge.bad { background: #fde8e6; color: var(--bad); }
+  .imgs { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 8px; margin-top: 8px; }
+  .imgs img { width: 100%; border: 1px solid var(--line); border-radius: 8px; background: #fff; cursor: zoom-in; }
+  .files { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0 18px; }
+  .file { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); text-decoration: none; color: var(--ink); min-width: 240px; box-shadow: var(--shadow); }
+  .file:hover { border-color: var(--faint); }
+  .file .fi { width: 34px; height: 40px; border-radius: 6px; background: var(--code); display: grid; place-items: center; font-size: 11px; font-weight: 700; color: var(--accent); }
+  .file small { display: block; color: var(--muted); font-size: 12px; }
+  .card { border: 1px solid var(--line); border-radius: 14px; background: var(--panel); box-shadow: var(--shadow); padding: 16px 18px; margin: 12px 0; }
+  .card h4 { margin: 0 0 4px; font-size: 15px; }
+  .card .sub { color: var(--muted); font-size: 13px; margin-bottom: 10px; }
+  .cand { border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; margin: 10px 0; display: block; cursor: pointer; }
+  .cand:has(input:checked) { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+  .cand input[type=radio] { accent-color: var(--accent); margin-right: 8px; }
+  .flow { font-size: 12.5px; color: var(--muted); margin: 6px 0 2px; }
+  .flow span { display: inline-block; background: var(--code); border-radius: 6px; padding: 1px 7px; margin: 2px 2px; }
+  .field { display: grid; grid-template-columns: 180px 1fr; gap: 8px; align-items: center; margin: 6px 0; font-size: 13px; }
+  .field label { color: var(--muted); overflow: hidden; text-overflow: ellipsis; }
+  .field input, .card textarea, .card input.wide { width: 100%; border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; background: var(--bg); }
+  .card textarea { min-height: 90px; font-family: "SF Mono", Menlo, monospace; font-size: 13px; }
+  .actions { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; align-items: center; }
+  .btn { padding: 8px 16px; border-radius: 10px; border: 1px solid var(--line); background: var(--panel); font-weight: 500; }
+  .btn:hover { background: var(--hover); }
+  .btn.primary { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+  .btn.primary:hover { opacity: .9; }
+  .opt { padding: 7px 14px; border-radius: 999px; border: 1px solid var(--line); background: var(--bg); }
+  .opt:hover { border-color: var(--accent); color: var(--accent); }
+  .error { color: var(--bad); font-size: 14px; margin: 10px 0; }
+
+  /* composer */
+  .composer-wrap { padding: 0 24px 18px; }
+  .composer { max-width: 780px; margin: 0 auto; background: var(--panel); border: 1px solid var(--line); border-radius: 20px; box-shadow: var(--shadow); padding: 12px 12px 10px 18px; }
+  .composer textarea { width: 100%; border: 0; outline: none; resize: none; background: transparent; max-height: 220px; min-height: 26px; line-height: 1.5; }
+  .composer .bar { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
+  .composer .hint { font-size: 12px; color: var(--faint); flex: 1; }
+  .send { width: 34px; height: 34px; border-radius: 10px; background: var(--accent); color: #fff; display: grid; place-items: center; }
+  .send:disabled { opacity: .35; cursor: default; }
+  .send.stop { background: var(--ink); }
+  .send svg { width: 16px; height: 16px; }
+
+  /* drawer */
+  .drawer { width: 340px; flex: none; border-left: 1px solid var(--line); background: var(--side); overflow: auto; padding: 16px; display: none; }
+  .drawer.open { display: block; }
+  .drawer h3 { font-size: 13px; color: var(--muted); font-weight: 600; margin: 18px 0 8px; }
+  .mem { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; margin: 8px 0; font-size: 13px; }
+  .mem .t { font-weight: 500; display: flex; gap: 6px; align-items: center; }
+  .mem .t .x { margin-left: auto; color: var(--faint); }
+  .mem p { margin: 4px 0 0; color: var(--muted); }
+  .drawer input, .drawer select, .drawer textarea { width: 100%; border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; background: var(--panel); margin: 4px 0; font-size: 13px; }
+  .lightbox { position: fixed; inset: 0; background: rgba(0,0,0,.7); display: none; place-items: center; z-index: 10; cursor: zoom-out; }
+  .lightbox img { max-width: 92vw; max-height: 92vh; border-radius: 8px; background: #fff; }
 </style>
 </head>
 <body>
 <aside>
-  <div id="me">로그인 확인 중…</div>
-  <h3>프로젝트</h3>
-  <select id="projects"></select>
-  <div class="row"><input id="newProject" placeholder="새 프로젝트 이름"><button onclick="createProject()">추가</button></div>
-  <h3>세션 <button onclick="newSession()">+ 새 대화</button></h3>
+  <div class="brand"><div class="mark">◆</div>Analysis Agent</div>
+  <button class="new" onclick="newSession()"><span class="plus">+</span>새 대화</button>
+  <div class="label">프로젝트</div>
+  <select id="projects" class="project"></select>
+  <div class="label">최근 대화</div>
   <div id="sessions"></div>
-  <h3>설정</h3>
-  <div class="row"><label>모델</label><select id="model"></select></div>
-  <div class="row"><label>코드 레벨(세션)</label><select id="level"><option value="">프로젝트 기본</option><option>1</option><option>2</option><option>3</option><option>4</option></select></div>
+  <div class="me"><div class="avatar" id="avatar">?</div><div><div id="meName">-</div><div style="font-size:12px;color:var(--faint)" id="meId"></div></div></div>
 </aside>
+
 <main>
-  <div id="status">-</div>
-  <div id="log"></div>
-  <div id="composer">
-    <textarea id="input" placeholder="메시지를 입력하세요 (Ctrl+Enter 전송)"></textarea>
-    <div><button class="primary" onclick="send()">전송</button><br><br><button onclick="cancelRun()">취소</button></div>
+  <header>
+    <div class="title" id="title">새 대화</div>
+    <label class="chip">모델 <select id="model"></select></label>
+    <label class="chip">코드 레벨 <select id="level"><option value="">기본</option><option value="1">1 · tool만</option><option value="2">2 · 연결 코드</option><option value="3">3 · tool 우선</option><option value="4">4 · 자유 코드</option></select></label>
+    <button class="ghost" onclick="toggleDrawer()">메모리 · 워크플로우</button>
+  </header>
+  <div id="scroll"><div id="log"></div></div>
+  <div class="composer-wrap">
+    <div class="composer">
+      <textarea id="input" rows="1" placeholder="분석하고 싶은 내용을 입력하세요"></textarea>
+      <div class="bar">
+        <span class="hint" id="hint">Enter 전송 · Shift+Enter 줄바꿈</span>
+        <button class="send" id="send" onclick="sendOrStop()" title="전송"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 4l7 7-1.4 1.4L13 7.8V20h-2V7.8l-4.6 4.6L5 11z"/></svg></button>
+      </div>
+    </div>
   </div>
 </main>
-<section>
-  <h3>프로젝트 메모리</h3>
+
+<div class="drawer" id="drawer">
+  <h3>프로젝트 공유 메모리 <span id="memUsage" style="font-weight:400"></span></h3>
   <div id="memory"></div>
-  <select id="memCat"><option>background</option><option>analysis_preferences</option><option>report_preferences</option><option>shared_findings</option></select>
-  <input id="memTitle" placeholder="제목"><textarea id="memContent" placeholder="내용"></textarea>
-  <button onclick="addMemory()">메모리 추가</button>
+  <select id="memCat"><option value="background">프로젝트 배경</option><option value="analysis_preferences">분석 선호</option><option value="report_preferences">보고서 선호</option><option value="shared_findings">공유할 주요 발견</option></select>
+  <input id="memTitle" placeholder="제목"><textarea id="memContent" rows="3" placeholder="내용"></textarea>
+  <button class="btn" onclick="addMemory()">메모리 추가</button>
   <h3>워크플로우</h3>
   <div id="workflows"></div>
-</section>
+</div>
+<div class="lightbox" id="lightbox" onclick="this.style.display='none'"><img id="lightboxImg" alt=""></div>
+
 <script>
 const API = '/api/v1';
-const S = { csrf: null, project: null, session: null, run: null, es: null, streamEl: null };
+const S = { csrf: null, project: null, session: null, run: null, es: null, answerEl: null, activity: null, busy: false };
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const md = s => marked.parse(esc(s));
+const CAT = { background: '프로젝트 배경', analysis_preferences: '분석 선호', report_preferences: '보고서 선호', shared_findings: '공유할 주요 발견' };
+const TOOL_TEXT = {
+  read_knowledge: a => `도메인 지식 확인 · ${a.name}`, search_memory: () => '프로젝트 메모리 검색', save_memory: a => `메모리 저장 · ${a.title || ''}`,
+  delete_memory: () => '메모리 삭제', start_analysis: () => '분석 담당에게 전달', read_skill: a => `분석 skill 확인 · ${a.name}`,
+  read_tool: a => `도구 확인 · ${a.name}`, search_tools: () => '도구 검색', search_workflows: () => '등록된 워크플로우 검색',
+  propose_plans: () => '실행 계획 작성', revise_call: a => `파라미터 수정 · #${a.call}`, run_plan: a => a.decisions ? '조건 판단 후 이어서 실행' : '코드 실행 요청',
+  run_custom_code: a => `직접 작성한 코드 실행 · ${a.purpose || ''}`, write_report: () => '리포트·노트북 확정', save_workflow: () => '워크플로우 저장 제안', finish_analysis: () => '분석 정리',
+};
 
 async function api(path, opts = {}) {
   const headers = { 'Content-Type': 'application/json', ...(S.csrf ? { 'X-CSRF-Token': S.csrf } : {}) };
   const r = await fetch(API + path, { credentials: 'include', ...opts, headers, body: opts.body && JSON.stringify(opts.body) });
   if (r.status === 401) { location.href = `${API}/auth/login/sso?return_to=/dev/`; throw new Error('login'); }
   const data = r.status === 204 ? null : await r.json();
-  if (!r.ok) { alert(JSON.stringify(data)); throw new Error(r.status); }
+  if (!r.ok) { showError(typeof data?.detail === 'string' ? data.detail : JSON.stringify(data?.detail ?? data)); throw new Error(r.status); }
   return data;
 }
 
 async function boot() {
   S.csrf = (await api('/auth/session')).csrf_token;
   const me = await api('/users/me');
-  $('me').innerHTML = `<b>${esc(me.user.name)}</b> (${esc(me.user.employee_id)})`;
+  $('meName').textContent = me.user.name; $('meId').textContent = me.user.employee_id; $('avatar').textContent = me.user.name.slice(0, 1);
   $('model').innerHTML = me.models.map(m => `<option ${m === me.default_model ? 'selected' : ''}>${esc(m)}</option>`).join('');
-  await loadProjects(me.default_project_id);
+  const projects = await api('/projects');
+  $('projects').innerHTML = projects.map(p => `<option value="${p.id}">${esc(p.name)}</option>`).join('') + '<option value="__new">+ 새 프로젝트…</option>';
+  $('projects').value = me.default_project_id;
+  await selectProject(me.default_project_id);
 }
 
-async function loadProjects(select) {
-  const list = await api('/projects');
-  $('projects').innerHTML = list.map(p => `<option value="${p.id}">${esc(p.name)}</option>`).join('');
-  $('projects').value = select || S.project || list[0].id;
-  await selectProject($('projects').value);
-}
-$('projects').onchange = e => selectProject(e.target.value);
-
-async function createProject() {
-  const name = $('newProject').value.trim(); if (!name) return;
+$('projects').onchange = async e => {
+  if (e.target.value !== '__new') return selectProject(e.target.value);
+  const name = prompt('새 프로젝트 이름'); if (!name) { e.target.value = S.project; return; }
   const p = await api('/projects', { method: 'POST', body: { name } });
-  $('newProject').value = ''; await loadProjects(p.id);
-}
+  e.target.insertAdjacentHTML('afterbegin', `<option value="${p.id}">${esc(p.name)}</option>`); e.target.value = p.id; selectProject(p.id);
+};
 
-async function selectProject(id) {
-  S.project = id; S.session = null; $('log').innerHTML = '';
-  await Promise.all([loadSessions(), loadMemory(), loadWorkflows()]);
-}
+async function selectProject(id) { S.project = id; newSession(); await Promise.all([loadMemory(), loadWorkflows()]); }
 
 async function loadSessions() {
   const list = await api(`/projects/${S.project}/sessions`);
-  $('sessions').innerHTML = list.map(s => `<div class="item ${s.id === S.session ? 'active' : ''}" onclick="openSession('${s.id}')">${s.active_run_id ? '⏳ ' : ''}${esc(s.title)}</div>`).join('') || '<div class="bg">세션 없음. 메시지를 보내면 새로 만듭니다.</div>';
+  $('sessions').innerHTML = list.map(s => `<button class="item ${s.id === S.session ? 'active' : ''}" onclick="openSession('${s.id}')">${s.active_run_id ? '<span class="dot"></span>' : ''}${esc(s.title)}</button>`).join('')
+    || '<div style="padding:8px 10px;color:var(--faint);font-size:13px">아직 대화가 없습니다</div>';
 }
 
-function newSession() { S.session = null; S.run = null; closeStream(); $('log').innerHTML = ''; $('status').textContent = '새 대화'; loadSessions(); }
+function emptyState() {
+  const ideas = ['NCE 데이터 표본 1000개로 기술통계와 분포 보여줘', 'NCE와 WT를 결합해서 상관이 강한 변수쌍 찾아줘', '이 프로젝트에서 할 수 있는 분석을 알려줘'];
+  $('log').innerHTML = `<div class="empty"><h1>무엇을 분석해 볼까요?</h1><div class="suggest">${ideas.map(i => `<button onclick="useIdea(this)">${esc(i)}</button>`).join('')}</div></div>`;
+}
+function useIdea(b) { $('input').value = b.textContent; autosize(); $('input').focus(); }
+
+function newSession() { S.session = null; S.run = null; closeStream(); setBusy(false); $('title').textContent = '새 대화'; $('level').value = ''; emptyState(); loadSessions(); }
 
 async function openSession(id) {
-  S.session = id; closeStream(); $('log').innerHTML = '';
+  S.session = id; closeStream(); $('log').innerHTML = ''; S.answerEl = S.activity = null;
   const session = await api(`/sessions/${id}`);
-  $('level').value = session.code_level ?? '';
-  for (const m of await api(`/sessions/${id}/messages`)) addMessage(m.role, m.content, m.attachments);
-  S.run = session.active_run_id;
+  $('title').textContent = session.title; $('level').value = session.code_level ?? '';
+  for (const m of await api(`/sessions/${id}/messages`)) m.role === 'user' ? addUser(m.content) : addAnswer(m.content, m.attachments);
+  S.run = session.active_run_id; setBusy(!!S.run);
   if (S.run) { const run = await api(`/runs/${S.run}`); if (run.status === 'waiting_input') renderHitl(run.id, run.waiting); }
   openStream(); loadSessions();
 }
 
 $('level').onchange = async e => { if (S.session) await api(`/sessions/${S.session}`, { method: 'PATCH', body: { code_level: e.target.value ? +e.target.value : null } }); };
-$('input').onkeydown = e => { if (e.key === 'Enter' && e.ctrlKey) send(); };
+const input = $('input');
+function autosize() { input.style.height = 'auto'; input.style.height = Math.min(input.scrollHeight, 220) + 'px'; }
+input.addEventListener('input', autosize);
+input.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); if (!S.busy) send(); } });
+
+function setBusy(busy) {
+  S.busy = busy; const b = $('send');
+  b.classList.toggle('stop', busy); b.title = busy ? '중지' : '전송';
+  b.innerHTML = busy ? '<svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>'
+                     : '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 4l7 7-1.4 1.4L13 7.8V20h-2V7.8l-4.6 4.6L5 11z"/></svg>';
+  $('hint').textContent = busy ? '작업 중입니다. 다른 작업은 새 대화에서 할 수 있어요.' : 'Enter 전송 · Shift+Enter 줄바꿈';
+}
+function sendOrStop() { S.busy ? cancelRun() : send(); }
 
 async function send() {
-  const text = $('input').value.trim(); if (!text) return;
-  $('input').value = ''; addMessage('user', text);
-  const model_alias = $('model').value;
-  if (!S.session) {
-    const level = $('level').value ? +$('level').value : null;
-    const r = await api(`/projects/${S.project}/sessions`, { method: 'POST', body: { message: text, model_alias, code_level: level } });
-    S.session = r.session.id; S.run = r.run.id; openStream(); loadSessions();
-  } else {
-    S.run = (await api(`/sessions/${S.session}/messages`, { method: 'POST', body: { content: text, model_alias } })).id;
-  }
+  const text = input.value.trim(); if (!text) return;
+  input.value = ''; autosize();
+  if ($('log').querySelector('.empty')) $('log').innerHTML = '';
+  addUser(text); setBusy(true); startActivity();
+  try {
+    if (!S.session) {
+      const level = $('level').value ? +$('level').value : null;
+      const r = await api(`/projects/${S.project}/sessions`, { method: 'POST', body: { message: text, model_alias: $('model').value, code_level: level } });
+      S.session = r.session.id; S.run = r.run.id; $('title').textContent = r.session.title; openStream(); loadSessions();
+    } else {
+      S.run = (await api(`/sessions/${S.session}/messages`, { method: 'POST', body: { content: text, model_alias: $('model').value } })).id;
+    }
+  } catch { setBusy(false); finishActivity(true); }
 }
 
 async function cancelRun() { if (S.run) await api(`/runs/${S.run}/cancel`, { method: 'POST' }); }
@@ -146,108 +288,153 @@ function openStream() {
   closeStream();
   S.es = new EventSource(`${API}/sessions/${S.session}/events`, { withCredentials: true });
   const on = (type, fn) => S.es.addEventListener(type, e => fn(JSON.parse(e.data)));
-  on('token', e => { if (!S.streamEl) S.streamEl = addMessage('assistant', ''); S.streamEl.dataset.raw += e.data.text; S.streamEl.innerHTML = md(S.streamEl.dataset.raw); scroll(); });
-  on('message_final', e => { if (S.streamEl) S.streamEl.remove(); S.streamEl = null; addMessage('assistant', e.data.content); });
-  on('run_status', e => { S.run = e.run_id; $('status').textContent = `run ${e.run_id.slice(0, 8)} · ${e.data.status}${e.data.steps ? ' · 실행 중: ' + e.data.steps.join(', ') : ''}`; if (['succeeded','failed','cancelled'].includes(e.data.status)) loadSessions(); });
-  on('tool_call', e => bg(`🔧 ${e.data.name} ${JSON.stringify(e.data.args).slice(0, 300)}`));
-  on('agent_switched', e => bg(`👤 담당 전환 → ${e.data.agent}`));
-  on('plan_approved', e => bg(`✅ 계획 승인: ${e.data.title}`));
-  on('plan_auto_approved', e => bg(`⚡ 즉시 실행 템플릿: ${e.data.title}`));
-  on('plan_revised', e => bg(`✏️ 인자 수정: ${e.data.call}`));
-  on('execution_progress', e => bg(`⚙️ ${e.data.event_type} ${e.data.step ? '#' + e.data.step.sequence : ''} ${e.data.status || ''}`));
+  on('run_status', e => {
+    S.run = e.run_id; const st = e.data.status;
+    if (st === 'queued' || st === 'running') { setBusy(true); startActivity(); setActivityTitle('생각하는 중'); }
+    if (st === 'waiting_executor') setActivityTitle(`코드 실행 중 · ${(e.data.steps || []).length}단계`);
+    if (st === 'waiting_input') setActivityTitle('확인을 기다리는 중');
+    if (['succeeded', 'failed', 'cancelled'].includes(st)) { setBusy(false); finishActivity(st !== 'succeeded'); loadSessions(); if (st === 'cancelled') showError('작업을 중지했습니다.'); }
+  });
+  on('token', e => { if (!S.answerEl) S.answerEl = addAnswer(''); S.answerEl.dataset.raw += e.data.text; S.answerEl.innerHTML = md(S.answerEl.dataset.raw); scrollDown(); });
+  on('message_final', e => { if (S.answerEl) S.answerEl.remove(); S.answerEl = null; finishActivity(false); addAnswer(e.data.content); });
+  on('tool_call', e => { if (S.answerEl && !S.answerEl.dataset.raw.trim()) { S.answerEl.remove(); } S.answerEl = null; step('tool', (TOOL_TEXT[e.data.name] || (() => e.data.name))(e.data.args || {})); });
+  on('agent_switched', e => step('switch', e.data.agent === 'analyst' ? '분석 담당이 이어서 진행' : '대화 담당으로 복귀'));
+  on('plan_approved', e => step('ok', `계획 승인 · ${e.data.title}`));
+  on('plan_auto_approved', e => step('ok', `등록된 워크플로우로 바로 실행 · ${e.data.title}`));
+  on('plan_revised', e => step('tool', `파라미터 수정 · #${e.data.call}`));
+  on('execution_progress', e => { if (e.data.event_type === 'execution.step_completed') step(e.data.status === 'SUCCEEDED' ? 'ok' : 'bad', `단계 ${e.data.step?.sequence ?? ''} ${e.data.status === 'SUCCEEDED' ? '완료' : '실패'}`); });
   on('execution_completed', e => renderResults(e.data));
   on('hitl_request', e => renderHitl(e.run_id, e.data));
   on('hitl_resolved', e => document.querySelectorAll(`[data-interrupt="${e.data.interrupt_id}"]`).forEach(n => n.remove()));
-  on('artifact', e => bg(`📄 <a target="_blank" href="/view/artifacts/${e.data.artifact_id}">${esc(e.data.title)}</a>`, true));
-  on('memory_updated', e => { bg(`🧠 메모리 ${e.data.action}: ${esc(e.data.item.title || e.data.item.id)}`); loadMemory(); });
-  on('workflow_saved', e => { bg(`💾 워크플로우 저장: ${esc(e.data.name)}`); loadWorkflows(); });
-  on('run_error', e => bg(`❌ ${esc(e.data.message)}`));
+  on('artifact', e => addFiles([e.data]));
+  on('memory_updated', e => { step('ok', `메모리 ${e.data.action === 'deleted' ? '삭제' : '업데이트'} · ${e.data.item.title || ''}`); loadMemory(); });
+  on('workflow_saved', e => { step('ok', `워크플로우 저장 · ${e.data.name}`); loadWorkflows(); });
+  on('run_error', e => showError(e.data.message));
 }
 
-function scroll() { $('log').scrollTop = $('log').scrollHeight; }
-function bg(html, raw) { const d = document.createElement('div'); d.className = 'bg'; d.innerHTML = raw ? html : esc(html); $('log').appendChild(d); scroll(); }
-function addMessage(role, content, attachments = []) {
-  const d = document.createElement('div'); d.className = `msg ${role}`; d.dataset.raw = content;
-  d.innerHTML = md(content) + (attachments || []).map(a => `<div>📄 <a target="_blank" href="/view/artifacts/${a.artifact_id}">${esc(a.title)}</a></div>`).join('');
-  $('log').appendChild(d); scroll(); return d;
+/* rendering ---------------------------------------------------------------- */
+const logEl = () => $('log');
+function scrollDown() { const s = $('scroll'); s.scrollTop = s.scrollHeight; }
+function addUser(text) { const d = document.createElement('div'); d.className = 'turn-user'; d.innerHTML = `<div class="bubble">${esc(text)}</div>`; logEl().appendChild(d); scrollDown(); }
+function addAnswer(content, attachments = []) {
+  const d = document.createElement('div'); d.className = 'answer'; d.dataset.raw = content; d.innerHTML = md(content);
+  logEl().appendChild(d); if (attachments?.length) addFiles(attachments); scrollDown(); return d;
+}
+function addFiles(items) {
+  const wrap = document.createElement('div'); wrap.className = 'files';
+  wrap.innerHTML = items.map(a => `<a class="file" target="_blank" href="/view/artifacts/${a.artifact_id}"><span class="fi">${a.kind === 'notebook' ? 'IPYNB' : 'MD'}</span><span>${esc(a.title)}<small>${a.kind === 'notebook' ? '노트북' : '리포트'} · 열기</small></span></a>`).join('');
+  logEl().appendChild(wrap); scrollDown();
+}
+function showError(msg) { const d = document.createElement('div'); d.className = 'error'; d.textContent = msg; logEl().appendChild(d); scrollDown(); }
+
+function startActivity() {
+  if (S.activity && !S.activity.dataset.done) return;
+  const d = document.createElement('details'); d.className = 'activity';
+  d.innerHTML = `<summary><span class="spinner"></span><span class="t">생각하는 중</span><span class="chev">›</span></summary><div class="steps"></div>`;
+  logEl().appendChild(d); S.activity = d; scrollDown();
+}
+function setActivityTitle(text) { if (S.activity && !S.activity.dataset.done) S.activity.querySelector('.t').textContent = text; }
+function finishActivity(failed) {
+  if (!S.activity || S.activity.dataset.done) return;
+  const n = S.activity.querySelectorAll('.step').length;
+  if (!n) { S.activity.remove(); S.activity = null; return; }
+  S.activity.dataset.done = '1'; S.activity.open = false;
+  S.activity.querySelector('.spinner')?.replaceWith(Object.assign(document.createElement('span'), { className: failed ? 'spinner' : 'done-ico', style: failed ? 'animation:none;border-color:var(--bad)' : '' }));
+  S.activity.querySelector('.t').textContent = `작업 ${n}단계`;
+}
+function step(kind, text) {
+  startActivity();
+  const icon = { tool: '·', switch: '↪', ok: '✓', bad: '✕' }[kind] || '·';
+  const d = document.createElement('div'); d.className = 'step'; d.innerHTML = `<span class="ico">${icon}</span><span>${esc(text)}</span>`;
+  S.activity.querySelector('.steps').appendChild(d); setActivityTitle(text);
 }
 
 function renderResults(data) {
-  const lines = Object.entries(data.results).map(([k, v]) => {
-    const imgs = (v.images || []).map(p => `<img class="out" src="${API}/sessions/${S.session}/outputs?execution_id=${data.execution_id}&path=${encodeURIComponent(p)}">`).join('');
-    return `<div><b>${esc(k)}</b> ${esc(v.status)} ${v.error ? '— ' + esc(v.error) : ''}<pre>${esc((v.stdout || '').slice(-800))}</pre>${imgs}</div>`;
-  });
-  const d = document.createElement('details'); d.className = 'bg';
-  d.innerHTML = `<summary>📊 실행 결과 (${Object.keys(data.results).length}개 step)</summary>${lines.join('')}`;
-  $('log').appendChild(d); scroll();
+  const entries = Object.entries(data.results);
+  const ok = entries.filter(([, v]) => v.status === 'SUCCEEDED').length;
+  const d = document.createElement('details'); d.className = 'result';
+  d.innerHTML = `<summary>📊 <b>실행 결과</b><span class="badge ${ok === entries.length ? 'ok' : 'bad'}">${ok}/${entries.length} 성공</span></summary><div class="body">` +
+    entries.map(([k, v]) => {
+      const imgs = (v.images || []).map(p => `<img src="${API}/sessions/${S.session}/outputs?execution_id=${data.execution_id}&path=${encodeURIComponent(p)}" onclick="zoom(this.src)">`).join('');
+      const cls = v.status === 'SUCCEEDED' ? 'ok' : (v.status === 'NOT_RUN' ? '' : 'bad');
+      const out = (v.error || v.stdout || '').trim();
+      return `<div class="res-step"><div class="head"><b>${esc(k)}</b><span class="badge ${cls}">${esc(v.status)}</span></div>${out ? `<pre>${esc(out.slice(-1500))}</pre>` : ''}${imgs ? `<div class="imgs">${imgs}</div>` : ''}</div>`;
+    }).join('') + '</div>';
+  d.open = entries.some(([, v]) => v.images?.length);
+  (S.activity && !S.activity.dataset.done ? S.activity.after(d) : logEl().appendChild(d)); scrollDown();
 }
+function zoom(src) { $('lightboxImg').src = src; $('lightbox').style.display = 'grid'; }
 
 function renderHitl(runId, w) {
   const card = document.createElement('div'); card.className = 'card'; card.dataset.interrupt = w.interrupt_id;
   const resume = async value => { await api(`/runs/${runId}/resume`, { method: 'POST', body: { interrupt_id: w.interrupt_id, value } }); card.remove(); };
   if (w.type === 'question') {
-    card.innerHTML = `<b>❓ ${esc(w.question)}</b><div>${(w.options || []).map((o, i) => `<button data-i="${i}">${esc(o)}</button>`).join(' ')}</div>
-      ${(w.fields || []).map(f => `<div class="row"><label>${esc(f.label || f.key)}</label><input data-key="${esc(f.key)}"></div>`).join('')}
-      <div class="row"><input placeholder="직접 입력" id="free"><button class="primary">답변</button></div>`;
-    card.querySelectorAll('button[data-i]').forEach(b => b.onclick = () => resume(w.options[+b.dataset.i]));
-    card.querySelector('.primary').onclick = () => {
+    card.innerHTML = `<h4>${esc(w.question)}</h4><div class="actions">${(w.options || []).map((o, i) => `<button class="opt" data-i="${i}">${esc(o)}</button>`).join('')}</div>
+      ${(w.fields || []).map(f => `<div class="field"><label>${esc(f.label || f.key)}</label><input data-key="${esc(f.key)}"></div>`).join('')}
+      <div class="actions"><input class="wide" id="free" placeholder="직접 입력" style="flex:1"><button class="btn primary" id="ok">답변</button></div>`;
+    card.querySelectorAll('[data-i]').forEach(b => b.onclick = () => resume(w.options[+b.dataset.i]));
+    card.querySelector('#ok').onclick = () => {
       const fields = Object.fromEntries([...card.querySelectorAll('input[data-key]')].map(i => [i.dataset.key, i.value]));
-      resume(Object.keys(fields).length ? { ...fields, text: card.querySelector('#free').value } : card.querySelector('#free').value);
+      const free = card.querySelector('#free').value;
+      resume(Object.keys(fields).length ? { ...fields, text: free } : free);
     };
   } else if (w.type === 'plan_approval') {
-    card.innerHTML = `<b>📋 실행 계획 후보 (하나를 골라 승인)</b>` + w.candidates.map((c, i) => `
-      <div style="border-top:1px solid #d4a72c;margin-top:8px;padding-top:6px">
-        <label><input type="radio" name="cand" value="${i}" ${i === 0 ? 'checked' : ''} style="width:auto"> <b>${esc(c.title)}</b> ${c.source ? `(워크플로우: ${esc(c.source.name)})` : '(새 계획)'}</label>
-        <div class="bg">${esc(c.rationale)}</div>
-        <div class="bg">${c.document.workflow.steps.map(s => s.skill + ': ' + s.tools.map(t => t.tool + (t.execution === 'conditional' ? '(조건부)' : '')).join(', ')).join(' → ')}</div>
-        ${c.input_slots.map(s => `<div class="row"><label>${s.required ? '* ' : ''}${esc(s.key)} <small>${esc(s.type || '')}</small></label><input data-cand="${i}" data-key="${esc(s.key)}" value='${esc(s.value === null || s.value === undefined ? '' : JSON.stringify(s.value))}' placeholder="JSON 값 (예: &quot;nce&quot;, 500, [&quot;a&quot;])"></div>`).join('')}
-      </div>`).join('') + `<div class="row" style="margin-top:8px"><button class="primary" id="ok">승인</button><input id="fb" placeholder="수정 요청 내용"><button id="rev">수정 요청</button><button id="no">취소</button></div>`;
+    card.innerHTML = `<h4>실행 계획을 골라 주세요</h4><div class="sub">선택한 계획의 입력값을 확인하고 승인하면 코드가 실행됩니다.</div>` + w.candidates.map((c, i) => `
+      <label class="cand"><div><input type="radio" name="cand-${w.interrupt_id}" value="${i}" ${i === 0 ? 'checked' : ''}><b>${esc(c.title)}</b>
+        <span class="badge">${c.source ? '등록된 워크플로우' : '새 계획'}</span></div>
+        <div class="sub" style="margin:4px 0 0">${esc(c.rationale)}</div>
+        <div class="flow">${c.document.workflow.steps.flatMap(s => s.tools.map(t => `<span>${esc(t.tool)}${t.execution === 'conditional' ? ' ?' : ''}</span>`)).join('→')}</div>
+        ${c.input_slots.map(s => `<div class="field"><label title="${esc(s.key)}">${s.required ? '* ' : ''}${esc(s.tool)} · ${esc(s.param)}</label><input data-cand="${i}" data-key="${esc(s.key)}" value='${esc(s.value == null ? '' : JSON.stringify(s.value))}' placeholder="${esc(s.type || '')}"></div>`).join('')}
+      </label>`).join('') + `<div class="actions"><button class="btn primary" id="ok">승인하고 실행</button><input class="wide" id="fb" placeholder="수정 요청 (예: 표본을 500개로)" style="flex:1"><button class="btn" id="rev">수정 요청</button><button class="btn" id="no">취소</button></div>`;
     card.querySelector('#ok').onclick = () => {
-      const index = +card.querySelector('input[name=cand]:checked').value; const input_values = {};
-      for (const el of card.querySelectorAll(`input[data-cand="${index}"]`)) if (el.value.trim()) {
-        try { input_values[el.dataset.key] = JSON.parse(el.value); } catch { input_values[el.dataset.key] = el.value; }
-      }
+      const index = +card.querySelector(`input[name="cand-${w.interrupt_id}"]:checked`).value; const input_values = {};
+      for (const el of card.querySelectorAll(`input[data-cand="${index}"]`)) if (el.value.trim()) { try { input_values[el.dataset.key] = JSON.parse(el.value); } catch { input_values[el.dataset.key] = el.value; } }
       resume({ action: 'approve', index, input_values });
     };
     card.querySelector('#rev').onclick = () => resume({ action: 'revise', feedback: card.querySelector('#fb').value });
     card.querySelector('#no').onclick = () => resume({ action: 'cancel' });
   } else if (w.type === 'code_approval') {
-    card.innerHTML = `<b>🧩 Agent가 작성한 코드 실행 승인</b><div>${esc(w.purpose)}</div><textarea id="code" style="height:220px;font-family:monospace">${esc(w.code)}</textarea>
-      <div class="row"><button class="primary" id="ok">실행</button><input id="fb" placeholder="거절 사유"><button id="no">거절</button></div>`;
+    card.innerHTML = `<h4>Agent가 작성한 코드를 실행할까요?</h4><div class="sub">${esc(w.purpose)} · 코드 레벨 ${w.code_level}</div><textarea id="code" rows="10">${esc(w.code)}</textarea>
+      <div class="actions"><button class="btn primary" id="ok">실행</button><input class="wide" id="fb" placeholder="거절 사유" style="flex:1"><button class="btn" id="no">거절</button></div>`;
     card.querySelector('#ok').onclick = () => resume({ approve: true, code: card.querySelector('#code').value });
     card.querySelector('#no').onclick = () => resume({ approve: false, feedback: card.querySelector('#fb').value });
   } else if (w.type === 'memory_change') {
-    card.innerHTML = `<b>🧠 사용자가 작성한 메모리를 바꿀까요?</b><pre>현재: ${esc(w.item.title)} — ${esc(w.item.content)}\n제안: ${esc(w.proposed.title)} — ${esc(w.proposed.content)}</pre><div class="bg">${esc(w.reason)}</div>
-      <button class="primary" id="ok">변경</button> <button id="no">유지</button>`;
+    card.innerHTML = `<h4>직접 작성하신 메모리를 바꿀까요?</h4><div class="sub">${esc(w.reason)}</div>
+      <table><tr><th>현재</th><td>${esc(w.item.title)} — ${esc(w.item.content)}</td></tr><tr><th>제안</th><td>${esc(w.proposed.title)} — ${esc(w.proposed.content)}</td></tr></table>
+      <div class="actions"><button class="btn primary" id="ok">변경</button><button class="btn" id="no">유지</button></div>`;
     card.querySelector('#ok').onclick = () => resume({ approve: true });
     card.querySelector('#no').onclick = () => resume({ approve: false });
   } else if (w.type === 'workflow_save') {
-    card.innerHTML = `<b>💾 이 분석을 워크플로우로 저장할까요?</b>${w.excluded_custom_steps ? `<div class="bg">Agent 작성 코드 ${w.excluded_custom_steps}개는 제외됩니다.</div>` : ''}
-      <div class="row"><label>이름</label><input id="name" value="${esc(w.name)}"></div>
-      <div class="row"><label>예시 질문(줄바꿈 구분)</label><textarea id="q">${esc(w.user_queries.join('\n'))}</textarea></div>
-      <button class="primary" id="ok">저장</button> <button id="no">저장 안 함</button>`;
+    card.innerHTML = `<h4>이 분석을 워크플로우로 저장할까요?</h4><div class="sub">저장하면 나중에 비슷한 요청에서 추천됩니다.${w.excluded_custom_steps ? ` Agent가 작성한 코드 ${w.excluded_custom_steps}개는 제외됩니다.` : ''}</div>
+      <div class="field"><label>이름</label><input id="name" value="${esc(w.name)}"></div>
+      <div class="field"><label>예시 질문 (줄마다 하나)</label><textarea id="q" rows="3" style="font-family:inherit">${esc(w.user_queries.join('\n'))}</textarea></div>
+      <div class="actions"><button class="btn primary" id="ok">저장</button><button class="btn" id="no">저장 안 함</button></div>`;
     card.querySelector('#ok').onclick = () => resume({ approve: true, name: card.querySelector('#name').value, user_queries: card.querySelector('#q').value.split('\n').filter(Boolean) });
     card.querySelector('#no').onclick = () => resume({ approve: false });
   }
-  $('log').appendChild(card); scroll();
+  logEl().appendChild(card); scrollDown();
 }
 
+/* drawer ------------------------------------------------------------------- */
+function toggleDrawer() { $('drawer').classList.toggle('open'); }
 async function loadMemory() {
   const m = await api(`/projects/${S.project}/memory`);
-  $('memory').innerHTML = `<div class="bg">${m.total_chars}/${m.max_chars}자</div>` + m.items.map(i => `
-    <div class="bg" title="${esc(i.content)}">[${esc(i.category)}] <b>${esc(i.title)}</b> ${i.author === 'user' ? '🔒' : '🤖'} v${i.version}
-    <a href="#" onclick="delMemory('${i.id}', ${i.version});return false">삭제</a><br>${esc(i.content)}</div>`).join('');
+  $('memUsage').textContent = `${m.total_chars.toLocaleString()} / ${m.max_chars.toLocaleString()}자`;
+  $('memory').innerHTML = m.items.map(i => `<div class="mem"><div class="t">${i.author === 'user' ? '🔒' : '✦'} ${esc(i.title)}<button class="x" title="삭제" onclick="delMemory('${i.id}', ${i.version})">✕</button></div>
+    <div style="font-size:11px;color:var(--faint)">${CAT[i.category]} · v${i.version} · ${i.author === 'user' ? '직접 작성' : 'Agent'}</div><p>${esc(i.content)}</p></div>`).join('')
+    || '<div style="color:var(--faint);font-size:13px">아직 저장된 메모리가 없습니다</div>';
 }
 async function addMemory() {
+  if (!$('memTitle').value.trim() || !$('memContent').value.trim()) return;
   await api(`/projects/${S.project}/memory`, { method: 'POST', body: { category: $('memCat').value, title: $('memTitle').value, content: $('memContent').value } });
   $('memTitle').value = $('memContent').value = ''; loadMemory();
 }
 async function delMemory(id, v) { await api(`/projects/${S.project}/memory/${id}?expected_version=${v}`, { method: 'DELETE' }); loadMemory(); }
-
 async function loadWorkflows() {
   const list = await api('/workflows');
-  $('workflows').innerHTML = list.map(w => `<div class="bg"><b>${esc(w.name)}</b> [${w.lifecycle}] r${w.revision} ${w.index_state}
-    ${w.lifecycle === 'candidate' ? `<a href="#" onclick="promote('${w.id}');return false">승격</a>` : ''}</div>`).join('') || '<div class="bg">없음</div>';
+  $('workflows').innerHTML = list.map(w => `<div class="mem"><div class="t">${esc(w.name)}<span class="badge" style="margin-left:auto">${w.lifecycle === 'template' ? '공개' : '내 후보'}</span></div>
+    <p>${esc(w.user_request)}</p>${w.lifecycle === 'candidate' ? `<div class="actions" style="margin-top:6px"><button class="btn" onclick="promote('${w.id}')">공개(승격)</button></div>` : ''}</div>`).join('')
+    || '<div style="color:var(--faint);font-size:13px">저장된 워크플로우가 없습니다</div>';
 }
 async function promote(id) { await api(`/workflows/${id}/promote`, { method: 'POST' }); loadWorkflows(); }
 

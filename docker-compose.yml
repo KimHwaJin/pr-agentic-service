@@ -62,6 +62,7 @@ services:
       # Skills/tools/knowledge and prompts are read live, so edits apply without a rebuild.
       - ./assets:/app/assets:ro
       - ./src/agent/prompts:/app/src/agent/prompts:ro
+      - ./web:/app/web:ro
     extra_hosts:
       - "model.frodo.com:10.250.110.99"
     healthcheck:
