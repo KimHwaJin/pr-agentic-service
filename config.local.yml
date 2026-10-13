@@ -32,7 +32,8 @@ models:
   - name: qwen38-27b-nvfp4
     label: Qwen 3.8 27B
     default: true
-    input: [text]
+    input: [text, image]   # vision checked on the gateway 2026-10-14
+    max_images: 8
   - name: qwen38-27b-fp8
     label: Qwen 3.8 27B (FP8)
     input: [text]
