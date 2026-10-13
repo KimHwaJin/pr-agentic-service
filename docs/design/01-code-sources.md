@@ -76,7 +76,7 @@
 
 **정리 (보존 7일)**
 
-- Retention 워커가 `code_sources.created_at`이 7일 지난 행의 파일을 지우고 `file_deleted_at`을 채운 뒤, 빈 폴더(`<call>`, `runs/<run_id>`, …)를 지웁니다.
+- Retention 워커가 `code_sources.created_at`이 7일 지난 행의 파일을 지우고 `file_deleted_at`을 채운 뒤, 빈 폴더(`<NN>-<도구>`, `runs/<run_id>`, …)를 지웁니다.
 - 세션·프로젝트 삭제는 지금처럼 소프트 삭제라 파일도 같은 7일 규칙을 따릅니다.
 - 예전 해시 이름 파일(`sources/<sha 앞 2자>/<sha>.py`)은 executor가 이미 사본을 가지고 있으므로, 같은 워커가 수정 시각 기준 7일이 지나면 지웁니다.
 
