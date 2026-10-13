@@ -123,7 +123,17 @@
   .composer { max-width: 780px; margin: 0 auto; background: var(--panel); border: 1px solid var(--line); border-radius: 20px; box-shadow: var(--shadow); padding: 12px 12px 10px 18px; }
   .composer textarea { width: 100%; border: 0; outline: none; resize: none; background: transparent; max-height: 220px; min-height: 26px; line-height: 1.5; }
   .composer .bar { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
-  .composer .hint { font-size: 12px; color: var(--faint); flex: 1; }
+  .composer .hint { font-size: 12px; color: var(--faint); flex: 1; text-align: right; margin-right: 4px; }
+  .pick { display: inline-flex; align-items: center; gap: 5px; padding: 4px 8px; border-radius: 8px; font-size: 12.5px; color: var(--muted); cursor: pointer; }
+  .pick:hover { background: var(--hover); color: var(--ink); }
+  .pick svg { width: 15px; height: 15px; flex: none; }
+  .pick select { border: 0; background: transparent; outline: none; font-size: 12.5px; color: inherit; cursor: pointer; max-width: 160px; }
+  .item { position: relative; padding-right: 54px; }
+  .item .acts { position: absolute; right: 4px; top: 50%; transform: translateY(-50%); display: none; gap: 2px; }
+  .item:hover .acts, .item.active .acts { display: flex; }
+  .item .acts span { width: 22px; height: 22px; border-radius: 6px; display: grid; place-items: center; color: var(--faint); }
+  .item .acts span:hover { background: var(--panel); color: var(--ink); }
+  .item .acts svg { width: 13px; height: 13px; }
   .send { width: 34px; height: 34px; border-radius: 10px; background: var(--accent); color: #fff; display: grid; place-items: center; }
   .send:disabled { opacity: .35; cursor: default; }
   .send.stop { background: var(--ink); }
@@ -301,8 +311,6 @@
 <main>
   <header>
     <div class="title" id="title" title="클릭해서 이름 바꾸기" onclick="renameSession()">새 대화</div>
-    <label class="chip">모델 <select id="model"></select></label>
-    <label class="chip">코드 레벨 <select id="level"><option value="">기본</option><option value="1">1 · tool만</option><option value="2">2 · 연결 코드</option><option value="3">3 · tool 우선</option><option value="4">4 · 자유 코드</option></select></label>
   </header>
   <div id="scroll"><div id="log"></div></div>
   <div id="projectsView" style="display:none;flex:1;overflow:auto">
@@ -318,6 +326,8 @@
     <div class="composer">
       <textarea id="input" rows="1" placeholder="분석하고 싶은 내용을 입력하세요"></textarea>
       <div class="bar">
+        <label class="pick" title="모델"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z"/><path d="M12 12l8-4.5M12 12v9M12 12 4 7.5"/></svg><select id="model"></select></label>
+        <label class="pick" title="코드 레벨: Agent가 직접 코드를 작성할 수 있는 범위"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="m8 7-5 5 5 5M16 7l5 5-5 5"/></svg><select id="level"><option value="">코드 레벨 · 기본</option><option value="1">1 · tool만</option><option value="2">2 · 연결 코드</option><option value="3">3 · tool 우선</option><option value="4">4 · 자유 코드</option></select></label>
         <span class="hint" id="hint">Enter 전송 · Shift+Enter 줄바꿈</span>
         <button class="send" id="send" onclick="sendOrStop()" title="전송"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 4l7 7-1.4 1.4L13 7.8V20h-2V7.8l-4.6 4.6L5 11z"/></svg></button>
       </div>
@@ -413,7 +423,8 @@ async function loadSessions() {
 function renderSessions() {
   const q = $('sessionSearch').value.trim().toLowerCase();
   const list = sessionCache.filter(s => !q || s.title.toLowerCase().includes(q));
-  $('sessions').innerHTML = list.map(s => `<button class="item ${s.id === S.session ? 'active' : ''}" onclick="openSession('${s.id}')">${s.active_run_id ? '<span class="dot"></span>' : '<span class="bullet"></span>'}${esc(s.title)}</button>`).join('')
+  $('sessions').innerHTML = list.map(s => `<div class="item ${s.id === S.session ? 'active' : ''}" role="button" tabindex="0" onclick="openSession('${s.id}')">${s.active_run_id ? '<span class="dot"></span>' : '<span class="bullet"></span>'}${esc(s.title)}
+      <span class="acts"><span title="이름 바꾸기" onclick="event.stopPropagation(); renameSession('${s.id}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20h4L19 9l-4-4L4 16z"/></svg></span><span title="삭제" onclick="event.stopPropagation(); deleteSession('${s.id}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg></span></span></div>`).join('')
     || `<div style="padding:8px 10px;color:var(--faint);font-size:13px">${q ? '검색 결과가 없습니다' : '아직 대화가 없습니다'}</div>`;
 }
 $('sessionSearch').addEventListener('input', renderSessions);
@@ -524,11 +535,25 @@ async function openSession(id) {
   openStream(); loadSessions();
 }
 
-async function renameSession() {
-  if (!S.session) return;
-  const title = prompt('대화 이름', $('title').textContent); if (!title?.trim()) return;
-  const s = await api(`/sessions/${S.session}`, { method: 'PATCH', body: { title: title.trim() } });
-  $('title').textContent = s.title; loadSessions();
+async function renameSession(id = S.session) {
+  if (!id) return;
+  const current = sessionCache.find(x => x.id === id)?.title || $('title').textContent;
+  const title = prompt('대화 이름', current); if (!title?.trim()) return;
+  const s = await api(`/sessions/${id}`, { method: 'PATCH', body: { title: title.trim() } });
+  if (id === S.session) $('title').textContent = s.title;
+  loadSessions();
+}
+
+async function deleteSession(id) {
+  const target = sessionCache.find(x => x.id === id);
+  if (!target || !confirm(`"${target.title}" 대화를 삭제할까요?`)) return;
+  if (target.active_run_id) {
+    if (!confirm('이 대화는 아직 작업 중입니다. 작업을 중지하고 삭제할까요?')) return;
+    await api(`/runs/${target.active_run_id}/cancel`, { method: 'POST' });
+    for (let i = 0; i < 20; i++) { await new Promise(r => setTimeout(r, 500)); if (!(await api(`/sessions/${id}`)).active_run_id) break; }
+  }
+  await api(`/sessions/${id}`, { method: 'DELETE' });
+  if (id === S.session) newSession(); else loadSessions();
 }
 
 $('level').onchange = async e => { if (S.session) await api(`/sessions/${S.session}`, { method: 'PATCH', body: { code_level: e.target.value ? +e.target.value : null } }); };
