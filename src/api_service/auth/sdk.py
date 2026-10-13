@@ -1,10 +1,14 @@
-"""Boundary to the corporate SSO SDK (closed network only, synchronous, Flask style).
+"""Boundary to the corporate SSO SDK.
 
-Known SDK contract (Flask sample): ``sso = SSO(request)``, ``sso.redirect_url``,
-``sso.check_day_cookie(cookie) -> bool``, ``sso.get_sso_info(cookie)`` returning
-(employee_no, name, english_name, department, email). The SDK reads ``request.url``,
-``request.args.to_dict()``, ``request.cookies.to_dict()`` and ``request.environ``; we give
-it a read-only view of the ASGI request instead of Flask.
+Closed network only, synchronous, Flask style.
+
+Known SDK contract (Flask sample): ``sso = SSO(request)``,
+``sso.redirect_url``, ``sso.check_day_cookie(cookie) -> bool``,
+``sso.get_sso_info(cookie)`` returning
+(employee_no, name, english_name, department, email).
+The SDK reads ``request.url``, ``request.args.to_dict()``,
+``request.cookies.to_dict()`` and ``request.environ``; we give it a
+read-only view of the ASGI request instead of Flask.
 """
 
 from collections.abc import Callable, Iterable, Mapping
@@ -32,7 +36,8 @@ class CompanySdk(Protocol):
     def get_sso_info(self, cookie: str) -> Any: ...
 
 
-# factory(request_view, callback_url | None) -> SDK instance, e.g. ``lambda r, _: SSO(r)``
+# factory(request_view, callback_url | None) -> SDK instance,
+# e.g. ``lambda r, _: SSO(r)``
 SdkFactory = Callable[[Any, str | None], CompanySdk]
 
 
@@ -69,20 +74,32 @@ def _environ(request: Request) -> dict[str, str]:
     }
     for name, value in scope.get("headers", []):
         header = name.decode("latin-1").upper().replace("-", "_")
-        key = header if header in {"CONTENT_TYPE", "CONTENT_LENGTH"} else "HTTP_" + header
+        key = (
+            header
+            if header in {"CONTENT_TYPE", "CONTENT_LENGTH"}
+            else "HTTP_" + header
+        )
         text = value.decode("latin-1")
-        environ[key] = environ[key] + ("; " if key == "HTTP_COOKIE" else ",") + text if key in environ else text
+        environ[key] = (
+            environ[key] + ("; " if key == "HTTP_COOKIE" else ",") + text
+            if key in environ
+            else text
+        )
     return environ
 
 
 class SdkRequest:
-    """Flask-like read-only request. On login, args ORIGIN is the server callback."""
+    """Flask-like read-only request.
+
+    On login, args ORIGIN is the server callback.
+    """
 
     def __init__(self, request: Request, callback_url: str | None = None):
         params = request.query_params
         if callback_url is not None:
             params = QueryParams(
-                [(k, v) for k, v in params.multi_items() if k != "ORIGIN"] + [("ORIGIN", callback_url)]
+                [(k, v) for k, v in params.multi_items() if k != "ORIGIN"]
+                + [("ORIGIN", callback_url)]
             )
         self.args = _Values(params.multi_items())
         self.cookies = _Values(request.cookies.items())
@@ -92,7 +109,9 @@ class SdkRequest:
         self.method = request.method
 
 
-def verify_employee(sdk_factory: SdkFactory, request: Request) -> Employee | None:
+def verify_employee(
+    sdk_factory: SdkFactory, request: Request
+) -> Employee | None:
     cookie = request.headers.get("cookie")
     if not cookie:
         return None
@@ -106,10 +125,18 @@ def verify_employee(sdk_factory: SdkFactory, request: Request) -> Employee | Non
     if not isinstance(info, (tuple, list)) or len(info) != 5:
         raise ValueError("Invalid SSO employee response")
     employee_id, name, english_name, department, email = info
-    if not isinstance(employee_id, str) or not employee_id.strip() or not isinstance(name, str):
+    if (
+        not isinstance(employee_id, str)
+        or not employee_id.strip()
+        or not isinstance(name, str)
+    ):
         raise ValueError("Invalid SSO employee response")
     return Employee(employee_id.strip(), name, english_name, department, email)
 
 
-def login_url(sdk_factory: SdkFactory, request: Request, callback_url: str) -> str:
-    return sdk_factory(SdkRequest(request, callback_url), callback_url).redirect_url
+def login_url(
+    sdk_factory: SdkFactory, request: Request, callback_url: str
+) -> str:
+    return sdk_factory(
+        SdkRequest(request, callback_url), callback_url
+    ).redirect_url

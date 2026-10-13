@@ -52,7 +52,12 @@ class ProjectRead(Model):
 class SessionCreate(Model):
     title: str | None = Field(None, max_length=200)
     code_level: int | None = Field(None, ge=1, le=4)
-    message: str | None = Field(None, min_length=1, max_length=20000, description="첫 메시지. 있으면 바로 run 시작")
+    message: str | None = Field(
+        None,
+        min_length=1,
+        max_length=20000,
+        description="첫 메시지. 있으면 바로 run 시작",
+    )
     model_alias: str | None = None
 
 
@@ -100,7 +105,9 @@ class RunRead(Model):
 
 class SessionPage(Model):
     items: list[SessionRead]
-    next_cursor: str | None  # pass back as ?cursor= for the next (older) page; null on the last page
+    next_cursor: (
+        str | None
+    )  # pass back as ?cursor= for the next (older) page; null on the last page
 
 
 class MessagePage(Model):
@@ -137,14 +144,27 @@ class ResumeRequest(Model):
 
 
 class MemoryCreate(Model):
-    category: Literal["background", "analysis_preferences", "report_preferences", "shared_findings"]
+    category: Literal[
+        "background",
+        "analysis_preferences",
+        "report_preferences",
+        "shared_findings",
+    ]
     title: str = Field(min_length=1, max_length=200)
     content: str = Field(min_length=1)
 
 
 class MemoryUpdate(Model):
     expected_version: int
-    category: Literal["background", "analysis_preferences", "report_preferences", "shared_findings"] | None = None
+    category: (
+        Literal[
+            "background",
+            "analysis_preferences",
+            "report_preferences",
+            "shared_findings",
+        ]
+        | None
+    ) = None
     title: str | None = Field(None, min_length=1, max_length=200)
     content: str | None = Field(None, min_length=1)
 
@@ -191,7 +211,9 @@ class WorkflowSummary(Model):
     author_id: str
     revision: int
     index_state: str
-    steps: list[dict[str, Any]]  # [{skill, tools: [{tool, execution}]}] in execution order
+    steps: list[
+        dict[str, Any]
+    ]  # [{skill, tools: [{tool, execution}]}] in execution order
     call_count: int
     mine: bool
     created_at: datetime
@@ -199,7 +221,9 @@ class WorkflowSummary(Model):
 
 
 class WorkflowDetail(WorkflowRead):
-    calls: list[dict[str, Any]]  # per tool call: skill, tool, summary, condition, params with sources and docs
+    # per tool call: skill, tool, summary, condition, params with sources
+    # and docs
+    calls: list[dict[str, Any]]
     mine: bool
 
 

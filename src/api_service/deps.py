@@ -27,7 +27,10 @@ async def current_user(request: Request) -> User:
         if len(_USER_CACHE) > 10000:
             _USER_CACHE.clear()
         if user is not None:
-            _USER_CACHE[login.user_id] = (time.monotonic() + USER_CACHE_SECONDS, user)
+            _USER_CACHE[login.user_id] = (
+                time.monotonic() + USER_CACHE_SECONDS,
+                user,
+            )
     if user is None or not user.is_active:
         raise HTTPException(401, "Login required.")
     return user
@@ -46,14 +49,23 @@ AdminDep = Annotated[User, Depends(admin_user)]
 WRITE_ROLES = {"owner", "editor"}
 
 
-async def project_for(services: Services, user: User, project_id: str, write: bool = False) -> Project:
-    """Membership decides access (owner today; editor/viewer when projects are shared)."""
+async def project_for(
+    services: Services, user: User, project_id: str, write: bool = False
+) -> Project:
+    """Membership decides access.
+
+    Owner today; editor/viewer when projects are shared.
+    """
     async with services.db.sessions() as db:
         row = (
             await db.execute(
                 select(Project, ProjectMember.role)
                 .join(ProjectMember, ProjectMember.project_id == Project.id)
-                .where(Project.id == project_id, ProjectMember.user_id == user.id, Project.deleted_at.is_(None))
+                .where(
+                    Project.id == project_id,
+                    ProjectMember.user_id == user.id,
+                    Project.deleted_at.is_(None),
+                )
             )
         ).first()
     if row is None:
@@ -64,7 +76,9 @@ async def project_for(services: Services, user: User, project_id: str, write: bo
     return project
 
 
-async def session_for(services: Services, user: User, session_id: str, write: bool = False) -> ChatSession:
+async def session_for(
+    services: Services, user: User, session_id: str, write: bool = False
+) -> ChatSession:
     async with services.db.sessions() as db:
         session = await db.get(ChatSession, session_id)
     if session is None or session.deleted_at is not None:

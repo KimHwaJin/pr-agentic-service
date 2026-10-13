@@ -8,7 +8,10 @@ from core.services import Services
 
 @dataclass
 class RunContext:
-    """Per-run runtime context (not checkpointed). Tools reach services through it."""
+    """Per-run runtime context (not checkpointed).
+
+    Tools reach services through it.
+    """
 
     services: Services
     run_id: str
@@ -22,16 +25,22 @@ class RunContext:
     user_text: str
     cache: dict[str, Any] = field(default_factory=dict)
 
-    async def emit(self, type: str, data: dict[str, Any], durable: bool = True) -> None:
-        await self.services.events.emit(self.session_id, self.run_id, type, data, durable)
+    async def emit(
+        self, type: str, data: dict[str, Any], durable: bool = True
+    ) -> None:
+        await self.services.events.emit(
+            self.session_id, self.run_id, type, data, durable
+        )
 
 
 class AnalysisState(AgentState):
     """Checkpointed per session thread.
 
     active_agent: which persona drives the conversation (main | analyst).
-    plan: approved Workflow 1.0 document + run bindings (see agent.tools.analysis).
-    execution: the session's live executor MULTI execution (one kernel, one notebook).
+    plan: approved Workflow 1.0 document + run bindings
+        (see agent.tools.analysis).
+    execution: the session's live executor MULTI execution
+        (one kernel, one notebook).
     reports: published report artifacts of this session.
     """
 

@@ -1,7 +1,8 @@
-"""Agent prompts are Markdown files: ``prompts/<agent>.md`` with optional frontmatter.
+"""Agent prompts are Markdown files: ``prompts/<agent>.md``.
 
-Frontmatter keys: ``skills`` (skill roots this agent may read: knowledge | analysis).
-Body placeholders use ``{name}``; only the names passed to ``render`` are replaced.
+Each file may start with frontmatter. Frontmatter keys: ``skills`` (skill
+roots this agent may read: knowledge | analysis). Body placeholders use
+``{name}``; only the names passed to ``render`` are replaced.
 """
 
 import re
@@ -18,9 +19,16 @@ class Prompt:
     body: str
 
     def render(self, **values: object) -> str:
-        """Fills {name} placeholders that are given; any other braces (JSON examples) stay as written."""
+        """Fills the {name} placeholders that are given.
+
+        Any other braces (JSON examples) stay as written.
+        """
         return re.sub(
-            r"\{(\w+)\}", lambda m: str(values[m.group(1)]) if m.group(1) in values else m.group(0), self.body
+            r"\{(\w+)\}",
+            lambda m: (
+                str(values[m.group(1)]) if m.group(1) in values else m.group(0)
+            ),
+            self.body,
         )
 
 
@@ -31,7 +39,9 @@ def _parse(root: Path) -> dict[str, Prompt]:
     prompts = {}
     for path in root.glob("*.md"):
         meta, body = split_frontmatter(path.read_text("utf-8"))
-        prompts[path.stem] = Prompt(path.stem, tuple(meta.get("skills", ())), body)
+        prompts[path.stem] = Prompt(
+            path.stem, tuple(meta.get("skills", ())), body
+        )
     return prompts
 
 

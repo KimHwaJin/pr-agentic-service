@@ -1,9 +1,11 @@
 """pr-batch integration.
 
-* Gateway: ``/api/v1/batch/{path}`` relays to pr-batch ``/api/v1/{path}`` with a short-lived JWT for
-  the SSO user (HS256, aud=pr-batch, scope=batch:manage, <= 300 s).
-* ``/internal/v1/execution-reports``: pr-batch asks for a report of a finished batch execution,
-  authenticated with its own service token (iss=pr-batch, aud=prj_re-report).
+* Gateway: ``/api/v1/batch/{path}`` relays to pr-batch ``/api/v1/{path}``
+  with a short-lived JWT for the SSO user (HS256, aud=pr-batch,
+  scope=batch:manage, <= 300 s).
+* ``/internal/v1/execution-reports``: pr-batch asks for a report of a
+  finished batch execution, authenticated with its own service token
+  (iss=pr-batch, aud=prj_re-report).
 """
 
 import hashlib
@@ -50,29 +52,57 @@ def _batch_token(services, user) -> str:
 
 
 @router.post("/api/v1/batch/scripts/from-notebook", status_code=201)
-async def notebook_to_batch_script(body: BatchScriptFromNotebook, services: ServicesDep, user: UserDep):
-    """Registers a session notebook (executor artifact) as a pr-batch NOTEBOOK script."""
+async def notebook_to_batch_script(
+    body: BatchScriptFromNotebook, services: ServicesDep, user: UserDep
+):
+    """Registers a session notebook (executor artifact).
+
+    It becomes a pr-batch NOTEBOOK script.
+    """
     artifact = await _owned_artifact(services, user, body.artifact_id)
     if artifact["type"] != "NOTEBOOK":
-        raise HTTPException(422, "Only notebook artifacts can become batch scripts.")
-    response, chunks = await services.executor.stream_artifact(body.artifact_id)
+        raise HTTPException(
+            422, "Only notebook artifacts can become batch scripts."
+        )
+    response, chunks = await services.executor.stream_artifact(
+        body.artifact_id
+    )
     content = b"".join([c async for c in chunks])
     await response.aclose()
+    digest = hashlib.sha256(content).hexdigest()[:16]
     result = await _client(services).post(
         "/api/v1/scripts",
         headers={
             "Authorization": f"Bearer {_batch_token(services, user)}",
-            "Idempotency-Key": f"nb-{body.artifact_id}-{hashlib.sha256(content).hexdigest()[:16]}",
+            "Idempotency-Key": f"nb-{body.artifact_id}-{digest}",
         },
-        data={"type": "NOTEBOOK", **({"name": body.name} if body.name else {})},
-        files={"file": (artifact["name"], content, "application/x-ipynb+json")},
+        data={
+            "type": "NOTEBOOK",
+            **({"name": body.name} if body.name else {}),
+        },
+        files={
+            "file": (artifact["name"], content, "application/x-ipynb+json")
+        },
     )
-    return Response(result.content, result.status_code, media_type=result.headers.get("content-type"))
+    return Response(
+        result.content,
+        result.status_code,
+        media_type=result.headers.get("content-type"),
+    )
 
 
-@router.api_route("/api/v1/batch/{path:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE"])
-async def batch_gateway(path: str, request: Request, services: ServicesDep, user: UserDep):
-    headers = {k: v for k, v in request.headers.items() if k.lower() in FORWARD_HEADERS}
+@router.api_route(
+    "/api/v1/batch/{path:path}",
+    methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
+)
+async def batch_gateway(
+    path: str, request: Request, services: ServicesDep, user: UserDep
+):
+    headers = {
+        k: v
+        for k, v in request.headers.items()
+        if k.lower() in FORWARD_HEADERS
+    }
     headers["Authorization"] = f"Bearer {_batch_token(services, user)}"
     result = await _client(services).request(
         request.method,
@@ -81,16 +111,24 @@ async def batch_gateway(path: str, request: Request, services: ServicesDep, user
         headers=headers,
         content=await request.body(),
     )
-    passthrough = {k: v for k, v in result.headers.items() if k.lower() in {"etag", "location", "content-type"}}
+    passthrough = {
+        k: v
+        for k, v in result.headers.items()
+        if k.lower() in {"etag", "location", "content-type"}
+    }
     return Response(result.content, result.status_code, headers=passthrough)
 
 
-# --- called by pr-batch ---------------------------------------------------------------------
+# --- called by pr-batch -----------------------------------------------------
 
 
 def _verify_service_token(services, authorization: str | None) -> dict:
     secret = services.settings.batch_report_jwt_secret
-    if not secret or not authorization or not authorization.startswith("Bearer "):
+    if (
+        not secret
+        or not authorization
+        or not authorization.startswith("Bearer ")
+    ):
         raise HTTPException(401, "Service token required.")
     try:
         return jwt.decode(
@@ -132,12 +170,20 @@ async def create_report_job(
     execution = await services.executor.get(body.execution_id)
     if execution["context"]["user_id"] != body.owner_id:
         raise HTTPException(403, "The execution belongs to another user.")
-    digest = hashlib.sha256(json.dumps(body.model_dump(), sort_keys=True).encode()).hexdigest()
+    digest = hashlib.sha256(
+        json.dumps(body.model_dump(), sort_keys=True).encode()
+    ).hexdigest()
     async with services.db.sessions() as db:
-        existing = await db.scalar(select(BatchReportJob).where(BatchReportJob.idempotency_key == idempotency_key))
+        existing = await db.scalar(
+            select(BatchReportJob).where(
+                BatchReportJob.idempotency_key == idempotency_key
+            )
+        )
         if existing:
             if existing.request_hash != digest:
-                raise HTTPException(409, "Idempotency-Key reused with a different request.")
+                raise HTTPException(
+                    409, "Idempotency-Key reused with a different request."
+                )
             return _job_view(existing)
         job = BatchReportJob(
             id=str(uuid.uuid4()),
@@ -154,7 +200,11 @@ async def create_report_job(
 
 
 @router.get("/internal/v1/execution-reports/{job_id}")
-async def get_report_job(job_id: str, services: ServicesDep, authorization: str | None = Header(None)):
+async def get_report_job(
+    job_id: str,
+    services: ServicesDep,
+    authorization: str | None = Header(None),
+):
     _verify_service_token(services, authorization)
     async with services.db.sessions() as db:
         job = await db.get(BatchReportJob, job_id)
@@ -164,7 +214,11 @@ async def get_report_job(job_id: str, services: ServicesDep, authorization: str 
 
 
 @router.post("/internal/v1/execution-reports/{job_id}/retry", status_code=202)
-async def retry_report_job(job_id: str, services: ServicesDep, authorization: str | None = Header(None)):
+async def retry_report_job(
+    job_id: str,
+    services: ServicesDep,
+    authorization: str | None = Header(None),
+):
     _verify_service_token(services, authorization)
     async with services.db.sessions() as db:
         job = await db.get(BatchReportJob, job_id, with_for_update=True)
@@ -172,6 +226,10 @@ async def retry_report_job(job_id: str, services: ServicesDep, authorization: st
             raise HTTPException(404, "Report job not found.")
         if job.state != "FAILED":
             raise HTTPException(409, "Only failed jobs can be retried.")
-        job.state, job.lease_owner, job.lease_expires_at = job.failed_stage or "QUEUED", None, None
+        job.state, job.lease_owner, job.lease_expires_at = (
+            job.failed_stage or "QUEUED",
+            None,
+            None,
+        )
         await db.commit()
         return _job_view(job)

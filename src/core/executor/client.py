@@ -16,11 +16,16 @@ class ExecutorError(Exception):
 
 
 class ExecutorClient:
-    """Executor REST v1. Every mutation carries a caller-derived idempotency key so a
-    replayed call (pod crash, graph replay) returns the original receipt."""
+    """Executor REST v1.
+
+    Every mutation carries a caller-derived idempotency key so a replayed
+    call (pod crash, graph replay) returns the original receipt.
+    """
 
     def __init__(self, base_url: str, timeout: float):
-        self.http = httpx.AsyncClient(base_url=base_url.rstrip("/") + "/api/v1", timeout=timeout)
+        self.http = httpx.AsyncClient(
+            base_url=base_url.rstrip("/") + "/api/v1", timeout=timeout
+        )
 
     async def close(self) -> None:
         await self.http.aclose()
@@ -32,7 +37,13 @@ class ExecutorClient:
                 body = response.json()
             except ValueError:
                 body = response.text
-            log.warning("executor_error method=%s url=%s status=%s body=%s", method, url, response.status_code, body)
+            log.warning(
+                "executor_error method=%s url=%s status=%s body=%s",
+                method,
+                url,
+                response.status_code,
+                body,
+            )
             raise ExecutorError(response.status_code, body)
         return response.json() if response.content else None
 
@@ -47,7 +58,9 @@ class ExecutorClient:
         trigger: str = "INTERACTIVE",
         metadata: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-        lifecycle: dict[str, Any] = {"operation_mode": "MULTI" if wait_seconds else "SINGLE"}
+        lifecycle: dict[str, Any] = {
+            "operation_mode": "MULTI" if wait_seconds else "SINGLE"
+        }
         if wait_seconds:
             lifecycle["operation_wait_timeout_seconds"] = wait_seconds
         body = {
@@ -62,7 +75,12 @@ class ExecutorClient:
         return await self._call("POST", "/executions", json=body)
 
     async def append_operation(
-        self, execution_id: str, *, idempotency_key: str, expected_version: int, steps: list[dict[str, Any]]
+        self,
+        execution_id: str,
+        *,
+        idempotency_key: str,
+        expected_version: int,
+        steps: list[dict[str, Any]],
     ) -> dict[str, Any]:
         body = {
             "idempotency_key": idempotency_key,
@@ -70,15 +88,33 @@ class ExecutorClient:
             "spec": {"schema_version": "1.0", "steps": steps},
             "actor": AGENT_ACTOR,
         }
-        return await self._call("POST", f"/executions/{execution_id}/operations", json=body)
+        return await self._call(
+            "POST", f"/executions/{execution_id}/operations", json=body
+        )
 
-    async def finalize(self, execution_id: str, *, idempotency_key: str, expected_version: int) -> dict[str, Any]:
-        body = {"idempotency_key": idempotency_key, "expected_version": expected_version, "actor": AGENT_ACTOR}
-        return await self._call("POST", f"/executions/{execution_id}/finalize", json=body)
+    async def finalize(
+        self, execution_id: str, *, idempotency_key: str, expected_version: int
+    ) -> dict[str, Any]:
+        body = {
+            "idempotency_key": idempotency_key,
+            "expected_version": expected_version,
+            "actor": AGENT_ACTOR,
+        }
+        return await self._call(
+            "POST", f"/executions/{execution_id}/finalize", json=body
+        )
 
-    async def cancel(self, execution_id: str, *, idempotency_key: str, reason: str) -> dict[str, Any]:
-        body = {"idempotency_key": idempotency_key, "reason": reason, "actor": AGENT_ACTOR}
-        return await self._call("POST", f"/executions/{execution_id}/cancel", json=body)
+    async def cancel(
+        self, execution_id: str, *, idempotency_key: str, reason: str
+    ) -> dict[str, Any]:
+        body = {
+            "idempotency_key": idempotency_key,
+            "reason": reason,
+            "actor": AGENT_ACTOR,
+        }
+        return await self._call(
+            "POST", f"/executions/{execution_id}/cancel", json=body
+        )
 
     async def get(self, execution_id: str) -> dict[str, Any]:
         return await self._call("GET", f"/executions/{execution_id}")
@@ -87,14 +123,24 @@ class ExecutorClient:
         return await self._call("GET", f"/executions/{execution_id}/result")
 
     async def artifacts(self, execution_id: str) -> list[dict[str, Any]]:
-        page = await self._call("GET", f"/executions/{execution_id}/artifacts", params={"limit": 200})
+        page = await self._call(
+            "GET",
+            f"/executions/{execution_id}/artifacts",
+            params={"limit": 200},
+        )
         return page["items"]
 
     async def artifact(self, artifact_id: str) -> dict[str, Any]:
         return await self._call("GET", f"/artifacts/{artifact_id}")
 
     async def create_report(
-        self, execution_id: str, *, idempotency_key: str, markdown: str, name: str, metadata: dict[str, Any]
+        self,
+        execution_id: str,
+        *,
+        idempotency_key: str,
+        markdown: str,
+        name: str,
+        metadata: dict[str, Any],
     ) -> dict[str, Any]:
         body = {
             "idempotency_key": idempotency_key,
@@ -106,10 +152,16 @@ class ExecutorClient:
             "metadata": metadata,
             "actor": AGENT_ACTOR,
         }
-        return await self._call("POST", f"/executions/{execution_id}/artifacts", json=body)
+        return await self._call(
+            "POST", f"/executions/{execution_id}/artifacts", json=body
+        )
 
-    async def stream_artifact(self, artifact_id: str) -> tuple[httpx.Response, AsyncIterator[bytes]]:
-        request = self.http.build_request("GET", f"/artifacts/{artifact_id}/content")
+    async def stream_artifact(
+        self, artifact_id: str
+    ) -> tuple[httpx.Response, AsyncIterator[bytes]]:
+        request = self.http.build_request(
+            "GET", f"/artifacts/{artifact_id}/content"
+        )
         response = await self.http.send(request, stream=True)
         if response.status_code >= 400:
             await response.aread()

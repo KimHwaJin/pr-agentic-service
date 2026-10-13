@@ -1,4 +1,6 @@
-def sample_data(data, sample_size: int = 1000, method: str = "random", seed: int = 42) -> dict:
+def sample_data(
+    data, sample_size: int = 1000, method: str = "random", seed: int = 42
+) -> dict:
     """분석용 표본을 추출합니다.
 
     Args:
@@ -11,6 +13,10 @@ def sample_data(data, sample_size: int = 1000, method: str = "random", seed: int
         {"sampled_data": pandas.DataFrame, "shape": list}
     """
     size = min(int(sample_size), len(data))
-    sampled = data.sample(n=size, random_state=seed) if method == "random" else data.head(size)
+    sampled = (
+        data.sample(n=size, random_state=seed)
+        if method == "random"
+        else data.head(size)
+    )
     print(f"sample_data: {len(data)} -> {len(sampled)} rows ({method})")
     return {"sampled_data": sampled, "shape": list(sampled.shape)}

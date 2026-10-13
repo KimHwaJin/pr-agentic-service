@@ -6,7 +6,9 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 
 
 @router.get("/login/sso", status_code=302)
-async def login(request: Request, return_to: str = "/", target: str = "app") -> Response:
+async def login(
+    request: Request, return_to: str = "/", target: str = "app"
+) -> Response:
     """Start login with a browser navigation (not XHR)."""
     return await request.app.state.sso.login(request, return_to, target)
 

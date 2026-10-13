@@ -32,10 +32,20 @@ def test_always_call_cannot_depend_on_conditional(adaptive, skills, tools):
         {
             "tool": "histogram_eda",
             "execution": "always",
-            "arguments": {"data": {"source": "tool_output", "step_index": 2, "tool_index": 1, "output": "plot_path"}},
+            "arguments": {
+                "data": {
+                    "source": "tool_output",
+                    "step_index": 2,
+                    "tool_index": 1,
+                    "output": "plot_path",
+                }
+            },
         }
     )
-    assert any("cannot depend on conditional" in e for e in spec.validate(adaptive, skills, tools))
+    assert any(
+        "cannot depend on conditional" in e
+        for e in spec.validate(adaptive, skills, tools)
+    )
 
 
 def test_input_slots(adaptive, tools):

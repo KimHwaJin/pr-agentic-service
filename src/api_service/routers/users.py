@@ -14,7 +14,11 @@ async def me(services: ServicesDep, user: UserDep):
         default_project = await db.scalar(
             select(Project.id)
             .join(ProjectMember, ProjectMember.project_id == Project.id)
-            .where(ProjectMember.user_id == user.id, Project.is_default, Project.deleted_at.is_(None))
+            .where(
+                ProjectMember.user_id == user.id,
+                Project.is_default,
+                Project.deleted_at.is_(None),
+            )
         )
     return {
         "user": UserRead.model_validate(user),
@@ -26,16 +30,22 @@ async def me(services: ServicesDep, user: UserDep):
 
 
 @router.get("/admin/users", response_model=list[UserRead])
-async def list_users(services: ServicesDep, admin: AdminDep, q: str | None = None):
+async def list_users(
+    services: ServicesDep, admin: AdminDep, q: str | None = None
+):
     query = select(User).order_by(User.created_at.desc()).limit(500)
     if q:
-        query = query.where(User.name.ilike(f"%{q}%") | User.employee_id.ilike(f"%{q}%"))
+        query = query.where(
+            User.name.ilike(f"%{q}%") | User.employee_id.ilike(f"%{q}%")
+        )
     async with services.db.sessions() as db:
         return (await db.scalars(query)).all()
 
 
 @router.patch("/admin/users/{user_id}", response_model=UserRead)
-async def update_user(user_id: str, body: UserAdminUpdate, services: ServicesDep, admin: AdminDep):
+async def update_user(
+    user_id: str, body: UserAdminUpdate, services: ServicesDep, admin: AdminDep
+):
     if user_id == admin.id and body.is_active is False:
         raise HTTPException(409, "You cannot deactivate yourself.")
     async with services.db.sessions() as db:

@@ -1,8 +1,10 @@
-"""Consumes ``executor.events`` (Redis Streams, at-least-once) and resumes runs waiting on them.
+"""Consumes ``executor.events`` and resumes runs waiting on them.
 
-Each event is stored once in ``executor_inbox`` (dedup on event_id) before XACK, so a run that
-starts waiting after its event already arrived still finds it (see ``RunScheduler``).
-Redis 6.0 compatible: stale pending entries are reclaimed with XPENDING + XCLAIM.
+``executor.events`` is a Redis Stream with at-least-once delivery. Each event
+is stored once in ``executor_inbox`` (dedup on event_id) before XACK, so a run
+that starts waiting after its event already arrived still finds it (see
+``RunScheduler``). Redis 6.0 compatible: stale pending entries are reclaimed
+with XPENDING + XCLAIM.
 """
 
 import asyncio
@@ -22,7 +24,9 @@ log = logging.getLogger(__name__)
 WAKE_TYPES = {"execution.operation_completed", "execution.completed"}
 
 
-def matches(waiting: dict[str, Any], event_type: str, payload: dict[str, Any]) -> bool:
+def matches(
+    waiting: dict[str, Any], event_type: str, payload: dict[str, Any]
+) -> bool:
     """Does this executor event end what the run is waiting for?"""
     if event_type == "execution.completed":
         return True
@@ -34,15 +38,25 @@ def matches(waiting: dict[str, Any], event_type: str, payload: dict[str, Any]) -
     )
 
 
-async def wake_waiting_run(db: Database, execution_id: str, event_type: str, payload: dict[str, Any]) -> str | None:
-    """Queue the run waiting on this execution with the event as its resume value."""
+async def wake_waiting_run(
+    db: Database, execution_id: str, event_type: str, payload: dict[str, Any]
+) -> str | None:
+    """Queue the run waiting on this execution.
+
+    The event becomes its resume value.
+    """
     async with db.sessions() as session:
         run = await session.scalar(
             select(Run)
-            .where(Run.status == "waiting_executor", Run.waiting["execution_id"].astext == execution_id)
+            .where(
+                Run.status == "waiting_executor",
+                Run.waiting["execution_id"].astext == execution_id,
+            )
             .with_for_update(skip_locked=True)
         )
-        if run is None or not matches(run.waiting, event_type, payload):
+        if run is None or not run.waiting:
+            return None
+        if not matches(run.waiting, event_type, payload):
             return None
         run.resume = {
             "interrupt_id": run.waiting["interrupt_id"],
@@ -54,14 +68,31 @@ async def wake_waiting_run(db: Database, execution_id: str, event_type: str, pay
 
 
 class ExecutorEventConsumer:
-    def __init__(self, db: Database, redis: Redis, stream: str, group: str, consumer: str, on_wake, on_progress):
-        self.db, self.redis, self.stream, self.group, self.consumer = db, redis, stream, group, consumer
+    def __init__(
+        self,
+        db: Database,
+        redis: Redis,
+        stream: str,
+        group: str,
+        consumer: str,
+        on_wake,
+        on_progress,
+    ):
+        self.db, self.redis, self.stream, self.group, self.consumer = (
+            db,
+            redis,
+            stream,
+            group,
+            consumer,
+        )
         self.on_wake = on_wake  # async (run_id) -> None
         self.on_progress = on_progress  # async (execution_id, event) -> None
 
     async def run_forever(self) -> None:
         try:
-            await self.redis.xgroup_create(self.stream, self.group, id="$", mkstream=True)
+            await self.redis.xgroup_create(
+                self.stream, self.group, id="$", mkstream=True
+            )
         except ResponseError as exc:
             if "BUSYGROUP" not in str(exc):
                 raise
@@ -72,7 +103,11 @@ class ExecutorEventConsumer:
                     await self._reclaim()
                 ticks += 1
                 batches = await self.redis.xreadgroup(
-                    self.group, self.consumer, {self.stream: ">"}, count=50, block=5000
+                    self.group,
+                    self.consumer,
+                    {self.stream: ">"},
+                    count=50,
+                    block=5000,
                 )
                 for _, messages in batches or []:
                     for message_id, fields in messages:
@@ -84,10 +119,18 @@ class ExecutorEventConsumer:
                 await asyncio.sleep(2)
 
     async def _reclaim(self) -> None:
-        pending = await self.redis.xpending_range(self.stream, self.group, min="-", max="+", count=50)
-        stale = [p["message_id"] for p in pending if p["time_since_delivered"] > 60000]
+        pending = await self.redis.xpending_range(
+            self.stream, self.group, min="-", max="+", count=50
+        )
+        stale = [
+            p["message_id"]
+            for p in pending
+            if p["time_since_delivered"] > 60000
+        ]
         if stale:
-            for message_id, fields in await self.redis.xclaim(self.stream, self.group, self.consumer, 60000, stale):
+            for message_id, fields in await self.redis.xclaim(
+                self.stream, self.group, self.consumer, 60000, stale
+            ):
                 await self._handle(message_id, fields)
 
     async def _handle(self, message_id: str, fields: dict[str, str]) -> None:
@@ -106,9 +149,15 @@ class ExecutorEventConsumer:
             return
         if event["event_type"] in WAKE_TYPES:
             async with self.db.sessions() as session:
-                await session.execute(insert(ExecutorInbox).values(**event).on_conflict_do_nothing())
+                await session.execute(
+                    insert(ExecutorInbox)
+                    .values(**event)
+                    .on_conflict_do_nothing()
+                )
                 await session.commit()
-            run_id = await wake_waiting_run(self.db, event["execution_id"], event["event_type"], payload)
+            run_id = await wake_waiting_run(
+                self.db, event["execution_id"], event["event_type"], payload
+            )
             if run_id:
                 await self.on_wake(run_id)
         else:

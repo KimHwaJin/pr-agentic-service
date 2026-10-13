@@ -15,9 +15,19 @@ async def ask_user(
 ) -> str:
     """Ask the user and wait for the answer (human-in-the-loop).
 
-    Use whenever a required value is missing or the request is ambiguous instead of guessing.
-    options: short choices shown as buttons (the user may still type a free answer).
-    fields: structured inputs, each {"key", "label", "type": "string|number|date|list", "required"}.
+    Use whenever a required value is missing or the request is ambiguous
+    instead of guessing.
+    options: short choices shown as buttons (the user may still type a free
+    answer).
+    fields: structured inputs, each
+    {"key", "label", "type": "string|number|date|list", "required"}.
     """
-    answer = interrupt({"type": "question", "question": question, "options": options or [], "fields": fields or []})
+    answer = interrupt(
+        {
+            "type": "question",
+            "question": question,
+            "options": options or [],
+            "fields": fields or [],
+        }
+    )
     return f"사용자 답변: {answer}"

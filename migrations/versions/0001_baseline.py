@@ -26,39 +26,59 @@ def upgrade() -> None:
         sa.Column("owner_id", sa.String(length=64), nullable=False),
         sa.Column("execution_id", sa.String(length=36), nullable=False),
         sa.Column("batch_run_id", sa.String(length=64), nullable=False),
-        sa.Column("request", postgresql.JSONB(astext_type=sa.Text()), nullable=False),
+        sa.Column(
+            "request", postgresql.JSONB(astext_type=sa.Text()), nullable=False
+        ),
         sa.Column("state", sa.String(length=16), nullable=False),
         sa.Column("failed_stage", sa.String(length=16), nullable=True),
         sa.Column("markdown", sa.Text(), nullable=True),
         sa.Column("artifact_id", sa.String(length=36), nullable=True),
         sa.Column("error", sa.Text(), nullable=True),
         sa.Column("lease_owner", sa.String(length=128), nullable=True),
-        sa.Column("lease_expires_at", sa.DateTime(timezone=True), nullable=True),
+        sa.Column(
+            "lease_expires_at", sa.DateTime(timezone=True), nullable=True
+        ),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("idempotency_key"),
     )
-    op.create_index(op.f("ix_batch_report_jobs_state"), "batch_report_jobs", ["state"], unique=False)
+    op.create_index(
+        op.f("ix_batch_report_jobs_state"),
+        "batch_report_jobs",
+        ["state"],
+        unique=False,
+    )
     op.create_table(
         "executor_inbox",
         sa.Column("event_id", sa.String(length=36), nullable=False),
         sa.Column("execution_id", sa.String(length=36), nullable=False),
         sa.Column("event_type", sa.String(length=64), nullable=False),
         sa.Column("event_sequence", sa.Integer(), nullable=False),
-        sa.Column("payload", postgresql.JSONB(astext_type=sa.Text()), nullable=False),
+        sa.Column(
+            "payload", postgresql.JSONB(astext_type=sa.Text()), nullable=False
+        ),
         sa.Column("received_at", sa.DateTime(timezone=True), nullable=False),
         sa.PrimaryKeyConstraint("event_id"),
     )
-    op.create_index(op.f("ix_executor_inbox_execution_id"), "executor_inbox", ["execution_id"], unique=False)
+    op.create_index(
+        op.f("ix_executor_inbox_execution_id"),
+        "executor_inbox",
+        ["execution_id"],
+        unique=False,
+    )
     op.create_table(
         "memory_history",
         sa.Column("id", sa.BigInteger(), autoincrement=True, nullable=False),
         sa.Column("project_id", sa.String(length=36), nullable=False),
         sa.Column("item_id", sa.String(length=64), nullable=False),
         sa.Column("action", sa.String(length=16), nullable=False),
-        sa.Column("before", postgresql.JSONB(astext_type=sa.Text()), nullable=True),
-        sa.Column("after", postgresql.JSONB(astext_type=sa.Text()), nullable=True),
+        sa.Column(
+            "before", postgresql.JSONB(astext_type=sa.Text()), nullable=True
+        ),
+        sa.Column(
+            "after", postgresql.JSONB(astext_type=sa.Text()), nullable=True
+        ),
         sa.Column("actor_type", sa.String(length=16), nullable=False),
         sa.Column("actor_id", sa.String(length=64), nullable=False),
         sa.Column("session_id", sa.String(length=36), nullable=True),
@@ -66,18 +86,30 @@ def upgrade() -> None:
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.PrimaryKeyConstraint("id"),
     )
-    op.create_index(op.f("ix_memory_history_project_id"), "memory_history", ["project_id"], unique=False)
+    op.create_index(
+        op.f("ix_memory_history_project_id"),
+        "memory_history",
+        ["project_id"],
+        unique=False,
+    )
     op.create_table(
         "run_events",
         sa.Column("id", sa.BigInteger(), autoincrement=True, nullable=False),
         sa.Column("session_id", sa.String(length=36), nullable=False),
         sa.Column("run_id", sa.String(length=36), nullable=False),
         sa.Column("type", sa.String(length=40), nullable=False),
-        sa.Column("data", postgresql.JSONB(astext_type=sa.Text()), nullable=False),
+        sa.Column(
+            "data", postgresql.JSONB(astext_type=sa.Text()), nullable=False
+        ),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.PrimaryKeyConstraint("id"),
     )
-    op.create_index(op.f("ix_run_events_session_id"), "run_events", ["session_id"], unique=False)
+    op.create_index(
+        op.f("ix_run_events_session_id"),
+        "run_events",
+        ["session_id"],
+        unique=False,
+    )
     op.create_table(
         "users",
         sa.Column("id", sa.String(length=36), nullable=False),
@@ -116,9 +148,17 @@ def upgrade() -> None:
         sa.Column("id", sa.String(length=36), nullable=False),
         sa.Column("name", sa.String(length=200), nullable=False),
         sa.Column("user_request", sa.Text(), nullable=False),
-        sa.Column("document", postgresql.JSONB(astext_type=sa.Text()), nullable=False),
-        sa.Column("user_queries", postgresql.JSONB(astext_type=sa.Text()), nullable=False),
-        sa.Column("tags", postgresql.JSONB(astext_type=sa.Text()), nullable=False),
+        sa.Column(
+            "document", postgresql.JSONB(astext_type=sa.Text()), nullable=False
+        ),
+        sa.Column(
+            "user_queries",
+            postgresql.JSONB(astext_type=sa.Text()),
+            nullable=False,
+        ),
+        sa.Column(
+            "tags", postgresql.JSONB(astext_type=sa.Text()), nullable=False
+        ),
         sa.Column("lifecycle", sa.String(length=16), nullable=False),
         sa.Column("author_id", sa.String(length=36), nullable=False),
         sa.Column("source_run_id", sa.String(length=36), nullable=True),
@@ -134,7 +174,12 @@ def upgrade() -> None:
         ),
         sa.PrimaryKeyConstraint("id"),
     )
-    op.create_index(op.f("ix_workflows_author_id"), "workflows", ["author_id"], unique=False)
+    op.create_index(
+        op.f("ix_workflows_author_id"),
+        "workflows",
+        ["author_id"],
+        unique=False,
+    )
     op.create_table(
         "project_members",
         sa.Column("project_id", sa.String(length=36), nullable=False),
@@ -172,7 +217,12 @@ def upgrade() -> None:
         ),
         sa.PrimaryKeyConstraint("id"),
     )
-    op.create_index(op.f("ix_sessions_project_id"), "sessions", ["project_id"], unique=False)
+    op.create_index(
+        op.f("ix_sessions_project_id"),
+        "sessions",
+        ["project_id"],
+        unique=False,
+    )
     op.create_table(
         "workflow_query_vectors",
         sa.Column("id", sa.BigInteger(), autoincrement=True, nullable=False),
@@ -180,7 +230,9 @@ def upgrade() -> None:
         sa.Column("revision", sa.Integer(), nullable=False),
         sa.Column("query", sa.Text(), nullable=False),
         sa.Column("model", sa.String(length=200), nullable=False),
-        sa.Column("embedding", pgvector.sqlalchemy.vector.VECTOR(), nullable=False),
+        sa.Column(
+            "embedding", pgvector.sqlalchemy.vector.VECTOR(), nullable=False
+        ),
         sa.Column("active", sa.Boolean(), nullable=False),
         sa.ForeignKeyConstraint(
             ["workflow_id"],
@@ -189,7 +241,10 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("id"),
     )
     op.create_index(
-        op.f("ix_workflow_query_vectors_workflow_id"), "workflow_query_vectors", ["workflow_id"], unique=False
+        op.f("ix_workflow_query_vectors_workflow_id"),
+        "workflow_query_vectors",
+        ["workflow_id"],
+        unique=False,
     )
     op.create_table(
         "messages",
@@ -198,7 +253,11 @@ def upgrade() -> None:
         sa.Column("run_id", sa.String(length=36), nullable=True),
         sa.Column("role", sa.String(length=16), nullable=False),
         sa.Column("content", sa.Text(), nullable=False),
-        sa.Column("attachments", postgresql.JSONB(astext_type=sa.Text()), nullable=False),
+        sa.Column(
+            "attachments",
+            postgresql.JSONB(astext_type=sa.Text()),
+            nullable=False,
+        ),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.ForeignKeyConstraint(
             ["session_id"],
@@ -206,7 +265,12 @@ def upgrade() -> None:
         ),
         sa.PrimaryKeyConstraint("id"),
     )
-    op.create_index(op.f("ix_messages_session_id"), "messages", ["session_id"], unique=False)
+    op.create_index(
+        op.f("ix_messages_session_id"),
+        "messages",
+        ["session_id"],
+        unique=False,
+    )
     op.create_table(
         "runs",
         sa.Column("id", sa.String(length=36), nullable=False),
@@ -215,13 +279,21 @@ def upgrade() -> None:
         sa.Column("user_id", sa.String(length=36), nullable=False),
         sa.Column("status", sa.String(length=24), nullable=False),
         sa.Column("model_alias", sa.String(length=64), nullable=False),
-        sa.Column("input", postgresql.JSONB(astext_type=sa.Text()), nullable=False),
-        sa.Column("resume", postgresql.JSONB(astext_type=sa.Text()), nullable=True),
-        sa.Column("waiting", postgresql.JSONB(astext_type=sa.Text()), nullable=True),
+        sa.Column(
+            "input", postgresql.JSONB(astext_type=sa.Text()), nullable=False
+        ),
+        sa.Column(
+            "resume", postgresql.JSONB(astext_type=sa.Text()), nullable=True
+        ),
+        sa.Column(
+            "waiting", postgresql.JSONB(astext_type=sa.Text()), nullable=True
+        ),
         sa.Column("error", sa.Text(), nullable=True),
         sa.Column("cancel_requested", sa.Boolean(), nullable=False),
         sa.Column("lease_owner", sa.String(length=128), nullable=True),
-        sa.Column("lease_expires_at", sa.DateTime(timezone=True), nullable=True),
+        sa.Column(
+            "lease_expires_at", sa.DateTime(timezone=True), nullable=True
+        ),
         sa.Column("attempts", sa.Integer(), nullable=False),
         sa.Column("finished_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
@@ -232,8 +304,12 @@ def upgrade() -> None:
         ),
         sa.PrimaryKeyConstraint("id"),
     )
-    op.create_index("ix_runs_claim", "runs", ["status", "lease_expires_at"], unique=False)
-    op.create_index(op.f("ix_runs_session_id"), "runs", ["session_id"], unique=False)
+    op.create_index(
+        "ix_runs_claim", "runs", ["status", "lease_expires_at"], unique=False
+    )
+    op.create_index(
+        op.f("ix_runs_session_id"), "runs", ["session_id"], unique=False
+    )
     op.create_index(op.f("ix_runs_status"), "runs", ["status"], unique=False)
     # ### end Alembic commands ###
 
@@ -246,7 +322,10 @@ def downgrade() -> None:
     op.drop_table("runs")
     op.drop_index(op.f("ix_messages_session_id"), table_name="messages")
     op.drop_table("messages")
-    op.drop_index(op.f("ix_workflow_query_vectors_workflow_id"), table_name="workflow_query_vectors")
+    op.drop_index(
+        op.f("ix_workflow_query_vectors_workflow_id"),
+        table_name="workflow_query_vectors",
+    )
     op.drop_table("workflow_query_vectors")
     op.drop_index(op.f("ix_sessions_project_id"), table_name="sessions")
     op.drop_table("sessions")
@@ -257,10 +336,16 @@ def downgrade() -> None:
     op.drop_table("users")
     op.drop_index(op.f("ix_run_events_session_id"), table_name="run_events")
     op.drop_table("run_events")
-    op.drop_index(op.f("ix_memory_history_project_id"), table_name="memory_history")
+    op.drop_index(
+        op.f("ix_memory_history_project_id"), table_name="memory_history"
+    )
     op.drop_table("memory_history")
-    op.drop_index(op.f("ix_executor_inbox_execution_id"), table_name="executor_inbox")
+    op.drop_index(
+        op.f("ix_executor_inbox_execution_id"), table_name="executor_inbox"
+    )
     op.drop_table("executor_inbox")
-    op.drop_index(op.f("ix_batch_report_jobs_state"), table_name="batch_report_jobs")
+    op.drop_index(
+        op.f("ix_batch_report_jobs_state"), table_name="batch_report_jobs"
+    )
     op.drop_table("batch_report_jobs")
     # ### end Alembic commands ###

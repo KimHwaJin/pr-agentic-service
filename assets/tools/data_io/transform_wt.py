@@ -9,6 +9,12 @@ def transform_wt(data: dict | None = None) -> dict:
     """
     import pandas as pd
 
-    frame = pd.DataFrame(data) if data else pd.read_parquet("/workspace/pv/default_data/df_wt_symbol_wide_format.parquet")
+    frame = (
+        pd.DataFrame(data)
+        if data
+        else pd.read_parquet(
+            "/workspace/pv/default_data/df_wt_symbol_wide_format.parquet"
+        )
+    )
     print(f"transform_wt: shape={frame.shape}")
     return {"data": frame, "shape": list(frame.shape)}

@@ -1,16 +1,20 @@
-"""Compact plan format the model writes, converted to a Workflow 1.0 document on the server.
+"""Compact plan format the model writes.
 
-Deeply nested Workflow JSON is where served models break (unbalanced braces, invented keys).
-The model writes a flat call list instead:
+The server converts it to a Workflow 1.0 document. Deeply nested Workflow
+JSON is where served models break (unbalanced braces, invented keys). The
+model writes a flat call list instead:
 
     calls = [
-      {"skill": "data_load", "tool": "extract_data", "args": {"data_type": "$input", "limit": 5000}},
-      {"skill": "data_load", "tool": "transform_nce", "args": {"data": "@0.data"}},
+      {"skill": "data_load", "tool": "extract_data",
+       "args": {"data_type": "$input", "limit": 5000}},
+      {"skill": "data_load", "tool": "transform_nce",
+       "args": {"data": "@0.data"}},
     ]
 
-args values: "$input" (ask the user / input form), "@<call>.<output>" (an earlier call's output),
-anything else is a literal. Consecutive calls of one skill become one Workflow step; each tool's
-always/conditional comes from the skill's Tool list.
+args values: "$input" (ask the user / input form), "@<call>.<output>" (an
+earlier call's output), anything else is a literal. Consecutive calls of one
+skill become one Workflow step; each tool's always/conditional comes from
+the skill's Tool list.
 """
 
 import json
@@ -29,21 +33,44 @@ class PlanFormatError(ValueError):
 
 
 def to_workflow(
-    calls: list[dict[str, Any]], *, name: str, user_request: str, skills: SkillCatalog
+    calls: list[dict[str, Any]],
+    *,
+    name: str,
+    user_request: str,
+    skills: SkillCatalog,
 ) -> tuple[dict, list[str]]:
-    """Returns (Workflow 1.0 document, workflow call key "<step>.<tool>" for each call index)."""
+    """Returns (Workflow 1.0 document, call keys).
+
+    The call keys list holds the workflow call key "<step>.<tool>" for each
+    call index.
+    """
     steps: list[dict[str, Any]] = []
     keys: list[str] = []
     for index, call in enumerate(calls):
-        if not isinstance(call, dict) or not call.get("skill") or not call.get("tool"):
+        if (
+            not isinstance(call, dict)
+            or not call.get("skill")
+            or not call.get("tool")
+        ):
             raise PlanFormatError(f"calls[{index}] needs 'skill' and 'tool'")
         if not steps or steps[-1]["skill"] != call["skill"]:
             steps.append({"skill": call["skill"], "tools": []})
         skill = skills.skills.get(call["skill"])
-        rule = next((t for t in skill.tools if t.tool == call["tool"]), None) if skill else None
-        arguments = {param: _argument(value, index, keys, param) for param, value in (call.get("args") or {}).items()}
+        rule = (
+            next((t for t in skill.tools if t.tool == call["tool"]), None)
+            if skill
+            else None
+        )
+        arguments = {
+            param: _argument(value, index, keys, param)
+            for param, value in (call.get("args") or {}).items()
+        }
         steps[-1]["tools"].append(
-            {"tool": call["tool"], "execution": rule.execution if rule else "always", "arguments": arguments}
+            {
+                "tool": call["tool"],
+                "execution": rule.execution if rule else "always",
+                "arguments": arguments,
+            }
         )
         keys.append(f"{len(steps) - 1}.{len(steps[-1]['tools']) - 1}")
     document = {
@@ -60,20 +87,30 @@ def to_workflow(
     return spec.normalize(document), keys
 
 
-def _argument(value: Any, index: int, keys: list[str], param: str) -> dict[str, Any]:
+def _argument(
+    value: Any, index: int, keys: list[str], param: str
+) -> dict[str, Any]:
     if value == "$input":
         return {"source": "input"}
     if isinstance(value, str) and (match := _REF.match(value)):
         ref = int(match.group(1))
         if ref >= index:
-            raise PlanFormatError(f"calls[{index}].args.{param}: '@{ref}' must point to an earlier call")
+            raise PlanFormatError(
+                f"calls[{index}].args.{param}: "
+                f"'@{ref}' must point to an earlier call"
+            )
         step_index, tool_index = (int(x) for x in keys[ref].split("."))
-        return {"source": "tool_output", "step_index": step_index, "tool_index": tool_index, "output": match.group(2)}
+        return {
+            "source": "tool_output",
+            "step_index": step_index,
+            "tool_index": tool_index,
+            "output": match.group(2),
+        }
     return {"source": "literal", "value": value}
 
 
 def input_keys(values: dict[str, Any], keys: list[str]) -> dict[str, Any]:
-    """Prefilled inputs "<call>.<param>" -> internal "<step>.<tool>.<param>"."""
+    """Prefilled inputs "<call>.<param>" -> "<step>.<tool>.<param>"."""
     out = {}
     for key, value in values.items():
         head, _, param = key.partition(".")
@@ -93,17 +130,30 @@ def describe(document: dict[str, Any]) -> list[dict[str, Any]]:
                 if arg["source"] == "input":
                     args[param] = "$input"
                 elif arg["source"] == "tool_output":
-                    args[param] = f"@{index_of[(arg['step_index'], arg['tool_index'])]}.{arg['output']}"
+                    ref = index_of[(arg["step_index"], arg["tool_index"])]
+                    args[param] = f"@{ref}.{arg['output']}"
                 else:
                     args[param] = arg["value"]
-            calls.append({"skill": step["skill"], "tool": tool["tool"], "execution": tool["execution"], "args": args})
+            calls.append(
+                {
+                    "skill": step["skill"],
+                    "tool": tool["tool"],
+                    "execution": tool["execution"],
+                    "args": args,
+                }
+            )
     return calls
 
 
 def apply_overrides(
-    document: dict[str, Any], input_values: dict[str, Any], overrides: dict[str, Any]
+    document: dict[str, Any],
+    input_values: dict[str, Any],
+    overrides: dict[str, Any],
 ) -> tuple[dict, dict]:
-    """User edits on the approval screen: an input key fills the input, any other parameter becomes a fixed value."""
+    """Applies user edits from the approval screen.
+
+    An input key fills the input; any other parameter becomes a fixed value.
+    """
     document = json.loads(json.dumps(document))
     values = dict(input_values)
     steps = document["workflow"]["steps"]
@@ -117,5 +167,8 @@ def apply_overrides(
         if arg and arg["source"] == "input":
             values[key] = value
         elif not arg or arg["source"] == "literal":
-            call.setdefault("arguments", {})[param] = {"source": "literal", "value": value}
+            call.setdefault("arguments", {})[param] = {
+                "source": "literal",
+                "value": value,
+            }
     return document, values

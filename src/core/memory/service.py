@@ -1,7 +1,8 @@
 """Project shared memory on the LangGraph Store.
 
-Namespace ("project_memory", project_id); one Store item per memory entry. Entries written by a
-user (author=user) are locked: the agent proposes a change and the user approves it.
+Namespace ("project_memory", project_id); one Store item per memory entry.
+Entries written by a user (author=user) are locked: the agent proposes a
+change and the user approves it.
 Every change is appended to ``memory_history``.
 """
 
@@ -14,7 +15,12 @@ from sqlalchemy import select
 from core.db import Database, new_id, utcnow
 from core.models import MemoryHistory
 
-CATEGORIES = ("background", "analysis_preferences", "report_preferences", "shared_findings")
+CATEGORIES = (
+    "background",
+    "analysis_preferences",
+    "report_preferences",
+    "shared_findings",
+)
 CATEGORY_TITLES = {
     "background": "프로젝트 배경",
     "analysis_preferences": "분석 선호",
@@ -39,28 +45,56 @@ class Actor:
 
 
 class ProjectMemory:
-    def __init__(self, store: BaseStore, db: Database, item_max: int, total_max: int):
-        self.store, self.db, self.item_max, self.total_max = store, db, item_max, total_max
+    def __init__(
+        self, store: BaseStore, db: Database, item_max: int, total_max: int
+    ):
+        self.store, self.db, self.item_max, self.total_max = (
+            store,
+            db,
+            item_max,
+            total_max,
+        )
 
     @staticmethod
     def namespace(project_id: str) -> tuple[str, ...]:
         return ("project_memory", project_id)
 
     async def entries(self, project_id: str) -> list[dict[str, Any]]:
-        items = await self.store.asearch(self.namespace(project_id), limit=1000)
-        return sorted((self._view(i.key, i.value) for i in items), key=lambda v: (v["category"], v["created_at"]))
+        items = await self.store.asearch(
+            self.namespace(project_id), limit=1000
+        )
+        return sorted(
+            (self._view(i.key, i.value) for i in items),
+            key=lambda v: (v["category"], v["created_at"]),
+        )
 
-    async def get(self, project_id: str, item_id: str) -> dict[str, Any] | None:
+    async def get(
+        self, project_id: str, item_id: str
+    ) -> dict[str, Any] | None:
         item = await self.store.aget(self.namespace(project_id), item_id)
         return self._view(item.key, item.value) if item else None
 
-    async def search(self, project_id: str, query: str, limit: int) -> list[dict[str, Any]]:
-        """Semantic when the Store has an embedding index, otherwise newest first."""
-        items = await self.store.asearch(self.namespace(project_id), query=query or None, limit=limit)
+    async def search(
+        self, project_id: str, query: str, limit: int
+    ) -> list[dict[str, Any]]:
+        """Semantic when the Store has an embedding index.
+
+        Otherwise newest first.
+        """
+        items = await self.store.asearch(
+            self.namespace(project_id), query=query or None, limit=limit
+        )
         return [self._view(i.key, i.value) | {"score": i.score} for i in items]
 
     async def create(
-        self, project_id: str, *, category: str, title: str, content: str, actor: Actor, source: dict | None = None
+        self,
+        project_id: str,
+        *,
+        category: str,
+        title: str,
+        content: str,
+        actor: Actor,
+        source: dict | None = None,
     ) -> dict[str, Any]:
         self._check(category, title, content)
         await self._check_total(project_id, len(content))
@@ -97,40 +131,82 @@ class ProjectMemory:
             raise MemoryError(404, "memory item not found")
         before = item.value
         if before["version"] != expected_version:
-            raise MemoryError(409, f"version conflict: current version is {before['version']}")
-        if before["author"] == "user" and actor.type == "agent" and not approved_by_user:
-            raise MemoryError(423, "user-authored memory requires user approval")
+            raise MemoryError(
+                409,
+                f"version conflict: current version is {before['version']}",
+            )
+        if (
+            before["author"] == "user"
+            and actor.type == "agent"
+            and not approved_by_user
+        ):
+            raise MemoryError(
+                423, "user-authored memory requires user approval"
+            )
         after = dict(before)
-        after.update({k: v.strip() for k, v in {"title": title, "content": content}.items() if v is not None})
+        after.update(
+            {
+                k: v.strip()
+                for k, v in {"title": title, "content": content}.items()
+                if v is not None
+            }
+        )
         if category is not None:
             after["category"] = category
         self._check(after["category"], after["title"], after["content"])
-        await self._check_total(project_id, len(after["content"]) - len(before["content"]))
+        await self._check_total(
+            project_id, len(after["content"]) - len(before["content"])
+        )
         if actor.type == "user":
             after["author"] = "user"
         after["version"] = before["version"] + 1
         after["updated_at"] = utcnow().isoformat()
         await self.store.aput(self.namespace(project_id), item_id, after)
-        await self._history(project_id, item_id, "update", before, after, actor)
+        await self._history(
+            project_id, item_id, "update", before, after, actor
+        )
         return self._view(item_id, after)
 
-    async def delete(self, project_id: str, item_id: str, *, expected_version: int, actor: Actor) -> None:
+    async def delete(
+        self,
+        project_id: str,
+        item_id: str,
+        *,
+        expected_version: int,
+        actor: Actor,
+    ) -> None:
         item = await self.store.aget(self.namespace(project_id), item_id)
         if item is None:
             raise MemoryError(404, "memory item not found")
         if item.value["version"] != expected_version:
-            raise MemoryError(409, f"version conflict: current version is {item.value['version']}")
+            raise MemoryError(
+                409,
+                "version conflict: current version is "
+                f"{item.value['version']}",
+            )
         if item.value["author"] == "user" and actor.type == "agent":
-            raise MemoryError(423, "user-authored memory requires user approval")
+            raise MemoryError(
+                423, "user-authored memory requires user approval"
+            )
         await self.store.adelete(self.namespace(project_id), item_id)
-        await self._history(project_id, item_id, "delete", item.value, None, actor)
+        await self._history(
+            project_id, item_id, "delete", item.value, None, actor
+        )
 
-    async def history(self, project_id: str, item_id: str | None = None, limit: int = 100) -> list[dict[str, Any]]:
-        query = select(MemoryHistory).where(MemoryHistory.project_id == project_id)
+    async def history(
+        self, project_id: str, item_id: str | None = None, limit: int = 100
+    ) -> list[dict[str, Any]]:
+        query = select(MemoryHistory).where(
+            MemoryHistory.project_id == project_id
+        )
         if item_id:
             query = query.where(MemoryHistory.item_id == item_id)
         async with self.db.sessions() as db:
-            rows = (await db.scalars(query.order_by(MemoryHistory.id.desc()).limit(limit))).all()
+            rows = (
+                await db.scalars(
+                    query.order_by(MemoryHistory.id.desc()).limit(limit)
+                )
+            ).all()
         return [
             {
                 "item_id": r.item_id,
@@ -151,16 +227,32 @@ class ProjectMemory:
         if not title.strip() or not content.strip():
             raise MemoryError(422, "title and content are required")
         if len(content) > self.item_max:
-            raise MemoryError(422, f"content exceeds {self.item_max} characters")
+            raise MemoryError(
+                422, f"content exceeds {self.item_max} characters"
+            )
 
     async def _check_total(self, project_id: str, delta: int) -> None:
         if delta <= 0:
             return
-        current = sum(len(i["content"]) for i in await self.entries(project_id))
+        current = sum(
+            len(i["content"]) for i in await self.entries(project_id)
+        )
         if current + delta > self.total_max:
-            raise MemoryError(422, f"project memory is full ({current}/{self.total_max} characters)")
+            raise MemoryError(
+                422,
+                f"project memory is full ({current}/{self.total_max} "
+                "characters)",
+            )
 
-    async def _history(self, project_id: str, item_id: str, action: str, before, after, actor: Actor) -> None:
+    async def _history(
+        self,
+        project_id: str,
+        item_id: str,
+        action: str,
+        before,
+        after,
+        actor: Actor,
+    ) -> None:
         async with self.db.sessions() as db:
             db.add(
                 MemoryHistory(
@@ -179,15 +271,28 @@ class ProjectMemory:
 
     @staticmethod
     def _view(item_id: str, value: dict[str, Any]) -> dict[str, Any]:
-        return {"id": item_id, **{k: value[k] for k in value if k != "source"}, "source": value.get("source", {})}
+        return {
+            "id": item_id,
+            **{k: value[k] for k in value if k != "source"},
+            "source": value.get("source", {}),
+        }
 
 
-def render_for_prompt(index: list[dict[str, Any]], relevant: list[dict[str, Any]], max_chars: int) -> str:
-    """Titles of every entry (so the agent knows what exists) + bodies of the most relevant ones."""
+def render_for_prompt(
+    index: list[dict[str, Any]], relevant: list[dict[str, Any]], max_chars: int
+) -> str:
+    """Titles of every entry + bodies of the most relevant ones.
+
+    The titles let the agent know what exists.
+    """
     if not index:
         return ""
     lines = ["# Project memory (공유 메모리)", "", "## 항목 목록"]
-    lines += [f"- [{CATEGORY_TITLES[m['category']]}] {m['title']} (id={m['id']}, author={m['author']})" for m in index]
+    lines += [
+        f"- [{CATEGORY_TITLES[m['category']]}] {m['title']} "
+        f"(id={m['id']}, author={m['author']})"
+        for m in index
+    ]
     body_lines = ["", "## 현재 요청과 관련된 항목 본문"]
     used = sum(len(line) for line in lines)
     for item in relevant:

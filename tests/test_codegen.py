@@ -9,8 +9,9 @@ def test_tool_step_code(adaptive, tools):
     code = tool_step_code(calls["1.0"], values, tools, producers)
     compile(code, "step", "exec")
     assert (
-        "_r_s1_t0 = merge_data(left_data=_r_s0_t1['data'], right_data=_r_s0_t3['data'], join_columns=['alias_lot_id', 'wf_id'], how='inner')"
-        in code
+        "_r_s1_t0 = merge_data(left_data=_r_s0_t1['data'], "
+        "right_data=_r_s0_t3['data'], "
+        "join_columns=['alias_lot_id', 'wf_id'], how='inner')" in code
     )
     assert '"""' not in code.split("def _agentic_observe")[0]
 
@@ -22,12 +23,16 @@ def test_empty_optional_inputs_use_tool_defaults(adaptive, tools):
 
 
 def test_parse_observations():
-    obs, rest = parse_observations('hello\nAGENTIC_OBSERVATION {"var": "x", "value": 1}\nbye')
+    obs, rest = parse_observations(
+        'hello\nAGENTIC_OBSERVATION {"var": "x", "value": 1}\nbye'
+    )
     assert obs == [{"var": "x", "value": 1}] and rest == "hello\nbye"
 
 
 def test_json_string_arguments_are_decoded():
     from agent.middleware import _structured
 
-    assert _structured({"type": "array"}) and _structured({"anyOf": [{"type": "object"}, {"type": "null"}]})
+    assert _structured({"type": "array"}) and _structured(
+        {"anyOf": [{"type": "object"}, {"type": "null"}]}
+    )
     assert not _structured({"type": "string"})

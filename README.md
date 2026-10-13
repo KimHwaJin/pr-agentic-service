@@ -60,6 +60,7 @@ uv run uvicorn main:app --app-dir src --port 8080
 - 테스트 콘솔: http://localhost:8080/dev/ (`SSO_ALLOWED_RETURN_ROOTS=["/", "/dev"]`, `SSO_ADAPTER=dev`)
 - 종단 점검: `uv run python scripts/smoke_e2e.py`
 - 단위 테스트: `uv run pytest`
+- 정적 검사: `uv run ruff format`, `uv run ruff check`, `uv run ty check` (줄 길이 79, 설정은 `pyproject.toml`)
 - 부하 측정: `uv run python scripts/loadtest.py --users 100 --turns 3`
 
 기동 시 Alembic, LangGraph checkpointer/store 테이블, Workflow 벡터 인덱스가 advisory lock 아래 한 번 적용됩니다(`AUTO_MIGRATE=false`로 끌 수 있음).
@@ -69,6 +70,7 @@ uv run uvicorn main:app --app-dir src --port 8080
 - **사내 SSO**: `SSO_ADAPTER=company`, `SSO_ADAPTER_FACTORY=company_sso:create_sdk`. 폐쇄망에서 `src/company_sso.py`를 아래처럼 추가합니다.
   ```python
   from your_private_module import SSO
+
 
   def create_sdk(request, callback_url):
       return SSO(request)  # request는 Flask 호환 뷰(args, cookies, environ, url)

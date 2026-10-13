@@ -31,7 +31,9 @@ class Services:
     tools: AssetLoader  # -> ToolCatalog
 
     def skills(self, root: str) -> SkillCatalog:
-        return {"analysis": self.analysis_skills, "knowledge": self.knowledge}[root].get()
+        return {"analysis": self.analysis_skills, "knowledge": self.knowledge}[
+            root
+        ].get()
 
     def tool_catalog(self) -> ToolCatalog:
         return self.tools.get()

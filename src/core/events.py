@@ -1,11 +1,14 @@
-"""Session event stream: durable events in PostgreSQL, live fan-out over Redis pub/sub.
+"""Session event stream.
 
-Durable events carry an id so SSE clients can resume with Last-Event-ID from any pod.
-Live-only events (token deltas, executor progress) are published but not stored.
+Durable events in PostgreSQL, live fan-out over Redis pub/sub.
 
-Load notes: each process holds ONE pattern subscription and fans events out to its local SSE
-streams through in-memory queues, so SSE connections cost no Redis connections. Token deltas are
-coalesced per run before publishing.
+Durable events carry an id so SSE clients can resume with Last-Event-ID
+from any pod. Live-only events (token deltas, executor progress) are
+published but not stored.
+
+Load notes: each process holds ONE pattern subscription and fans events out
+to its local SSE streams through in-memory queues, so SSE connections cost
+no Redis connections. Token deltas are coalesced per run before publishing.
 """
 
 import asyncio
@@ -35,30 +38,53 @@ class EventBus:
     def channel(self, session_id: str) -> str:
         return f"{self.namespace}:session:{session_id}"
 
-    async def emit(self, session_id: str, run_id: str, type: str, data: dict[str, Any], durable: bool = True) -> None:
+    async def emit(
+        self,
+        session_id: str,
+        run_id: str,
+        type: str,
+        data: dict[str, Any],
+        durable: bool = True,
+    ) -> None:
         event: dict[str, Any] = {"type": type, "run_id": run_id, "data": data}
         if durable:
             async with self.db.sessions() as db:
-                row = RunEvent(session_id=session_id, run_id=run_id, type=type, data=data)
+                row = RunEvent(
+                    session_id=session_id, run_id=run_id, type=type, data=data
+                )
                 db.add(row)
                 await db.commit()
                 event["id"] = row.id
-        await self.redis.publish(self.channel(session_id), json.dumps(event, ensure_ascii=False, default=str))
+        await self.redis.publish(
+            self.channel(session_id),
+            json.dumps(event, ensure_ascii=False, default=str),
+        )
 
-    async def history(self, session_id: str, after_id: int, run_id: str | None = None) -> list[dict[str, Any]]:
-        query = select(RunEvent).where(RunEvent.session_id == session_id, RunEvent.id > after_id)
+    async def history(
+        self, session_id: str, after_id: int, run_id: str | None = None
+    ) -> list[dict[str, Any]]:
+        query = select(RunEvent).where(
+            RunEvent.session_id == session_id, RunEvent.id > after_id
+        )
         if run_id:
             query = query.where(RunEvent.run_id == run_id)
         async with self.db.sessions() as db:
-            rows = (await db.scalars(query.order_by(RunEvent.id).limit(5000))).all()
-        return [{"id": r.id, "type": r.type, "run_id": r.run_id, "data": r.data} for r in rows]
+            rows = (
+                await db.scalars(query.order_by(RunEvent.id).limit(5000))
+            ).all()
+        return [
+            {"id": r.id, "type": r.type, "run_id": r.run_id, "data": r.data}
+            for r in rows
+        ]
 
-    # --- local fan-out ----------------------------------------------------------------------
+    # --- local fan-out -----------------------------------------------------
 
     def subscribe(self, session_id: str) -> asyncio.Queue:
         """Register before replaying history so nothing falls in between."""
         if self._listener is None or self._listener.done():
-            self._listener = asyncio.create_task(self._listen(), name="event-fanout")
+            self._listener = asyncio.create_task(
+                self._listen(), name="event-fanout"
+            )
         queue: asyncio.Queue = asyncio.Queue(SUBSCRIBER_QUEUE_SIZE)
         self._subscribers[session_id].add(queue)
         return queue
@@ -79,8 +105,12 @@ class EventBus:
                 async for message in pubsub.listen():
                     if message["type"] != "pmessage":
                         continue
-                    for queue in self._subscribers.get(message["channel"][len(prefix) :], ()):
-                        with contextlib.suppress(asyncio.QueueFull):  # a stalled client drops live events
+                    for queue in self._subscribers.get(
+                        message["channel"][len(prefix) :], ()
+                    ):
+                        with contextlib.suppress(
+                            asyncio.QueueFull
+                        ):  # a stalled client drops live events
                             queue.put_nowait(message["data"])
             except asyncio.CancelledError:
                 raise
@@ -119,7 +149,13 @@ class TokenBuffer:
         self._flusher = None
         if self._parts:
             text, self._parts = "".join(self._parts), []
-            await self.bus.emit(self.session_id, self.run_id, "token", {"text": text}, durable=False)
+            await self.bus.emit(
+                self.session_id,
+                self.run_id,
+                "token",
+                {"text": text},
+                durable=False,
+            )
 
 
 def runs_wake_channel(namespace: str) -> str:

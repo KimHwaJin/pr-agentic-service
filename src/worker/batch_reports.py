@@ -1,6 +1,9 @@
-"""pr-batch report jobs: QUEUED -> COLLECTING -> GENERATING -> MATERIALIZING -> SUCCEEDED | FAILED.
+"""pr-batch report jobs.
 
-A retry resumes the failed stage; a generated Markdown is reused so only materialization repeats.
+QUEUED -> COLLECTING -> GENERATING -> MATERIALIZING -> SUCCEEDED | FAILED.
+
+A retry resumes the failed stage; a generated Markdown is reused so only
+materialization repeats.
 """
 
 import asyncio
@@ -19,8 +22,14 @@ ACTIVE = ("QUEUED", "COLLECTING", "GENERATING", "MATERIALIZING")
 
 
 class BatchReportWorker:
-    def __init__(self, services: Services, owner: str, lease_seconds: int = 300):
-        self.services, self.owner, self.lease_seconds = services, owner, lease_seconds
+    def __init__(
+        self, services: Services, owner: str, lease_seconds: int = 300
+    ):
+        self.services, self.owner, self.lease_seconds = (
+            services,
+            owner,
+            lease_seconds,
+        )
 
     async def run_forever(self) -> None:
         while True:
@@ -43,14 +52,20 @@ class BatchReportWorker:
                 select(BatchReportJob)
                 .where(
                     BatchReportJob.state.in_(ACTIVE),
-                    or_(BatchReportJob.lease_expires_at.is_(None), BatchReportJob.lease_expires_at < now),
+                    or_(
+                        BatchReportJob.lease_expires_at.is_(None),
+                        BatchReportJob.lease_expires_at < now,
+                    ),
                 )
                 .order_by(BatchReportJob.created_at)
                 .limit(1)
                 .with_for_update(skip_locked=True)
             )
             if job:
-                job.lease_owner, job.lease_expires_at = self.owner, now + timedelta(seconds=self.lease_seconds)
+                job.lease_owner, job.lease_expires_at = (
+                    self.owner,
+                    now + timedelta(seconds=self.lease_seconds),
+                )
                 await db.commit()
             return job
 
@@ -68,12 +83,21 @@ class BatchReportWorker:
             if job.markdown is None:
                 stage = "COLLECTING"
                 await self._set(job.id, state=stage)
-                status = (await executor.get(job.execution_id))["state"]["status"]
+                status = (await executor.get(job.execution_id))["state"][
+                    "status"
+                ]
                 if status != "SUCCEEDED":
-                    raise RuntimeError(f"execution is {status}; reports need a SUCCEEDED execution")
+                    raise RuntimeError(
+                        f"execution is {status}; "
+                        "reports need a SUCCEEDED execution"
+                    )
                 stage = "GENERATING"
                 await self._set(job.id, state=stage)
-                markdown = await generate_batch_report(self.services, job.execution_id, job.request.get("options", {}))
+                markdown = await generate_batch_report(
+                    self.services,
+                    job.execution_id,
+                    job.request.get("options", {}),
+                )
                 await self._set(job.id, markdown=markdown)
             else:
                 markdown = job.markdown
@@ -84,7 +108,10 @@ class BatchReportWorker:
                 idempotency_key=f"batch-report:{job.id}",
                 markdown=markdown,
                 name=f"batch-{job.batch_run_id}-report.md",
-                metadata={"batch_run_id": job.batch_run_id, "report_job_id": job.id},
+                metadata={
+                    "batch_run_id": job.batch_run_id,
+                    "report_job_id": job.id,
+                },
             )
             await self._set(
                 job.id,

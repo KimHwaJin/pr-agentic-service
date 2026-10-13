@@ -1,4 +1,7 @@
-"""Shared-volume access: PATH sources we write, Step manifests the executor writes."""
+"""Shared-volume access.
+
+PATH sources we write, Step manifests the executor writes.
+"""
 
 import hashlib
 import json
@@ -11,10 +14,17 @@ TEXT_TYPES = ("text/plain", "text/markdown", "application/json")
 
 class SharedStorage:
     def __init__(self, input_root: Path, result_root: Path, input_subdir: str):
-        self.input_root, self.result_root, self.input_subdir = input_root, result_root, input_subdir
+        self.input_root, self.result_root, self.input_subdir = (
+            input_root,
+            result_root,
+            input_subdir,
+        )
 
     def write_source(self, code: str) -> dict[str, str]:
-        """Content-addressed, never overwritten; returns an executor PATH source."""
+        """Content-addressed, never overwritten.
+
+        Returns an executor PATH source.
+        """
         data = code.encode("utf-8")
         sha = hashlib.sha256(data).hexdigest()
         relative = f"{self.input_subdir}/sources/{sha[:2]}/{sha}.py"
@@ -32,22 +42,35 @@ class SharedStorage:
             raise ValueError("result path escapes the shared root")
         return path
 
-    def read_step_outputs(self, result_ref: dict[str, Any] | None, max_chars: int = 12000) -> dict[str, Any]:
+    def read_step_outputs(
+        self, result_ref: dict[str, Any] | None, max_chars: int = 12000
+    ) -> dict[str, Any]:
         """Bounded view of one Step manifest for the model and the UI."""
         if not result_ref:
             return {"available": False}
-        manifest = json.loads(self.resolve_result(result_ref["relative_path"]).read_text("utf-8"))
+        manifest = json.loads(
+            self.resolve_result(result_ref["relative_path"]).read_text("utf-8")
+        )
         texts: list[str] = []
         images: list[str] = []
         budget = max_chars
         for output in manifest.get("outputs", []):
             reps = output.get("representations", [])
-            images += [r["relative_path"] for r in reps if r.get("media_type", "").startswith("image/")]
+            images += [
+                r["relative_path"]
+                for r in reps
+                if r.get("media_type", "").startswith("image/")
+            ]
             if any(r.get("media_type", "").startswith("image/") for r in reps):
-                continue  # a figure's text/plain twin ("<Figure ...>") adds nothing
-            text_rep = next((r for r in reps if r.get("media_type") in TEXT_TYPES), None)
+                # a figure's text/plain twin ("<Figure ...>") adds nothing
+                continue
+            text_rep = next(
+                (r for r in reps if r.get("media_type") in TEXT_TYPES), None
+            )
             if text_rep and budget > 0:
-                text = self.resolve_result(text_rep["relative_path"]).read_text("utf-8", errors="replace")
+                text = self.resolve_result(
+                    text_rep["relative_path"]
+                ).read_text("utf-8", errors="replace")
                 texts.append(text[:budget])
                 budget -= len(texts[-1])
         return {

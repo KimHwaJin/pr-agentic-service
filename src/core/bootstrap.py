@@ -1,14 +1,19 @@
-"""Builds process-wide services and runs schema setup once per deploy (advisory lock)."""
+"""Builds process-wide services.
+
+Also runs schema setup once per deploy (advisory lock).
+"""
 
 import asyncio
-from collections.abc import AsyncIterator
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
 from alembic import command
 from alembic.config import Config
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 from langgraph.store.postgres import AsyncPostgresStore
-from psycopg.rows import dict_row
+from langgraph.store.postgres.base import PostgresIndexConfig
+from psycopg import AsyncConnection
+from psycopg.rows import DictRow, dict_row
 from psycopg_pool import AsyncConnectionPool
 from redis.asyncio import Redis
 from sqlalchemy import text
@@ -24,6 +29,9 @@ from core.memory.service import ProjectMemory
 from core.services import Services
 from core.workflows.service import WorkflowService
 
+# LangGraph's checkpointer and store want dict rows.
+PgPool = AsyncConnectionPool[AsyncConnection[DictRow]]
+
 MIGRATION_LOCK = 7_340_001
 
 
@@ -35,23 +43,44 @@ def _alembic_upgrade(settings: Settings) -> None:
 
 
 @asynccontextmanager
-async def build_services(settings: Settings) -> AsyncIterator[tuple[Services, AsyncConnectionPool]]:
+async def build_services(
+    settings: Settings,
+) -> AsyncGenerator[tuple[Services, PgPool]]:
     db = Database(settings.database_url, settings.db_pool_size)
     redis = Redis.from_url(settings.redis_url, decode_responses=True)
-    pool = AsyncConnectionPool(
+    pool: PgPool = AsyncConnectionPool(
         settings.psycopg_url,
+        connection_class=AsyncConnection[DictRow],
         min_size=1,
         max_size=max(2, settings.db_pool_size // 2),
-        kwargs={"autocommit": True, "prepare_threshold": 0, "row_factory": dict_row},
+        kwargs={
+            "autocommit": True,
+            "prepare_threshold": 0,
+            "row_factory": dict_row,
+        },
         open=False,
     )
     await pool.open()
     embedder = build_embedder(settings)
-    index = {"dims": settings.embedding_dims, "embed": embedder, "fields": ["title", "content"]} if embedder else None
+    index: PostgresIndexConfig | None = (
+        {
+            "dims": settings.embedding_dims,
+            "embed": embedder,
+            "fields": ["title", "content"],
+        }
+        if embedder
+        else None
+    )
     store = AsyncPostgresStore(pool, index=index)
-    executor = ExecutorClient(settings.executor_base_url, settings.executor_timeout_seconds)
+    executor = ExecutorClient(
+        settings.executor_base_url, settings.executor_timeout_seconds
+    )
     workflows = WorkflowService(
-        db, embedder, settings.embedding_space, settings.embedding_dims, settings.workflow_similarity
+        db,
+        embedder,
+        settings.embedding_space,
+        settings.embedding_dims,
+        settings.workflow_similarity,
     )
     services = Services(
         settings=settings,
@@ -60,9 +89,16 @@ async def build_services(settings: Settings) -> AsyncIterator[tuple[Services, As
         events=EventBus(db, redis, settings.redis_namespace),
         executor=executor,
         storage=SharedStorage(
-            settings.executor_input_root, settings.executor_result_root, settings.executor_input_subdir
+            settings.executor_input_root,
+            settings.executor_result_root,
+            settings.executor_input_subdir,
         ),
-        memory=ProjectMemory(store, db, settings.memory_item_max_chars, settings.memory_total_max_chars),
+        memory=ProjectMemory(
+            store,
+            db,
+            settings.memory_item_max_chars,
+            settings.memory_total_max_chars,
+        ),
         workflows=workflows,
         embedder=embedder,
         analysis_skills=AssetLoader(settings.skills_root, SkillCatalog.load),
@@ -81,17 +117,25 @@ async def build_services(settings: Settings) -> AsyncIterator[tuple[Services, As
         await db.close()
 
 
-async def migrate(services: Services, pool: AsyncConnectionPool) -> None:
-    """App tables (Alembic), LangGraph checkpointer/store tables and the workflow vector index."""
+async def migrate(services: Services, pool: PgPool) -> None:
+    """App tables (Alembic), LangGraph checkpointer/store tables.
+
+    Also the workflow vector index.
+    """
     async with services.db.engine.connect() as conn:
-        await conn.execute(text("SELECT pg_advisory_lock(:k)"), {"k": MIGRATION_LOCK})
+        await conn.execute(
+            text("SELECT pg_advisory_lock(:k)"), {"k": MIGRATION_LOCK}
+        )
         try:
             await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
             await conn.commit()
             await asyncio.to_thread(_alembic_upgrade, services.settings)
             await AsyncPostgresSaver(pool).setup()
-            await services.memory.store.setup()
+            if isinstance(services.memory.store, AsyncPostgresStore):
+                await services.memory.store.setup()
             await services.workflows.ensure_index()
         finally:
-            await conn.execute(text("SELECT pg_advisory_unlock(:k)"), {"k": MIGRATION_LOCK})
+            await conn.execute(
+                text("SELECT pg_advisory_unlock(:k)"), {"k": MIGRATION_LOCK}
+            )
             await conn.commit()

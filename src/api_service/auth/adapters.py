@@ -5,7 +5,12 @@ from typing import Protocol
 from fastapi import Request
 from starlette.concurrency import run_in_threadpool
 
-from api_service.auth.sdk import Employee, SdkFactory, login_url, verify_employee
+from api_service.auth.sdk import (
+    Employee,
+    SdkFactory,
+    login_url,
+    verify_employee,
+)
 from core.config import Settings
 
 
@@ -30,10 +35,15 @@ class CompanyAdapter:
 
 
 class DevAdapter:
-    """Local development only (guarded by Settings): every visitor is the dev employee."""
+    """Local development only (guarded by Settings).
+
+    Every visitor is the dev employee.
+    """
 
     def __init__(self, settings: Settings):
-        self.employee = Employee(settings.dev_employee_id, settings.dev_employee_name)
+        self.employee = Employee(
+            settings.dev_employee_id, settings.dev_employee_name
+        )
 
     async def verify(self, request: Request) -> Employee | None:
         return self.employee
@@ -46,7 +56,10 @@ def load_adapter(settings: Settings) -> SsoAdapter:
     if settings.sso_adapter == "dev":
         return DevAdapter(settings)
     if not settings.sso_adapter_factory:
-        raise ValueError("SSO_ADAPTER_FACTORY (module:function) is required for SSO_ADAPTER=company")
+        raise ValueError(
+            "SSO_ADAPTER_FACTORY (module:function) is required for "
+            "SSO_ADAPTER=company"
+        )
     module, name = settings.sso_adapter_factory.split(":", 1)
     sdk_factory: SdkFactory = getattr(importlib.import_module(module), name)
     return CompanyAdapter(sdk_factory)

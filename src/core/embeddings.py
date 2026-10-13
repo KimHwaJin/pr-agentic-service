@@ -1,8 +1,10 @@
 """Embedding model for memory and workflow search.
 
-EMBEDDING_PROVIDER: none (keyword fallback) | openai (gateway, OpenAI compatible) | mock.
-The mock is a deterministic hashed character n-gram vector: no model server, but similar texts
-still land close together, so the vector paths (pgvector index, Store search) run end to end.
+EMBEDDING_PROVIDER: none (keyword fallback)
+| openai (gateway, OpenAI compatible) | mock.
+The mock is a deterministic hashed character n-gram vector: no model server,
+but similar texts still land close together, so the vector paths
+(pgvector index, Store search) run end to end.
 """
 
 import hashlib
@@ -23,7 +25,9 @@ class MockEmbeddings(Embeddings):
         normalized = " ".join(text.lower().split())
         for n in (2, 3):
             for i in range(len(normalized) - n + 1):
-                digest = hashlib.blake2b(normalized[i : i + n].encode(), digest_size=8).digest()
+                digest = hashlib.blake2b(
+                    normalized[i : i + n].encode(), digest_size=8
+                ).digest()
                 index = int.from_bytes(digest[:4], "little") % self.dims
                 vector[index] += 1.0 if digest[4] & 1 else -1.0
         norm = math.sqrt(sum(v * v for v in vector)) or 1.0

@@ -1,11 +1,17 @@
-def boxplot_eda(data, columns: list | None = None, output_dir: str = "artifacts/plots", figsize: list = (10, 5), dpi: int = 110) -> dict:
+def boxplot_eda(
+    data,
+    columns: list | None = None,
+    output_dir: str = "artifacts/plots",
+    figsize: list | None = None,
+    dpi: int = 110,
+) -> dict:
     """수치형 컬럼의 박스플롯으로 이상치를 시각화합니다.
 
     Args:
         data: 입력 DataFrame
         columns: 대상 컬럼 (None이면 수치형 최대 12개)
         output_dir: 그림 저장 경로
-        figsize: 그림 크기
+        figsize: 그림 크기 [가로, 세로] (None이면 [10, 5])
         dpi: 해상도
 
     Returns:
@@ -16,8 +22,10 @@ def boxplot_eda(data, columns: list | None = None, output_dir: str = "artifacts/
     import matplotlib.pyplot as plt
 
     numeric = data.select_dtypes("number")
-    cols = [c for c in (columns or numeric.columns[:12]) if c in numeric.columns]
-    plt.figure(figsize=tuple(figsize))
+    cols = [
+        c for c in (columns or numeric.columns[:12]) if c in numeric.columns
+    ]
+    plt.figure(figsize=tuple(figsize or (10, 5)))
     numeric[cols].boxplot(rot=60)
     plt.tight_layout()
     Path(output_dir).mkdir(parents=True, exist_ok=True)

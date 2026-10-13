@@ -20,9 +20,17 @@ def tools() -> ToolCatalog:
 
 @pytest.fixture
 def adaptive() -> dict:
-    return json.loads((ROOT / "tests/fixtures/workflow_adaptive.example.json").read_text("utf-8"))
+    return json.loads(
+        (ROOT / "tests/fixtures/workflow_adaptive.example.json").read_text(
+            "utf-8"
+        )
+    )
 
 
 @pytest.fixture
 def static() -> dict:
-    return json.loads((ROOT / "tests/fixtures/workflow_static.example.json").read_text("utf-8"))
+    return json.loads(
+        (ROOT / "tests/fixtures/workflow_static.example.json").read_text(
+            "utf-8"
+        )
+    )

@@ -19,7 +19,13 @@ def extract_data(
     Returns:
         {"data": dict, "query": dict}
     """
-    query = {"data_type": str(data_type).lower(), "lot_cd": lot_cd, "process": process,
-             "start_dt": start_dt, "end_dt": end_dt, "limit": limit}
+    query = {
+        "data_type": str(data_type).lower(),
+        "lot_cd": lot_cd,
+        "process": process,
+        "start_dt": start_dt,
+        "end_dt": end_dt,
+        "limit": limit,
+    }
     print(f"extract_data mock: {query}")
     return {"data": {}, "query": query}

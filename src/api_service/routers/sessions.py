@@ -21,25 +21,47 @@ from api_service.schemas import (
     SessionStart,
     SessionUpdate,
 )
-from core.db import utcnow
+from core.db import get_row, utcnow
 from core.executor.client import ExecutorError
 from core.models import ChatSession, Message, Run, RunEvent, User
 from core.services import Services
 
 router = APIRouter(tags=["sessions"])
 HEARTBEAT = ": keep-alive\n\n"
-RESUME_TYPES = {"plan_approval", "code_approval", "memory_change", "workflow_save"}  # need a dict answer
+RESUME_TYPES = {
+    "plan_approval",
+    "code_approval",
+    "memory_change",
+    "workflow_save",
+}  # need a dict answer
 
 
-async def start_run(services: Services, user: User, session_id: str, text: str, model_alias: str | None) -> Run:
-    """One run per session at a time: the session row lock serialises concurrent sends."""
+async def start_run(
+    services: Services,
+    user: User,
+    session_id: str,
+    text: str,
+    model_alias: str | None,
+) -> Run:
+    """One run per session at a time.
+
+    The session row lock serialises concurrent sends.
+    """
     alias = model_alias or services.settings.llm_default_alias
     if alias not in services.settings.llm_models:
-        raise HTTPException(422, f"Unknown model alias. Choose one of {list(services.settings.llm_models)}.")
+        raise HTTPException(
+            422,
+            "Unknown model alias. Choose one of "
+            f"{list(services.settings.llm_models)}.",
+        )
     async with services.db.sessions() as db:
-        session = await db.get(ChatSession, session_id, with_for_update=True)
+        session = await get_row(db, ChatSession, session_id, lock=True)
         if session.active_run_id:
-            raise HTTPException(409, "This session is still working. Wait for it to finish or cancel it.")
+            raise HTTPException(
+                409,
+                "This session is still working. "
+                "Wait for it to finish or cancel it.",
+            )
         run = Run(
             session_id=session.id,
             project_id=session.project_id,
@@ -50,17 +72,32 @@ async def start_run(services: Services, user: User, session_id: str, text: str, 
         )
         db.add(run)
         await db.flush()
-        db.add(Message(session_id=session.id, run_id=run.id, role="user", content=text))
+        db.add(
+            Message(
+                session_id=session.id, run_id=run.id, role="user", content=text
+            )
+        )
         session.active_run_id = run.id
         await db.commit()
-    await services.events.emit(session_id, run.id, "run_status", {"status": "queued"})
+    await services.events.emit(
+        session_id, run.id, "run_status", {"status": "queued"}
+    )
     await services.events.wake_runs(run.id)
     return run
 
 
-@router.post("/projects/{project_id}/sessions", response_model=SessionStart, status_code=201)
-async def create_session(project_id: str, body: SessionCreate, services: ServicesDep, user: UserDep):
-    """Creates a session; with ``message`` the first turn starts immediately (login -> chat)."""
+@router.post(
+    "/projects/{project_id}/sessions",
+    response_model=SessionStart,
+    status_code=201,
+)
+async def create_session(
+    project_id: str, body: SessionCreate, services: ServicesDep, user: UserDep
+):
+    """Creates a session.
+
+    With ``message`` the first turn starts immediately (login -> chat).
+    """
     await project_for(services, user, project_id, write=True)
     title = body.title or (body.message[:40] if body.message else "새 대화")
     async with services.db.sessions() as db:
@@ -73,15 +110,28 @@ async def create_session(project_id: str, body: SessionCreate, services: Service
         )
         db.add(session)
         await db.commit()
-    run = await start_run(services, user, session.id, body.message, body.model_alias) if body.message else None
+    run = (
+        await start_run(
+            services, user, session.id, body.message, body.model_alias
+        )
+        if body.message
+        else None
+    )
     async with services.db.sessions() as db:
         session = await db.get(ChatSession, session.id)
-    return SessionStart(session=SessionRead.model_validate(session), run=RunRead.model_validate(run) if run else None)
+    return SessionStart(
+        session=SessionRead.model_validate(session),
+        run=RunRead.model_validate(run) if run else None,
+    )
 
 
 @router.get("/projects/{project_id}/sessions", response_model=SessionPage)
 async def list_sessions(
-    project_id: str, services: ServicesDep, user: UserDep, limit: int = pagination.Limit, cursor: str | None = None
+    project_id: str,
+    services: ServicesDep,
+    user: UserDep,
+    limit: int = pagination.Limit,
+    cursor: str | None = None,
 ):
     """Most recently updated first."""
     await project_for(services, user, project_id)
@@ -92,7 +142,9 @@ async def list_sessions(
                 .where(
                     ChatSession.project_id == project_id,
                     ChatSession.deleted_at.is_(None),
-                    pagination.older_than(ChatSession.updated_at, ChatSession.id, cursor),
+                    pagination.older_than(
+                        ChatSession.updated_at, ChatSession.id, cursor
+                    ),
                 )
                 .order_by(ChatSession.updated_at.desc(), ChatSession.id.desc())
                 .limit(limit + 1)
@@ -100,7 +152,12 @@ async def list_sessions(
         ).all()
     page = rows[:limit]
     more = len(rows) > limit
-    return SessionPage(items=page, next_cursor=pagination.encode(page[-1].updated_at, page[-1].id) if more else None)
+    return SessionPage(
+        items=page,
+        next_cursor=pagination.encode(page[-1].updated_at, page[-1].id)
+        if more
+        else None,
+    )
 
 
 @router.get("/sessions/{session_id}", response_model=SessionRead)
@@ -109,10 +166,12 @@ async def get_session(session_id: str, services: ServicesDep, user: UserDep):
 
 
 @router.patch("/sessions/{session_id}", response_model=SessionRead)
-async def update_session(session_id: str, body: SessionUpdate, services: ServicesDep, user: UserDep):
+async def update_session(
+    session_id: str, body: SessionUpdate, services: ServicesDep, user: UserDep
+):
     await session_for(services, user, session_id, write=True)
     async with services.db.sessions() as db:
-        session = await db.get(ChatSession, session_id)
+        session = await get_row(db, ChatSession, session_id)
         for key, value in body.model_dump(exclude_unset=True).items():
             setattr(session, key, value)
         if body.title is not None:
@@ -122,27 +181,45 @@ async def update_session(session_id: str, body: SessionUpdate, services: Service
 
 
 @router.delete("/sessions/{session_id}", status_code=204)
-async def delete_session(session_id: str, services: ServicesDep, user: UserDep):
+async def delete_session(
+    session_id: str, services: ServicesDep, user: UserDep
+):
     session = await session_for(services, user, session_id, write=True)
     if session.active_run_id:
         raise HTTPException(409, "Cancel the running turn first.")
     async with services.db.sessions() as db:
-        await db.execute(update(ChatSession).where(ChatSession.id == session_id).values(deleted_at=utcnow()))
+        await db.execute(
+            update(ChatSession)
+            .where(ChatSession.id == session_id)
+            .values(deleted_at=utcnow())
+        )
         await db.commit()
     return Response(status_code=204)
 
 
 @router.get("/sessions/{session_id}/messages", response_model=MessagePage)
 async def list_messages(
-    session_id: str, services: ServicesDep, user: UserDep, limit: int = pagination.Limit, cursor: str | None = None
+    session_id: str,
+    services: ServicesDep,
+    user: UserDep,
+    limit: int = pagination.Limit,
+    cursor: str | None = None,
 ):
-    """The latest ``limit`` messages (oldest first within the page); ``next_cursor`` loads earlier ones."""
+    """The latest ``limit`` messages (oldest first within the page).
+
+    ``next_cursor`` loads earlier ones.
+    """
     await session_for(services, user, session_id)
     async with services.db.sessions() as db:
         rows = (
             await db.scalars(
                 select(Message)
-                .where(Message.session_id == session_id, pagination.older_than(Message.created_at, Message.id, cursor))
+                .where(
+                    Message.session_id == session_id,
+                    pagination.older_than(
+                        Message.created_at, Message.id, cursor
+                    ),
+                )
                 .order_by(Message.created_at.desc(), Message.id.desc())
                 .limit(limit + 1)
             )
@@ -150,36 +227,59 @@ async def list_messages(
     page = rows[:limit]
     more = len(rows) > limit
     return MessagePage(
-        items=list(reversed(page)), next_cursor=pagination.encode(page[-1].created_at, page[-1].id) if more else None
+        items=list(reversed(page)),
+        next_cursor=pagination.encode(page[-1].created_at, page[-1].id)
+        if more
+        else None,
     )
 
 
-@router.post("/sessions/{session_id}/messages", response_model=RunRead, status_code=202)
-async def send_message(session_id: str, body: MessageCreate, services: ServicesDep, user: UserDep):
+@router.post(
+    "/sessions/{session_id}/messages", response_model=RunRead, status_code=202
+)
+async def send_message(
+    session_id: str, body: MessageCreate, services: ServicesDep, user: UserDep
+):
     await session_for(services, user, session_id, write=True)
-    return await start_run(services, user, session_id, body.content, body.model_alias)
+    return await start_run(
+        services, user, session_id, body.content, body.model_alias
+    )
 
 
 @router.get("/sessions/{session_id}/runs", response_model=RunPage)
 async def list_runs(
-    session_id: str, services: ServicesDep, user: UserDep, limit: int = pagination.Limit, cursor: str | None = None
+    session_id: str,
+    services: ServicesDep,
+    user: UserDep,
+    limit: int = pagination.Limit,
+    cursor: str | None = None,
 ):
     await session_for(services, user, session_id)
     async with services.db.sessions() as db:
         rows = (
             await db.scalars(
                 select(Run)
-                .where(Run.session_id == session_id, pagination.older_than(Run.created_at, Run.id, cursor))
+                .where(
+                    Run.session_id == session_id,
+                    pagination.older_than(Run.created_at, Run.id, cursor),
+                )
                 .order_by(Run.created_at.desc(), Run.id.desc())
                 .limit(limit + 1)
             )
         ).all()
     page = rows[:limit]
     more = len(rows) > limit
-    return RunPage(items=page, next_cursor=pagination.encode(page[-1].created_at, page[-1].id) if more else None)
+    return RunPage(
+        items=page,
+        next_cursor=pagination.encode(page[-1].created_at, page[-1].id)
+        if more
+        else None,
+    )
 
 
-async def _run_for(services: Services, user: User, run_id: str, write: bool = False) -> Run:
+async def _run_for(
+    services: Services, user: User, run_id: str, write: bool = False
+) -> Run:
     async with services.db.sessions() as db:
         run = await db.get(Run, run_id)
     if run is None:
@@ -194,35 +294,60 @@ async def get_run(run_id: str, services: ServicesDep, user: UserDep):
 
 
 @router.get("/runs/{run_id}/events", response_model=RunEvents)
-async def run_events(run_id: str, services: ServicesDep, user: UserDep, types: str | None = None):
-    """Durable events of one turn, in order: work steps, plan approvals, execution results, artifacts...
+async def run_events(
+    run_id: str, services: ServicesDep, user: UserDep, types: str | None = None
+):
+    """Durable events of one turn, in order.
 
-    The same events the SSE stream delivered live (token deltas and executor progress are live-only),
-    so a client can redraw a past turn. ``types`` filters, e.g. ``execution_completed,artifact``.
+    Work steps, plan approvals, execution results, artifacts...
+    The same events the SSE stream delivered live (token deltas and
+    executor progress are live-only), so a client can redraw a past turn.
+    ``types`` filters, e.g. ``execution_completed,artifact``.
     """
     run = await _run_for(services, user, run_id)
     async with services.db.sessions() as db:
         query = select(RunEvent).where(RunEvent.run_id == run_id)
         if types:
-            query = query.where(RunEvent.type.in_([t.strip() for t in types.split(",") if t.strip()]))
-        rows = (await db.scalars(query.order_by(RunEvent.id).limit(5000))).all()
+            query = query.where(
+                RunEvent.type.in_(
+                    [t.strip() for t in types.split(",") if t.strip()]
+                )
+            )
+        rows = (
+            await db.scalars(query.order_by(RunEvent.id).limit(5000))
+        ).all()
     return RunEvents(run_id=run_id, status=run.status, items=rows)
 
 
 @router.post("/runs/{run_id}/resume", response_model=RunRead, status_code=202)
-async def resume_run(run_id: str, body: ResumeRequest, services: ServicesDep, user: UserDep):
+async def resume_run(
+    run_id: str, body: ResumeRequest, services: ServicesDep, user: UserDep
+):
     """Answer the run's pending question / approval (HITL)."""
     await _run_for(services, user, run_id, write=True)
     async with services.db.sessions() as db:
-        run = await db.get(Run, run_id, with_for_update=True)
-        if run.status != "waiting_input" or (run.waiting or {}).get("interrupt_id") != body.interrupt_id:
+        run = await get_row(db, Run, run_id, lock=True)
+        if (
+            run.status != "waiting_input"
+            or (run.waiting or {}).get("interrupt_id") != body.interrupt_id
+        ):
             raise HTTPException(409, "The run is not waiting for this answer.")
-        if run.waiting.get("type") in RESUME_TYPES and not isinstance(body.value, dict):
-            raise HTTPException(422, f"'{run.waiting['type']}' expects an object answer.")
+        waiting = run.waiting or {}
+        if waiting.get("type") in RESUME_TYPES and not isinstance(
+            body.value, dict
+        ):
+            raise HTTPException(
+                422, f"'{waiting['type']}' expects an object answer."
+            )
         run.resume = {"interrupt_id": body.interrupt_id, "value": body.value}
         run.status, run.waiting = "queued", None
         await db.commit()
-    await services.events.emit(run.session_id, run.id, "hitl_resolved", {"interrupt_id": body.interrupt_id})
+    await services.events.emit(
+        run.session_id,
+        run.id,
+        "hitl_resolved",
+        {"interrupt_id": body.interrupt_id},
+    )
     await services.events.wake_runs(run.id)
     return run
 
@@ -232,33 +357,53 @@ async def cancel_run(run_id: str, services: ServicesDep, user: UserDep):
     await _run_for(services, user, run_id, write=True)
     execution_id = None
     async with services.db.sessions() as db:
-        run = await db.get(Run, run_id, with_for_update=True)
+        run = await get_row(db, Run, run_id, lock=True)
         if run.status in {"succeeded", "failed", "cancelled"}:
             return run
         run.cancel_requested = True
         if run.status != "running":  # nobody is executing it: finish here
             execution_id = (run.waiting or {}).get("execution_id")
-            run.status, run.waiting, run.finished_at = "cancelled", None, utcnow()
+            run.status, run.waiting, run.finished_at = (
+                "cancelled",
+                None,
+                utcnow(),
+            )
             await db.execute(
                 update(ChatSession)
-                .where(ChatSession.id == run.session_id, ChatSession.active_run_id == run.id)
+                .where(
+                    ChatSession.id == run.session_id,
+                    ChatSession.active_run_id == run.id,
+                )
                 .values(active_run_id=None)
             )
         await db.commit()
     if execution_id:
         try:
-            await services.executor.cancel(execution_id, idempotency_key=f"cancel:{run_id}", reason="사용자 취소")
+            await services.executor.cancel(
+                execution_id,
+                idempotency_key=f"cancel:{run_id}",
+                reason="사용자 취소",
+            )
         except ExecutorError:
             pass  # already terminal
-    await services.events.emit(run.session_id, run.id, "run_status", {"status": run.status})
+    await services.events.emit(
+        run.session_id, run.id, "run_status", {"status": run.status}
+    )
     return run
 
 
 @router.get("/sessions/{session_id}/events")
 async def session_events(
-    session_id: str, request: Request, services: ServicesDep, user: UserDep, after: int | None = None
+    session_id: str,
+    request: Request,
+    services: ServicesDep,
+    user: UserDep,
+    after: int | None = None,
 ):
-    """SSE. Resume with the ``Last-Event-ID`` header (or ``?after=``) after a reconnect.
+    """SSE.
+
+    Resume with the ``Last-Event-ID`` header (or ``?after=``) after a
+    reconnect.
 
     Without a cursor the stream replays the events of the session's active run.
     """
@@ -269,7 +414,9 @@ async def session_events(
     async def stream():
         try:
             last = int(cursor) if cursor else 0
-            history = await services.events.history(session_id, last, None if cursor else session.active_run_id)
+            history = await services.events.history(
+                session_id, last, None if cursor else session.active_run_id
+            )
             if not cursor and not session.active_run_id:
                 history = []
             for event in history:
@@ -293,18 +440,30 @@ async def session_events(
             services.events.unsubscribe(session_id, queue)
 
     return StreamingResponse(
-        stream(), media_type="text/event-stream", headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"}
+        stream(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"},
     )
 
 
 def _sse(event: dict) -> str:
     head = f"id: {event['id']}\n" if "id" in event else ""
-    return f"{head}event: {event['type']}\ndata: {json.dumps(event, ensure_ascii=False, default=str)}\n\n"
+    data = json.dumps(event, ensure_ascii=False, default=str)
+    return f"{head}event: {event['type']}\ndata: {data}\n\n"
 
 
 @router.get("/sessions/{session_id}/outputs")
-async def step_output_file(session_id: str, execution_id: str, path: str, services: ServicesDep, user: UserDep):
-    """Images and files of executed steps (paths from execution_completed events)."""
+async def step_output_file(
+    session_id: str,
+    execution_id: str,
+    path: str,
+    services: ServicesDep,
+    user: UserDep,
+):
+    """Images and files of executed steps.
+
+    Paths come from execution_completed events.
+    """
     await session_for(services, user, session_id)
     if not path.startswith(f"executions/{execution_id}/"):
         raise HTTPException(404, "Not found.")

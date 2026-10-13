@@ -32,12 +32,12 @@ module-name = ["core", "api_service", "agent", "worker"]
 
 [tool.ruff]
 target-version = "py312"
-line-length = 120
+line-length = 79
 src = ["src"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]
-ignore = ["E501"]  # ruff format owns line length; long literals stay readable
+
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -49,4 +49,16 @@ dev = [
     "pytest>=9.1.1",
     "pytest-asyncio>=1.4.0",
     "ruff>=0.17.0",
+    "ty>=0.0.86",
 ]
+
+[tool.ty.environment]
+python-version = "3.12"
+extra-paths = ["src", "scripts"]
+
+# assets/tools run in the executor's Jupyter kernel, whose packages are not in this venv.
+[[tool.ty.overrides]]
+include = ["assets/**"]
+
+[tool.ty.overrides.rules]
+unresolved-import = "ignore"
