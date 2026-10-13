@@ -38,10 +38,14 @@ def _decide(body: dict) -> tuple[str, list[dict]]:
         return ("# 분석 리포트\n\n## 요약\n표본 통계와 분포를 확인했습니다.\n\n## 특이사항\n- (mock) 근거 기반 정리\n\n"
                 "## 추가로 해볼 만한 분석\n- 공정별 비교\n- 시계열 추세", [])
     if "start_analysis" in tools:  # main persona
+        if last["role"] == "user" and "기억해" in content:
+            return "", [_call("save_memory", {"category": "report_preferences", "title": "보고서 형식", "content": content, "reason": "사용자 요청"})]
+        if tool_name == "save_memory":
+            return "기억했습니다.", []
         if last["role"] == "user" and "분석" in content:
             return "", [_call("start_analysis", {"task": content, "context": "NCE wide mock 데이터"})]
-        if tool_name == "start_analysis":
-            return "분석 담당이 진행 중입니다.", []
+        if tool_name == "finish_analysis":
+            return "분석을 마쳤습니다. 리포트와 노트북을 확인해 주세요.", []
         return "안녕하세요! 데이터 분석을 도와드리는 Agent입니다. (mock LLM)", []
     # analyst persona
     if tool_name in (None, "start_analysis"):
@@ -57,8 +61,12 @@ def _decide(body: dict) -> tuple[str, list[dict]]:
         if state.get("remaining_conditional_calls"):
             decisions = {k: {"run": True, "reason": "mock: 조건 충족"} for k in state["remaining_conditional_calls"]}
             return "", [_call("run_plan", {"decisions": decisions})]
+        return "", [_call("run_custom_code", {"code": "print(_r_s1_t1['sampled_data'].shape)", "purpose": "표본 크기 확인"})]
+    if tool_name == "run_custom_code":
         return "", [_call("write_report", {"title": "NCE WT 탐색 분석", "focus": "분포와 상관"})]
     if tool_name == "write_report":
+        return "", [_call("save_workflow", {"name": "NCE WT 결합 탐색", "user_queries": ["NCE와 WT를 결합해 탐색 분석해줘"]})]
+    if tool_name == "save_workflow":
         return "", [_call("finish_analysis", {"summary": "리포트 작성 완료"})]
     return "완료했습니다.", []
 

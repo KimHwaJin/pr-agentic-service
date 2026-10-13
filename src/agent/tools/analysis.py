@@ -241,8 +241,26 @@ def _segment(plan: dict[str, Any], decisions: dict[str, dict[str, Any]]) -> tupl
     return segment, undecided
 
 
+async def _once(runtime: ToolRuntime, name: str, effect) -> Any:
+    """Run an executor side effect once per tool call.
+
+    LangGraph re-executes a tool from the top when it resumes after an interrupt; the recorded
+    result is returned instead of calling the executor again (whose state has moved on).
+    """
+    namespace, key = ("tool_effects", runtime.context.run_id), f"{runtime.tool_call_id}:{name}"
+    if (item := await runtime.store.aget(namespace, key)) is not None:
+        return item.value["result"]
+    result = await effect()
+    await runtime.store.aput(namespace, key, {"result": result}, index=False)
+    return result
+
+
 async def _submit(runtime: ToolRuntime, steps: list[dict[str, Any]], labels: list[str]) -> tuple[dict, dict]:
-    """Append to the live execution or open a new MULTI execution; returns (receipt, execution)."""
+    return tuple(await _once(runtime, "submit", lambda: _submit_now(runtime, steps, labels)))
+
+
+async def _submit_now(runtime: ToolRuntime, steps: list[dict[str, Any]], labels: list[str]) -> list[dict]:
+    """Append to the live execution or open a new MULTI execution; returns [receipt, execution]."""
     ctx = runtime.context
     settings = ctx.services.settings
     executor = ctx.services.executor
@@ -288,7 +306,7 @@ async def _submit(runtime: ToolRuntime, steps: list[dict[str, Any]], labels: lis
         **execution.get("steps", {}),
         **{step_ids[s["sequence"]]: label for s, label in zip(steps, labels, strict=True)},
     }
-    return receipt, execution
+    return [receipt, execution]
 
 
 def _wait_operation(execution: dict, receipt: dict) -> dict[str, Any]:
@@ -464,8 +482,12 @@ async def write_report(title: str, focus: str, runtime: ToolRuntime[RunContext, 
     if not execution:
         return _reply(runtime, "실행된 분석이 없습니다.")
     if execution.get("alive"):
-        await executor.finalize(
-            execution["id"], idempotency_key=_key(runtime, "finalize"), expected_version=execution["version"]
+        await _once(
+            runtime,
+            "finalize",
+            lambda: executor.finalize(
+                execution["id"], idempotency_key=_key(runtime, "finalize"), expected_version=execution["version"]
+            ),
         )
         event = interrupt(
             {"type": "executor_wait", "execution_id": execution["id"], "operation_id": None, "steps": ["finalize"]}

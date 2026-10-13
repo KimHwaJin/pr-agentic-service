@@ -1,7 +1,10 @@
+import logging
 from collections.abc import AsyncIterator
 from typing import Any
 
 import httpx
+
+log = logging.getLogger(__name__)
 
 AGENT_ACTOR = {"type": "AGENT", "id": "pr-agentic-service"}
 
@@ -29,6 +32,7 @@ class ExecutorClient:
                 body = response.json()
             except ValueError:
                 body = response.text
+            log.warning("executor_error method=%s url=%s status=%s body=%s", method, url, response.status_code, body)
             raise ExecutorError(response.status_code, body)
         return response.json() if response.content else None
 
