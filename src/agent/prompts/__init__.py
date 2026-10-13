@@ -7,7 +7,7 @@ Body placeholders use ``{name}`` and are filled with str.format_map (missing key
 from dataclasses import dataclass
 from pathlib import Path
 
-from core.assets import split_frontmatter
+from core.assets import AssetLoader, split_frontmatter
 
 
 class _Keep(dict):
@@ -25,6 +25,18 @@ class Prompt:
         return self.body.format_map(_Keep(values))
 
 
+_loaders: dict[Path, AssetLoader] = {}
+
+
+def _parse(root: Path) -> dict[str, Prompt]:
+    prompts = {}
+    for path in root.glob("*.md"):
+        meta, body = split_frontmatter(path.read_text("utf-8"))
+        prompts[path.stem] = Prompt(path.stem, tuple(meta.get("skills", ())), body)
+    return prompts
+
+
 def load_prompt(root: Path, name: str) -> Prompt:
-    meta, body = split_frontmatter((root / f"{name}.md").read_text("utf-8"))
-    return Prompt(name, tuple(meta.get("skills", ())), body)
+    """Edited prompt files apply to the next model call without a restart."""
+    loader = _loaders.setdefault(root, AssetLoader(root, _parse))
+    return loader.get()[name]

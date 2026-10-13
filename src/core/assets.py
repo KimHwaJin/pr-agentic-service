@@ -8,6 +8,7 @@ Imports live inside the function; the executor receives the function without its
 
 import ast
 import re
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -154,14 +155,19 @@ class ToolCatalog:
 
 
 class AssetLoader:
-    """Reloads a directory only when one of its files changed (cheap mtime check per run)."""
+    """Parsed view of a directory, reloaded when a file changes (checked at most every few seconds)."""
 
-    def __init__(self, root: Path, factory):
-        self.root, self.factory = root, factory
+    def __init__(self, root: Path, factory, check_seconds: float = 5.0):
+        self.root, self.factory, self.check_seconds = root, factory, check_seconds
         self._stamp: tuple | None = None
+        self._checked = 0.0
         self._value = None
 
     def get(self):
+        now = time.monotonic()
+        if self._value is not None and now - self._checked < self.check_seconds:
+            return self._value
+        self._checked = now
         files = sorted(self.root.rglob("*")) if self.root.exists() else []
         stamp = tuple((str(p), p.stat().st_mtime_ns) for p in files if p.is_file())
         if stamp != self._stamp:

@@ -23,6 +23,14 @@ from core.models import BatchReportJob
 
 router = APIRouter(tags=["batch"])
 FORWARD_HEADERS = ("content-type", "idempotency-key", "if-match", "accept")
+_clients: dict[str, httpx.AsyncClient] = {}
+
+
+def _client(services) -> httpx.AsyncClient:
+    base = services.settings.batch_base_url
+    if base not in _clients:
+        _clients[base] = httpx.AsyncClient(base_url=base, timeout=60)
+    return _clients[base]
 
 
 def _batch_token(services, user) -> str:
@@ -50,16 +58,15 @@ async def notebook_to_batch_script(body: BatchScriptFromNotebook, services: Serv
     response, chunks = await services.executor.stream_artifact(body.artifact_id)
     content = b"".join([c async for c in chunks])
     await response.aclose()
-    async with httpx.AsyncClient(base_url=services.settings.batch_base_url, timeout=60) as client:
-        result = await client.post(
-            "/api/v1/scripts",
-            headers={
-                "Authorization": f"Bearer {_batch_token(services, user)}",
-                "Idempotency-Key": f"nb-{body.artifact_id}-{hashlib.sha256(content).hexdigest()[:16]}",
-            },
-            data={"type": "NOTEBOOK", **({"name": body.name} if body.name else {})},
-            files={"file": (artifact["name"], content, "application/x-ipynb+json")},
-        )
+    result = await _client(services).post(
+        "/api/v1/scripts",
+        headers={
+            "Authorization": f"Bearer {_batch_token(services, user)}",
+            "Idempotency-Key": f"nb-{body.artifact_id}-{hashlib.sha256(content).hexdigest()[:16]}",
+        },
+        data={"type": "NOTEBOOK", **({"name": body.name} if body.name else {})},
+        files={"file": (artifact["name"], content, "application/x-ipynb+json")},
+    )
     return Response(result.content, result.status_code, media_type=result.headers.get("content-type"))
 
 
@@ -67,14 +74,13 @@ async def notebook_to_batch_script(body: BatchScriptFromNotebook, services: Serv
 async def batch_gateway(path: str, request: Request, services: ServicesDep, user: UserDep):
     headers = {k: v for k, v in request.headers.items() if k.lower() in FORWARD_HEADERS}
     headers["Authorization"] = f"Bearer {_batch_token(services, user)}"
-    async with httpx.AsyncClient(base_url=services.settings.batch_base_url, timeout=60) as client:
-        result = await client.request(
-            request.method,
-            f"/api/v1/{path}",
-            params=request.query_params,
-            headers=headers,
-            content=await request.body(),
-        )
+    result = await _client(services).request(
+        request.method,
+        f"/api/v1/{path}",
+        params=request.query_params,
+        headers=headers,
+        content=await request.body(),
+    )
     passthrough = {k: v for k, v in result.headers.items() if k.lower() in {"etag", "location", "content-type"}}
     return Response(result.content, result.status_code, headers=passthrough)
 

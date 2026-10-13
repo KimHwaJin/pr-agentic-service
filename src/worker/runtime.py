@@ -9,6 +9,7 @@ from agent.graph import AgentGraphs
 from core.services import Services
 from worker.batch_reports import BatchReportWorker
 from worker.executor_events import ExecutorEventConsumer
+from worker.maintenance import Retention
 from worker.scheduler import RunScheduler
 
 
@@ -30,6 +31,7 @@ class Worker:
             on_progress=self.scheduler.progress,
         )
         self.reports = BatchReportWorker(services, self.owner)
+        self.retention = Retention(services)
         self.tasks: list[asyncio.Task] = []
 
     def start(self) -> None:
@@ -37,6 +39,7 @@ class Worker:
             asyncio.create_task(self.scheduler.run_forever(), name="run-scheduler"),
             asyncio.create_task(self.consumer.run_forever(), name="executor-events"),
             asyncio.create_task(self.reports.run_forever(), name="batch-reports"),
+            asyncio.create_task(self.retention.run_forever(), name="retention"),
         ]
 
     async def stop(self, drain_seconds: float = 20) -> None:

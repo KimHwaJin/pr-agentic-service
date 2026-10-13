@@ -347,7 +347,7 @@ def _step_view(runtime: ToolRuntime, result: dict[str, Any] | None) -> dict[str,
     return {
         "status": result["status"],
         "observations": [_bounded(o) for o in observations],
-        "stdout": text[-2000:],
+        "stdout": text[-1500:],
         "images": view.get("images", []),
         "error": view.get("error"),
     }

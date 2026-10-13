@@ -33,6 +33,7 @@ from agent.tools.main import (
     start_analysis,
 )
 from core.config import Settings
+from core.events import TokenBuffer
 from core.executor.client import ExecutorError
 
 TOOLS = [
@@ -105,16 +106,20 @@ class AgentGraphs:
             closing = _dangling_tool_results(state.values.get("messages", []))
             command = {"messages": [*closing, HumanMessage(ctx.user_text, id=ctx.run_id)]}
 
-        async for mode, chunk in graph.astream(command, config, context=ctx, stream_mode=["messages", "updates"]):
+        tokens = TokenBuffer(ctx.services.events, ctx.session_id, ctx.run_id)
+        stream = graph.astream(command, config, context=ctx, stream_mode=["messages", "updates"], durability="async")
+        async for mode, chunk in stream:
             if mode == "messages":
                 message, meta = chunk
                 if isinstance(message, AIMessageChunk) and meta.get("langgraph_node") == "model" and message.text:
-                    await ctx.emit("token", {"text": message.text}, durable=False)
+                    tokens.add(message.text)
             elif "model" in chunk:
+                await tokens.flush()  # keep token text ahead of the events that follow it
                 for message in chunk["model"].get("messages", []):
                     for call in getattr(message, "tool_calls", []):
                         if call["name"] not in QUIET_TOOLS:
                             await ctx.emit("tool_call", {"name": call["name"], "args": _brief(call["args"])})
+        await tokens.flush()
 
         state = await graph.aget_state(config)
         if state.interrupts:

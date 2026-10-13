@@ -80,9 +80,13 @@ class Settings(BaseSettings):
     memory_prompt_items: int = 8
 
     # Run scheduler.
-    run_concurrency: int = Field(8, ge=1)
+    run_concurrency: int = Field(32, ge=1)  # turns are I/O bound (LLM, executor)
     run_lease_seconds: int = Field(60, ge=10)
-    run_poll_seconds: float = 2.0
+    run_poll_seconds: float = 5.0  # fallback only; runs are woken over Redis
+
+    # Retention of transport data.
+    run_event_retention_days: int = 30
+    executor_inbox_retention_days: int = 7
 
     # pr-batch.
     batch_base_url: str = "http://localhost:8100"

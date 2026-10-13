@@ -18,7 +18,17 @@ class GatewayChatOpenAI(ChatOpenAI):
         return payload
 
 
+_models: dict[str, BaseChatModel] = {}
+
+
 def chat_model(settings: Settings, alias: str) -> BaseChatModel:
+    """One client (and HTTP connection pool) per model alias for the whole process."""
+    if alias not in _models:
+        _models[alias] = _build(settings, alias)
+    return _models[alias]
+
+
+def _build(settings: Settings, alias: str) -> BaseChatModel:
     extra_body: dict[str, Any] = {}
     if settings.llm_enable_thinking is not None:
         extra_body["chat_template_kwargs"] = {"enable_thinking": settings.llm_enable_thinking}

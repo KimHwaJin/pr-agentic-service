@@ -33,7 +33,6 @@ class RunScheduler:
     def __init__(self, services: Services, graphs: AgentGraphs, owner: str):
         self.services, self.graphs, self.owner = services, graphs, owner
         self.settings = services.settings
-        self.slots = asyncio.Semaphore(self.settings.run_concurrency)
         self.tasks: set[asyncio.Task] = set()
         self.accepting = True
         self._wake = asyncio.Event()
@@ -45,18 +44,23 @@ class RunScheduler:
         listener = asyncio.create_task(self._listen())
         try:
             while self.accepting:
+                self._wake.clear()  # before claiming, so a wake during the claim is not lost
                 free = self.settings.run_concurrency - len(self.tasks)
-                if free > 0:
-                    for run in await self._claim(free):
-                        await self.slots.acquire()
-                        task = asyncio.create_task(self._execute(run))
-                        self.tasks.add(task)
-                        task.add_done_callback(lambda t: (self.tasks.discard(t), self.slots.release()))
-                self._wake.clear()
+                runs = await self._claim(free) if free > 0 else []
+                for run in runs:
+                    task = asyncio.create_task(self._execute(run))
+                    self.tasks.add(task)
+                    task.add_done_callback(self._task_done)
+                if len(runs) == free and free > 0:
+                    continue  # the queue may hold more work
                 with contextlib.suppress(TimeoutError):
                     await asyncio.wait_for(self._wake.wait(), self.settings.run_poll_seconds)
         finally:
             listener.cancel()
+
+    def _task_done(self, task: asyncio.Task) -> None:
+        self.tasks.discard(task)
+        self._wake.set()  # a slot is free: claim queued work now, not at the next poll
 
     async def drain(self, timeout: float) -> None:
         """Graceful shutdown: stop claiming, let running turns finish, then release leases."""
@@ -264,11 +268,19 @@ class RunScheduler:
                     .values(active_run_id=None)
                 )
             await db.commit()
+        await self._forget_tool_effects(run.id)
         if answer:
             await ctx.emit("message_final", {"content": answer})
         if error:
             await ctx.emit("run_error", {"message": error})
         await ctx.emit("run_status", {"status": status})
+
+    async def _forget_tool_effects(self, run_id: str) -> None:
+        """Replay guards (agent.tools.analysis._once) are only needed while the run is alive."""
+        store = self.services.memory.store
+        namespace = ("tool_effects", run_id)
+        for item in await store.asearch(namespace, limit=1000):
+            await store.adelete(namespace, item.key)
 
     async def progress(self, execution_id: str, event: dict[str, Any]) -> None:
         """Forward executor step progress to the session that is waiting on the execution."""
@@ -288,4 +300,5 @@ class RunScheduler:
                     "step": payload.get("step"),
                     "error": payload.get("error"),
                 },
+                durable=False,  # high volume; execution_completed is the durable summary
             )

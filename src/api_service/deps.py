@@ -1,3 +1,4 @@
+import time
 from typing import Annotated
 
 from fastapi import Depends, HTTPException, Request
@@ -11,10 +12,22 @@ def get_services(request: Request) -> Services:
     return request.app.state.services
 
 
+_USER_CACHE: dict[str, tuple[float, User]] = {}
+USER_CACHE_SECONDS = 30  # role/deactivation changes apply within this window
+
+
 async def current_user(request: Request) -> User:
     login = await request.app.state.sso.authenticate(request)
-    async with get_services(request).db.sessions() as db:
-        user = await db.get(User, login.user_id)
+    cached = _USER_CACHE.get(login.user_id)
+    if cached and cached[0] > time.monotonic():
+        user = cached[1]
+    else:
+        async with get_services(request).db.sessions() as db:
+            user = await db.get(User, login.user_id)
+        if len(_USER_CACHE) > 10000:
+            _USER_CACHE.clear()
+        if user is not None:
+            _USER_CACHE[login.user_id] = (time.monotonic() + USER_CACHE_SECONDS, user)
     if user is None or not user.is_active:
         raise HTTPException(401, "Login required.")
     return user

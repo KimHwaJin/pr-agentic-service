@@ -201,8 +201,7 @@ async def session_events(
     """
     session = await session_for(services, user, session_id)
     cursor = request.headers.get("last-event-id") or after
-    pubsub, channel = services.events.pubsub(session_id)
-    await pubsub.subscribe(channel)
+    queue = services.events.subscribe(session_id)
 
     async def stream():
         try:
@@ -214,11 +213,12 @@ async def session_events(
                 last = event["id"]
                 yield _sse(event)
             while not await request.is_disconnected():
-                message = await pubsub.get_message(ignore_subscribe_messages=True, timeout=15.0)
-                if message is None:
+                try:
+                    raw = await asyncio.wait_for(queue.get(), 15.0)
+                except TimeoutError:
                     yield HEARTBEAT
                     continue
-                event = json.loads(message["data"])
+                event = json.loads(raw)
                 if "id" in event:
                     if event["id"] <= last:
                         continue
@@ -227,8 +227,7 @@ async def session_events(
         except asyncio.CancelledError:
             pass
         finally:
-            await pubsub.unsubscribe()
-            await pubsub.aclose()
+            services.events.unsubscribe(session_id, queue)
 
     return StreamingResponse(
         stream(), media_type="text/event-stream", headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"}

@@ -17,6 +17,8 @@ from core.config import get_settings
 from worker.runtime import Worker
 
 logging.basicConfig(level=os.environ.get("LOG_LEVEL", "INFO"), format="%(asctime)s %(levelname)s %(name)s %(message)s")
+for noisy in ("httpx", "httpx2", "openai"):
+    logging.getLogger(noisy).setLevel(logging.WARNING)  # one INFO line per LLM/executor call is load
 settings = get_settings()
 mode = os.environ.get("RUN_MODE", "all")
 api_enabled, worker_enabled = mode in {"all", "api"}, mode in {"all", "worker"}

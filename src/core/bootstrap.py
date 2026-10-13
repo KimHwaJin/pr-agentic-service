@@ -74,6 +74,7 @@ async def build_services(settings: Settings) -> AsyncIterator[tuple[Services, As
     try:
         yield services, pool
     finally:
+        await services.events.close()
         await executor.close()
         await redis.aclose()
         await pool.close()
