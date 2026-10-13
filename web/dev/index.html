@@ -219,6 +219,7 @@
   .cand .ct .state { margin-left: auto; font-size: 11.5px; }
   .state.need { color: var(--accent); background: #fde9df; border-radius: 999px; padding: 2px 8px; font-size: 11.5px; }
   .state.ok { color: var(--ok); }
+  .badge.rec { background: #fde9df; color: var(--accent); }
   .cand .skill-head { margin: 12px 2px 6px; align-items: center; }
   .skill-head .seq { width: 20px; height: 20px; flex: none; border-radius: 6px; background: var(--ink); color: var(--bg); display: grid; place-items: center; font-size: 11px; font-weight: 600; }
   .tool-row { border: 1px solid var(--line); border-radius: 10px; margin-bottom: 6px; background: var(--panel); }
@@ -702,7 +703,8 @@ function renderPlanApproval(w, resume) {
   // Accordion: plan -> its tools (grouped by skill) -> a tool's parameters
   const items = w.candidates.map((c, i) => `<div class="cand ${i === 0 ? 'on' : ''}" data-i="${i}">
       <button class="cand-tab ${i === 0 ? 'on' : ''}" data-i="${i}">
-        <div class="ct"><span class="n">${i + 1}</span><b>${esc(c.title)}</b><span class="badge">${c.source ? '워크플로우' : '새 계획'}</span><span class="state"></span></div>
+        <div class="ct"><span class="n">${i + 1}</span><b>${esc(c.title)}</b>${c.source ? `<span class="badge rec" title="등록된 워크플로우: ${esc(c.source.name)} (r${c.source.revision})">추천 워크플로우</span>` : '<span class="badge">새 계획</span>'}<span class="state"></span></div>
+        ${c.source ? `<div class="crat">등록된 워크플로우 「${esc(c.source.name)}」를 바탕으로 한 계획입니다.</div>` : ''}
         ${c.rationale ? `<div class="crat">${esc(c.rationale)}</div>` : ''}
       </button>
       <div class="cand-pane">
