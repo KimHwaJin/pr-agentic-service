@@ -26,19 +26,87 @@ except Exception:
 def _agentic_observe(name, value):
     import json
 
+    def num(x):
+        x = x.item() if hasattr(x, "item") else x
+        if isinstance(x, bool | int | str) or x is None:
+            return x
+        try:
+            return round(float(x), 6)
+        except (TypeError, ValueError):
+            return str(x)
+
+    def frame(v):
+        # compact: rows and stats are lists aligned with "columns"
+        cols = v.columns[:30]
+        kinds = v.dtypes.value_counts()
+        out = {
+            "type": "DataFrame",
+            "shape": list(v.shape),
+            "columns": [str(c) for c in cols],
+            "dtypes": {str(t): int(n) for t, n in kinds.items()},
+            "head": [[num(x) for x in row] for row in v[cols].head(3).values],
+        }
+        numeric = [c for c in cols if v[c].dtype.kind in "biuf"]
+        if numeric:
+            stats = v[numeric].describe().loc[["mean", "std", "min", "max"]]
+            out["describe"] = {
+                "fields": ["mean", "std", "min", "max"],
+                **{str(c): [num(x) for x in stats[c]] for c in numeric},
+            }
+        return out
+
+    def array(v):
+        out = {"type": "ndarray", "shape": list(v.shape)}
+        out["dtype"] = str(v.dtype)
+        if v.size and v.dtype.kind in "biuf":
+            out.update(min=num(v.min()), max=num(v.max()), mean=num(v.mean()))
+        out["head"] = [num(x) for x in v.ravel()[:5]]
+        return out
+
+    def empty(x):
+        return x is None or (isinstance(x, list | dict | tuple) and not x)
+
+    def obj(v):
+        kind = type(v)
+        out = {"type": f"{kind.__module__}.{kind.__qualname__}"}
+        if hasattr(v, "shape"):
+            out["shape"] = str(getattr(v, "shape"))
+        if kind.__name__ == "Figure" and hasattr(v, "axes"):  # matplotlib
+            titles = [a.get_title() for a in v.axes]
+            out["axes"] = len(titles)
+            out["titles"] = [t for t in titles if t][:10]
+            return out
+        attrs = {
+            k: repr(x)[:120]
+            for k, x in list(getattr(v, "__dict__", {}).items())[:40]
+            if not k.startswith("_")
+            and not callable(x)
+            and not empty(x)
+        }
+        if attrs:
+            out["attrs"] = dict(list(attrs.items())[:10])
+        out["repr"] = repr(v)[:200]
+        return out
+
     def brief(v, depth=0):
+        if v is None or isinstance(v, (bool, int, float, str)):
+            text = repr(v)
+            return text if len(text) <= 500 else text[:500] + "..."
         try:
             import pandas as pd
             if isinstance(v, pd.DataFrame):
-                return {
-                    "type": "DataFrame",
-                    "shape": list(v.shape),
-                    "columns": [str(c) for c in v.columns[:50]],
-                    "head": v.head(5).to_dict(orient="records"),
-                }
+                return frame(v)
             if isinstance(v, pd.Series):
                 head = v.head(10).to_dict()
                 return {"type": "Series", "len": len(v), "head": head}
+        except ImportError:
+            pass
+        try:
+            import numpy as np
+            if isinstance(v, np.ndarray):
+                return array(v)
+            if isinstance(v, np.generic):
+                return num(v)
         except ImportError:
             pass
         if isinstance(v, dict) and depth < 2:
@@ -47,10 +115,16 @@ def _agentic_observe(name, value):
         if isinstance(v, (list, tuple)) and depth < 2:
             head = [brief(x, depth + 1) for x in v[:5]]
             return {"type": type(v).__name__, "len": len(v), "head": head}
-        text = repr(v)
-        return text if len(text) <= 500 else text[:500] + "..."
+        if isinstance(v, (dict, list, tuple, set)):
+            text = repr(v)
+            return text if len(text) <= 500 else text[:500] + "..."
+        return obj(v)
 
-    payload = {"var": name, "value": brief(value)}
+    try:
+        summary = brief(value)
+    except Exception as exc:  # never fail the step because of the summary
+        summary = f"(요약 실패: {type(exc).__name__}) {repr(value)[:300]}"
+    payload = {"var": name, "value": summary}
     dumped = json.dumps(payload, default=str, ensure_ascii=False)
     print("AGENTIC_OBSERVATION " + dumped)
 """.strip()

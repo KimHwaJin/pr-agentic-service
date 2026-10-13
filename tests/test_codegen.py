@@ -45,3 +45,25 @@ def test_json_string_arguments_are_decoded():
         {"anyOf": [{"type": "object"}, {"type": "null"}]}
     )
     assert not _structured({"type": "string"})
+
+
+def test_observation_summarises_plain_objects(capsys):
+    import json
+
+    from agent.codegen import SETUP
+
+    namespace: dict = {"get_ipython": lambda: None}
+    exec(compile(SETUP, "setup", "exec"), namespace)
+
+    class Model:
+        def __init__(self):
+            self.coef_ = [1.5, 2.0]
+            self.fitted = None
+            self._private = 1
+
+    namespace["_agentic_observe"]("m", Model())
+    namespace["_agentic_observe"]("d", {"a": {"b": {"c": 1}}})
+    out = capsys.readouterr().out.splitlines()
+    model, nested = (json.loads(line.split(" ", 1)[1]) for line in out)
+    assert model["value"]["attrs"] == {"coef_": "[1.5, 2.0]"}
+    assert nested["value"] == {"a": {"b": "{'c': 1}"}}

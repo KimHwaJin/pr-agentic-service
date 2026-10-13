@@ -615,7 +615,7 @@ def _apply_event(
     return execution, results, error
 
 
-def _bounded(value: Any, limit: int = 1500) -> Any:
+def _bounded(value: Any, limit: int = 3000) -> Any:
     text = json.dumps(value, ensure_ascii=False, default=str)
     return value if len(text) <= limit else text[:limit] + " ...(생략)"
 
