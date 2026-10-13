@@ -4,6 +4,12 @@ Per model call this middleware picks the active persona's Markdown prompt,
 exposes only that persona's tools, injects project instructions + project
 memory (never stored in the message history) and hides the other persona's
 catalog reads so neither carries skills it does not need.
+
+A turn ends when a model reply has no tool calls. That is the main agent's
+answer; the analyst must hand back with finish_analysis. A text-only analyst
+reply is dropped and the analyst is told to carry on; if it keeps doing that,
+the main agent takes over and explains the situation, so a turn never stops
+on a half-done hand-off.
 """
 
 import json
@@ -15,13 +21,23 @@ from langchain.agents.middleware import (
     AgentMiddleware,
     ModelRequest,
     ModelResponse,
+    hook_config,
 )
-from langchain_core.messages import AIMessage, SystemMessage, ToolMessage
+from langchain_core.messages import (
+    AIMessage,
+    HumanMessage,
+    RemoveMessage,
+    SystemMessage,
+    ToolMessage,
+)
 
 from agent.context import AnalysisState, RunContext
 from agent.prompts import Prompt, load_prompt
 from core.memory.service import render_for_prompt
 from core.workflows import spec
+
+# text-only analyst replies sent back before the main agent takes over
+ANALYST_NUDGES = 2
 
 PERSONA_TOOLS = {
     "main": {
@@ -98,7 +114,44 @@ class PersonaMiddleware(AgentMiddleware[AnalysisState, RunContext]):
         ctx.cache["memory"] = render_for_prompt(
             index, relevant, settings.memory_prompt_max_chars
         )
-        return {"active_agent": state.get("active_agent") or "main"}
+        return {
+            "active_agent": state.get("active_agent") or "main",
+            "nudges": 0,
+            "notice": None,
+        }
+
+    @hook_config(can_jump_to=["model"])
+    async def aafter_model(
+        self, state: AnalysisState, runtime
+    ) -> dict[str, Any] | None:
+        last = state["messages"][-1]
+        if not isinstance(last, AIMessage):
+            return None
+        if last.tool_calls:
+            if state.get("notice") or state.get("nudges"):
+                return {"notice": None, "nudges": 0}
+            return None
+        if state.get("active_agent") != "analyst" or last.id is None:
+            return None
+        # The analyst answered without a tool: without this the turn ends
+        # here, on a promise nobody will keep.
+        nudges = state.get("nudges", 0)
+        update: dict[str, Any] = {
+            "messages": [RemoveMessage(id=last.id)],
+            "jump_to": "model",
+        }
+        if nudges < ANALYST_NUDGES:
+            notice = self._prompt("analyst_continue").render(last=last.text)
+            return {**update, "nudges": nudges + 1, "notice": notice}
+        ctx: RunContext = runtime.context
+        await ctx.emit("agent_switched", {"agent": "main"})
+        notice = self._prompt("main_fallback").render(last=last.text)
+        return {
+            **update,
+            "active_agent": "main",
+            "nudges": 0,
+            "notice": notice,
+        }
 
     async def aafter_agent(
         self, state: AnalysisState, runtime
@@ -144,14 +197,22 @@ class PersonaMiddleware(AgentMiddleware[AnalysisState, RunContext]):
                     for t in request.tools
                     if getattr(t, "name", None) in allowed
                 ],
-                messages=_isolate(request.messages, persona),
+                messages=[
+                    *_isolate(request.messages, persona),
+                    *_notice(request.state),
+                ],
             )
         )
 
 
+def _notice(state: Any) -> list[HumanMessage]:
+    notice = state.get("notice")
+    return [HumanMessage(notice)] if notice else []
+
+
 def _plan_status(state: AnalysisState) -> str:
     plan, execution = state.get("plan"), state.get("execution")
-    if not plan:
+    if not plan or not plan.get("document"):
         return "승인된 계획 없음"
     calls = {
         f"#{i} {c.tool}": plan["calls"][c.key]["status"]

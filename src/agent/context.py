@@ -42,9 +42,13 @@ class AnalysisState(AgentState):
     execution: the session's live executor MULTI execution
         (one kernel, one notebook).
     reports: published report artifacts of this session.
+    nudges: text-only analyst replies sent back in this graph run.
+    notice: one-off instruction appended to the next model call only.
     """
 
     active_agent: NotRequired[str]
     plan: NotRequired[dict[str, Any] | None]
     execution: NotRequired[dict[str, Any] | None]
     reports: NotRequired[list[dict[str, Any]]]
+    nudges: NotRequired[int]
+    notice: NotRequired[str | None]

@@ -23,7 +23,7 @@ async def collect_evidence(
 ) -> str:
     result = await services.executor.result(execution_id)
     parts: list[str] = []
-    if plan:
+    if plan and plan.get("document"):
         parts.append(
             "## 승인된 계획 (Workflow 1.0)\n"
             + json.dumps(plan["document"], ensure_ascii=False)

@@ -17,7 +17,7 @@ or a pod crash the executor returns the same receipt.
 """
 
 import json
-from typing import Any
+from typing import Any, TypeGuard
 
 from langchain.tools import ToolRuntime, tool
 from langchain_core.messages import ToolMessage
@@ -52,6 +52,11 @@ def _reply(runtime: Runtime, content: str, **update: Any) -> Command:
             ],
         }
     )
+
+
+def _approved(plan: dict[str, Any] | None) -> TypeGuard[dict[str, Any]]:
+    """A plan the user approved (custom code alone leaves one without it)."""
+    return bool(plan and plan.get("document"))
 
 
 def _key(runtime: Runtime, suffix: str) -> str:
@@ -366,7 +371,7 @@ async def revise_call(
     fixed value replaces an input the user gave.
     """
     plan = runtime.state.get("plan")
-    if not plan:
+    if not _approved(plan):
         return _reply(runtime, "승인된 계획이 없습니다.")
     key = _call_key(plan, call)
     if key is None:
@@ -649,7 +654,7 @@ async def run_plan(
     """
     ctx = runtime.context
     plan = runtime.state.get("plan")
-    if not plan:
+    if not _approved(plan):
         return _reply(
             runtime,
             "승인된 계획이 없습니다. propose_plans로 먼저 승인을 받으세요.",
@@ -968,7 +973,7 @@ async def save_workflow(
     """
     ctx = runtime.context
     plan = runtime.state.get("plan")
-    if not plan:
+    if not _approved(plan):
         return "저장할 계획이 없습니다."
     document = json.loads(json.dumps(plan["document"]))
     document["workflow"]["name"] = name
