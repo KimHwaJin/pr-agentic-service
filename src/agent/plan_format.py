@@ -100,62 +100,6 @@ def describe(document: dict[str, Any]) -> list[dict[str, Any]]:
     return calls
 
 
-def review(document: dict[str, Any], input_values: dict[str, Any], skills: SkillCatalog, tools) -> list[dict[str, Any]]:
-    """What the approval screen shows per call: skill, tool and every parameter with where its value comes from.
-
-    source: literal (decided by the agent), input (the user fills it; prefilled when the request said it),
-    tool_output (an earlier call's result) or default (left to the tool's default).
-    """
-    flat = spec.calls(document)
-    number = {c.key: i for i, c in enumerate(flat)}
-    views = []
-    for i, call in enumerate(flat):
-        tool = tools.tools.get(call.tool)
-        skill = skills.skills.get(call.skill)
-        rule = next((t for t in skill.tools if t.tool == call.tool), None) if skill else None
-        params = []
-        for p in tool.params if tool else ():
-            arg = call.arguments.get(p.name)
-            view = {
-                "name": p.name,
-                "type": p.annotation,
-                "required": p.required,
-                "doc": tool.param_docs.get(p.name, ""),
-                "key": f"{call.key}.{p.name}",
-            }
-            if arg is None:
-                view |= {"source": "default", "value": None, "default": p.default}
-            elif arg["source"] == "literal":
-                view |= {"source": "literal", "value": arg["value"]}
-            elif arg["source"] == "input":
-                view |= {"source": "input", "value": input_values.get(view["key"]), "required": True}
-            else:
-                ref = f"{arg['step_index']}.{arg['tool_index']}"
-                view |= {
-                    "source": "tool_output",
-                    "ref": {
-                        "call": number.get(ref),
-                        "tool": flat[number[ref]].tool if ref in number else None,
-                        "output": arg["output"],
-                    },
-                }
-            params.append(view)
-        views.append(
-            {
-                "index": i,
-                "key": call.key,
-                "skill": call.skill,
-                "skill_description": skill.description if skill else "",
-                "tool": call.tool,
-                "summary": tool.summary if tool else "",
-                "execution": call.execution,
-                "condition": rule.condition if rule and call.execution == "conditional" else None,
-                "params": params,
-            }
-        )
-    return views
-
-
 def apply_overrides(
     document: dict[str, Any], input_values: dict[str, Any], overrides: dict[str, Any]
 ) -> tuple[dict, dict]:

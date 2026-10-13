@@ -94,10 +94,10 @@ category: `background`(프로젝트 배경), `analysis_preferences`(분석 선�
 | Method | Path | 설명 |
 | --- | --- | --- |
 | POST | `/workflows` | `{document, user_queries[], tags[]}` → candidate (작성자만 보임) |
-| GET | `/workflows?lifecycle=&q=&tag=` | template 전체 + 내 candidate |
+| GET | `/workflows?lifecycle=&q=&tag=` | template 전체 + 내 candidate. 가벼운 요약: `steps`(skill 순서와 tool), `call_count`, `mine` (문서 본문 없음) |
 | POST | `/workflows/validate` | 문서 검증만 |
 | POST | `/workflows/search` | `{query}` → 승격된 template만 유사도 순 |
-| GET/PATCH/DELETE | `/workflows/{id}` | PATCH는 `expected_revision` 필수 |
+| GET/PATCH/DELETE | `/workflows/{id}` | GET은 문서 전체 + `calls`(tool별 설명·파라미터 출처·앞 단계 참조, 계획 승인 화면과 같은 형식) + `mine`. PATCH는 `expected_revision` 필수. DELETE는 작성자, 또는 관리자(template·candidate 모두) |
 | POST | `/workflows/{id}/promote` | candidate → template (검색·추천 대상) |
 | POST | `/workflows/{id}/clone`, `/workflows/{id}/reindex` | |
 

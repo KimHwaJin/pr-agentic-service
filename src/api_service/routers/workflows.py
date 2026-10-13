@@ -1,14 +1,42 @@
 from fastapi import APIRouter, HTTPException, Response
 
 from api_service.deps import ServicesDep, UserDep
-from api_service.schemas import WorkflowClone, WorkflowCreate, WorkflowRead, WorkflowSearch, WorkflowUpdate
+from api_service.schemas import (
+    WorkflowClone,
+    WorkflowCreate,
+    WorkflowDetail,
+    WorkflowRead,
+    WorkflowSearch,
+    WorkflowSummary,
+    WorkflowUpdate,
+)
 from core.workflows.service import WorkflowError
+from core.workflows.view import call_views, steps_summary
 
 router = APIRouter(prefix="/workflows", tags=["workflows"])
 
 
 def _error(exc: WorkflowError) -> HTTPException:
     return HTTPException(exc.status, {"message": str(exc), "errors": exc.details} if exc.details else str(exc))
+
+
+def _summary(workflow, user) -> WorkflowSummary:
+    steps = steps_summary(workflow.document)
+    return WorkflowSummary.model_validate(
+        {
+            **{k: getattr(workflow, k) for k in WorkflowSummary.model_fields if hasattr(workflow, k)},
+            "steps": steps,
+            "call_count": sum(len(s["tools"]) for s in steps),
+            "mine": workflow.author_id == user.id,
+        }
+    )
+
+
+def _detail(services, workflow, user) -> WorkflowDetail:
+    calls = call_views(workflow.document, {}, services.skills("analysis"), services.tool_catalog())
+    return WorkflowDetail.model_validate(
+        {**WorkflowRead.model_validate(workflow).model_dump(), "calls": calls, "mine": workflow.author_id == user.id}
+    )
 
 
 def _validated(services, document: dict) -> dict:
@@ -30,11 +58,12 @@ async def create_workflow(body: WorkflowCreate, services: ServicesDep, user: Use
         raise _error(exc) from None
 
 
-@router.get("", response_model=list[WorkflowRead])
+@router.get("", response_model=list[WorkflowSummary])
 async def list_workflows(
     services: ServicesDep, user: UserDep, lifecycle: str | None = None, q: str | None = None, tag: str | None = None
 ):
-    return await services.workflows.browse(user.id, lifecycle=lifecycle, q=q, tag=tag)
+    """Promoted templates and the caller's own candidates, as light summaries (no document)."""
+    return [_summary(w, user) for w in await services.workflows.browse(user.id, lifecycle=lifecycle, q=q, tag=tag)]
 
 
 @router.post("/validate")
@@ -60,10 +89,11 @@ async def search_workflows(body: WorkflowSearch, services: ServicesDep, user: Us
     }
 
 
-@router.get("/{workflow_id}", response_model=WorkflowRead)
+@router.get("/{workflow_id}", response_model=WorkflowDetail)
 async def get_workflow(workflow_id: str, services: ServicesDep, user: UserDep):
+    """Full document plus ``calls``: a readable per-tool view (descriptions, parameters, step references)."""
     try:
-        return await services.workflows.readable(workflow_id, user.id)
+        return _detail(services, await services.workflows.readable(workflow_id, user.id), user)
     except WorkflowError as exc:
         raise _error(exc) from None
 
@@ -108,8 +138,9 @@ async def reindex_workflow(workflow_id: str, services: ServicesDep, user: UserDe
 
 @router.delete("/{workflow_id}", status_code=204)
 async def delete_workflow(workflow_id: str, services: ServicesDep, user: UserDep):
+    """The author deletes their own; an administrator can delete any template or candidate."""
     try:
-        await services.workflows.delete(workflow_id, user.id)
+        await services.workflows.delete(workflow_id, user.id, is_admin=user.role == "admin")
     except WorkflowError as exc:
         raise _error(exc) from None
     return Response(status_code=204)

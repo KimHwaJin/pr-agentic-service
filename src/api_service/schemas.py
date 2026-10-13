@@ -152,6 +152,29 @@ class WorkflowRead(Model):
     updated_at: datetime
 
 
+class WorkflowSummary(Model):
+    """List item: no document, only what a card needs."""
+
+    id: str
+    name: str
+    user_request: str
+    lifecycle: str
+    tags: list[str]
+    author_id: str
+    revision: int
+    index_state: str
+    steps: list[dict[str, Any]]  # [{skill, tools: [{tool, execution}]}] in execution order
+    call_count: int
+    mine: bool
+    created_at: datetime
+    updated_at: datetime
+
+
+class WorkflowDetail(WorkflowRead):
+    calls: list[dict[str, Any]]  # per tool call: skill, tool, summary, condition, params with sources and docs
+    mine: bool
+
+
 class WorkflowClone(Model):
     name: str | None = None
 

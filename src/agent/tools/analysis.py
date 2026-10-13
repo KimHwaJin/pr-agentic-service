@@ -26,6 +26,7 @@ from core.db import new_id
 from core.executor.client import ExecutorError
 from core.workflows import spec
 from core.workflows.service import WorkflowError
+from core.workflows.view import call_views
 
 
 def _reply(runtime: ToolRuntime, content: str, **update: Any) -> Command:
@@ -144,7 +145,7 @@ async def propose_plans(candidates: list[dict[str, Any]], runtime: ToolRuntime[R
                 "rationale": candidate.get("rationale", ""),
                 "source": source,
                 "document": document,
-                "calls": plan_format.review(document, values, skills, tools),
+                "calls": call_views(document, values, skills, tools),
                 "input_slots": [s | {"value": values.get(s["key"])} for s in slots],
                 "input_values": values,
             }

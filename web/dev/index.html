@@ -140,7 +140,7 @@
   .send svg { width: 16px; height: 16px; }
 
   /* drawer */
-  .drawer { width: 340px; flex: none; border-left: 1px solid var(--line); background: var(--side); overflow: auto; padding: 16px; display: none; }
+  .drawer { width: 420px; flex: none; border-left: 1px solid var(--line); background: var(--side); overflow: auto; padding: 16px; display: none; }
   .drawer.open { display: block; }
   .drawer h3 { font-size: 13px; color: var(--muted); font-weight: 600; margin: 18px 0 8px; }
   .mem { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; margin: 8px 0; font-size: 13px; }
@@ -289,6 +289,21 @@
   .hitl-note { display: flex; align-items: center; gap: 10px; margin: 12px 0; padding: 10px 14px; border: 1px dashed var(--accent); border-radius: 12px; color: var(--accent); font-size: 14px; cursor: pointer; background: var(--panel); }
   @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .cond { background: #3a2f1f; color: #e3b46b; } :root:not([data-theme="light"]) .tag.agent { background: #2b3546; color: #9fb7dc; } :root:not([data-theme="light"]) .param.need input { background: #3a2c25; border-color: #6b4535; } }
 
+  .wf { border: 1px solid var(--line); border-radius: 12px; background: var(--panel); margin-bottom: 8px; overflow: hidden; }
+  .wf > summary { list-style: none; cursor: pointer; padding: 11px 13px; }
+  .wf > summary::-webkit-details-marker { display: none; }
+  .wf[open] > summary { border-bottom: 1px solid var(--line); }
+  .wf-top { display: flex; align-items: center; gap: 6px; font-size: 14px; }
+  .wf-top .badge { margin-left: auto; }
+  .wf-goal { font-size: 12.5px; color: var(--muted); margin: 4px 0 6px; }
+  .wf-steps { display: flex; flex-direction: column; gap: 3px; font-size: 12px; color: var(--muted); }
+  .wf-steps i { font-style: normal; display: inline-grid; place-items: center; width: 16px; height: 16px; border-radius: 5px; background: var(--hover); font-size: 10px; margin-right: 6px; color: var(--ink); }
+  .wf-body { padding: 4px 12px 12px; font-size: 13px; }
+  .wf-sec { font-size: 12px; color: var(--faint); font-weight: 600; margin: 12px 0 6px; }
+  .wf-q { margin: 0; padding-left: 18px; color: var(--muted); font-size: 12.5px; }
+  .wf-meta { font-size: 11.5px; color: var(--faint); margin-top: 10px; }
+  .wf .param { grid-template-columns: 120px 1fr; }
+
   .lightbox { position: fixed; inset: 0; background: rgba(0,0,0,.7); display: none; place-items: center; z-index: 10; cursor: zoom-out; }
   .lightbox img { max-width: 92vw; max-height: 92vh; border-radius: 8px; background: #fff; }
 </style>
@@ -341,7 +356,7 @@
   <div class="hitl-foot" id="hitlFoot"></div>
 </div>
 <div class="drawer" id="drawer">
-  <h3>워크플로우 <span style="font-weight:400">· 공개된 것과 내가 저장한 것</span></h3>
+  <h3>워크플로우 <span style="font-weight:400">· 공개된 것과 내가 저장한 것 (눌러서 흐름 보기)</span></h3>
   <div id="workflows"></div>
 </div>
 
@@ -400,7 +415,7 @@ async function boot() {
   const me = await api('/users/me');
   $('meName').textContent = me.user.name; $('meId').textContent = me.user.employee_id; $('avatar').textContent = me.user.name.slice(0, 1);
   $('model').innerHTML = me.models.map(m => `<option ${m === me.default_model ? 'selected' : ''}>${esc(m)}</option>`).join('');
-  S.defaultLevel = me.default_code_level;
+  S.defaultLevel = me.default_code_level; S.isAdmin = me.user.role === 'admin';
   await loadProjects();
   let saved = null; try { saved = localStorage.getItem('agentic.project'); } catch {}
   await selectProject(S.projects.some(p => p.id === saved) ? saved : me.default_project_id);
@@ -806,11 +821,38 @@ function paramRow(p) {
 function toggleDrawer() { $('drawer').classList.toggle('open'); }
 async function loadWorkflows() {
   const list = await api('/workflows');
-  $('workflows').innerHTML = list.map(w => `<div class="mem"><div class="t">${esc(w.name)}<span class="badge" style="margin-left:auto">${w.lifecycle === 'template' ? '공개' : '내 후보'}</span></div>
-    <p>${esc(w.user_request)}</p>${w.lifecycle === 'candidate' ? `<div class="actions" style="margin-top:6px"><button class="btn" onclick="promote('${w.id}')">공개(승격)</button></div>` : ''}</div>`).join('')
-    || '<div style="color:var(--faint);font-size:13px">저장된 워크플로우가 없습니다</div>';
+  $('workflows').innerHTML = list.map(w => `<details class="wf" data-id="${w.id}" ontoggle="if (this.open) loadWorkflowDetail(this)">
+      <summary>
+        <div class="wf-top"><b>${esc(w.name)}</b>${w.lifecycle === 'template' ? '<span class="badge rec">공개</span>' : '<span class="badge">내 후보</span>'}</div>
+        <div class="wf-goal">${esc(w.user_request)}</div>
+        <div class="wf-steps">${w.steps.map((st, i) => `<span><i>${i + 1}</i>${esc(st.skill)} · ${st.tools.map(t => esc(t.tool) + (t.execution === 'conditional' ? '?' : '')).join(', ')}</span>`).join('')}</div>
+      </summary>
+      <div class="wf-body">불러오는 중…</div>
+    </details>`).join('') || '<div style="color:var(--faint);font-size:13px">저장된 워크플로우가 없습니다</div>';
+}
+async function loadWorkflowDetail(el) {
+  if (el.dataset.loaded) return;
+  const w = await api(`/workflows/${el.dataset.id}`); el.dataset.loaded = '1';
+  const groups = []; for (const call of w.calls) { if (!groups.length || groups.at(-1).skill !== call.skill) groups.push({ skill: call.skill, desc: call.skill_description, calls: [] }); groups.at(-1).calls.push(call); }
+  const value = p => p.source === 'tool_output' ? `<span class="ref">← #${p.ref.call} ${esc(p.ref.tool)} · ${esc(p.ref.output)}</span>`
+    : p.source === 'input' ? '<span class="tag user">실행할 때 입력</span>' : p.source === 'default' ? `<span class="tsum">기본값 ${esc(p.default ?? '')}</span>` : `<code>${esc(fmt(p.value))}</code>`;
+  el.querySelector('.wf-body').innerHTML = `
+    ${w.user_queries.length ? `<div class="wf-sec">이런 질문에 추천됩니다</div><ul class="wf-q">${w.user_queries.map(q => `<li>${esc(q)}</li>`).join('')}</ul>` : ''}
+    <div class="wf-sec">실행 흐름</div>
+    ${groups.map((g, gi) => `<div class="skill-head"><span class="seq">${gi + 1}</span><b>${esc(g.skill)}</b><span>${esc(g.desc)}</span></div>
+      ${g.calls.map(call => `<details class="tool-row"><summary><span class="chev">›</span><span class="no">#${call.index}</span><b>${esc(call.tool)}</b>${call.execution === 'conditional' ? '<span class="badge">조건부</span>' : ''}<span class="tsum">${esc(call.summary)}</span></summary>
+        <div class="tool-body">${call.condition ? `<div class="cond">실행 조건: ${esc(call.condition)}</div>` : ''}
+          ${call.params.map(p => `<div class="param"><div class="pl"><code>${esc(p.name)}</code>${p.type ? ` <small>${esc(p.type)}</small>` : ''}</div><div>${value(p)}</div>${p.doc ? `<div class="help">${esc(p.doc)}</div>` : ''}</div>`).join('')}
+        </div></details>`).join('')}`).join('')}
+    <div class="wf-meta">r${w.revision} · ${ago(w.updated_at)} 수정${w.tags.length ? ' · ' + w.tags.map(esc).join(', ') : ''}</div>
+    <div class="actions">${w.mine && w.lifecycle === 'candidate' ? `<button class="btn" onclick="promote('${w.id}')">공개(승격)</button>` : ''}
+      ${w.mine || S.isAdmin ? `<button class="btn" style="color:var(--bad)" onclick="deleteWorkflow('${w.id}', '${esc(w.name).replace(/'/g, '&#39;')}')">삭제</button>` : ''}</div>`;
 }
 async function promote(id) { await api(`/workflows/${id}/promote`, { method: 'POST' }); loadWorkflows(); }
+async function deleteWorkflow(id, name) {
+  if (!confirm(`"${name}" 워크플로우를 삭제할까요? 추천 대상에서도 빠집니다.`)) return;
+  await api(`/workflows/${id}`, { method: 'DELETE' }); loadWorkflows();
+}
 
 boot();
 </script>

@@ -147,8 +147,11 @@ class WorkflowService:
             source_workflow_id=source.id,
         )
 
-    async def delete(self, workflow_id: str, user_id: str) -> None:
-        await self.owned(workflow_id, user_id)
+    async def delete(self, workflow_id: str, user_id: str, is_admin: bool = False) -> None:
+        if is_admin:
+            await self.get(workflow_id)
+        else:
+            await self.owned(workflow_id, user_id)
         async with self.db.sessions() as db:
             await db.execute(update(Workflow).where(Workflow.id == workflow_id).values(deleted_at=utcnow()))
             await db.execute(
