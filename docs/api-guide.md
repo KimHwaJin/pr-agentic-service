@@ -134,8 +134,12 @@
 | GET | `/executions?project_id=&session_id=&status=&cursor=&limit=` | 내 실행만 (`user_id`는 서버가 로그인 사용자로 고정). `project_id`·`session_id`는 내가 속한 것만 |
 | GET | `/executions/{id}`, `/result`, `/steps`, `/steps/{step_id}`, `/events`, `/artifacts`, `/notebook` | 그 실행의 프로젝트 멤버 (관리자는 전부) |
 | GET | `/executions/{id}/diagnostics`, `/attempts`, `/attempts/{id}`, `/attempts/{id}/steps` | 관리자 |
-| GET | `/runtime-targets`, `/runtime-targets/{id}`, `/runtime-pools`, `/maintenance` | 관리자 |
-| POST | `/runtime-targets` | 관리자. 런타임 등록·수정(바로 probe). `actor`는 서버가 요청한 관리자로 채웁니다 |
+| GET | `/runtime-targets`, `/runtime-targets/{id}`, `/runtime-pools`, `/maintenance`, `/maintenance/runs/{id}`, `/maintenance/runs/{id}/targets` | 관리자 |
+| POST | `/runtime-targets` | 관리자. 런타임 등록·수정(바로 probe) |
+| POST | `/runtime-targets/{id}/probe`, `/drain`, `/activate`, `/disable`, `/purge` | 관리자. 다시 점검 / 새 작업 배정 중지(진행 중은 마저) / 배정 복귀 / 사용 중지 / 사용 중지된 대상 제거 |
+| POST | `/maintenance/drain`, `/maintenance/activate`, `/maintenance/runs` | 관리자. executor 전체의 새 실행 접수 중지 / 재개 / 진행 중 실행을 멈추는 점검 작업 생성 |
+
+POST의 `actor`는 클라이언트 값 대신 서버가 요청한 관리자(`{"type": "USER", "id": <사번>}`)로 채웁니다. 나머지 본문(`idempotency_key` 등)은 executor 형식 그대로입니다.
 
 executor가 응답하지 않으면 502 `executor_unavailable`입니다.
 

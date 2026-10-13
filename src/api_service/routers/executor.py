@@ -49,8 +49,20 @@ _ALLOWED: list[tuple[str, str, Access]] = [
     ("GET", rf"runtime-targets/{UUID}", "admin"),
     ("GET", r"runtime-pools", "admin"),
     ("GET", r"maintenance", "admin"),
-    # register or update (and probe) a runtime
+    ("GET", rf"maintenance/runs/{UUID}", "admin"),
+    ("GET", rf"maintenance/runs/{UUID}/targets", "admin"),
+    # runtime operations: register/update (and probe), probe, take a target
+    # out of rotation and back, disable, remove
     ("POST", r"runtime-targets", "admin"),
+    ("POST", rf"runtime-targets/{UUID}/probe", "admin"),
+    ("POST", rf"runtime-targets/{UUID}/drain", "admin"),
+    ("POST", rf"runtime-targets/{UUID}/activate", "admin"),
+    ("POST", rf"runtime-targets/{UUID}/disable", "admin"),
+    ("POST", rf"runtime-targets/{UUID}/purge", "admin"),
+    # executor-wide admission, and stopping running executions
+    ("POST", r"maintenance/drain", "admin"),
+    ("POST", r"maintenance/activate", "admin"),
+    ("POST", r"maintenance/runs", "admin"),
 ]
 ROUTES = [(m, re.compile(p), a) for m, p, a in _ALLOWED]
 PASS_HEADERS = {"content-type", "etag", "location", "content-disposition"}

@@ -18,10 +18,11 @@ def test_only_listed_routes_are_relayed():
     assert route and route[0] == "execution" and route[1]["execution"] == E
     assert _access("GET", f"executions/{E}/attempts") == "admin"
     assert _access("POST", "runtime-targets") == "admin"
+    assert _access("POST", f"runtime-targets/{E}/drain") == "admin"
+    assert _access("POST", "maintenance/drain") == "admin"
     for method, path in [
         ("POST", "executions"),
         ("POST", f"executions/{E}/cancel"),
-        ("POST", "maintenance/drain"),
         ("GET", f"executions/{E}/../../maintenance"),
         ("GET", "executions/not-a-uuid"),
     ]:

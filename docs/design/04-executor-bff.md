@@ -76,4 +76,4 @@
 - 범위: 2.1(필수 8개) + 2.3(관리자용: diagnostics, attempts, runtime-targets, runtime-pools, maintenance 조회) + **런타임 등록 `POST /runtime-targets`(관리자)**. 2.2(operation 단위)는 넣지 않음.
 - 경로: `/api/v1/executor/...`에 executor와 같은 모양.
 - 응답: executor 본문 그대로. 런타임 등록의 `actor`만 서버가 요청한 관리자(`USER`, 사번)로 덮어씀.
-- 런타임의 drain, activate, disable, purge, probe는 아직 열지 않음(필요하면 같은 방식으로 허용 목록에 추가).
+- 런타임 조작(probe, drain, activate, disable, purge)과 executor 점검 조작(maintenance drain, activate, runs 생성·조회)도 관리자 전용으로 열었음.
