@@ -31,6 +31,21 @@ scripts/         mock_llm.py(게이트웨이 대역), smoke_e2e.py(종단 점검
 - 메인 Agent가 대화하다가 필요하면 분석 담당(analyst)으로 넘깁니다. analyst는 skill을 읽고 Workflow 1.0 형식으로 계획 후보를 만들어 승인을 받은 뒤, tool 함수(docstring 제거) + 호출 코드를 executor MULTI 실행에 Step으로 보냅니다. 조건부 tool은 앞 결과를 보고 판단해 같은 커널에 이어 실행합니다.
 - 분석이 끝나면 노트북을 확정(finalize)하고 리포트를 executor Artifact로 저장합니다.
 
+## Docker Compose로 실행
+
+shared-infra(postgres, redis)와 executor compose가 떠 있는 상태에서:
+
+```bash
+docker compose up -d --build
+```
+
+- http://localhost:8080/dev/ 테스트 콘솔, http://localhost:8080/docs API 문서
+- 서비스 DB(`agentic`)는 `db-init`이 공용 Postgres에 없으면 만듭니다.
+- executor 공유 볼륨은 `../executor/shared_dir`(`EXECUTOR_SHARED_DIR`로 변경), LLM은 `model.frodo.com` 게이트웨이를 씁니다.
+- `assets/`와 `src/agent/prompts/`는 마운트되어 있어 수정하면 재빌드 없이 다음 요청부터 반영됩니다.
+- 게이트웨이 대신 mock LLM: `.env`에 `LLM_BASE_URL=http://mock-llm:8001/v1`을 넣고 `docker compose --profile mock up -d`
+- 값 변경은 compose 옆 `.env`에서 합니다(`LLM_MODELS`, `LLM_DEFAULT_ALIAS`, `EMBEDDING_PROVIDER`, `APP_PORT` 등).
+
 ## 로컬 실행
 
 필요: PostgreSQL(pgvector), Redis, executor 스택(`../executor`), LLM 게이트웨이 또는 mock.

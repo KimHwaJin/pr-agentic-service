@@ -1,0 +1,86 @@
+# Local stack on top of the already running shared infrastructure:
+#   - shared-infra compose: postgres, redis (network "shared-infra")
+#   - executor compose: executor API + Jupyter runtimes (also on "shared-infra" as host "executor")
+#
+#   docker compose up -d --build            # service at http://localhost:8080 (console: /dev/)
+#   docker compose --profile mock up -d     # + scripted mock LLM instead of the gateway
+#
+# Override any value from a .env file next to this compose (see .env.example for the keys).
+name: pr-agentic-service
+
+x-app-env: &app-env
+  ENV: local
+  RUN_MODE: all
+  LOG_LEVEL: INFO
+  DATABASE_URL: postgresql+psycopg://${PG_USER:-executor}:${PG_PASSWORD:-executor}@postgres:5432/${PG_DB:-agentic}
+  REDIS_URL: redis://redis:6379/0
+  REDIS_NAMESPACE: agentic
+  SSO_ADAPTER: dev
+  PUBLIC_API_ORIGIN: http://localhost:${APP_PORT:-8080}
+  FRONTEND_ORIGIN: http://localhost:${APP_PORT:-8080}
+  SSO_ALLOWED_RETURN_ROOTS: '["/", "/dev"]'
+  COOKIE_SECURE: "false"
+  LLM_BASE_URL: ${LLM_BASE_URL:-http://model.frodo.com/v1}
+  LLM_API_KEY: ${LLM_API_KEY:-EMPTY}
+  LLM_MODELS: ${LLM_MODELS:-{"default":"qwen38-27b-nvfp4","fp8":"qwen38-27b-fp8"}}
+  LLM_DEFAULT_ALIAS: ${LLM_DEFAULT_ALIAS:-default}
+  LLM_ENABLE_THINKING: ${LLM_ENABLE_THINKING:-false}
+  EMBEDDING_PROVIDER: ${EMBEDDING_PROVIDER:-mock}
+  EMBEDDING_DIMS: ${EMBEDDING_DIMS:-1024}
+  EXECUTOR_BASE_URL: http://executor:8000
+  EXECUTOR_INPUT_ROOT: /mnt/executor-shared
+  EXECUTOR_RESULT_ROOT: /mnt/executor-shared
+  EXECUTOR_RUNTIME_PROFILE: default
+  BATCH_BASE_URL: ${BATCH_BASE_URL:-http://host.docker.internal:8100}
+  BATCH_JWT_SECRET: ${BATCH_JWT_SECRET:-}
+  BATCH_REPORT_JWT_SECRET: ${BATCH_REPORT_JWT_SECRET:-}
+
+services:
+  db-init:
+    # Creates the service database on the shared Postgres once (idempotent).
+    image: pgvector/pgvector:pg17
+    environment:
+      PGPASSWORD: ${PG_PASSWORD:-executor}
+    command: >
+      sh -c "psql -h postgres -U ${PG_USER:-executor} -d postgres -tc \"SELECT 1 FROM pg_database WHERE datname='${PG_DB:-agentic}'\" | grep -q 1
+      || psql -h postgres -U ${PG_USER:-executor} -d postgres -c 'CREATE DATABASE ${PG_DB:-agentic}'"
+    networks: [shared-infra]
+    restart: "no"
+
+  app:
+    build: .
+    image: pr-agentic-service:local
+    depends_on:
+      db-init:
+        condition: service_completed_successfully
+    environment: *app-env
+    ports:
+      - "${APP_PORT:-8080}:8080"
+    volumes:
+      # Agent/Executor shared volume: PATH sources we write, step results the executor writes.
+      - ${EXECUTOR_SHARED_DIR:-../executor/shared_dir}:/mnt/executor-shared
+      # Skills/tools/knowledge and prompts are read live, so edits apply without a rebuild.
+      - ./assets:/app/assets:ro
+      - ./src/agent/prompts:/app/src/agent/prompts:ro
+    extra_hosts:
+      - "model.frodo.com:10.250.110.99"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/readyz')"]
+      interval: 10s
+      timeout: 3s
+      retries: 12
+    networks: [shared-infra]
+    restart: unless-stopped
+
+  mock-llm:
+    profiles: [mock]
+    image: pr-agentic-service:local
+    command: ["uvicorn", "mock_llm:app", "--app-dir", "scripts", "--host", "0.0.0.0", "--port", "8001"]
+    volumes:
+      - ./scripts:/app/scripts:ro
+      - ./tests/fixtures:/app/tests/fixtures:ro
+    networks: [shared-infra]
+
+networks:
+  shared-infra:
+    external: true
