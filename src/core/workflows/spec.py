@@ -110,7 +110,9 @@ def input_slots(document: dict[str, Any], tools: ToolCatalog) -> list[dict[str, 
                         "tool": call.tool,
                         "param": name,
                         "type": param.annotation if param else None,
-                        "required": param.required if param else True,
+                        # Workflow 1.0: source=input means the user provides the value, so it is required
+                        # even when the tool itself has a default.
+                        "required": True,
                     }
                 )
     return slots

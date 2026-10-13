@@ -128,7 +128,7 @@ def review(document: dict[str, Any], input_values: dict[str, Any], skills: Skill
             elif arg["source"] == "literal":
                 view |= {"source": "literal", "value": arg["value"]}
             elif arg["source"] == "input":
-                view |= {"source": "input", "value": input_values.get(view["key"])}
+                view |= {"source": "input", "value": input_values.get(view["key"]), "required": True}
             else:
                 ref = f"{arg['step_index']}.{arg['tool_index']}"
                 view |= {

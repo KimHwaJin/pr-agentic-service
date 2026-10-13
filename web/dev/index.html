@@ -208,9 +208,27 @@
   .hitl-foot { border-top: 1px solid var(--line); padding: 12px 20px; display: flex; flex-direction: column; gap: 8px; }
   .hitl-foot .row { display: flex; gap: 8px; align-items: center; }
   .hitl-foot input { flex: 1; border: 1px solid var(--line); border-radius: 10px; padding: 8px 12px; background: var(--bg); outline: none; }
-  .cand-tabs { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
-  .cand-tab { border: 1px solid var(--line); border-radius: 10px; padding: 7px 12px; font-size: 13px; text-align: left; background: var(--bg); max-width: 100%; }
-  .cand-tab b { font-weight: 600; margin-right: 4px; }
+  .cand-tabs { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
+  .cand-tab { border: 1px solid var(--line); border-radius: 12px; padding: 9px 12px; font-size: 13px; text-align: left; background: var(--bg); width: 100%; }
+  .cand-tab .ct { display: flex; align-items: center; gap: 6px; }
+  .cand-tab .ct b { font-weight: 600; }
+  .cand-tab .ct .n { width: 20px; height: 20px; border-radius: 50%; background: var(--hover); display: grid; place-items: center; font-size: 11px; font-weight: 600; flex: none; }
+  .cand-tab.on .ct .n { background: var(--accent); color: #fff; }
+  .chain { display: flex; flex-wrap: wrap; gap: 4px 6px; margin-top: 6px; font-size: 11.5px; color: var(--muted); }
+  .chain .sk { display: inline-flex; align-items: center; gap: 4px; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 2px 7px; }
+  .chain .sk i { font-style: normal; color: var(--faint); }
+  .sg { border: 1px solid var(--line); border-radius: 12px; margin-bottom: 8px; overflow: hidden; }
+  .sg > summary { list-style: none; cursor: pointer; display: flex; align-items: center; gap: 8px; padding: 11px 14px; font-size: 13.5px; }
+  .sg > summary::-webkit-details-marker { display: none; }
+  .sg > summary .sname { font-weight: 600; }
+  .sg > summary .cnt { color: var(--muted); font-size: 12.5px; }
+  .sg > summary .need { margin-left: auto; font-size: 11.5px; color: var(--accent); background: #fde9df; border-radius: 999px; padding: 2px 8px; }
+  .sg > summary .ok { margin-left: auto; font-size: 11.5px; color: var(--ok); }
+  .sg > summary .chev { color: var(--faint); transition: transform .15s; }
+  .sg[open] > summary .chev { transform: rotate(90deg); }
+  .sg .sg-body { padding: 0 12px 4px; border-top: 1px solid var(--line); }
+  .sg .sdesc { font-size: 12px; color: var(--faint); padding: 8px 2px 4px; }
+  .sg .tool-card { margin: 8px 0; }
   .cand-tab.on { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; background: var(--panel); }
   .rationale { font-size: 13px; color: var(--muted); background: var(--bg); border-radius: 10px; padding: 10px 12px; margin-bottom: 14px; }
   .skill-group { margin-bottom: 14px; }
@@ -628,6 +646,7 @@ function renderHitl(runId, w) {
     body.innerHTML = `${(w.options || []).length ? `<div class="actions">${w.options.map((o, i) => `<button class="opt" data-i="${i}">${esc(o)}</button>`).join('')}</div>` : ''}
       ${(w.fields || []).map(f => `<div class="param"><div class="pl">${esc(f.label || f.key)}${f.required ? '<span class="tag user">필수</span>' : ''}</div><input data-key="${esc(f.key)}"></div>`).join('')}`;
     foot.innerHTML = `<div class="row"><input id="free" placeholder="직접 답변 입력"><button class="btn primary" id="ok">답변</button></div>`;
+    foot.querySelector('#free').onkeydown = e => { if (e.key === 'Enter' && !e.isComposing) foot.querySelector('#ok').click(); };
     body.querySelectorAll('[data-i]').forEach(b => b.onclick = () => resume(w.options[+b.dataset.i]));
     foot.querySelector('#ok').onclick = () => {
       const fields = Object.fromEntries([...body.querySelectorAll('input[data-key]')].map(i => [i.dataset.key, i.value]));
@@ -659,13 +678,15 @@ function renderHitl(runId, w) {
 function renderPlanApproval(w, resume) {
   openHitlPanel(w, '실행 계획 확인', '실행 계획을 확인해 주세요', `후보 ${w.candidates.length}개 · 비어 있는 값을 채우고, Agent가 정한 값도 고칠 수 있습니다.`);
   const body = $('hitlBody'), foot = $('hitlFoot');
-  const tabs = w.candidates.map((c, i) => `<button class="cand-tab ${i === 0 ? 'on' : ''}" data-i="${i}"><b>${i + 1}</b>${esc(c.title)} <span class="badge">${c.source ? '워크플로우' : '새 계획'}</span></button>`).join('');
-  const panes = w.candidates.map((c, i) => {
-    const groups = [];
-    for (const call of c.calls) { if (!groups.length || groups.at(-1).skill !== call.skill) groups.push({ skill: call.skill, desc: call.skill_description, calls: [] }); groups.at(-1).calls.push(call); }
-    return `<div class="cand-pane" data-i="${i}" style="${i ? 'display:none' : ''}">
+  const groupsOf = c => { const g = []; for (const call of c.calls) { if (!g.length || g.at(-1).skill !== call.skill) g.push({ skill: call.skill, desc: call.skill_description, calls: [] }); g.at(-1).calls.push(call); } return g; };
+  const tabs = w.candidates.map((c, i) => `<button class="cand-tab ${i === 0 ? 'on' : ''}" data-i="${i}">
+      <div class="ct"><span class="n">${i + 1}</span><b>${esc(c.title)}</b><span class="badge">${c.source ? '워크플로우' : '새 계획'}</span></div>
+      <div class="chain">${groupsOf(c).map(g => `<span class="sk">${esc(g.skill)} <i>·</i> ${g.calls.map(x => esc(x.tool) + (x.execution === 'conditional' ? '?' : '')).join(', ')}</span>`).join('<span>→</span>')}</div>
+    </button>`).join('');
+  const panes = w.candidates.map((c, i) => `<div class="cand-pane" data-i="${i}" style="${i ? 'display:none' : ''}">
       ${c.rationale ? `<div class="rationale">${esc(c.rationale)}</div>` : ''}
-      ${groups.map(g => `<div class="skill-group"><div class="skill-head"><b>${esc(g.skill)}</b><span>${esc(g.desc)}</span></div>
+      ${groupsOf(c).map(g => `<details class="sg"><summary><span class="chev">›</span><span class="sname">${esc(g.skill)}</span><span class="cnt">tool ${g.calls.length}개 선택</span><span class="state"></span></summary>
+        <div class="sg-body"><div class="sdesc">${esc(g.desc)}</div>
         ${g.calls.map(call => {
           const shown = call.params.filter(p => p.source !== 'default'), defaults = call.params.filter(p => p.source === 'default');
           return `<div class="tool-card"><div class="tname"><span class="no">#${call.index}</span>${esc(call.tool)}${call.execution === 'conditional' ? '<span class="badge">조건부</span>' : ''}</div>
@@ -674,15 +695,18 @@ function renderPlanApproval(w, resume) {
             ${shown.map(p => paramRow(p)).join('')}
             ${defaults.length ? `<details class="defaults"><summary>기본값 사용 ${defaults.length}개 · ${defaults.map(p => esc(p.name)).join(', ')}</summary>${defaults.map(p => paramRow(p)).join('')}</details>` : ''}
           </div>`;
-        }).join('')}</div>`).join('')}
-    </div>`;
-  }).join('');
+        }).join('')}</div></details>`).join('')}
+    </div>`).join('');
   body.innerHTML = `<div class="cand-tabs">${tabs}</div>${panes}`;
   foot.innerHTML = `<div class="row"><input id="fb" placeholder="수정 요청 (예: 표본을 500개로, 상관분석도 추가)"><button class="btn" id="rev">수정 요청</button></div>
     <div class="row" style="justify-content:flex-end"><span id="need" style="flex:1;font-size:12px;color:var(--accent)"></span><button class="btn" id="no">취소</button><button class="btn primary" id="ok">승인하고 실행</button></div>`;
   let current = 0;
   const pane = () => body.querySelector(`.cand-pane[data-i="${current}"]`);
   const check = () => {
+    body.querySelectorAll('.sg').forEach(g => {
+      const n = [...g.querySelectorAll('input[data-required="1"]')].filter(i => !i.value.trim()).length;
+      g.querySelector('.state').outerHTML = n ? `<span class="state need">입력 필요 ${n}</span>` : '<span class="state ok">✓ 준비됨</span>';
+    });
     const missing = [...pane().querySelectorAll('input[data-required="1"]')].filter(i => !i.value.trim()).length;
     foot.querySelector('#need').textContent = missing ? `입력이 필요한 값 ${missing}개` : '';
     foot.querySelector('#ok').disabled = !!missing; foot.querySelector('#ok').style.opacity = missing ? .45 : 1;
