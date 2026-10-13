@@ -25,8 +25,10 @@ from langgraph.types import Command, interrupt
 
 from agent import plan_format
 from agent.codegen import (
+    SETUP_TOOL,
     custom_step_code,
     parse_observations,
+    setup_step,
     tool_step_code,
 )
 from agent.context import AnalysisState, RunContext
@@ -529,6 +531,10 @@ async def _submit_now(
                 "next_sequence": execution["next_sequence"] + len(steps),
             }
     if not execution or not execution.get("alive"):
+        # a fresh kernel: define the observation helper first
+        timeout = settings.executor_step_timeout_seconds
+        steps = [setup_step(ctx.services.storage, timeout), *steps]
+        labels = [SETUP_TOOL, *labels]
         for i, step in enumerate(steps):
             step["sequence"] = i
         receipt = await executor.submit(
@@ -570,7 +576,9 @@ def _wait_operation(execution: dict, receipt: dict) -> dict[str, Any]:
     The scheduler announces the wait.
     """
     labels = [
-        execution["steps"][s["step_id"]] for s in receipt["operation"]["steps"]
+        execution["steps"][s["step_id"]]
+        for s in receipt["operation"]["steps"]
+        if execution["steps"][s["step_id"]] != SETUP_TOOL
     ]
     return interrupt(
         {
@@ -805,7 +813,7 @@ async def run_custom_code(
     receipt, execution = await _submit(runtime, [step], [custom_id])
     event = _wait_operation(execution, receipt)
     execution, results, error = _apply_event(execution, event)
-    step_id = receipt["operation"]["steps"][0]["step_id"]
+    step_id = receipt["operation"]["steps"][-1]["step_id"]
     view = _step_view(runtime, results.get(step_id))
     plan.setdefault("custom", []).append(
         {

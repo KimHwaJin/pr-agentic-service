@@ -86,6 +86,8 @@ const py = s => { try { return hljs.highlight(s, {language: 'python'}).value; } 
 
 // Executor cells are "tool function + observation helper + call". Show the call up front and fold the rest.
 function splitCode(source) {
+  if (/^def _agentic_observe\(/m.test(source) && !/^_r_s\d+_t\d+ = /m.test(source))
+    return {name: null, setup: true, main: '# 에이전트 준비 (그림 표시, 결과 요약 함수)', def: tidy(source)};
   let code = source.replace(OBSERVE, '');
   code = code.split('\n').filter(l => !/^_agentic_observe\(/.test(l)).join('\n');
   const lines = tidy(code).split('\n');
@@ -130,18 +132,18 @@ function renderNotebook(nb) {
     if (cell.cell_type !== 'code') continue;
     step += 1;
     const id = `step-${step}`;
-    const {name, main, def} = splitCode(source);
+    const {name, main, def, setup} = splitCode(source);
     const outs = outputs(cell);
     const failed = (cell.outputs || []).some(o => o.output_type === 'error');
-    const label = name || '사용자 코드';
+    const label = setup ? '실행 준비' : (name || '사용자 코드');
     toc += `<a href="#${id}" class="${failed ? 'err' : ''}">${step}. ${esc(label)}</a>`;
     const count = cell.execution_count == null ? ' ' : cell.execution_count;
     html += `<section class="cell" id="${id}">
       <div class="cell-head"><span class="num">[${count}]</span><span class="name">${esc(label)}</span>
-        <span class="kind">${name ? '분석 도구' : ''}</span><span class="sp"></span>
+        <span class="kind">${name ? '분석 도구' : (setup ? '에이전트가 넣은 셀' : '')}</span><span class="sp"></span>
         <span class="status ${failed ? 'err' : ''}">${failed ? '실패' : (outs.length ? `출력 ${outs.length}` : '')}</span></div>
       <pre class="src"><code class="hljs">${py(main)}</code></pre>
-      ${def ? `<details class="def"><summary>함수 코드 보기 (${def.split('\n').length}줄)</summary><pre class="src"><code class="hljs">${py(def)}</code></pre></details>` : ''}
+      ${def ? `<details class="def"><summary>${setup ? '코드 보기' : '함수 코드 보기'} (${def.split('\n').length}줄)</summary><pre class="src"><code class="hljs">${py(def)}</code></pre></details>` : ''}
       ${outs.length ? `<div class="outs">${outs.join('')}</div>` : ''}
     </section>`;
   }

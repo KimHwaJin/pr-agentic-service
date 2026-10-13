@@ -10,7 +10,7 @@ from typing import Any
 
 from langchain_core.messages import HumanMessage, SystemMessage
 
-from agent.codegen import parse_observations
+from agent.codegen import SETUP_TOOL, parse_observations
 from agent.llm import chat_model
 from agent.prompts import load_prompt
 from core.services import Services
@@ -36,6 +36,8 @@ async def collect_evidence(
     for operation in result.get("operations", []):
         for step in operation.get("steps", []):
             lineage = step.get("lineage") or {}
+            if lineage.get("tool_name") == SETUP_TOOL:
+                continue
             step_result = step.get("result") or {}
             view = services.storage.read_step_outputs(
                 step_result.get("result_ref"), max_chars=3000

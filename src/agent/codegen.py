@@ -1,6 +1,8 @@
 """Deterministic code assembly.
 
 One tool call = function source (no docstring) + call + observation.
+Every new execution starts with one SETUP cell that defines the
+observation helper, so tool cells carry only the tool and its call.
 """
 
 import json
@@ -10,8 +12,11 @@ from core.assets import ToolCatalog
 from core.workflows.spec import Call
 
 OBSERVATION_PREFIX = "AGENTIC_OBSERVATION "
+SETUP_TOOL = "setup"
 
-OBSERVE = """
+SETUP = """
+# 에이전트 준비 셀: 그림을 노트북에 표시하고, 각 단계 결과를 에이전트가
+# 읽을 수 있게 요약해 출력하는 _agentic_observe 함수를 정의합니다.
 try:  # render figures as notebook outputs
     get_ipython().run_line_magic("matplotlib", "inline")
 except Exception:
@@ -85,14 +90,26 @@ def tool_step_code(
             expr = tools.tools[producers[ref]].output_expr(var, arg["output"])
         args.append(f"{name}={expr}")
     return (
-        f"{tool.code}\n\n{OBSERVE}\n\n"
+        f"{tool.code}\n\n"
         f"{call.var} = {tool.name}({', '.join(args)})\n"
         f"_agentic_observe({call.var!r}, {call.var})\n"
     )
 
 
+def setup_step(storage: Any, timeout: int | None) -> dict[str, Any]:
+    """The first step of every new execution (kernel)."""
+    return {
+        "payload": {
+            "type": "PYTHON_EXECUTE",
+            "source": storage.write_source(SETUP + "\n"),
+        },
+        "step_timeout_seconds": timeout,
+        "lineage": {"skill_name": "agentic", "tool_name": SETUP_TOOL},
+    }
+
+
 def custom_step_code(code: str, observe: list[str]) -> str:
-    lines = [code.rstrip(), "", OBSERVE, ""]
+    lines = [code.rstrip(), ""]
     lines += [f"_agentic_observe({name!r}, {name})" for name in observe]
     return "\n".join(lines) + "\n"
 

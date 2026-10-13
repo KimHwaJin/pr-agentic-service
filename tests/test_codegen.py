@@ -13,7 +13,16 @@ def test_tool_step_code(adaptive, tools):
         "right_data=_r_s0_t3['data'], "
         "join_columns=['alias_lot_id', 'wf_id'], how='inner')" in code
     )
-    assert '"""' not in code.split("def _agentic_observe")[0]
+    assert '"""' not in code  # docstring stripped
+    assert "def _agentic_observe" not in code  # defined once, in SETUP
+
+
+def test_setup_defines_the_observation_helper():
+    from agent.codegen import SETUP
+
+    namespace: dict = {"get_ipython": lambda: None}
+    exec(compile(SETUP, "setup", "exec"), namespace)
+    assert callable(namespace["_agentic_observe"])
 
 
 def test_empty_optional_inputs_use_tool_defaults(adaptive, tools):
