@@ -54,7 +54,17 @@
   .suggest button { border: 1px solid var(--line); background: var(--panel); border-radius: 999px; padding: 7px 14px; font-size: 13px; color: var(--muted); }
   .suggest button:hover { color: var(--ink); border-color: var(--faint); }
 
-  .turn-user { display: flex; justify-content: flex-end; margin: 22px 0 6px; }
+  .turn-user { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; margin: 22px 0 6px; }
+  .turn-user .shots, .composer .shots { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; }
+  .turn-user .shots img { max-width: 220px; max-height: 160px; border-radius: 10px; border: 1px solid var(--line); cursor: zoom-in; }
+  .composer .shots { justify-content: flex-start; margin-bottom: 6px; }
+  .composer .shots:empty { display: none; }
+  .composer .shot { position: relative; }
+  .composer .shot img { width: 56px; height: 56px; object-fit: cover; border-radius: 8px; border: 1px solid var(--line); display: block; }
+  .composer .shot button { position: absolute; top: -6px; right: -6px; width: 18px; height: 18px; border-radius: 50%; border: 0; background: var(--ink); color: #fff; font-size: 11px; line-height: 18px; padding: 0; cursor: pointer; }
+  .attach { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: 8px; border: 0; background: transparent; color: var(--muted); cursor: pointer; }
+  .attach:hover { background: var(--hover); }
+  .attach svg { width: 17px; height: 17px; }
   .bubble { background: var(--user); padding: 10px 16px; border-radius: 18px; max-width: 80%; white-space: pre-wrap; }
   .answer { margin: 8px 0 18px; font-size: 15.5px; line-height: 1.75; }
   .answer > :first-child { margin-top: 0; }
@@ -339,8 +349,11 @@
   </div>
   <div class="composer-wrap" id="composerWrap">
     <div class="composer">
+      <div class="shots" id="shots"></div>
       <textarea id="input" rows="1" placeholder="분석하고 싶은 내용을 입력하세요"></textarea>
       <div class="bar">
+        <button class="attach" id="attach" title="이미지 첨부 (이미지 입력 가능한 모델)" onclick="$('pickImage').click()" style="display:none"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="m21 16-5-5-9 9"/></svg></button>
+        <input type="file" id="pickImage" accept="image/png,image/jpeg,image/webp" multiple hidden>
         <label class="pick" title="모델"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z"/><path d="M12 12l8-4.5M12 12v9M12 12 4 7.5"/></svg><select id="model"></select></label>
         <label class="pick" title="코드 레벨: Agent가 직접 코드를 작성할 수 있는 범위"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="m8 7-5 5 5 5M16 7l5 5-5 5"/></svg><select id="level"><option value="">코드 레벨 · 기본</option><option value="1">1 · tool만</option><option value="2">2 · 연결 코드</option><option value="3">3 · tool 우선</option><option value="4">4 · 자유 코드</option></select></label>
         <span class="hint" id="hint">Enter 전송 · Shift+Enter 줄바꿈</span>
@@ -388,7 +401,7 @@
 
 <script>
 const API = '/api/v1';
-const S = { projects: [], defaultLevel: 3, csrf: null, project: null, session: null, run: null, es: null, answerEl: null, activity: null, busy: false };
+const S = { projects: [], models: [], images: [], waiting: false, csrf: null, project: null, session: null, run: null, es: null, answerEl: null, activity: null, busy: false };
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const md = s => marked.parse(esc(s));
@@ -406,7 +419,11 @@ async function api(path, opts = {}) {
   const r = await fetch(API + path, { credentials: 'include', ...opts, headers, body: opts.body && JSON.stringify(opts.body) });
   if (r.status === 401) { location.href = `${API}/auth/login/sso?return_to=/dev/`; throw new Error('login'); }
   const data = r.status === 204 ? null : await r.json();
-  if (!r.ok) { showError(typeof data?.detail === 'string' ? data.detail : JSON.stringify(data?.detail ?? data)); throw new Error(r.status); }
+  if (!r.ok) {
+    const fields = (data?.errors || []).map(e => `${e.field}: ${e.message}`).join(', ');
+    showError(`${typeof data?.detail === 'string' ? data.detail : JSON.stringify(data?.detail ?? data)}${data?.code ? ` (${data.code})` : ''}${fields ? ` · ${fields}` : ''}`);
+    throw new Error(r.status);
+  }
   return data;
 }
 
@@ -414,8 +431,9 @@ async function boot() {
   S.csrf = (await api('/auth/session')).csrf_token;
   const me = await api('/users/me');
   $('meName').textContent = me.user.name; $('meId').textContent = me.user.employee_id; $('avatar').textContent = me.user.name.slice(0, 1);
-  $('model').innerHTML = me.models.map(m => `<option ${m === me.default_model ? 'selected' : ''}>${esc(m)}</option>`).join('');
-  S.defaultLevel = me.default_code_level; S.isAdmin = me.user.role === 'admin';
+  S.models = (await api('/models')).items;
+  $('model').innerHTML = S.models.map(m => `<option value="${esc(m.name)}" ${m.default ? 'selected' : ''}>${esc(m.label || m.name)}</option>`).join('');
+  syncAttach(); S.isAdmin = me.user.role === 'admin';
   await loadProjects();
   let saved = null; try { saved = localStorage.getItem('agentic.project'); } catch {}
   await selectProject(S.projects.some(p => p.id === saved) ? saved : me.default_project_id);
@@ -582,7 +600,7 @@ async function renderMessages(sessionId, cursor = null) {
   const log = $('log'); const target = frag;
   const append = el => target.appendChild(el);
   for (const m of page.items) {
-    if (m.role === 'user') { const d = document.createElement('div'); d.className = 'turn-user'; d.innerHTML = `<div class="bubble">${esc(m.content)}</div>`; append(d); continue; }
+    if (m.role === 'user') { append(userTurn(m.content, (m.attachments || []).filter(a => a.kind === 'image').map(a => `${API}/images/${a.image_id}`))); continue; }
     if (m.run_id) for (const el of await runHistory(m.run_id)) append(el);
     const d = document.createElement('div'); d.className = 'answer'; d.dataset.raw = m.content; d.innerHTML = md(m.content); append(d);
     if (m.attachments?.length) { const f = document.createElement('div'); f.className = 'files'; f.innerHTML = fileCards(m.attachments); append(f); }
@@ -613,31 +631,62 @@ $('level').onchange = async e => { if (S.session) await api(`/sessions/${S.sessi
 const input = $('input');
 function autosize() { input.style.height = 'auto'; input.style.height = Math.min(input.scrollHeight, 220) + 'px'; }
 input.addEventListener('input', autosize);
-input.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); if (!S.busy) send(); } });
+input.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); if (!S.busy || S.waiting) send(); } });
+
+/* images: LangChain content blocks, only for models that accept images */
+const currentModel = () => S.models.find(m => m.name === $('model').value);
+function syncAttach() {
+  const m = currentModel(); const ok = !!m && m.input.includes('image');
+  $('attach').style.display = ok ? '' : 'none';
+  if (!ok && S.images.length) { S.images = []; drawShots(); }
+}
+$('model').onchange = syncAttach;
+function drawShots() {
+  $('shots').innerHTML = S.images.map((im, i) => `<div class="shot"><img src="${im.url}" title="${esc(im.name)}"><button onclick="S.images.splice(${i},1);drawShots()">×</button></div>`).join('');
+}
+async function addImages(files) {
+  const max = currentModel()?.max_images || 0;
+  for (const f of files) {
+    if (!['image/png', 'image/jpeg', 'image/webp'].includes(f.type)) { showError(`${f.name}: png, jpeg, webp만 첨부할 수 있습니다.`); continue; }
+    if (S.images.length >= max) { showError(`이미지는 한 번에 ${max}장까지 첨부할 수 있습니다.`); break; }
+    const url = await new Promise(res => { const r = new FileReader(); r.onload = () => res(r.result); r.readAsDataURL(f); });
+    S.images.push({ url, name: f.name, mime_type: f.type, base64: url.split(',')[1] });
+  }
+  drawShots();
+}
+$('pickImage').onchange = e => { addImages([...e.target.files]); e.target.value = ''; };
+input.addEventListener('paste', e => { const files = [...e.clipboardData.files].filter(f => f.type.startsWith('image/')); if (files.length && $('attach').style.display !== 'none') { e.preventDefault(); addImages(files); } });
 
 function setBusy(busy) {
   S.busy = busy; const b = $('send');
   b.classList.toggle('stop', busy); b.title = busy ? '중지' : '전송';
   b.innerHTML = busy ? '<svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>'
                      : '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 4l7 7-1.4 1.4L13 7.8V20h-2V7.8l-4.6 4.6L5 11z"/></svg>';
-  $('hint').textContent = busy ? '작업 중입니다. 다른 작업은 새 대화에서 할 수 있어요.' : 'Enter 전송 · Shift+Enter 줄바꿈';
+  $('hint').textContent = S.waiting ? '확인 카드에 답하거나, 여기에 입력하면 그 내용으로 답합니다.' : busy ? '작업 중입니다. 다른 작업은 새 대화에서 할 수 있어요.' : 'Enter 전송 · Shift+Enter 줄바꿈';
 }
 function sendOrStop() { S.busy ? cancelRun() : send(); }
 
 async function send() {
   const text = input.value.trim(); if (!text) return;
+  const images = S.images; S.images = []; drawShots();
+  const content = images.length
+    ? [{ type: 'text', text }, ...images.map(im => ({ type: 'image', base64: im.base64, mime_type: im.mime_type, name: im.name }))]
+    : text;
   input.value = ''; autosize();
   if ($('log').querySelector('.empty')) $('log').innerHTML = '';
-  addUser(text); setBusy(true); startActivity();
+  addUser(text, images.map(im => im.url));
+  const answering = S.waiting;
+  if (!answering) { setBusy(true); startActivity(); }
   try {
     if (!S.session) {
       const level = $('level').value ? +$('level').value : null;
-      const r = await api(`/projects/${S.project}/sessions`, { method: 'POST', body: { message: text, model_alias: $('model').value, code_level: level } });
+      const r = await api(`/projects/${S.project}/sessions`, { method: 'POST', body: { input: { content }, model: $('model').value, code_level: level } });
       S.session = r.session.id; S.run = r.run.id; $('title').textContent = r.session.title; openStream(); loadSessions();
     } else {
-      S.run = (await api(`/sessions/${S.session}/messages`, { method: 'POST', body: { content: text, model_alias: $('model').value } })).id;
+      const r = await api(`/sessions/${S.session}/runs`, { method: 'POST', body: answering ? { input: { content } } : { input: { content }, model: $('model').value } });
+      S.run = r.run.id;
     }
-  } catch { setBusy(false); finishActivity(true); }
+  } catch { if (!answering) { setBusy(false); finishActivity(true); } }
 }
 
 async function cancelRun() { if (S.run) await api(`/runs/${S.run}/cancel`, { method: 'POST' }); }
@@ -648,10 +697,10 @@ function openStream() {
   S.es = new EventSource(`${API}/sessions/${S.session}/events`, { withCredentials: true });
   const on = (type, fn) => S.es.addEventListener(type, e => fn(JSON.parse(e.data)));
   on('run_status', e => {
-    S.run = e.run_id; const st = e.data.status;
+    S.run = e.run_id; const st = e.data.status; S.waiting = st === 'waiting_input';
     if (st === 'queued' || st === 'running') { setBusy(true); startActivity(); setActivityTitle('생각하는 중'); }
     if (st === 'waiting_executor') setActivityTitle(`코드 실행 중 · ${(e.data.steps || []).length}단계`);
-    if (st === 'waiting_input') setActivityTitle('확인을 기다리는 중');
+    if (st === 'waiting_input') { setActivityTitle('확인을 기다리는 중'); setBusy(true); }
     if (['succeeded', 'failed', 'cancelled'].includes(st)) { setBusy(false); finishActivity(st !== 'succeeded'); loadSessions(); if (st === 'cancelled') showError('작업을 중지했습니다.'); }
   });
   on('token', e => { if (!S.answerEl) S.answerEl = addAnswer(''); S.answerEl.dataset.raw += e.data.text; S.answerEl.innerHTML = md(S.answerEl.dataset.raw); scrollDown(); });
@@ -675,7 +724,12 @@ function openStream() {
 /* rendering ---------------------------------------------------------------- */
 const logEl = () => $('log');
 function scrollDown() { const s = $('scroll'); s.scrollTop = s.scrollHeight; }
-function addUser(text) { const d = document.createElement('div'); d.className = 'turn-user'; d.innerHTML = `<div class="bubble">${esc(text)}</div>`; logEl().appendChild(d); scrollDown(); }
+function userTurn(text, imageUrls = []) {
+  const d = document.createElement('div'); d.className = 'turn-user';
+  d.innerHTML = `${imageUrls.length ? `<div class="shots">${imageUrls.map(u => `<img src="${u}" onclick="zoom(this.src)">`).join('')}</div>` : ''}<div class="bubble">${esc(text)}</div>`;
+  return d;
+}
+function addUser(text, imageUrls = []) { logEl().appendChild(userTurn(text, imageUrls)); scrollDown(); }
 function addAnswer(content, attachments = []) {
   const d = document.createElement('div'); d.className = 'answer'; d.dataset.raw = content; d.innerHTML = md(content);
   logEl().appendChild(d); if (attachments?.length) addFiles(attachments); scrollDown(); return d;
@@ -758,7 +812,7 @@ function openHitlPanel(w, kicker, title, sub) {
 }
 
 function renderHitl(runId, w) {
-  const resume = async value => { await api(`/runs/${runId}/resume`, { method: 'POST', body: { interrupt_id: w.interrupt_id, value } }); closeHitl(w.interrupt_id); };
+  const resume = async value => { await api(`/sessions/${S.session}/runs`, { method: 'POST', body: { command: { resume: { interrupt_id: w.interrupt_id, value } } } }); closeHitl(w.interrupt_id); };
   const body = $('hitlBody'), foot = $('hitlFoot');
   if (w.type === 'plan_approval') return renderPlanApproval(w, resume);
   if (w.type === 'question') {

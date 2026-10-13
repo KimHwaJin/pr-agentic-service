@@ -70,4 +70,4 @@ def test_lab_url_uses_a_workspace_per_employee():
         url
         == "https://lab.example/lab/workspaces/agentic-00123/tree/pv/users/u1/a%20b/execution.ipynb"
     )
-    assert lab_url(Settings(), "x.ipynb", "1") is None
+    assert lab_url(Settings(notebook_lab_base_url=""), "x.ipynb", "1") is None

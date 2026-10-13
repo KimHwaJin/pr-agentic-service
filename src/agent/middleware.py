@@ -198,11 +198,75 @@ class PersonaMiddleware(AgentMiddleware[AnalysisState, RunContext]):
                     if getattr(t, "name", None) in allowed
                 ],
                 messages=[
-                    *_isolate(request.messages, persona),
+                    *await _with_images(
+                        _isolate(request.messages, persona), ctx
+                    ),
                     *_notice(request.state),
                 ],
             )
         )
+
+
+async def _with_images(messages: list, ctx: RunContext) -> list:
+    """Image references in user turns -> image data for this model call.
+
+    The checkpoint keeps only ``{"type": "image", "file_id": <image id>}``.
+    Images of the last ``image_context_turns`` user turns are sent when the
+    model accepts images; older ones (or a text-only model) get a short
+    text placeholder instead.
+    """
+    settings = ctx.services.settings
+    spec = settings.model(ctx.model)
+    vision = bool(spec and spec.vision)
+    turns = [i for i, m in enumerate(messages) if isinstance(m, HumanMessage)]
+    recent = set(turns[-settings.image_context_turns :])
+    out = []
+    for i, message in enumerate(messages):
+        content = message.content
+        if not isinstance(message, HumanMessage) or not isinstance(
+            content, list
+        ):
+            out.append(message)
+            continue
+        blocks: list[Any] = []
+        for block in content:
+            if not (
+                isinstance(block, dict)
+                and block.get("type") == "image"
+                and block.get("file_id")
+            ):
+                blocks.append(block)
+                continue
+            name = (block.get("extras") or {}).get("name") or "이미지"
+            data = (
+                await _image_data(ctx, block["file_id"])
+                if vision and i in recent
+                else None
+            )
+            if data:
+                blocks.append(
+                    {
+                        "type": "image",
+                        "base64": data,
+                        "mime_type": block.get("mime_type"),
+                    }
+                )
+            else:
+                blocks.append({"type": "text", "text": f"[이미지: {name}]"})
+        out.append(message.model_copy(update={"content": blocks}))
+    return out
+
+
+async def _image_data(ctx: RunContext, image_id: str) -> str | None:
+    cache = ctx.cache.setdefault("images", {})
+    if image_id not in cache:
+        image = await ctx.services.images.get(image_id)
+        cache[image_id] = (
+            ctx.services.images.read_base64(image)
+            if image is not None and image.session_id == ctx.session_id
+            else None
+        )
+    return cache[image_id]
 
 
 def _notice(state: Any) -> list[HumanMessage]:

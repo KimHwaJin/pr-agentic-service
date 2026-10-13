@@ -26,6 +26,7 @@ from core.events import EventBus
 from core.executor.client import ExecutorClient
 from core.executor.sources import CodeSources
 from core.executor.storage import SharedStorage
+from core.images import Images
 from core.memory.service import ProjectMemory
 from core.services import Services
 from core.workflows.service import WorkflowService
@@ -96,6 +97,7 @@ async def build_services(
         executor=executor,
         storage=storage,
         code_sources=CodeSources(db, storage),
+        images=Images(db, settings.storage_root),
         memory=ProjectMemory(
             store,
             db,

@@ -12,7 +12,10 @@ WORKDIR /app
 COPY pyproject.toml uv.lock ./
 RUN uv sync --locked --no-dev --no-install-project
 
-COPY alembic.ini ./
+# Settings per environment; ENV (Deployment env, or --build-arg ENV=...) picks config.<ENV>.yml.
+ARG ENV=local
+ENV ENV=${ENV}
+COPY config.*.yml alembic.ini ./
 COPY migrations ./migrations
 COPY assets ./assets
 COPY web ./web

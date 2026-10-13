@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, cast
 
 from langchain.agents import create_agent
 from langchain.agents.middleware import (
@@ -75,7 +75,7 @@ class TurnResult:
 
 
 class AgentGraphs:
-    """One compiled graph per model alias.
+    """One compiled graph per served model name.
 
     All graphs share the checkpointer and store.
     """
@@ -93,9 +93,9 @@ class AgentGraphs:
         )
         self._graphs: dict[str, Any] = {}
 
-    def get(self, alias: str):
-        if alias not in self._graphs:
-            model = chat_model(self.settings, alias)
+    def get(self, name: str):
+        if name not in self._graphs:
+            model = chat_model(self.settings, name)
             middleware: list[AgentMiddleware[Any, Any, Any]] = [
                 PersonaMiddleware(self.settings.prompts_root),
                 JsonArgumentsMiddleware(),
@@ -108,7 +108,7 @@ class AgentGraphs:
                     model, trigger=("tokens", 60000), keep=("messages", 40)
                 ),
             ]
-            self._graphs[alias] = create_agent(
+            self._graphs[name] = create_agent(
                 model,
                 tools=TOOLS,
                 middleware=middleware,
@@ -117,7 +117,7 @@ class AgentGraphs:
                 checkpointer=self.checkpointer,
                 store=self.store,
             )
-        return self._graphs[alias]
+        return self._graphs[name]
 
     async def run_turn(
         self, ctx: RunContext, resume: dict[str, Any] | None
@@ -126,7 +126,7 @@ class AgentGraphs:
 
         With ``resume``, resumes its pending interrupt instead.
         """
-        graph = self.get(ctx.model_alias)
+        graph = self.get(ctx.model)
         config = {
             "configurable": {"thread_id": ctx.session_id},
             "recursion_limit": self.settings.agent_recursion_limit,
@@ -153,7 +153,10 @@ class AgentGraphs:
             command = {
                 "messages": [
                     *closing,
-                    HumanMessage(ctx.user_text, id=ctx.run_id),
+                    HumanMessage(
+                        content=cast(Any, ctx.user_content or ctx.user_text),
+                        id=ctx.run_id,
+                    ),
                 ]
             }
 

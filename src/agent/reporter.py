@@ -96,10 +96,10 @@ def _source_preview(services: Services, result_ref: dict[str, Any]) -> str:
 
 
 async def write_markdown(
-    services: Services, model_alias: str, system: str, request: str
+    services: Services, model: str, system: str, request: str
 ) -> str:
-    model = chat_model(services.settings, model_alias)
-    response = await model.ainvoke(
+    llm = chat_model(services.settings, model)
+    response = await llm.ainvoke(
         [SystemMessage(system), HumanMessage(request)]
     )
     return (
@@ -134,7 +134,7 @@ async def generate_report(
         f"# 강조할 점\n{focus}\n\n"
         f"# 근거\n{evidence}"
     )
-    return await write_markdown(services, ctx.model_alias, system, request)
+    return await write_markdown(services, ctx.model, system, request)
 
 
 async def generate_batch_report(
@@ -155,5 +155,5 @@ async def generate_batch_report(
         f"# 근거\n{evidence}"
     )
     return await write_markdown(
-        services, services.settings.llm_default_alias, system, request
+        services, services.settings.default_model.name, system, request
     )

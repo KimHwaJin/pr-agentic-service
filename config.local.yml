@@ -1,0 +1,42 @@
+# Local stack (docker compose). Running uvicorn on the host instead? Override
+# hosts and paths in .env (environment variables win over this file).
+env: local
+database_url: postgresql+psycopg://executor:executor@postgres:5432/agentic
+redis_url: redis://redis:6379/0
+redis_namespace: agentic
+
+sso_adapter: dev
+public_api_origin: http://localhost:8080
+frontend_origin: http://localhost:8080
+sso_allowed_return_roots: ["/", "/dev"]
+cookie_secure: false
+
+llm_base_url: http://model.frodo.com/v1
+llm_api_key: EMPTY
+llm_enable_thinking: false
+embedding_provider: mock
+embedding_dims: 1024
+
+executor_base_url: http://executor:8000
+# executor INPUT_STORAGE_ROOT = SHARED_STORAGE_ROOT = ../executor/shared_dir
+storage_root: /mnt/executor-shared/agentic
+storage_executor_path: agentic
+executor_result_root: /mnt/executor-shared
+executor_runtime_profile: default
+notebook_lab_base_url: http://localhost:8888
+
+batch_base_url: http://host.docker.internal:8100
+
+# Chat models offered to users. Only these are used; exactly one default.
+models:
+  - name: qwen38-27b-nvfp4
+    label: Qwen 3.8 27B
+    default: true
+    input: [text]
+  - name: qwen38-27b-fp8
+    label: Qwen 3.8 27B (FP8)
+    input: [text]
+  - name: qwen3-vl-30b-fp8
+    label: Qwen3 VL 30B (이미지)
+    input: [text, image]
+    max_images: 8

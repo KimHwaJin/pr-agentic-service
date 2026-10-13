@@ -1,15 +1,63 @@
+"""Service settings.
+
+Sources, lowest to highest priority: field defaults, ``config.<ENV>.yml`` at
+the repo root (baked into the image; ``CONFIG_FILE`` overrides the path),
+``.env``, environment variables. ``ENV`` itself comes from the environment
+(or ``.env``) and picks the file.
+"""
+
+import os
 from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
-from pydantic import Field, model_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from dotenv import dotenv_values
+from pydantic import BaseModel, Field, model_validator
+from pydantic_settings import (
+    BaseSettings,
+    PydanticBaseSettingsSource,
+    SettingsConfigDict,
+    YamlConfigSettingsSource,
+)
 
 ROOT = Path(__file__).resolve().parents[2]
 
 
+def config_file() -> Path:
+    if path := os.environ.get("CONFIG_FILE"):
+        return Path(path)
+    env = os.environ.get("ENV") or dotenv_values(".env").get("ENV") or "local"
+    return ROOT / f"config.{env}.yml"
+
+
+class ModelSpec(BaseModel):
+    """One chat model offered to users (config ``models``)."""
+
+    name: str  # served model name on the gateway = API "model" value
+    label: str | None = None  # display name; the UI falls back to name
+    default: bool = False
+    input: list[Literal["text", "image"]] = ["text"]
+    max_images: int = Field(0, ge=0, le=32)
+
+    @property
+    def vision(self) -> bool:
+        return "image" in self.input
+
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+
+    @classmethod
+    def settings_customise_sources(
+        cls,
+        settings_cls: type[BaseSettings],
+        init_settings: PydanticBaseSettingsSource,
+        env_settings: PydanticBaseSettingsSource,
+        dotenv_settings: PydanticBaseSettingsSource,
+        file_secret_settings: PydanticBaseSettingsSource,
+    ) -> tuple[PydanticBaseSettingsSource, ...]:
+        yaml = YamlConfigSettingsSource(settings_cls, yaml_file=config_file())
+        return init_settings, env_settings, dotenv_settings, yaml
 
     env: Literal["local", "dev", "stg", "prd"] = "local"
     api_prefix: str = "/api/v1"
@@ -43,10 +91,8 @@ class Settings(BaseSettings):
     # LLM gateway (OpenAI compatible, vLLM).
     llm_base_url: str = "http://localhost:8001/v1"
     llm_api_key: str = "EMPTY"
-    llm_models: dict[str, str] = {
-        "default": "default"
-    }  # alias -> served model name
-    llm_default_alias: str = "default"
+    # Offered chat models; exactly one has default: true.
+    models: list[ModelSpec] = [ModelSpec(name="default", default=True)]
     llm_temperature: float = 0.2
     llm_timeout_seconds: float = 120.0
     llm_enable_thinking: bool | None = None
@@ -110,6 +156,16 @@ class Settings(BaseSettings):
     executor_inbox_retention_days: int = 7
     # code files are only needed until the executor snapshots them
     code_source_retention_days: int = 7
+    # images of deleted sessions; run idempotency keys
+    image_retention_days: int = 7
+    run_request_retention_days: int = 1
+
+    # Images sent with a turn (vision models only).
+    image_max_bytes: int = 10 * 1024 * 1024
+    image_max_total_bytes: int = 20 * 1024 * 1024
+    image_context_turns: int = (
+        3  # images of the last N user turns reach the model
+    )
 
     # pr-batch.
     batch_base_url: str = "http://localhost:8100"
@@ -132,9 +188,26 @@ class Settings(BaseSettings):
                 "EMBEDDING_PROVIDER=openai needs EMBEDDING_BASE_URL and "
                 "EMBEDDING_MODEL"
             )
-        if self.llm_default_alias not in self.llm_models:
-            raise ValueError("LLM_DEFAULT_ALIAS must be a key of LLM_MODELS")
+        names = [m.name for m in self.models]
+        if len(set(names)) != len(names):
+            raise ValueError("models: duplicate name")
+        if sum(m.default for m in self.models) != 1:
+            raise ValueError("models: exactly one model needs default: true")
+        if self.env == "local" and os.environ.get("KUBERNETES_SERVICE_HOST"):
+            raise ValueError("ENV is not set for this pod (got local)")
+        if self.env != "local" and not config_file().is_file():
+            raise ValueError(f"{config_file()} not found (ENV={self.env})")
         return self
+
+    @property
+    def default_model(self) -> ModelSpec:
+        return next(m for m in self.models if m.default)
+
+    def model(self, name: str | None) -> ModelSpec | None:
+        """The configured model by name (None -> the default)."""
+        if name is None:
+            return self.default_model
+        return next((m for m in self.models if m.name == name), None)
 
     @property
     def psycopg_url(self) -> str:

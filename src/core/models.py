@@ -12,9 +12,10 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    select,
 )
 from sqlalchemy.dialects.postgresql import JSONB
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, column_property, mapped_column
 
 from core.db import Base, Timestamped, new_id, utcnow
 
@@ -85,6 +86,13 @@ class ChatSession(Timestamped, Base):
     deleted_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True)
     )
+    # loaded with the row: the project's level, for the effective level
+    project_code_level: Mapped[int | None] = column_property(
+        select(Project.code_level)
+        .where(Project.id == project_id)
+        .correlate_except(Project)
+        .scalar_subquery()
+    )
 
 
 class Message(Base):
@@ -120,7 +128,7 @@ class Run(Timestamped, Base):
     # queued -> running -> (waiting_input | waiting_executor) -> queued ...
     # -> terminal
     status: Mapped[str] = mapped_column(String(24), index=True)
-    model_alias: Mapped[str] = mapped_column(String(64))
+    model: Mapped[str] = mapped_column(String(64))
     input: Mapped[dict[str, Any]] = mapped_column(JSONB)
     resume: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
     waiting: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
@@ -286,4 +294,39 @@ class CodeSource(Base):
     )
     file_deleted_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True)
+    )
+
+
+class Image(Base):
+    """An image a user sent with a turn (stored once, referenced by id)."""
+
+    __tablename__ = "images"
+    id: Mapped[str] = mapped_column(ID, primary_key=True, default=new_id)
+    user_id: Mapped[str] = mapped_column(ID)
+    project_id: Mapped[str] = mapped_column(ID)
+    session_id: Mapped[str] = mapped_column(ID, index=True)
+    run_id: Mapped[str | None] = mapped_column(ID)
+    name: Mapped[str | None] = mapped_column(String(255))
+    mime_type: Mapped[str] = mapped_column(String(32))
+    size_bytes: Mapped[int] = mapped_column(Integer)
+    width: Mapped[int] = mapped_column(Integer)
+    height: Mapped[int] = mapped_column(Integer)
+    sha256: Mapped[str] = mapped_column(String(64))
+    path: Mapped[str] = mapped_column(String(1024))  # under STORAGE_ROOT
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow
+    )
+
+
+class RunRequest(Base):
+    """Idempotency-Key of POST /sessions/{id}/runs (kept for a day)."""
+
+    __tablename__ = "run_requests"
+    session_id: Mapped[str] = mapped_column(ID, primary_key=True)
+    key: Mapped[str] = mapped_column(String(128), primary_key=True)
+    request_hash: Mapped[str] = mapped_column(String(64))
+    run_id: Mapped[str] = mapped_column(ID)
+    resumed: Mapped[bool] = mapped_column(Boolean)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, index=True
     )

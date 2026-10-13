@@ -10,6 +10,7 @@ from core.events import EventBus
 from core.executor.client import ExecutorClient
 from core.executor.sources import CodeSources
 from core.executor.storage import SharedStorage
+from core.images import Images
 from core.memory.service import ProjectMemory
 from core.workflows.service import WorkflowService
 
@@ -25,6 +26,7 @@ class Services:
     executor: ExecutorClient
     storage: SharedStorage
     code_sources: CodeSources
+    images: Images
     memory: ProjectMemory
     workflows: WorkflowService
     embedder: Embeddings | None

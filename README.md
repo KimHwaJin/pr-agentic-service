@@ -44,7 +44,7 @@ docker compose up -d --build
 - executor 공유 볼륨은 `../executor/shared_dir`(`EXECUTOR_SHARED_DIR`로 변경), LLM은 `model.frodo.com` 게이트웨이를 씁니다.
 - `assets/`와 `src/agent/prompts/`는 마운트되어 있어 수정하면 재빌드 없이 다음 요청부터 반영됩니다.
 - 게이트웨이 대신 mock LLM: `.env`에 `LLM_BASE_URL=http://mock-llm:8001/v1`을 넣고 `docker compose --profile mock up -d`
-- 값 변경은 compose 옆 `.env`에서 합니다(`LLM_MODELS`, `LLM_DEFAULT_ALIAS`, `EMBEDDING_PROVIDER`, `APP_PORT` 등).
+- 설정은 `config.local.yml`에서 바꿉니다(마운트되어 있어 컨테이너 재시작으로 반영). compose 옆 `.env`는 `APP_PORT`, `PG_PASSWORD`, `LLM_API_KEY` 같은 값만 채웁니다.
 
 ## 로컬 실행
 
@@ -75,11 +75,11 @@ uv run uvicorn main:app --app-dir src --port 8080
   def create_sdk(request, callback_url):
       return SSO(request)  # request는 Flask 호환 뷰(args, cookies, environ, url)
   ```
-- **LLM**: `LLM_BASE_URL`, `LLM_MODELS`(별칭 → 모델명), `LLM_ENABLE_THINKING`.
+- **LLM**: `llm_base_url`, `llm_api_key`, `llm_enable_thinking`, 그리고 사용자에게 보여 줄 모델 목록 `models`(게이트웨이 모델 이름, 표시 이름, `default: true` 하나, 이미지 입력 가능 여부). 목록에 적힌 모델만 씁니다.
 - **임베딩**: `EMBEDDING_BASE_URL`, `EMBEDDING_MODEL`, `EMBEDDING_DIMS`(HNSW 인덱스는 2,000차원 이하).
 - **skill/tool**: `SKILLS_ROOT`, `TOOLS_ROOT`, `KNOWLEDGE_ROOT`(기본은 레포의 `assets/`). 파일이 바뀌면 다음 run부터 반영됩니다.
 - **executor**: `EXECUTOR_BASE_URL`, 결과 PVC 마운트 경로 `EXECUTOR_RESULT_ROOT`(executor의 SHARED_STORAGE_ROOT).
-- **서비스 저장소**: executor 입력 PVC(INPUT_STORAGE_ROOT) 안의 이 서비스 폴더. `STORAGE_ROOT`(Pod 마운트 경로)와 `STORAGE_EXECUTOR_PATH`(INPUT_STORAGE_ROOT 기준 같은 폴더). executor에 보내는 코드는 `<root>/sources/` 아래에 쓰고 7일 뒤 지웁니다(`CODE_SOURCE_RETENTION_DAYS`). 경로 규칙은 [docs/design/01-code-sources.md](docs/design/01-code-sources.md).
+- **설정 파일**: 레포 루트의 `config.<ENV>.yml`(local, dev, stg, prd)을 이미지에 넣고, `ENV`로 어느 파일을 읽을지 고릅니다. 우선순위는 파일 < `.env` < 환경변수입니다. 모델 목록(`models`), executor 경로(`storage_root`, `storage_executor_path`, `executor_result_root`), 비밀값이 모두 이 파일에 있습니다. 자세한 규칙은 [docs/design/03-config.md](docs/design/03-config.md).
 - **JupyterLab 링크**: `NOTEBOOK_LAB_BASE_URL`(Lab 서버 주소), Lab 루트가 Jupyter 공유 저장소 루트와 다르면 `NOTEBOOK_LAB_PATH_PREFIX`.
 - **pr-batch**: `BATCH_BASE_URL`, `BATCH_JWT_SECRET`(pr-batch의 BATCH_AUTH_SECRET), `BATCH_REPORT_JWT_SECRET`.
-- 배포 예시: [deploy/kubernetes/deployment.yaml](deploy/kubernetes/deployment.yaml)
+- 배포 예시: [deploy/kubernetes/deployment.yml](deploy/kubernetes/deployment.yml)

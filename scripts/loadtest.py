@@ -53,8 +53,8 @@ async def user(
         for i in range(turns):
             started = time.perf_counter()
             r = await client.post(
-                f"/api/v1/sessions/{session}/messages",
-                json={"content": f"안녕 {i}"},
+                f"/api/v1/sessions/{session}/runs",
+                json={"input": {"content": f"안녕 {i}"}},
             )
             if r.status_code != 202:
                 errors.append(f"send {r.status_code}")

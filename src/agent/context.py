@@ -19,10 +19,13 @@ class RunContext:
     project_id: str
     user_id: str
     employee_id: str
-    model_alias: str
+    model: str
     code_level: int
     project_prompt: str
     user_text: str
+    # LangChain content blocks when the turn has images (image blocks carry
+    # our image id in file_id); None for a plain text turn
+    user_content: list[dict[str, Any]] | None = None
     cache: dict[str, Any] = field(default_factory=dict)
 
     async def emit(

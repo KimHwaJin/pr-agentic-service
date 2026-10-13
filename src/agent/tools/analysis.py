@@ -1066,7 +1066,10 @@ async def save_workflow(
         }
     )
     if not (isinstance(answer, dict) and answer.get("approve")):
-        return "사용자가 워크플로우 저장을 원하지 않습니다."
+        feedback = answer.get("feedback") if isinstance(answer, dict) else None
+        return "사용자가 워크플로우 저장을 원하지 않습니다." + (
+            f" 사용자 메시지: {feedback}" if feedback else ""
+        )
     document["workflow"]["name"] = answer.get("name") or name
     document["workflow"]["actor"] = {"type": "USER", "id": ctx.employee_id}
     workflow = await ctx.services.workflows.create(

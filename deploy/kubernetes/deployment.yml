@@ -20,18 +20,11 @@ spec:
         - name: app
           image: REGISTRY/pr-agentic-service:TAG
           ports: [{containerPort: 8080}]
+          # Settings come from config.<ENV>.yml baked into the image; env: only
+          # picks the environment and overrides single values when needed.
           env:
             - {name: ENV, value: prd}
             - {name: RUN_MODE, value: all}
-            - {name: SSO_ADAPTER, value: company}
-            - {name: SSO_ADAPTER_FACTORY, value: "company_sso:create_sdk"}
-            - {name: COOKIE_SECURE, value: "true"}
-            - {name: STORAGE_ROOT, value: /mnt/data/agent/pr-agentic-service}
-            - {name: STORAGE_EXECUTOR_PATH, value: pr-agentic-service}
-            - {name: EXECUTOR_RESULT_ROOT, value: /mnt/data/executor}
-          envFrom:
-            - configMapRef: {name: pr-agentic-service-config}
-            - secretRef: {name: pr-agentic-service-secret}
           readinessProbe:
             httpGet: {path: /readyz, port: 8080}
             periodSeconds: 5

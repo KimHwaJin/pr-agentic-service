@@ -14,10 +14,10 @@ SYSTEM = (
 
 
 async def summarize_title(
-    settings: Settings, model_alias: str, question: str, answer: str
+    settings: Settings, model: str, question: str, answer: str
 ) -> str | None:
-    model = chat_model(settings, model_alias)
-    response = await model.ainvoke(
+    llm = chat_model(settings, model)
+    response = await llm.ainvoke(
         [
             SystemMessage(SYSTEM),
             HumanMessage(

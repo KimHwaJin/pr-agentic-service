@@ -116,9 +116,15 @@ async def save_memory(
                     }
                 )
                 if not (isinstance(answer, dict) and answer.get("approve")):
+                    feedback = (
+                        answer.get("feedback")
+                        if isinstance(answer, dict)
+                        else None
+                    )
                     return (
                         "사용자가 메모리 변경을 거절했습니다. "
                         "이번 요청에만 반영하세요."
+                        + (f" 사용자 메시지: {feedback}" if feedback else "")
                     )
                 approved = True
             item = await memory.update(

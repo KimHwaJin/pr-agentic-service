@@ -11,24 +11,59 @@
 | 3 | 이후 모든 호출 | `credentials: "include"`로 쿠키를 보냅니다. GET 외 요청에는 `X-CSRF-Token: <csrf_token>` 헤더가 필요합니다. |
 | - | `POST /api/v1/auth/logout` | 서비스 세션만 종료합니다(사내 SSO 전체 로그아웃 아님). |
 
-`GET /api/v1/users/me` → `{user, default_project_id, models, default_model, default_code_level}`
+`GET /api/v1/users/me` → `{user, default_project_id}`
+
+`GET /api/v1/models` → `{items: [{name, label, default, input: ["text"] | ["text","image"], max_images}]}`: 고를 수 있는 모델(설정 파일 `config.<ENV>.yml`의 `models`). 요청의 `model`에는 `name`을 보내고, 화면에는 `label`(없으면 `name`)을 보여 줍니다. `input`에 `image`가 있는 모델만 이미지를 받습니다.
+
+**오류 응답:** 모든 오류는 `{"detail": "설명", "code": "기계가 읽는 코드", ...}`입니다. 요청 형식 오류는 `code: invalid_body`와 `errors: [{field, message}]`가 붙습니다.
 
 ## 2. 프로젝트·세션·메시지
 
 | Method | Path | 설명 |
 | --- | --- | --- |
 | GET/POST | `/projects` | 목록 / 생성 `{name, description?, system_prompt?, code_level?}` |
-| GET/PATCH/DELETE | `/projects/{id}` | `system_prompt`는 모든 Agent에 주입되는 프로젝트 지침입니다. 기본 프로젝트는 삭제할 수 없습니다. |
-| POST | `/projects/{id}/sessions` | `{message?, title?, code_level?, model_alias?}`. `message`가 있으면 세션을 만들고 바로 첫 턴을 시작합니다(응답 `{session, run}`). |
+| GET/PATCH/DELETE | `/projects/{id}` | `system_prompt`는 모든 Agent에 주입되는 프로젝트 지침입니다. 응답의 `effective_code_level`은 실제 적용되는 코드 레벨입니다. 기본 프로젝트는 삭제할 수 없습니다. |
+| POST | `/projects/{id}/sessions` | `{input?, title?, code_level?, model?}`. `input`이 있으면 세션을 만들고 바로 첫 턴을 시작합니다(응답 `{session, run}`). 첫 턴이 거절되면(모델 이름 오류 등) 세션도 만들지 않습니다. |
 | GET | `/projects/{id}/sessions?limit=&cursor=` | 세션 목록(최근 수정순). `{items, next_cursor}`. `active_run_id`가 있으면 작업 중입니다. |
-| GET/PATCH/DELETE | `/sessions/{id}` | `title`, `code_level`(1~4, null이면 프로젝트 기본값) 변경. `title_source`: `initial`(첫 메시지 앞부분) → `auto`(첫 답변 후 LLM 요약) / `user`(직접 변경, 이후 자동 변경 없음) |
-| GET | `/sessions/{id}/messages?limit=&cursor=` | 최근 `limit`개(페이지 안에서는 오래된 → 최신 순), `next_cursor`로 더 이전 메시지. assistant 메시지의 `attachments`에 리포트·노트북, `run_id`로 그 턴의 이벤트를 조회합니다. |
-| POST | `/sessions/{id}/messages` | `{content, model_alias?}` → 202 Run. **세션이 작업 중이면 409**입니다(세션당 동시 작업 1개). |
+| GET/PATCH/DELETE | `/sessions/{id}` | `title`, `code_level`(1~4, null이면 프로젝트 기본값) 변경. 응답의 `effective_code_level`은 세션 → 프로젝트 → 서비스 기본값 순으로 정해진 실제 값입니다. `title_source`: `initial`(첫 메시지 앞부분) → `auto`(첫 답변 후 LLM 요약) / `user`(직접 변경, 이후 자동 변경 없음) |
+| GET | `/sessions/{id}/messages?limit=&cursor=` | 대화 기록(읽기 전용). 최근 `limit`개(페이지 안에서는 오래된 → 최신 순), `next_cursor`로 더 이전 메시지. user 메시지의 `attachments`에 보낸 이미지(`{kind: image, image_id, name, width, height}`), assistant 메시지의 `attachments`에 리포트·노트북, `run_id`로 그 턴의 이벤트를 조회합니다. |
+| POST | `/sessions/{id}/runs` | **에이전트 실행.** 새 턴 `{input, model?}` 또는 재개 `{command: {resume: {interrupt_id, value}}}` → 202 `{run, resumed}`. 아래 "에이전트 실행" 참고. |
 | GET | `/sessions/{id}/runs?limit=&cursor=` | run 이력 `{items, next_cursor}` |
 | GET | `/runs/{id}/events?types=` | 그 턴의 저장된 이벤트를 순서대로 반환(작업 단계, 계획 승인, 실행 결과, 결과물 등). 지난 대화를 다시 그릴 때 씁니다. `types=execution_completed,artifact`처럼 거를 수 있습니다. 토큰·executor 진행 이벤트는 저장하지 않습니다. |
 | GET | `/runs/{id}` | `status`: `queued`, `running`, `waiting_input`, `waiting_executor`, `succeeded`, `failed`, `cancelled` |
-| POST | `/runs/{id}/resume` | HITL 응답 `{interrupt_id, value}` (4장) |
 | POST | `/runs/{id}/cancel` | 취소. 실행 중인 executor 작업도 취소됩니다. |
+
+## 에이전트 실행: `POST /sessions/{id}/runs`
+
+본문에는 `input`과 `command` 중 **정확히 하나**를 담습니다. 선택 헤더 `Idempotency-Key`를 주면, 같은 키로 다시 보낸 요청은 처음 결과를 그대로 돌려받습니다(하루 보관, 본문이 다르면 409 `idempotency_conflict`).
+
+```json
+// 새 턴: content는 문자열, 또는 LangChain content block 목록
+{"input": {"content": "NCE 분석해줘"}, "model": "qwen38-27b-nvfp4"}
+{"input": {"content": [
+   {"type": "text", "text": "이 웨이퍼 맵에서 이상 패턴 찾아줘"},
+   {"type": "image", "base64": "iVBOR…", "mime_type": "image/png", "name": "wafer.png"}
+ ]}, "model": "qwen3-vl-30b-fp8"}
+
+// 재개: hitl_request(또는 Run.waiting)의 interrupt_id와 답(4장)
+{"command": {"resume": {"interrupt_id": "…", "value": {"action": "approve", "index": 0}}}}
+```
+
+- 응답 202 `{run, resumed}`. 새 턴이면 `resumed: false`와 새 run, 재개면 `resumed: true`와 기다리던 그 run(같은 id)입니다. 진행은 SSE로 받습니다.
+- **이미지:** `image/png`, `image/jpeg`, `image/webp`만, 장당 10MB, 합계 20MB, 장수는 모델의 `max_images`까지. 긴 변이 1568px를 넘으면 서버가 줄입니다. 대화 기록에서는 `GET /api/v1/images/{image_id}`로 보여 줍니다. 모델은 최근 3턴의 이미지까지 봅니다.
+- **확인 대기 중에 `input`을 보내면** 그 글이 기다리던 확인에 대한 답이 됩니다: `question`은 답, `plan_approval`은 수정 요청 피드백, `code_approval`·`memory_change`·`workflow_save`는 거절 + 그 글을 에이전트에게 전달. 응답은 `resumed: true`이고, 글은 대화 기록에 user 메시지로 남습니다.
+
+| 상태 | code | 언제 |
+| --- | --- | --- |
+| 409 | `session_busy` | 다른 턴이 돌고 있음 (`run`에 진행 중인 run) |
+| 409 | `not_waiting` | 재개인데 기다리는 질문이 없음 (이미 답했거나 끝남, `run` 포함) |
+| 409 | `stale_interrupt` | `interrupt_id`가 지금 질문이 아님 (오래된 화면, `run.waiting`에 현재 질문) |
+| 409 | `idempotency_conflict` | 같은 키, 다른 본문 |
+| 422 | `invalid_body` | `input`/`command` 둘 다 또는 둘 다 없음, 형식 오류 (`errors`) |
+| 422 | `invalid_answer` | 답이 질문과 맞지 않음, 예: 후보 번호 범위 밖, 필수 입력 빈칸 (`errors`) |
+| 422 | `unknown_model` | `model`이 목록에 없음 (`models`) |
+| 422 | `model_not_multimodal` | 텍스트 전용 모델에 이미지 (`models`: 이미지 가능한 모델) |
+| 422 / 413 | `invalid_image` / `image_too_large` | 이미지가 아니거나 형식·장수·크기 초과 |
 
 ## 목록 페이지네이션
 
@@ -44,7 +79,7 @@
 
 | type | data | 화면 처리 |
 | --- | --- | --- |
-| `run_status` | `{status, execution_id?, operation_id?, steps?}` | 상태 표시. `waiting_executor`면 실행 중 단계 표시 |
+| `run_status` | `{status, execution_id?, operation_id?, steps?}` | 상태 표시. `waiting_executor`면 실행 중 단계 표시, `waiting_input`이면 확인 카드(입력창 글도 답으로 받음) |
 | `token` | `{text}` | 답변 스트리밍 |
 | `message_final` | `{content}` | 확정 답변 (Markdown) |
 | `tool_call` | `{name, args}` | 백그라운드 메시지 (Agent가 하는 일) |
@@ -62,7 +97,7 @@
 
 ## 4. HITL (사용자 확인)
 
-`hitl_request.type`별 화면과 `POST /runs/{run_id}/resume`의 `value`:
+`hitl_request.type`별 화면과 `POST /sessions/{id}/runs`의 `command.resume.value` (서버가 질문과 맞는지 먼저 검사하고, 맞지 않으면 422 `invalid_answer`):
 
 | type | 받는 데이터 | value |
 | --- | --- | --- |

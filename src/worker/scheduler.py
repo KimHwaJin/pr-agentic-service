@@ -19,8 +19,10 @@ from agent.graph import AgentGraphs
 from agent.titles import summarize_title
 from core.db import affected, get_row, utcnow
 from core.events import runs_wake_channel
+from core.executor.client import ExecutorError
 from core.models import (
     ChatSession,
+    CodeSource,
     ExecutorInbox,
     Message,
     Project,
@@ -179,10 +181,11 @@ class RunScheduler:
             project_id=run.project_id,
             user_id=run.user_id,
             employee_id=user.employee_id,
-            model_alias=run.model_alias,
+            model=run.model,
             code_level=level,
             project_prompt=project.system_prompt,
             user_text=run.input["text"],
+            user_content=run.input.get("content"),
         )
 
     async def _execute(self, run: Run) -> None:
@@ -202,6 +205,7 @@ class RunScheduler:
         except asyncio.CancelledError:
             if await self._cancel_requested(run.id):
                 await self._finish(run, ctx, "cancelled")
+                await self._cancel_executor(run.id)
             # otherwise lease lost or shutdown: the next owner continues from
             # the checkpoint
         except LeaseLost:
@@ -213,6 +217,33 @@ class RunScheduler:
             )
         finally:
             heartbeat.cancel()
+
+    async def _cancel_executor(self, run_id: str) -> None:
+        """Stop executor work this turn already sent (cancel while running).
+
+        The executor cancels the whole execution; the next turn starts a new
+        kernel. Already finished executions just refuse the cancel.
+        """
+        async with self.services.db.sessions() as db:
+            execution_id = await db.scalar(
+                select(CodeSource.execution_id)
+                .where(
+                    CodeSource.run_id == run_id,
+                    CodeSource.execution_id.is_not(None),
+                )
+                .order_by(CodeSource.created_at.desc())
+                .limit(1)
+            )
+        if not execution_id:
+            return
+        try:
+            await self.services.executor.cancel(
+                execution_id,
+                idempotency_key=f"cancel:{run_id}",
+                reason="사용자 취소",
+            )
+        except ExecutorError:
+            pass  # already terminal
 
     async def _cancel_requested(self, run_id: str) -> bool:
         async with self.services.db.sessions() as db:
@@ -384,7 +415,7 @@ class RunScheduler:
             return
         try:
             title = await summarize_title(
-                self.settings, run.model_alias, ctx.user_text, answer
+                self.settings, run.model, ctx.user_text, answer
             )
         except Exception:  # noqa: BLE001 - keep the first-message title
             log.warning("auto_title_failed session=%s", run.session_id)

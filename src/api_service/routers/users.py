@@ -2,13 +2,13 @@ from fastapi import APIRouter, HTTPException
 from sqlalchemy import select
 
 from api_service.deps import AdminDep, ServicesDep, UserDep
-from api_service.schemas import UserAdminUpdate, UserRead
+from api_service.schemas import Me, UserAdminUpdate, UserRead
 from core.models import Project, ProjectMember, User
 
 router = APIRouter(tags=["users"])
 
 
-@router.get("/users/me")
+@router.get("/users/me", response_model=Me)
 async def me(services: ServicesDep, user: UserDep):
     async with services.db.sessions() as db:
         default_project = await db.scalar(
@@ -20,13 +20,9 @@ async def me(services: ServicesDep, user: UserDep):
                 Project.deleted_at.is_(None),
             )
         )
-    return {
-        "user": UserRead.model_validate(user),
-        "default_project_id": default_project,
-        "models": list(services.settings.llm_models),
-        "default_model": services.settings.llm_default_alias,
-        "default_code_level": services.settings.default_code_level,
-    }
+    return Me(
+        user=UserRead.model_validate(user), default_project_id=default_project
+    )
 
 
 @router.get("/admin/users", response_model=list[UserRead])

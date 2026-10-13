@@ -1,8 +1,8 @@
-from fastapi import APIRouter, FastAPI, Request
+from fastapi import APIRouter, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
+from api_service import errors
 from api_service.auth.adapters import load_adapter
 from api_service.auth.service import SsoService
 from api_service.auth.store import AuthStore
@@ -10,24 +10,33 @@ from api_service.routers import (
     artifacts,
     auth,
     batch,
+    images,
+    models,
     projects,
     sessions,
     users,
     workflows,
 )
 from core.config import ROOT, Settings
-from core.db import NotFound
 from core.services import Services
 
 
 def mount_api(app: FastAPI, settings: Settings) -> None:
     api = APIRouter(prefix=settings.api_prefix)
-    for module in (auth, users, projects, sessions, workflows):
+    for module in (
+        auth,
+        users,
+        models,
+        projects,
+        sessions,
+        images,
+        workflows,
+    ):
         api.include_router(module.router)
     app.include_router(api)
     app.include_router(artifacts.router)
     app.include_router(batch.router)
-    app.add_exception_handler(NotFound, _not_found)
+    errors.install(app)
     if settings.cors_origins:
         app.add_middleware(
             CORSMiddleware,
@@ -42,11 +51,6 @@ def mount_api(app: FastAPI, settings: Settings) -> None:
             StaticFiles(directory=ROOT / "web/dev", html=True),
             name="dev",
         )
-
-
-async def _not_found(request: Request, exc: Exception) -> JSONResponse:
-    # a row checked a moment ago was deleted concurrently
-    return JSONResponse({"detail": "Not found."}, status_code=404)
 
 
 def start_api(app: FastAPI, services: Services) -> None:

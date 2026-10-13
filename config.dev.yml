@@ -1,0 +1,35 @@
+# ENV=dev. Fill the <...> values; environment variables (Deployment env:) win over this file.
+env: dev
+database_url: postgresql+psycopg://<user>:<password>@<pg-host>:5432/agentic
+redis_url: redis://<redis-host>:6379/0
+redis_namespace: agentic
+
+sso_adapter: company
+sso_adapter_factory: "company_sso:create_sdk"
+public_api_origin: https://<api-host>
+frontend_origin: https://<front-host>
+sso_allowed_return_roots: ["/"]
+cors_origins: ["https://<front-host>"]
+cookie_secure: false
+
+llm_base_url: http://model.frodo.com/v1
+llm_api_key: <llm-api-key>
+llm_enable_thinking: false
+embedding_provider: none
+
+executor_base_url: http://<executor-host>:8000
+storage_root: /mnt/data/agent/pr-agentic-service
+storage_executor_path: pr-agentic-service
+executor_result_root: /mnt/data/executor
+executor_runtime_profile: default
+notebook_lab_base_url: https://executor-jupyter-lab.frodo.com
+
+batch_base_url: http://<pr-batch-host>:8100
+batch_jwt_secret: <batch-jwt-secret>
+batch_report_jwt_secret: <batch-report-jwt-secret>
+
+models:
+  - name: qwen38-27b-nvfp4
+    label: Qwen 3.8 27B
+    default: true
+    input: [text]

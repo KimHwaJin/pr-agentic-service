@@ -26,24 +26,24 @@ class GatewayChatOpenAI(ChatOpenAI):
 _models: dict[str, BaseChatModel] = {}
 
 
-def chat_model(settings: Settings, alias: str) -> BaseChatModel:
-    """One client (and HTTP connection pool) per model alias.
+def chat_model(settings: Settings, name: str) -> BaseChatModel:
+    """One client (and HTTP connection pool) per served model name.
 
     Shared for the whole process.
     """
-    if alias not in _models:
-        _models[alias] = _build(settings, alias)
-    return _models[alias]
+    if name not in _models:
+        _models[name] = _build(settings, name)
+    return _models[name]
 
 
-def _build(settings: Settings, alias: str) -> BaseChatModel:
+def _build(settings: Settings, name: str) -> BaseChatModel:
     extra_body: dict[str, Any] = {}
     if settings.llm_enable_thinking is not None:
         extra_body["chat_template_kwargs"] = {
             "enable_thinking": settings.llm_enable_thinking
         }
     return GatewayChatOpenAI(
-        model=settings.llm_models[alias],
+        model=name,
         base_url=settings.llm_base_url,
         api_key=settings.llm_api_key,
         temperature=settings.llm_temperature,

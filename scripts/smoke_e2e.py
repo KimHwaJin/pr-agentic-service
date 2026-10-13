@@ -26,7 +26,8 @@ csrf = client.get("/api/v1/auth/session").json()["csrf_token"]
 client.headers["X-CSRF-Token"] = csrf
 project = client.get("/api/v1/users/me").json()["default_project_id"]
 started = client.post(
-    f"/api/v1/projects/{project}/sessions", json={"message": REQUEST}
+    f"/api/v1/projects/{project}/sessions",
+    json={"input": {"content": REQUEST}},
 ).json()
 session, run = started["session"]["id"], started["run"]["id"]
 print("session", session, "run", run)
@@ -63,9 +64,10 @@ while time.time() < deadline:
         else:
             answer = {"approve": True}
         print("HITL", waiting["type"], "->", answer)
+        resume = {"interrupt_id": waiting["interrupt_id"], "value": answer}
         client.post(
-            f"/api/v1/runs/{run}/resume",
-            json={"interrupt_id": waiting["interrupt_id"], "value": answer},
+            f"/api/v1/sessions/{session}/runs",
+            json={"command": {"resume": resume}},
         ).raise_for_status()
     elif state["status"] in {"succeeded", "failed", "cancelled"}:
         print("RUN", state["status"], state.get("error"))

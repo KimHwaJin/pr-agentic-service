@@ -12,7 +12,7 @@ from datetime import timedelta
 from sqlalchemy import delete, select
 
 from core.db import affected, utcnow
-from core.models import ExecutorInbox, RunEvent
+from core.models import ChatSession, ExecutorInbox, Image, RunEvent, RunRequest
 from core.services import Services
 
 log = logging.getLogger(__name__)
@@ -47,11 +47,35 @@ class Retention:
             ExecutorInbox.received_at,
             settings.executor_inbox_retention_days,
         )
+        await self._purge(
+            RunRequest,
+            RunRequest.key,
+            RunRequest.created_at,
+            settings.run_request_retention_days,
+        )
+        await self._purge_images(settings.image_retention_days)
         days = settings.code_source_retention_days
         removed = await self.services.code_sources.purge(days)
         removed += await asyncio.to_thread(self._purge_legacy_sources, days)
         if removed:
             log.info("code_sources_purged files=%s", removed)
+
+    async def _purge_images(self, days: int) -> None:
+        """Images of sessions deleted more than ``days`` ago."""
+        cutoff = utcnow() - timedelta(days=days)
+        while True:
+            async with self.services.db.sessions() as db:
+                ids = (
+                    await db.scalars(
+                        select(Image.id)
+                        .join(ChatSession, ChatSession.id == Image.session_id)
+                        .where(ChatSession.deleted_at < cutoff)
+                        .limit(BATCH)
+                    )
+                ).all()
+            await self.services.images.remove(list(ids))
+            if len(ids) < BATCH:
+                return
 
     def _purge_legacy_sources(self, days: int) -> int:
         """Files of the old hash-named layout (sources/<ab>/<sha>.py)."""
