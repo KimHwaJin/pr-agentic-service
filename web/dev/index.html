@@ -99,9 +99,6 @@
   .card { border: 1px solid var(--line); border-radius: 14px; background: var(--panel); box-shadow: var(--shadow); padding: 16px 18px; margin: 12px 0; }
   .card h4 { margin: 0 0 4px; font-size: 15px; }
   .card .sub { color: var(--muted); font-size: 13px; margin-bottom: 10px; }
-  .cand { border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; margin: 10px 0; display: block; cursor: pointer; }
-  .cand:has(input:checked) { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
-  .cand input[type=radio] { accent-color: var(--accent); margin-right: 8px; }
   .flow { font-size: 12.5px; color: var(--muted); margin: 6px 0 2px; }
   .flow span { display: inline-block; background: var(--code); border-radius: 6px; padding: 1px 7px; margin: 2px 2px; }
   .field { display: grid; grid-template-columns: 180px 1fr; gap: 8px; align-items: center; margin: 6px 0; font-size: 13px; }
@@ -214,6 +211,23 @@
   .cand-tab .ct b { font-weight: 600; }
   .cand-tab .ct .n { width: 20px; height: 20px; border-radius: 50%; background: var(--hover); display: grid; place-items: center; font-size: 11px; font-weight: 600; flex: none; }
   .cand-tab.on .ct .n { background: var(--accent); color: #fff; }
+  .cand { border: 1px solid var(--line); border-radius: 12px; background: var(--bg); overflow: hidden; }
+  .cand:has(> .cand-tab.on) { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+  .cand > .cand-tab { border: 0; border-radius: 0; background: transparent; box-shadow: none !important; }
+  .cand .cand-pane { display: none; padding: 4px 12px 12px; border-top: 1px solid var(--line); background: var(--panel); }
+  .cand.on .cand-pane { display: block; }
+  .cand .ct .state { margin-left: auto; font-size: 11.5px; }
+  .state.need { color: var(--accent); background: #fde9df; border-radius: 999px; padding: 2px 8px; font-size: 11.5px; }
+  .state.ok { color: var(--ok); }
+  .cand .skill-head { margin: 12px 2px 6px; }
+  .tool-row { border: 1px solid var(--line); border-radius: 10px; margin-bottom: 6px; background: var(--panel); }
+  .tool-row > summary { list-style: none; cursor: pointer; display: flex; align-items: center; gap: 7px; padding: 9px 12px; font-size: 13px; }
+  .tool-row > summary::-webkit-details-marker { display: none; }
+  .tool-row > summary .no { color: var(--faint); font-size: 11.5px; }
+  .tool-row > summary .tsum { color: var(--muted); font-size: 12px; margin: 0; flex: 1; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+  .tool-row > summary .chev { color: var(--faint); transition: transform .15s; }
+  .tool-row[open] > summary .chev { transform: rotate(90deg); }
+  .tool-row .tool-body { padding: 4px 12px 10px; border-top: 1px solid var(--line); }
   .crat { font-size: 12.5px; color: var(--muted); margin: 6px 0 2px 26px; line-height: 1.5; }
   .cand-tab .chain { margin-left: 26px; }
   .chain { display: flex; flex-wrap: wrap; gap: 4px 6px; margin-top: 6px; font-size: 11.5px; color: var(--muted); }
@@ -682,43 +696,44 @@ function renderPlanApproval(w, resume) {
   openHitlPanel(w, '실행 계획 확인', '실행 계획을 확인해 주세요', `후보 ${w.candidates.length}개 · 비어 있는 값을 채우고, Agent가 정한 값도 고칠 수 있습니다.`);
   const body = $('hitlBody'), foot = $('hitlFoot');
   const groupsOf = c => { const g = []; for (const call of c.calls) { if (!g.length || g.at(-1).skill !== call.skill) g.push({ skill: call.skill, desc: call.skill_description, calls: [] }); g.at(-1).calls.push(call); } return g; };
-  const tabs = w.candidates.map((c, i) => `<button class="cand-tab ${i === 0 ? 'on' : ''}" data-i="${i}">
-      <div class="ct"><span class="n">${i + 1}</span><b>${esc(c.title)}</b><span class="badge">${c.source ? '워크플로우' : '새 계획'}</span></div>
-      ${c.rationale ? `<div class="crat">${esc(c.rationale)}</div>` : ''}
-      <div class="chain">${groupsOf(c).map(g => `<span class="sk">${esc(g.skill)} <i>·</i> ${g.calls.map(x => esc(x.tool) + (x.execution === 'conditional' ? '?' : '')).join(', ')}</span>`).join('<span>→</span>')}</div>
-    </button>`).join('');
-  const panes = w.candidates.map((c, i) => `<div class="cand-pane" data-i="${i}" style="${i ? 'display:none' : ''}">
-      <div class="skill-head" style="margin:4px 0 8px"><b>${i + 1}번 계획의 파라미터</b><span>skill을 눌러 값을 확인·입력하세요</span></div>
-      ${groupsOf(c).map(g => `<details class="sg"><summary><span class="chev">›</span><span class="sname">${esc(g.skill)}</span><span class="cnt">tool ${g.calls.length}개 선택</span><span class="state"></span></summary>
-        <div class="sg-body"><div class="sdesc">${esc(g.desc)}</div>
-        ${g.calls.map(call => {
-          const shown = call.params.filter(p => p.source !== 'default'), defaults = call.params.filter(p => p.source === 'default');
-          return `<div class="tool-card"><div class="tname"><span class="no">#${call.index}</span>${esc(call.tool)}${call.execution === 'conditional' ? '<span class="badge">조건부</span>' : ''}</div>
-            <div class="tsum">${esc(call.summary)}</div>
-            ${call.condition ? `<div class="cond">실행 조건: ${esc(call.condition)} — 앞 단계 결과를 보고 Agent가 판단합니다.</div>` : ''}
-            ${shown.map(p => paramRow(p)).join('')}
-            ${defaults.length ? `<details class="defaults"><summary>기본값 사용 ${defaults.length}개 · ${defaults.map(p => esc(p.name)).join(', ')}</summary>${defaults.map(p => paramRow(p)).join('')}</details>` : ''}
-          </div>`;
-        }).join('')}</div></details>`).join('')}
+  // Accordion: plan -> its tools (grouped by skill) -> a tool's parameters
+  const items = w.candidates.map((c, i) => `<div class="cand ${i === 0 ? 'on' : ''}" data-i="${i}">
+      <button class="cand-tab ${i === 0 ? 'on' : ''}" data-i="${i}">
+        <div class="ct"><span class="n">${i + 1}</span><b>${esc(c.title)}</b><span class="badge">${c.source ? '워크플로우' : '새 계획'}</span><span class="state"></span></div>
+        ${c.rationale ? `<div class="crat">${esc(c.rationale)}</div>` : ''}
+        <div class="chain">${groupsOf(c).map(g => `<span class="sk">${esc(g.skill)} <i>·</i> ${g.calls.map(x => esc(x.tool) + (x.execution === 'conditional' ? '?' : '')).join(', ')}</span>`).join('<span>→</span>')}</div>
+      </button>
+      <div class="cand-pane">
+        ${groupsOf(c).map(g => `<div class="skill-head"><b>${esc(g.skill)}</b><span>${esc(g.desc)}</span></div>
+          ${g.calls.map(call => {
+            const shown = call.params.filter(p => p.source !== 'default'), defaults = call.params.filter(p => p.source === 'default');
+            return `<details class="tool-row"><summary><span class="chev">›</span><span class="no">#${call.index}</span><b>${esc(call.tool)}</b>${call.execution === 'conditional' ? '<span class="badge">조건부</span>' : ''}<span class="tsum">${esc(call.summary)}</span><span class="state"></span></summary>
+              <div class="tool-body">
+                ${call.condition ? `<div class="cond">실행 조건: ${esc(call.condition)} — 앞 단계 결과를 보고 Agent가 판단합니다.</div>` : ''}
+                ${shown.map(p => paramRow(p)).join('') || '<div class="tsum">설정할 파라미터가 없습니다.</div>'}
+                ${defaults.length ? `<details class="defaults"><summary>기본값 사용 ${defaults.length}개 · ${defaults.map(p => esc(p.name)).join(', ')}</summary>${defaults.map(p => paramRow(p)).join('')}</details>` : ''}
+              </div></details>`;
+          }).join('')}`).join('')}
+      </div>
     </div>`).join('');
-  body.innerHTML = `<div class="cand-tabs">${tabs}</div>${panes}`;
+  body.innerHTML = `<div class="cand-tabs">${items}</div>`;
   foot.innerHTML = `<div class="row"><input id="fb" placeholder="수정 요청 (예: 표본을 500개로, 상관분석도 추가)"><button class="btn" id="rev">수정 요청</button></div>
     <div class="row" style="justify-content:flex-end"><span id="need" style="flex:1;font-size:12px;color:var(--accent)"></span><button class="btn" id="no">취소</button><button class="btn primary" id="ok">승인하고 실행</button></div>`;
   let current = 0;
-  const pane = () => body.querySelector(`.cand-pane[data-i="${current}"]`);
+  const pane = () => body.querySelector(`.cand[data-i="${current}"] .cand-pane`);
   const check = () => {
-    body.querySelectorAll('.sg').forEach(g => {
-      const n = [...g.querySelectorAll('input[data-required="1"]')].filter(i => !i.value.trim()).length;
-      g.querySelector('.state').outerHTML = n ? `<span class="state need">입력 필요 ${n}</span>` : '<span class="state ok">✓ 준비됨</span>';
-    });
+    const missingIn = el => [...el.querySelectorAll('input[data-required="1"]')].filter(i => !i.value.trim()).length;
+    body.querySelectorAll('.tool-row').forEach(t => { const n = missingIn(t.querySelector('.tool-body')); t.querySelector(':scope > summary .state').outerHTML = n ? `<span class="state need">입력 ${n}</span>` : '<span class="state"></span>'; });
+    body.querySelectorAll('.cand').forEach(c => { const n = missingIn(c.querySelector('.cand-pane')); c.querySelector('.ct .state').outerHTML = n ? `<span class="state need">입력 필요 ${n}</span>` : '<span class="state ok">✓ 준비됨</span>'; });
     const missing = [...pane().querySelectorAll('input[data-required="1"]')].filter(i => !i.value.trim()).length;
     foot.querySelector('#need').textContent = missing ? `입력이 필요한 값 ${missing}개` : '';
     foot.querySelector('#ok').disabled = !!missing; foot.querySelector('#ok').style.opacity = missing ? .45 : 1;
   };
   body.querySelectorAll('.cand-tab').forEach(t => t.onclick = () => {
+    const item = t.closest('.cand'), reopen = !item.classList.contains('on');
     current = +t.dataset.i;
-    body.querySelectorAll('.cand-tab').forEach(x => x.classList.toggle('on', x === t));
-    body.querySelectorAll('.cand-pane').forEach(p => p.style.display = +p.dataset.i === current ? '' : 'none');
+    body.querySelectorAll('.cand').forEach(x => { x.classList.toggle('on', x === item && reopen); x.querySelector('.cand-tab').classList.toggle('on', x === item); });
+    if (!reopen) item.classList.remove('on');  // clicking the open plan folds it; it stays the selected one
     check();
   });
   body.addEventListener('input', check); check();
