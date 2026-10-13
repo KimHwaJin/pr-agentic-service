@@ -9,6 +9,12 @@ from core.workflows.spec import Call
 OBSERVATION_PREFIX = "AGENTIC_OBSERVATION "
 
 OBSERVE = """
+try:  # render figures as notebook outputs (visible in step results and the notebook)
+    get_ipython().run_line_magic("matplotlib", "inline")
+except Exception:
+    pass
+
+
 def _agentic_observe(name, value):
     import json
 

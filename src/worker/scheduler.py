@@ -267,7 +267,7 @@ class RunScheduler:
         if answer:
             await ctx.emit("message_final", {"content": answer})
         if error:
-            await ctx.emit("error", {"message": error})
+            await ctx.emit("run_error", {"message": error})
         await ctx.emit("run_status", {"status": status})
 
     async def progress(self, execution_id: str, event: dict[str, Any]) -> None:

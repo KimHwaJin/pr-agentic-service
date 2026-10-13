@@ -1,1 +1,257 @@
-<!doctype html><title>dev</title>
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Agentic 테스트 콘솔</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js"></script>
+<style>
+  :root { --line:#d0d7de; --muted:#59636e; --bg:#f6f8fa; --accent:#0969da; }
+  * { box-sizing: border-box; }
+  body { margin:0; font:14px/1.5 system-ui, sans-serif; color:#1f2328; display:grid; grid-template-columns:260px 1fr 320px; height:100vh; }
+  aside, main, section { overflow:auto; padding:12px; }
+  aside { border-right:1px solid var(--line); background:var(--bg); }
+  section { border-left:1px solid var(--line); background:var(--bg); }
+  main { display:flex; flex-direction:column; padding:0; }
+  h3 { margin:12px 0 6px; font-size:13px; color:var(--muted); text-transform:uppercase; }
+  button { cursor:pointer; border:1px solid var(--line); background:#fff; border-radius:6px; padding:4px 10px; }
+  button.primary { background:var(--accent); color:#fff; border-color:var(--accent); }
+  select, input, textarea { width:100%; border:1px solid var(--line); border-radius:6px; padding:4px 6px; font:inherit; }
+  .item { padding:4px 6px; border-radius:6px; cursor:pointer; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .item.active { background:#ddf4ff; }
+  #log { flex:1; overflow:auto; padding:16px; }
+  .msg { margin:10px 0; padding:10px 12px; border-radius:8px; max-width:900px; }
+  .user { background:#ddf4ff; margin-left:auto; }
+  .assistant { background:#fff; border:1px solid var(--line); }
+  .bg { color:var(--muted); font-size:12px; margin:2px 0; white-space:pre-wrap; }
+  .card { border:1px solid #d4a72c; background:#fff8c5; border-radius:8px; padding:10px; margin:10px 0; max-width:900px; }
+  .card pre, .msg pre { background:var(--bg); padding:8px; overflow:auto; }
+  .row { display:flex; gap:6px; align-items:center; margin:4px 0; }
+  .row label { min-width:160px; font-size:12px; }
+  #composer { display:flex; gap:8px; padding:12px; border-top:1px solid var(--line); }
+  #composer textarea { height:60px; }
+  #status { padding:4px 16px; font-size:12px; color:var(--muted); border-bottom:1px solid var(--line); }
+  img.out { max-width:420px; border:1px solid var(--line); margin:4px; }
+</style>
+</head>
+<body>
+<aside>
+  <div id="me">로그인 확인 중…</div>
+  <h3>프로젝트</h3>
+  <select id="projects"></select>
+  <div class="row"><input id="newProject" placeholder="새 프로젝트 이름"><button onclick="createProject()">추가</button></div>
+  <h3>세션 <button onclick="newSession()">+ 새 대화</button></h3>
+  <div id="sessions"></div>
+  <h3>설정</h3>
+  <div class="row"><label>모델</label><select id="model"></select></div>
+  <div class="row"><label>코드 레벨(세션)</label><select id="level"><option value="">프로젝트 기본</option><option>1</option><option>2</option><option>3</option><option>4</option></select></div>
+</aside>
+<main>
+  <div id="status">-</div>
+  <div id="log"></div>
+  <div id="composer">
+    <textarea id="input" placeholder="메시지를 입력하세요 (Ctrl+Enter 전송)"></textarea>
+    <div><button class="primary" onclick="send()">전송</button><br><br><button onclick="cancelRun()">취소</button></div>
+  </div>
+</main>
+<section>
+  <h3>프로젝트 메모리</h3>
+  <div id="memory"></div>
+  <select id="memCat"><option>background</option><option>analysis_preferences</option><option>report_preferences</option><option>shared_findings</option></select>
+  <input id="memTitle" placeholder="제목"><textarea id="memContent" placeholder="내용"></textarea>
+  <button onclick="addMemory()">메모리 추가</button>
+  <h3>워크플로우</h3>
+  <div id="workflows"></div>
+</section>
+<script>
+const API = '/api/v1';
+const S = { csrf: null, project: null, session: null, run: null, es: null, streamEl: null };
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const md = s => marked.parse(esc(s));
+
+async function api(path, opts = {}) {
+  const headers = { 'Content-Type': 'application/json', ...(S.csrf ? { 'X-CSRF-Token': S.csrf } : {}) };
+  const r = await fetch(API + path, { credentials: 'include', ...opts, headers, body: opts.body && JSON.stringify(opts.body) });
+  if (r.status === 401) { location.href = `${API}/auth/login/sso?return_to=/dev/`; throw new Error('login'); }
+  const data = r.status === 204 ? null : await r.json();
+  if (!r.ok) { alert(JSON.stringify(data)); throw new Error(r.status); }
+  return data;
+}
+
+async function boot() {
+  S.csrf = (await api('/auth/session')).csrf_token;
+  const me = await api('/users/me');
+  $('me').innerHTML = `<b>${esc(me.user.name)}</b> (${esc(me.user.employee_id)})`;
+  $('model').innerHTML = me.models.map(m => `<option ${m === me.default_model ? 'selected' : ''}>${esc(m)}</option>`).join('');
+  await loadProjects(me.default_project_id);
+}
+
+async function loadProjects(select) {
+  const list = await api('/projects');
+  $('projects').innerHTML = list.map(p => `<option value="${p.id}">${esc(p.name)}</option>`).join('');
+  $('projects').value = select || S.project || list[0].id;
+  await selectProject($('projects').value);
+}
+$('projects').onchange = e => selectProject(e.target.value);
+
+async function createProject() {
+  const name = $('newProject').value.trim(); if (!name) return;
+  const p = await api('/projects', { method: 'POST', body: { name } });
+  $('newProject').value = ''; await loadProjects(p.id);
+}
+
+async function selectProject(id) {
+  S.project = id; S.session = null; $('log').innerHTML = '';
+  await Promise.all([loadSessions(), loadMemory(), loadWorkflows()]);
+}
+
+async function loadSessions() {
+  const list = await api(`/projects/${S.project}/sessions`);
+  $('sessions').innerHTML = list.map(s => `<div class="item ${s.id === S.session ? 'active' : ''}" onclick="openSession('${s.id}')">${s.active_run_id ? '⏳ ' : ''}${esc(s.title)}</div>`).join('') || '<div class="bg">세션 없음. 메시지를 보내면 새로 만듭니다.</div>';
+}
+
+function newSession() { S.session = null; S.run = null; closeStream(); $('log').innerHTML = ''; $('status').textContent = '새 대화'; loadSessions(); }
+
+async function openSession(id) {
+  S.session = id; closeStream(); $('log').innerHTML = '';
+  const session = await api(`/sessions/${id}`);
+  $('level').value = session.code_level ?? '';
+  for (const m of await api(`/sessions/${id}/messages`)) addMessage(m.role, m.content, m.attachments);
+  S.run = session.active_run_id;
+  if (S.run) { const run = await api(`/runs/${S.run}`); if (run.status === 'waiting_input') renderHitl(run.id, run.waiting); }
+  openStream(); loadSessions();
+}
+
+$('level').onchange = async e => { if (S.session) await api(`/sessions/${S.session}`, { method: 'PATCH', body: { code_level: e.target.value ? +e.target.value : null } }); };
+$('input').onkeydown = e => { if (e.key === 'Enter' && e.ctrlKey) send(); };
+
+async function send() {
+  const text = $('input').value.trim(); if (!text) return;
+  $('input').value = ''; addMessage('user', text);
+  const model_alias = $('model').value;
+  if (!S.session) {
+    const level = $('level').value ? +$('level').value : null;
+    const r = await api(`/projects/${S.project}/sessions`, { method: 'POST', body: { message: text, model_alias, code_level: level } });
+    S.session = r.session.id; S.run = r.run.id; openStream(); loadSessions();
+  } else {
+    S.run = (await api(`/sessions/${S.session}/messages`, { method: 'POST', body: { content: text, model_alias } })).id;
+  }
+}
+
+async function cancelRun() { if (S.run) await api(`/runs/${S.run}/cancel`, { method: 'POST' }); }
+
+function closeStream() { if (S.es) S.es.close(); S.es = null; }
+function openStream() {
+  closeStream();
+  S.es = new EventSource(`${API}/sessions/${S.session}/events`, { withCredentials: true });
+  const on = (type, fn) => S.es.addEventListener(type, e => fn(JSON.parse(e.data)));
+  on('token', e => { if (!S.streamEl) S.streamEl = addMessage('assistant', ''); S.streamEl.dataset.raw += e.data.text; S.streamEl.innerHTML = md(S.streamEl.dataset.raw); scroll(); });
+  on('message_final', e => { if (S.streamEl) S.streamEl.remove(); S.streamEl = null; addMessage('assistant', e.data.content); });
+  on('run_status', e => { S.run = e.run_id; $('status').textContent = `run ${e.run_id.slice(0, 8)} · ${e.data.status}${e.data.steps ? ' · 실행 중: ' + e.data.steps.join(', ') : ''}`; if (['succeeded','failed','cancelled'].includes(e.data.status)) loadSessions(); });
+  on('tool_call', e => bg(`🔧 ${e.data.name} ${JSON.stringify(e.data.args).slice(0, 300)}`));
+  on('agent_switched', e => bg(`👤 담당 전환 → ${e.data.agent}`));
+  on('plan_approved', e => bg(`✅ 계획 승인: ${e.data.title}`));
+  on('plan_auto_approved', e => bg(`⚡ 즉시 실행 템플릿: ${e.data.title}`));
+  on('plan_revised', e => bg(`✏️ 인자 수정: ${e.data.call}`));
+  on('execution_progress', e => bg(`⚙️ ${e.data.event_type} ${e.data.step ? '#' + e.data.step.sequence : ''} ${e.data.status || ''}`));
+  on('execution_completed', e => renderResults(e.data));
+  on('hitl_request', e => renderHitl(e.run_id, e.data));
+  on('hitl_resolved', e => document.querySelectorAll(`[data-interrupt="${e.data.interrupt_id}"]`).forEach(n => n.remove()));
+  on('artifact', e => bg(`📄 <a target="_blank" href="/view/artifacts/${e.data.artifact_id}">${esc(e.data.title)}</a>`, true));
+  on('memory_updated', e => { bg(`🧠 메모리 ${e.data.action}: ${esc(e.data.item.title || e.data.item.id)}`); loadMemory(); });
+  on('workflow_saved', e => { bg(`💾 워크플로우 저장: ${esc(e.data.name)}`); loadWorkflows(); });
+  on('run_error', e => bg(`❌ ${esc(e.data.message)}`));
+}
+
+function scroll() { $('log').scrollTop = $('log').scrollHeight; }
+function bg(html, raw) { const d = document.createElement('div'); d.className = 'bg'; d.innerHTML = raw ? html : esc(html); $('log').appendChild(d); scroll(); }
+function addMessage(role, content, attachments = []) {
+  const d = document.createElement('div'); d.className = `msg ${role}`; d.dataset.raw = content;
+  d.innerHTML = md(content) + (attachments || []).map(a => `<div>📄 <a target="_blank" href="/view/artifacts/${a.artifact_id}">${esc(a.title)}</a></div>`).join('');
+  $('log').appendChild(d); scroll(); return d;
+}
+
+function renderResults(data) {
+  const lines = Object.entries(data.results).map(([k, v]) => {
+    const imgs = (v.images || []).map(p => `<img class="out" src="${API}/sessions/${S.session}/outputs?execution_id=${data.execution_id}&path=${encodeURIComponent(p)}">`).join('');
+    return `<div><b>${esc(k)}</b> ${esc(v.status)} ${v.error ? '— ' + esc(v.error) : ''}<pre>${esc((v.stdout || '').slice(-800))}</pre>${imgs}</div>`;
+  });
+  const d = document.createElement('details'); d.className = 'bg';
+  d.innerHTML = `<summary>📊 실행 결과 (${Object.keys(data.results).length}개 step)</summary>${lines.join('')}`;
+  $('log').appendChild(d); scroll();
+}
+
+function renderHitl(runId, w) {
+  const card = document.createElement('div'); card.className = 'card'; card.dataset.interrupt = w.interrupt_id;
+  const resume = async value => { await api(`/runs/${runId}/resume`, { method: 'POST', body: { interrupt_id: w.interrupt_id, value } }); card.remove(); };
+  if (w.type === 'question') {
+    card.innerHTML = `<b>❓ ${esc(w.question)}</b><div>${(w.options || []).map((o, i) => `<button data-i="${i}">${esc(o)}</button>`).join(' ')}</div>
+      ${(w.fields || []).map(f => `<div class="row"><label>${esc(f.label || f.key)}</label><input data-key="${esc(f.key)}"></div>`).join('')}
+      <div class="row"><input placeholder="직접 입력" id="free"><button class="primary">답변</button></div>`;
+    card.querySelectorAll('button[data-i]').forEach(b => b.onclick = () => resume(w.options[+b.dataset.i]));
+    card.querySelector('.primary').onclick = () => {
+      const fields = Object.fromEntries([...card.querySelectorAll('input[data-key]')].map(i => [i.dataset.key, i.value]));
+      resume(Object.keys(fields).length ? { ...fields, text: card.querySelector('#free').value } : card.querySelector('#free').value);
+    };
+  } else if (w.type === 'plan_approval') {
+    card.innerHTML = `<b>📋 실행 계획 후보 (하나를 골라 승인)</b>` + w.candidates.map((c, i) => `
+      <div style="border-top:1px solid #d4a72c;margin-top:8px;padding-top:6px">
+        <label><input type="radio" name="cand" value="${i}" ${i === 0 ? 'checked' : ''} style="width:auto"> <b>${esc(c.title)}</b> ${c.source ? `(워크플로우: ${esc(c.source.name)})` : '(새 계획)'}</label>
+        <div class="bg">${esc(c.rationale)}</div>
+        <div class="bg">${c.document.workflow.steps.map(s => s.skill + ': ' + s.tools.map(t => t.tool + (t.execution === 'conditional' ? '(조건부)' : '')).join(', ')).join(' → ')}</div>
+        ${c.input_slots.map(s => `<div class="row"><label>${s.required ? '* ' : ''}${esc(s.key)} <small>${esc(s.type || '')}</small></label><input data-cand="${i}" data-key="${esc(s.key)}" value='${esc(s.value === null || s.value === undefined ? '' : JSON.stringify(s.value))}' placeholder="JSON 값 (예: &quot;nce&quot;, 500, [&quot;a&quot;])"></div>`).join('')}
+      </div>`).join('') + `<div class="row" style="margin-top:8px"><button class="primary" id="ok">승인</button><input id="fb" placeholder="수정 요청 내용"><button id="rev">수정 요청</button><button id="no">취소</button></div>`;
+    card.querySelector('#ok').onclick = () => {
+      const index = +card.querySelector('input[name=cand]:checked').value; const input_values = {};
+      for (const el of card.querySelectorAll(`input[data-cand="${index}"]`)) if (el.value.trim()) {
+        try { input_values[el.dataset.key] = JSON.parse(el.value); } catch { input_values[el.dataset.key] = el.value; }
+      }
+      resume({ action: 'approve', index, input_values });
+    };
+    card.querySelector('#rev').onclick = () => resume({ action: 'revise', feedback: card.querySelector('#fb').value });
+    card.querySelector('#no').onclick = () => resume({ action: 'cancel' });
+  } else if (w.type === 'code_approval') {
+    card.innerHTML = `<b>🧩 Agent가 작성한 코드 실행 승인</b><div>${esc(w.purpose)}</div><textarea id="code" style="height:220px;font-family:monospace">${esc(w.code)}</textarea>
+      <div class="row"><button class="primary" id="ok">실행</button><input id="fb" placeholder="거절 사유"><button id="no">거절</button></div>`;
+    card.querySelector('#ok').onclick = () => resume({ approve: true, code: card.querySelector('#code').value });
+    card.querySelector('#no').onclick = () => resume({ approve: false, feedback: card.querySelector('#fb').value });
+  } else if (w.type === 'memory_change') {
+    card.innerHTML = `<b>🧠 사용자가 작성한 메모리를 바꿀까요?</b><pre>현재: ${esc(w.item.title)} — ${esc(w.item.content)}\n제안: ${esc(w.proposed.title)} — ${esc(w.proposed.content)}</pre><div class="bg">${esc(w.reason)}</div>
+      <button class="primary" id="ok">변경</button> <button id="no">유지</button>`;
+    card.querySelector('#ok').onclick = () => resume({ approve: true });
+    card.querySelector('#no').onclick = () => resume({ approve: false });
+  } else if (w.type === 'workflow_save') {
+    card.innerHTML = `<b>💾 이 분석을 워크플로우로 저장할까요?</b>${w.excluded_custom_steps ? `<div class="bg">Agent 작성 코드 ${w.excluded_custom_steps}개는 제외됩니다.</div>` : ''}
+      <div class="row"><label>이름</label><input id="name" value="${esc(w.name)}"></div>
+      <div class="row"><label>예시 질문(줄바꿈 구분)</label><textarea id="q">${esc(w.user_queries.join('\n'))}</textarea></div>
+      <button class="primary" id="ok">저장</button> <button id="no">저장 안 함</button>`;
+    card.querySelector('#ok').onclick = () => resume({ approve: true, name: card.querySelector('#name').value, user_queries: card.querySelector('#q').value.split('\n').filter(Boolean) });
+    card.querySelector('#no').onclick = () => resume({ approve: false });
+  }
+  $('log').appendChild(card); scroll();
+}
+
+async function loadMemory() {
+  const m = await api(`/projects/${S.project}/memory`);
+  $('memory').innerHTML = `<div class="bg">${m.total_chars}/${m.max_chars}자</div>` + m.items.map(i => `
+    <div class="bg" title="${esc(i.content)}">[${esc(i.category)}] <b>${esc(i.title)}</b> ${i.author === 'user' ? '🔒' : '🤖'} v${i.version}
+    <a href="#" onclick="delMemory('${i.id}', ${i.version});return false">삭제</a><br>${esc(i.content)}</div>`).join('');
+}
+async function addMemory() {
+  await api(`/projects/${S.project}/memory`, { method: 'POST', body: { category: $('memCat').value, title: $('memTitle').value, content: $('memContent').value } });
+  $('memTitle').value = $('memContent').value = ''; loadMemory();
+}
+async function delMemory(id, v) { await api(`/projects/${S.project}/memory/${id}?expected_version=${v}`, { method: 'DELETE' }); loadMemory(); }
+
+async function loadWorkflows() {
+  const list = await api('/workflows');
+  $('workflows').innerHTML = list.map(w => `<div class="bg"><b>${esc(w.name)}</b> [${w.lifecycle}] r${w.revision} ${w.index_state}
+    ${w.lifecycle === 'candidate' ? `<a href="#" onclick="promote('${w.id}');return false">승격</a>` : ''}</div>`).join('') || '<div class="bg">없음</div>';
+}
+async function promote(id) { await api(`/workflows/${id}/promote`, { method: 'POST' }); loadWorkflows(); }
+
+boot();
+</script>
+</body>
+</html>

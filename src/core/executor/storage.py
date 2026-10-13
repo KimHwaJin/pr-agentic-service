@@ -32,7 +32,7 @@ class SharedStorage:
             raise ValueError("result path escapes the shared root")
         return path
 
-    def read_step_outputs(self, result_ref: dict[str, Any] | None, max_chars: int = 4000) -> dict[str, Any]:
+    def read_step_outputs(self, result_ref: dict[str, Any] | None, max_chars: int = 12000) -> dict[str, Any]:
         """Bounded view of one Step manifest for the model and the UI."""
         if not result_ref:
             return {"available": False}
@@ -41,15 +41,15 @@ class SharedStorage:
         images: list[str] = []
         budget = max_chars
         for output in manifest.get("outputs", []):
-            for rep in output.get("representations", []):
-                media = rep.get("media_type", "")
-                if media.startswith("image/"):
-                    images.append(rep["relative_path"])
-                elif media in TEXT_TYPES and budget > 0:
-                    text = self.resolve_result(rep["relative_path"]).read_text("utf-8", errors="replace")
-                    texts.append(text[:budget])
-                    budget -= len(texts[-1])
-                    break  # one text representation per output is enough
+            reps = output.get("representations", [])
+            images += [r["relative_path"] for r in reps if r.get("media_type", "").startswith("image/")]
+            if any(r.get("media_type", "").startswith("image/") for r in reps):
+                continue  # a figure's text/plain twin ("<Figure ...>") adds nothing
+            text_rep = next((r for r in reps if r.get("media_type") in TEXT_TYPES), None)
+            if text_rep and budget > 0:
+                text = self.resolve_result(text_rep["relative_path"]).read_text("utf-8", errors="replace")
+                texts.append(text[:budget])
+                budget -= len(texts[-1])
         return {
             "available": True,
             "complete": manifest.get("complete", False),
