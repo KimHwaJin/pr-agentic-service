@@ -431,8 +431,11 @@ async function selectProject(id) {
 }
 
 let sessionCache = [];
-async function loadSessions() {
-  sessionCache = await api(`/projects/${S.project}/sessions`);
+let sessionCursor = null;
+async function loadSessions(more = false) {
+  const page = await api(`/projects/${S.project}/sessions?limit=50${more && sessionCursor ? `&cursor=${encodeURIComponent(sessionCursor)}` : ''}`);
+  sessionCache = more ? [...sessionCache, ...page.items] : page.items;
+  sessionCursor = page.next_cursor;
   renderSessions();
 }
 function renderSessions() {
@@ -441,6 +444,7 @@ function renderSessions() {
   $('sessions').innerHTML = list.map(s => `<div class="item ${s.id === S.session ? 'active' : ''}" role="button" tabindex="0" onclick="openSession('${s.id}')">${s.active_run_id ? '<span class="dot"></span>' : '<span class="bullet"></span>'}${esc(s.title)}
       <span class="acts"><span title="이름 바꾸기" onclick="event.stopPropagation(); renameSession('${s.id}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20h4L19 9l-4-4L4 16z"/></svg></span><span title="삭제" onclick="event.stopPropagation(); deleteSession('${s.id}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg></span></span></div>`).join('')
     || `<div style="padding:8px 10px;color:var(--faint);font-size:13px">${q ? '검색 결과가 없습니다' : '아직 대화가 없습니다'}</div>`;
+  if (sessionCursor) $('sessions').insertAdjacentHTML('beforeend', '<button class="item" style="color:var(--faint)" onclick="loadSessions(true)">더 보기…</button>');
 }
 $('sessionSearch').addEventListener('input', renderSessions);
 
@@ -544,7 +548,7 @@ async function openSession(id) {
   showChat(); closeHitl(); S.session = id; closeStream(); $('log').innerHTML = ''; S.answerEl = S.activity = null;
   const session = await api(`/sessions/${id}`);
   $('title').textContent = session.title; $('level').value = session.code_level ?? '';
-  for (const m of await api(`/sessions/${id}/messages`)) m.role === 'user' ? addUser(m.content) : addAnswer(m.content, m.attachments);
+  await renderMessages(id);
   S.run = session.active_run_id; setBusy(!!S.run);
   if (S.run) { const run = await api(`/runs/${S.run}`); if (run.status === 'waiting_input') renderHitl(run.id, run.waiting); }
   openStream(); loadSessions();
@@ -569,6 +573,40 @@ async function deleteSession(id) {
   }
   await api(`/sessions/${id}`, { method: 'DELETE' });
   if (id === S.session) newSession(); else loadSessions();
+}
+
+/* past turns: messages page by page, each answered turn redrawn from GET /runs/{id}/events */
+async function renderMessages(sessionId, cursor = null) {
+  const page = await api(`/sessions/${sessionId}/messages?limit=30${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`);
+  const frag = document.createElement('div');
+  const log = $('log'); const target = frag;
+  const append = el => target.appendChild(el);
+  for (const m of page.items) {
+    if (m.role === 'user') { const d = document.createElement('div'); d.className = 'turn-user'; d.innerHTML = `<div class="bubble">${esc(m.content)}</div>`; append(d); continue; }
+    if (m.run_id) for (const el of await runHistory(m.run_id)) append(el);
+    const d = document.createElement('div'); d.className = 'answer'; d.dataset.raw = m.content; d.innerHTML = md(m.content); append(d);
+    if (m.attachments?.length) { const f = document.createElement('div'); f.className = 'files'; f.innerHTML = fileCards(m.attachments); append(f); }
+  }
+  if (page.next_cursor) {
+    const more = document.createElement('button'); more.className = 'ghost'; more.style.cssText = 'display:block;margin:0 auto 8px';
+    more.textContent = '이전 대화 더 보기'; more.onclick = async () => { more.remove(); const keep = log.firstChild; const older = await renderMessages(sessionId, page.next_cursor); log.insertBefore(older, keep); };
+    frag.prepend(more);
+  }
+  if (!cursor) { log.appendChild(frag); scrollDown(); }
+  return frag;
+}
+async function runHistory(runId) {
+  const { items } = await api(`/runs/${runId}/events?types=tool_call,plan_approved,execution_completed`);
+  const out = [];
+  const steps = items.filter(e => e.type !== 'execution_completed');
+  if (steps.length) {
+    const act = document.createElement('details'); act.className = 'activity'; act.dataset.done = '1';
+    act.innerHTML = `<summary><span class="done-ico"></span><span class="t">작업 ${steps.length}단계</span><span class="chev">›</span></summary><div class="steps">${steps.map(e =>
+      `<div class="step"><span class="ico">${e.type === 'plan_approved' ? '✓' : '·'}</span><span>${esc(e.type === 'plan_approved' ? `계획 승인 · ${e.data.title}` : (TOOL_TEXT[e.data.name] || (() => e.data.name))(e.data.args || {}))}</span></div>`).join('')}</div>`;
+    out.push(act);
+  }
+  items.filter(e => e.type === 'execution_completed').forEach((e, i) => out.push(resultCard(e.data, i + 1)));
+  return out;
 }
 
 $('level').onchange = async e => { if (S.session) await api(`/sessions/${S.session}`, { method: 'PATCH', body: { code_level: e.target.value ? +e.target.value : null } }); };
@@ -642,9 +680,11 @@ function addAnswer(content, attachments = []) {
   const d = document.createElement('div'); d.className = 'answer'; d.dataset.raw = content; d.innerHTML = md(content);
   logEl().appendChild(d); if (attachments?.length) addFiles(attachments); scrollDown(); return d;
 }
+function fileCards(items) {
+  return items.map(a => `<a class="file" target="_blank" href="/view/artifacts/${a.artifact_id}"><span class="fi">${a.kind === 'notebook' ? 'IPYNB' : 'MD'}</span><span>${esc(a.title)}<small>${a.kind === 'notebook' ? '노트북' : '리포트'} · 열기</small></span></a>`).join('');
+}
 function addFiles(items) {
-  const wrap = document.createElement('div'); wrap.className = 'files';
-  wrap.innerHTML = items.map(a => `<a class="file" target="_blank" href="/view/artifacts/${a.artifact_id}"><span class="fi">${a.kind === 'notebook' ? 'IPYNB' : 'MD'}</span><span>${esc(a.title)}<small>${a.kind === 'notebook' ? '노트북' : '리포트'} · 열기</small></span></a>`).join('');
+  const wrap = document.createElement('div'); wrap.className = 'files'; wrap.innerHTML = fileCards(items);
   logEl().appendChild(wrap); scrollDown();
 }
 function showError(msg) { const d = document.createElement('div'); d.className = 'error'; d.textContent = msg; logEl().appendChild(d); scrollDown(); }
@@ -671,12 +711,11 @@ function step(kind, text) {
   S.activity.querySelector('.steps').appendChild(d); setActivityTitle(text);
 }
 
-function renderResults(data) {
+function resultCard(data, n) {
   const entries = Object.entries(data.results);
   const ok = entries.filter(([, v]) => v.status === 'SUCCEEDED').length;
   const d = document.createElement('details'); d.className = 'result';
-  S.resultCount = (S.resultCount || 0) + 1;
-  const label = S.resultCount === 1 ? '실행 결과' : `실행 결과 ${S.resultCount} · 이어서 실행 (같은 커널)`;
+  const label = n === 1 ? '실행 결과' : `실행 결과 ${n} · 이어서 실행 (같은 커널)`;
   d.innerHTML = `<summary>📊 <b>${label}</b><span class="badge ${ok === entries.length ? 'ok' : 'bad'}">${ok}/${entries.length} 성공</span></summary><div class="body">` +
     entries.map(([k, v]) => {
       const imgs = (v.images || []).map(p => `<img src="${API}/sessions/${S.session}/outputs?execution_id=${data.execution_id}&path=${encodeURIComponent(p)}" onclick="zoom(this.src)">`).join('');
@@ -684,7 +723,12 @@ function renderResults(data) {
       const out = (v.error || v.stdout || '').trim();
       return `<div class="res-step"><div class="head"><b>${esc(k)}</b><span class="badge ${cls}">${esc(v.status)}</span></div>${out ? `<pre>${esc(out.slice(-1500))}</pre>` : ''}${imgs ? `<div class="imgs">${imgs}</div>` : ''}</div>`;
     }).join('') + '</div>';
-  d.open = entries.some(([, v]) => v.images?.length);
+  return d;
+}
+function renderResults(data) {
+  S.resultCount = (S.resultCount || 0) + 1;
+  const d = resultCard(data, S.resultCount);
+  d.open = Object.values(data.results).some(v => v.images?.length);
   // keep result blocks in execution order, right after the work log of this turn
   if (S.resultAnchor && S.resultAnchor.isConnected && S.activity && !S.activity.dataset.done) S.resultAnchor.after(d);
   else logEl().appendChild(d);

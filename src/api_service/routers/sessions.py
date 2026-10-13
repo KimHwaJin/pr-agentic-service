@@ -6,20 +6,24 @@ from fastapi import APIRouter, HTTPException, Request, Response
 from fastapi.responses import FileResponse, StreamingResponse
 from sqlalchemy import select, update
 
+from api_service import pagination
 from api_service.deps import ServicesDep, UserDep, project_for, session_for
 from api_service.schemas import (
     MessageCreate,
-    MessageRead,
+    MessagePage,
     ResumeRequest,
+    RunEvents,
+    RunPage,
     RunRead,
     SessionCreate,
+    SessionPage,
     SessionRead,
     SessionStart,
     SessionUpdate,
 )
 from core.db import utcnow
 from core.executor.client import ExecutorError
-from core.models import ChatSession, Message, Run, User
+from core.models import ChatSession, Message, Run, RunEvent, User
 from core.services import Services
 
 router = APIRouter(tags=["sessions"])
@@ -75,16 +79,28 @@ async def create_session(project_id: str, body: SessionCreate, services: Service
     return SessionStart(session=SessionRead.model_validate(session), run=RunRead.model_validate(run) if run else None)
 
 
-@router.get("/projects/{project_id}/sessions", response_model=list[SessionRead])
-async def list_sessions(project_id: str, services: ServicesDep, user: UserDep):
+@router.get("/projects/{project_id}/sessions", response_model=SessionPage)
+async def list_sessions(
+    project_id: str, services: ServicesDep, user: UserDep, limit: int = pagination.Limit, cursor: str | None = None
+):
+    """Most recently updated first."""
     await project_for(services, user, project_id)
     async with services.db.sessions() as db:
-        rows = await db.scalars(
-            select(ChatSession)
-            .where(ChatSession.project_id == project_id, ChatSession.deleted_at.is_(None))
-            .order_by(ChatSession.updated_at.desc())
-        )
-        return rows.all()
+        rows = (
+            await db.scalars(
+                select(ChatSession)
+                .where(
+                    ChatSession.project_id == project_id,
+                    ChatSession.deleted_at.is_(None),
+                    pagination.older_than(ChatSession.updated_at, ChatSession.id, cursor),
+                )
+                .order_by(ChatSession.updated_at.desc(), ChatSession.id.desc())
+                .limit(limit + 1)
+            )
+        ).all()
+    page = rows[:limit]
+    more = len(rows) > limit
+    return SessionPage(items=page, next_cursor=pagination.encode(page[-1].updated_at, page[-1].id) if more else None)
 
 
 @router.get("/sessions/{session_id}", response_model=SessionRead)
@@ -116,12 +132,26 @@ async def delete_session(session_id: str, services: ServicesDep, user: UserDep):
     return Response(status_code=204)
 
 
-@router.get("/sessions/{session_id}/messages", response_model=list[MessageRead])
-async def list_messages(session_id: str, services: ServicesDep, user: UserDep):
+@router.get("/sessions/{session_id}/messages", response_model=MessagePage)
+async def list_messages(
+    session_id: str, services: ServicesDep, user: UserDep, limit: int = pagination.Limit, cursor: str | None = None
+):
+    """The latest ``limit`` messages (oldest first within the page); ``next_cursor`` loads earlier ones."""
     await session_for(services, user, session_id)
     async with services.db.sessions() as db:
-        rows = await db.scalars(select(Message).where(Message.session_id == session_id).order_by(Message.created_at))
-        return rows.all()
+        rows = (
+            await db.scalars(
+                select(Message)
+                .where(Message.session_id == session_id, pagination.older_than(Message.created_at, Message.id, cursor))
+                .order_by(Message.created_at.desc(), Message.id.desc())
+                .limit(limit + 1)
+            )
+        ).all()
+    page = rows[:limit]
+    more = len(rows) > limit
+    return MessagePage(
+        items=list(reversed(page)), next_cursor=pagination.encode(page[-1].created_at, page[-1].id) if more else None
+    )
 
 
 @router.post("/sessions/{session_id}/messages", response_model=RunRead, status_code=202)
@@ -130,14 +160,23 @@ async def send_message(session_id: str, body: MessageCreate, services: ServicesD
     return await start_run(services, user, session_id, body.content, body.model_alias)
 
 
-@router.get("/sessions/{session_id}/runs", response_model=list[RunRead])
-async def list_runs(session_id: str, services: ServicesDep, user: UserDep):
+@router.get("/sessions/{session_id}/runs", response_model=RunPage)
+async def list_runs(
+    session_id: str, services: ServicesDep, user: UserDep, limit: int = pagination.Limit, cursor: str | None = None
+):
     await session_for(services, user, session_id)
     async with services.db.sessions() as db:
-        rows = await db.scalars(
-            select(Run).where(Run.session_id == session_id).order_by(Run.created_at.desc()).limit(100)
-        )
-        return rows.all()
+        rows = (
+            await db.scalars(
+                select(Run)
+                .where(Run.session_id == session_id, pagination.older_than(Run.created_at, Run.id, cursor))
+                .order_by(Run.created_at.desc(), Run.id.desc())
+                .limit(limit + 1)
+            )
+        ).all()
+    page = rows[:limit]
+    more = len(rows) > limit
+    return RunPage(items=page, next_cursor=pagination.encode(page[-1].created_at, page[-1].id) if more else None)
 
 
 async def _run_for(services: Services, user: User, run_id: str, write: bool = False) -> Run:
@@ -152,6 +191,22 @@ async def _run_for(services: Services, user: User, run_id: str, write: bool = Fa
 @router.get("/runs/{run_id}", response_model=RunRead)
 async def get_run(run_id: str, services: ServicesDep, user: UserDep):
     return await _run_for(services, user, run_id)
+
+
+@router.get("/runs/{run_id}/events", response_model=RunEvents)
+async def run_events(run_id: str, services: ServicesDep, user: UserDep, types: str | None = None):
+    """Durable events of one turn, in order: work steps, plan approvals, execution results, artifacts...
+
+    The same events the SSE stream delivered live (token deltas and executor progress are live-only),
+    so a client can redraw a past turn. ``types`` filters, e.g. ``execution_completed,artifact``.
+    """
+    run = await _run_for(services, user, run_id)
+    async with services.db.sessions() as db:
+        query = select(RunEvent).where(RunEvent.run_id == run_id)
+        if types:
+            query = query.where(RunEvent.type.in_([t.strip() for t in types.split(",") if t.strip()]))
+        rows = (await db.scalars(query.order_by(RunEvent.id).limit(5000))).all()
+    return RunEvents(run_id=run_id, status=run.status, items=rows)
 
 
 @router.post("/runs/{run_id}/resume", response_model=RunRead, status_code=202)

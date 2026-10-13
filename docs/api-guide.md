@@ -20,13 +20,19 @@
 | GET/POST | `/projects` | 목록 / 생성 `{name, description?, system_prompt?, code_level?}` |
 | GET/PATCH/DELETE | `/projects/{id}` | `system_prompt`는 모든 Agent에 주입되는 프로젝트 지침입니다. 기본 프로젝트는 삭제할 수 없습니다. |
 | POST | `/projects/{id}/sessions` | `{message?, title?, code_level?, model_alias?}`. `message`가 있으면 세션을 만들고 바로 첫 턴을 시작합니다(응답 `{session, run}`). |
-| GET | `/projects/{id}/sessions` | 세션 목록. `active_run_id`가 있으면 작업 중입니다. |
+| GET | `/projects/{id}/sessions?limit=&cursor=` | 세션 목록(최근 수정순). `{items, next_cursor}`. `active_run_id`가 있으면 작업 중입니다. |
 | GET/PATCH/DELETE | `/sessions/{id}` | `title`, `code_level`(1~4, null이면 프로젝트 기본값) 변경. `title_source`: `initial`(첫 메시지 앞부분) → `auto`(첫 답변 후 LLM 요약) / `user`(직접 변경, 이후 자동 변경 없음) |
-| GET | `/sessions/{id}/messages` | 화면용 대화 기록. assistant 메시지의 `attachments`에 리포트·노트북이 들어 있습니다. |
+| GET | `/sessions/{id}/messages?limit=&cursor=` | 최근 `limit`개(페이지 안에서는 오래된 → 최신 순), `next_cursor`로 더 이전 메시지. assistant 메시지의 `attachments`에 리포트·노트북, `run_id`로 그 턴의 이벤트를 조회합니다. |
 | POST | `/sessions/{id}/messages` | `{content, model_alias?}` → 202 Run. **세션이 작업 중이면 409**입니다(세션당 동시 작업 1개). |
+| GET | `/sessions/{id}/runs?limit=&cursor=` | run 이력 `{items, next_cursor}` |
+| GET | `/runs/{id}/events?types=` | 그 턴의 저장된 이벤트를 순서대로 반환(작업 단계, 계획 승인, 실행 결과, 결과물 등). 지난 대화를 다시 그릴 때 씁니다. `types=execution_completed,artifact`처럼 거를 수 있습니다. 토큰·executor 진행 이벤트는 저장하지 않습니다. |
 | GET | `/runs/{id}` | `status`: `queued`, `running`, `waiting_input`, `waiting_executor`, `succeeded`, `failed`, `cancelled` |
 | POST | `/runs/{id}/resume` | HITL 응답 `{interrupt_id, value}` (4장) |
 | POST | `/runs/{id}/cancel` | 취소. 실행 중인 executor 작업도 취소됩니다. |
+
+## 목록 페이지네이션
+
+목록 API는 `{items, next_cursor}`를 반환합니다. `next_cursor`가 있으면 그대로 `?cursor=`로 넘겨 다음(더 오래된) 페이지를 받습니다. `limit`은 1~200, 기본 50입니다.
 
 ## 3. 실시간 이벤트 (SSE)
 
@@ -72,10 +78,15 @@
 
 | Method | Path | 설명 |
 | --- | --- | --- |
-| GET | `/view/artifacts/{artifact_id}` | 리포트(.md)·노트북(.ipynb) 랜딩 페이지 |
+| GET | `/view/artifacts/{artifact_id}` | 리포트(.md)·노트북(.ipynb)을 렌더링한 HTML 페이지. API 서버가 직접 제공하므로 프론트는 새 탭 링크만 걸면 됩니다(로그인 쿠키로 인증, 본인 세션 결과물이 아니면 404). 화면 안에 직접 그리려면 아래 content API를 씁니다. |
 | GET | `/api/v1/artifacts/{artifact_id}` | 메타데이터 |
 | GET | `/api/v1/artifacts/{artifact_id}/content` | 원본 다운로드 (executor 프록시) |
 | GET | `/api/v1/sessions/{sid}/outputs?execution_id=&path=` | `execution_completed.images[]`의 그림 파일 |
+
+## 배포 시 프론트 연동 설정
+
+- 프론트가 다른 origin이면 `CORS_ORIGINS=["https://front.example"]`, 사이트가 다르면 `COOKIE_SAMESITE=none` + HTTPS(`COOKIE_SECURE=true`).
+- `FRONTEND_ORIGIN`: 로그인 후 돌아갈 프론트 주소, `SSO_ALLOWED_RETURN_ROOTS`: 허용할 경로.
 
 ## 6. 프로젝트 공유 메모리
 

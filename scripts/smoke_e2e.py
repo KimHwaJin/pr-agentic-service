@@ -50,5 +50,5 @@ while time.time() < deadline:
         print("RUN", state["status"], state.get("error"))
         break
     time.sleep(2)
-for m in client.get(f"/api/v1/sessions/{session}/messages").json():
+for m in client.get(f"/api/v1/sessions/{session}/messages").json()["items"]:
     print(f"[{m['role']}] {m['content'][:300]}")

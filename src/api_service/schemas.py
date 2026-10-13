@@ -98,6 +98,34 @@ class RunRead(Model):
     finished_at: datetime | None
 
 
+class SessionPage(Model):
+    items: list[SessionRead]
+    next_cursor: str | None  # pass back as ?cursor= for the next (older) page; null on the last page
+
+
+class MessagePage(Model):
+    items: list[MessageRead]  # oldest -> newest within the page
+    next_cursor: str | None  # older messages before this page
+
+
+class RunPage(Model):
+    items: list[RunRead]
+    next_cursor: str | None
+
+
+class RunEventRead(Model):
+    id: int
+    type: str
+    data: dict[str, Any]
+    created_at: datetime
+
+
+class RunEvents(Model):
+    run_id: str
+    status: str
+    items: list[RunEventRead]
+
+
 class SessionStart(Model):
     session: SessionRead
     run: RunRead | None
