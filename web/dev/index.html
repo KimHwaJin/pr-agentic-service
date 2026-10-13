@@ -85,6 +85,10 @@
   .result > summary { cursor: pointer; padding: 10px 14px; font-size: 14px; display: flex; gap: 8px; align-items: center; list-style: none; }
   .result > summary::-webkit-details-marker { display: none; }
   .result .body { padding: 0 14px 14px; }
+  .result { overflow: hidden; max-width: 100%; }
+  .result .res-step { min-width: 0; }
+  .result pre { background: var(--code); padding: 10px 12px; border-radius: 8px; margin: 8px 0 0; font-size: 12px; line-height: 1.45;
+                max-width: 100%; overflow: auto; max-height: 320px; white-space: pre; }
   .res-step { border-top: 1px solid var(--line); padding: 10px 0; }
   .res-step .head { font-size: 13px; display: flex; gap: 8px; align-items: center; }
   .badge { font-size: 11px; padding: 1px 8px; border-radius: 999px; background: var(--code); color: var(--muted); }
