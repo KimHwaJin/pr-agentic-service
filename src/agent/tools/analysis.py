@@ -24,6 +24,7 @@ from agent.context import AnalysisState, RunContext
 from agent.reporter import collect_evidence, generate_report
 from core.db import new_id
 from core.executor.client import ExecutorError
+from core.notebook_links import lab_url
 from core.workflows import spec
 from core.workflows.service import WorkflowError
 from core.workflows.view import call_views
@@ -565,9 +566,26 @@ async def write_report(title: str, focus: str, runtime: ToolRuntime[RunContext, 
     )
     notebook = next((a for a in await executor.artifacts(execution["id"]) if a["type"] == "NOTEBOOK"), None)
     links = {"report": artifact["artifact_id"], "notebook": notebook["artifact_id"] if notebook else None}
-    await ctx.emit("artifact", {"kind": "report", "artifact_id": links["report"], "title": title})
-    if links["notebook"]:
-        await ctx.emit("artifact", {"kind": "notebook", "artifact_id": links["notebook"], "title": f"{title} 노트북"})
+    settings = ctx.services.settings
+    await ctx.emit(
+        "artifact",
+        {
+            "kind": "report",
+            "artifact_id": links["report"],
+            "title": title,
+            "lab_url": lab_url(settings, artifact["storage"].get("relative_path"), ctx.employee_id),
+        },
+    )
+    if notebook:
+        await ctx.emit(
+            "artifact",
+            {
+                "kind": "notebook",
+                "artifact_id": links["notebook"],
+                "title": f"{title} 노트북",
+                "lab_url": lab_url(settings, notebook["storage"].get("relative_path"), ctx.employee_id),
+            },
+        )
     reports = [*runtime.state.get("reports", []), {"title": title, "execution_id": execution["id"], **links}]
     return _reply(
         runtime,

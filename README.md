@@ -77,5 +77,6 @@ uv run uvicorn main:app --app-dir src --port 8080
 - **임베딩**: `EMBEDDING_BASE_URL`, `EMBEDDING_MODEL`, `EMBEDDING_DIMS`(HNSW 인덱스는 2,000차원 이하).
 - **skill/tool**: `SKILLS_ROOT`, `TOOLS_ROOT`, `KNOWLEDGE_ROOT`(기본은 레포의 `assets/`). 파일이 바뀌면 다음 run부터 반영됩니다.
 - **executor**: `EXECUTOR_BASE_URL`, 공유 PVC 마운트 경로 `EXECUTOR_INPUT_ROOT`(executor의 INPUT_STORAGE_ROOT), `EXECUTOR_RESULT_ROOT`(SHARED_STORAGE_ROOT).
+- **JupyterLab 링크**: `NOTEBOOK_LAB_BASE_URL`(Lab 서버 주소), Lab 루트가 Jupyter 공유 저장소 루트와 다르면 `NOTEBOOK_LAB_PATH_PREFIX`.
 - **pr-batch**: `BATCH_BASE_URL`, `BATCH_JWT_SECRET`(pr-batch의 BATCH_AUTH_SECRET), `BATCH_REPORT_JWT_SECRET`.
 - 배포 예시: [deploy/kubernetes/deployment.yaml](deploy/kubernetes/deployment.yaml)

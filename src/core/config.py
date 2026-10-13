@@ -64,6 +64,11 @@ class Settings(BaseSettings):
     executor_step_timeout_seconds: int | None = None
     executor_timeout_seconds: float = 30.0
 
+    # JupyterLab link for executor notebooks/reports (empty = no link).
+    notebook_lab_base_url: str = ""
+    notebook_lab_path_prefix: str = ""  # Lab root -> Jupyter shared storage root, if they differ
+    notebook_lab_workspace_prefix: str = "agentic-"
+
     # Agent assets.
     prompts_root: Path = ROOT / "src/agent/prompts"
     skills_root: Path = ROOT / "assets/skills"

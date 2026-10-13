@@ -7,6 +7,7 @@ from fastapi.responses import HTMLResponse, StreamingResponse
 
 from api_service.deps import ServicesDep, UserDep, session_for
 from core.executor.client import ExecutorError
+from core.notebook_links import lab_url
 
 router = APIRouter(tags=["artifacts"])
 
@@ -26,7 +27,13 @@ async def _owned_artifact(services, user, artifact_id: str) -> dict:
 
 @router.get("/api/v1/artifacts/{artifact_id}")
 async def artifact_detail(artifact_id: str, services: ServicesDep, user: UserDep):
-    return await _owned_artifact(services, user, artifact_id)
+    """Executor artifact metadata plus ``view_url`` (rendered page) and ``lab_url`` (open in JupyterLab)."""
+    artifact = await _owned_artifact(services, user, artifact_id)
+    return {
+        **artifact,
+        "view_url": f"/view/artifacts/{artifact_id}",
+        "lab_url": lab_url(services.settings, artifact["storage"].get("relative_path"), user.employee_id),
+    }
 
 
 @router.get("/api/v1/artifacts/{artifact_id}/content")

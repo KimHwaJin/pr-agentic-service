@@ -54,7 +54,7 @@
 | `execution_completed` | `{execution_id, results: {"<step>.<tool> <tool>": {status, observations, stdout, images[], error}}, error}` | 단계 결과. 이미지는 5장 참고 |
 | `hitl_request` | `{interrupt_id, type, ...}` | 사용자 입력 카드 (4장) |
 | `hitl_resolved` | `{interrupt_id}` | 카드 닫기 |
-| `artifact` | `{kind: report\|notebook, artifact_id, title}` | 링크 `/view/artifacts/{artifact_id}` |
+| `artifact` | `{kind: report\|notebook, artifact_id, title, lab_url}` | 링크 `/view/artifacts/{artifact_id}`, `lab_url`이 있으면 JupyterLab에서 열기 (5장) |
 | `memory_updated` | `{action, item}` | 메모리 변경 알림 |
 | `workflow_saved` | `{workflow_id, name}` | 저장 알림 |
 | `run_error` | `{message}` | 실패 사유 |
@@ -79,9 +79,11 @@
 | Method | Path | 설명 |
 | --- | --- | --- |
 | GET | `/view/artifacts/{artifact_id}` | 리포트(.md)·노트북(.ipynb)을 렌더링한 HTML 페이지. API 서버가 직접 제공하므로 프론트는 새 탭 링크만 걸면 됩니다(로그인 쿠키로 인증, 본인 세션 결과물이 아니면 404). 화면 안에 직접 그리려면 아래 content API를 씁니다. |
-| GET | `/api/v1/artifacts/{artifact_id}` | 메타데이터 |
+| GET | `/api/v1/artifacts/{artifact_id}` | 메타데이터 + `view_url`, `lab_url` |
 | GET | `/api/v1/artifacts/{artifact_id}/content` | 원본 다운로드 (executor 프록시) |
 | GET | `/api/v1/sessions/{sid}/outputs?execution_id=&path=` | `execution_completed.images[]`의 그림 파일 |
+
+`lab_url`은 같은 파일을 사내 JupyterLab에서 여는 링크입니다(`NOTEBOOK_LAB_BASE_URL`이 비어 있으면 null). 형식은 `{lab}/lab/workspaces/agentic-{사번}/tree/{경로}`로, 사용자마다 Lab workspace(탭·레이아웃 상태)가 따로 있어 다른 사람의 화면과 겹치지 않습니다. 메시지 `attachments`와 `artifact` 이벤트에도 같은 값이 들어 있습니다. Lab 로그인은 Lab 서버의 인증을 따릅니다.
 
 ## 배포 시 프론트 연동 설정
 

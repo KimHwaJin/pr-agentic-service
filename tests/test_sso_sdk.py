@@ -43,3 +43,13 @@ def test_verify_employee_without_cookie():
 def test_login_url_replaces_client_origin_with_callback():
     url = login_url(FakeSdk, _request(query=b"ORIGIN=https://evil.example"), "https://api/cb/1")
     assert url.endswith("ORIGIN=https://api/cb/1")
+
+
+def test_lab_url_uses_a_workspace_per_employee():
+    from core.config import Settings
+    from core.notebook_links import lab_url
+
+    settings = Settings(notebook_lab_base_url="https://lab.example/", notebook_lab_path_prefix="pv")
+    url = lab_url(settings, "users/u1/a b/execution.ipynb", "00123")
+    assert url == "https://lab.example/lab/workspaces/agentic-00123/tree/pv/users/u1/a%20b/execution.ipynb"
+    assert lab_url(Settings(), "x.ipynb", "1") is None

@@ -31,6 +31,7 @@ x-app-env: &app-env
   EXECUTOR_INPUT_ROOT: /mnt/executor-shared
   EXECUTOR_RESULT_ROOT: /mnt/executor-shared
   EXECUTOR_RUNTIME_PROFILE: default
+  NOTEBOOK_LAB_BASE_URL: ${NOTEBOOK_LAB_BASE_URL:-http://localhost:8888}
   BATCH_BASE_URL: ${BATCH_BASE_URL:-http://host.docker.internal:8100}
   BATCH_JWT_SECRET: ${BATCH_JWT_SECRET:-}
   BATCH_REPORT_JWT_SECRET: ${BATCH_REPORT_JWT_SECRET:-}

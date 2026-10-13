@@ -681,7 +681,7 @@ function addAnswer(content, attachments = []) {
   logEl().appendChild(d); if (attachments?.length) addFiles(attachments); scrollDown(); return d;
 }
 function fileCards(items) {
-  return items.map(a => `<a class="file" target="_blank" href="/view/artifacts/${a.artifact_id}"><span class="fi">${a.kind === 'notebook' ? 'IPYNB' : 'MD'}</span><span>${esc(a.title)}<small>${a.kind === 'notebook' ? '노트북' : '리포트'} · 열기</small></span></a>`).join('');
+  return items.map(a => `<div class="file"><span class="fi">${a.kind === 'notebook' ? 'IPYNB' : 'MD'}</span><span>${esc(a.title)}<small>${a.kind === 'notebook' ? '노트북' : '리포트'} · <a target="_blank" href="/view/artifacts/${a.artifact_id}">보기</a>${a.lab_url ? ` · <a target="_blank" href="${esc(a.lab_url)}">JupyterLab에서 열기</a>` : ''}</small></span></div>`).join('');
 }
 function addFiles(items) {
   const wrap = document.createElement('div'); wrap.className = 'files'; wrap.innerHTML = fileCards(items);
