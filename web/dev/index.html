@@ -219,7 +219,8 @@
   .cand .ct .state { margin-left: auto; font-size: 11.5px; }
   .state.need { color: var(--accent); background: #fde9df; border-radius: 999px; padding: 2px 8px; font-size: 11.5px; }
   .state.ok { color: var(--ok); }
-  .cand .skill-head { margin: 12px 2px 6px; }
+  .cand .skill-head { margin: 12px 2px 6px; align-items: center; }
+  .skill-head .seq { width: 20px; height: 20px; flex: none; border-radius: 6px; background: var(--ink); color: var(--bg); display: grid; place-items: center; font-size: 11px; font-weight: 600; }
   .tool-row { border: 1px solid var(--line); border-radius: 10px; margin-bottom: 6px; background: var(--panel); }
   .tool-row > summary { list-style: none; cursor: pointer; display: flex; align-items: center; gap: 7px; padding: 9px 12px; font-size: 13px; }
   .tool-row > summary::-webkit-details-marker { display: none; }
@@ -701,10 +702,9 @@ function renderPlanApproval(w, resume) {
       <button class="cand-tab ${i === 0 ? 'on' : ''}" data-i="${i}">
         <div class="ct"><span class="n">${i + 1}</span><b>${esc(c.title)}</b><span class="badge">${c.source ? '워크플로우' : '새 계획'}</span><span class="state"></span></div>
         ${c.rationale ? `<div class="crat">${esc(c.rationale)}</div>` : ''}
-        <div class="chain">${groupsOf(c).map(g => `<span class="sk">${esc(g.skill)} <i>·</i> ${g.calls.map(x => esc(x.tool) + (x.execution === 'conditional' ? '?' : '')).join(', ')}</span>`).join('<span>→</span>')}</div>
       </button>
       <div class="cand-pane">
-        ${groupsOf(c).map(g => `<div class="skill-head"><b>${esc(g.skill)}</b><span>${esc(g.desc)}</span></div>
+        ${groupsOf(c).map((g, gi) => `<div class="skill-head"><span class="seq">${gi + 1}</span><b>${esc(g.skill)}</b><span>${esc(g.desc)}</span></div>
           ${g.calls.map(call => {
             const shown = call.params.filter(p => p.source !== 'default'), defaults = call.params.filter(p => p.source === 'default');
             return `<details class="tool-row"><summary><span class="chev">›</span><span class="no">#${call.index}</span><b>${esc(call.tool)}</b>${call.execution === 'conditional' ? '<span class="badge">조건부</span>' : ''}<span class="tsum">${esc(call.summary)}</span><span class="state"></span></summary>
