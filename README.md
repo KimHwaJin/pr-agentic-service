@@ -78,7 +78,8 @@ uv run uvicorn main:app --app-dir src --port 8080
 - **LLM**: `LLM_BASE_URL`, `LLM_MODELS`(별칭 → 모델명), `LLM_ENABLE_THINKING`.
 - **임베딩**: `EMBEDDING_BASE_URL`, `EMBEDDING_MODEL`, `EMBEDDING_DIMS`(HNSW 인덱스는 2,000차원 이하).
 - **skill/tool**: `SKILLS_ROOT`, `TOOLS_ROOT`, `KNOWLEDGE_ROOT`(기본은 레포의 `assets/`). 파일이 바뀌면 다음 run부터 반영됩니다.
-- **executor**: `EXECUTOR_BASE_URL`, 공유 PVC 마운트 경로 `EXECUTOR_INPUT_ROOT`(executor의 INPUT_STORAGE_ROOT), `EXECUTOR_RESULT_ROOT`(SHARED_STORAGE_ROOT).
+- **executor**: `EXECUTOR_BASE_URL`, 결과 PVC 마운트 경로 `EXECUTOR_RESULT_ROOT`(executor의 SHARED_STORAGE_ROOT).
+- **서비스 저장소**: executor 입력 PVC(INPUT_STORAGE_ROOT) 안의 이 서비스 폴더. `STORAGE_ROOT`(Pod 마운트 경로)와 `STORAGE_EXECUTOR_PATH`(INPUT_STORAGE_ROOT 기준 같은 폴더). executor에 보내는 코드는 `<root>/sources/` 아래에 쓰고 7일 뒤 지웁니다(`CODE_SOURCE_RETENTION_DAYS`). 경로 규칙은 [docs/design/01-code-sources.md](docs/design/01-code-sources.md).
 - **JupyterLab 링크**: `NOTEBOOK_LAB_BASE_URL`(Lab 서버 주소), Lab 루트가 Jupyter 공유 저장소 루트와 다르면 `NOTEBOOK_LAB_PATH_PREFIX`.
 - **pr-batch**: `BATCH_BASE_URL`, `BATCH_JWT_SECRET`(pr-batch의 BATCH_AUTH_SECRET), `BATCH_REPORT_JWT_SECRET`.
 - 배포 예시: [deploy/kubernetes/deployment.yaml](deploy/kubernetes/deployment.yaml)

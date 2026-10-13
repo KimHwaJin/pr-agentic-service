@@ -28,7 +28,9 @@ x-app-env: &app-env
   EMBEDDING_PROVIDER: ${EMBEDDING_PROVIDER:-mock}
   EMBEDDING_DIMS: ${EMBEDDING_DIMS:-1024}
   EXECUTOR_BASE_URL: http://executor:8000
-  EXECUTOR_INPUT_ROOT: /mnt/executor-shared
+  # executor INPUT_STORAGE_ROOT = SHARED_STORAGE_ROOT = ../executor/shared_dir
+  STORAGE_ROOT: /mnt/executor-shared/agentic
+  STORAGE_EXECUTOR_PATH: agentic
   EXECUTOR_RESULT_ROOT: /mnt/executor-shared
   EXECUTOR_RUNTIME_PROFILE: default
   NOTEBOOK_LAB_BASE_URL: ${NOTEBOOK_LAB_BASE_URL:-http://localhost:8888}

@@ -59,13 +59,13 @@ class Settings(BaseSettings):
 
     # Executor.
     executor_base_url: str = "http://localhost:8000"
-    executor_input_root: Path = (
-        ROOT / ".local/shared"
-    )  # local mount of INPUT_STORAGE_ROOT
-    executor_result_root: Path = (
-        ROOT / ".local/shared"
-    )  # local mount of SHARED_STORAGE_ROOT
-    executor_input_subdir: str = "agentic"
+    # This service's folder on the executor input PV (INPUT_STORAGE_ROOT):
+    # the local mount, and the same folder relative to INPUT_STORAGE_ROOT.
+    # Code sent to the executor lives under <root>/sources/.
+    storage_root: Path = ROOT / ".local/shared/agentic"
+    storage_executor_path: str = "agentic"
+    # local mount of the executor's SHARED_STORAGE_ROOT (results)
+    executor_result_root: Path = ROOT / ".local/shared"
     executor_event_stream: str = "executor.events"
     executor_runtime_profile: str = "default"
     executor_operation_wait_seconds: int = Field(1800, ge=30)
@@ -108,6 +108,8 @@ class Settings(BaseSettings):
     # Retention of transport data.
     run_event_retention_days: int = 30
     executor_inbox_retention_days: int = 7
+    # code files are only needed until the executor snapshots them
+    code_source_retention_days: int = 7
 
     # pr-batch.
     batch_base_url: str = "http://localhost:8100"

@@ -6,35 +6,82 @@ PATH sources we write, Step manifests the executor writes.
 import hashlib
 import json
 import os
+import re
 from pathlib import Path
 from typing import Any
 
 TEXT_TYPES = ("text/plain", "text/markdown", "application/json")
 
 
+_SAFE = re.compile(r"[^A-Za-z0-9_.-]")
+
+
+def safe_part(value: str) -> str:
+    """One path segment from an id or a name (no separators, no dot-dirs)."""
+    part = _SAFE.sub("-", value).strip(".") or "-"
+    return part[:128]
+
+
 class SharedStorage:
-    def __init__(self, input_root: Path, result_root: Path, input_subdir: str):
-        self.input_root, self.result_root, self.input_subdir = (
-            input_root,
-            result_root,
-            input_subdir,
-        )
+    def __init__(
+        self, storage_root: Path, executor_path: str, result_root: Path
+    ):
+        # storage_root: this service's folder on the executor input PV;
+        # executor_path: the same folder relative to INPUT_STORAGE_ROOT
+        self.storage_root = storage_root
+        self.executor_path = executor_path.strip("/")
+        self.result_root = result_root
 
-    def write_source(self, code: str) -> dict[str, str]:
-        """Content-addressed, never overwritten.
+    @property
+    def sources_root(self) -> Path:
+        return self.storage_root / "sources"
 
-        Returns an executor PATH source.
+    def write_source(
+        self, code: str, relative: str
+    ) -> tuple[dict[str, str], int]:
+        """Write-once code file under ``sources/``.
+
+        If the file already exists (a tool re-run after a resume or a pod
+        failover) its content is reused, so the executor always gets the
+        code first sent for that path. Returns the executor PATH source and
+        the file size.
         """
-        data = code.encode("utf-8")
-        sha = hashlib.sha256(data).hexdigest()
-        relative = f"{self.input_subdir}/sources/{sha[:2]}/{sha}.py"
-        target = self.input_root / relative
-        if not target.exists():
+        target = (self.sources_root / relative).resolve()
+        if not target.is_relative_to(self.sources_root.resolve()):
+            raise ValueError("source path escapes the storage root")
+        if target.exists():
+            data = target.read_bytes()
+        else:
+            data = code.encode("utf-8")
             target.parent.mkdir(parents=True, exist_ok=True)
-            temp = target.with_suffix(f".{os.getpid()}.tmp")
+            temp = target.with_name(f".{target.name}.{os.getpid()}.tmp")
             temp.write_bytes(data)
             os.replace(temp, target)
-        return {"type": "PATH", "path": relative, "sha256": sha}
+        path = "/".join(
+            p for p in (self.executor_path, "sources", relative) if p
+        )
+        sha = hashlib.sha256(data).hexdigest()
+        return {"type": "PATH", "path": path, "sha256": sha}, len(data)
+
+    def delete_source(self, executor_path: str) -> None:
+        """Remove a sent file and the folders it leaves empty."""
+        prefix = (
+            f"{self.executor_path}/sources/"
+            if self.executor_path
+            else "sources/"
+        )
+        if not executor_path.startswith(prefix):
+            return
+        target = self.sources_root / executor_path[len(prefix) :]
+        target.unlink(missing_ok=True)
+        root = self.sources_root.resolve()
+        parent = target.parent.resolve()
+        while parent != root and parent.is_relative_to(root):
+            try:
+                parent.rmdir()  # only when empty
+            except OSError:
+                break
+            parent = parent.parent
 
     def resolve_result(self, relative_path: str) -> Path:
         path = (self.result_root / relative_path).resolve()

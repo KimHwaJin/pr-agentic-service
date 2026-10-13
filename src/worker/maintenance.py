@@ -1,10 +1,12 @@
-"""Bounded growth of transport tables.
+"""Bounded growth of transport data.
 
-Purges old session events and executor inbox rows.
+Purges old session events, executor inbox rows and code files already
+snapshotted by the executor.
 """
 
 import asyncio
 import logging
+import time
 from datetime import timedelta
 
 from sqlalchemy import delete, select
@@ -45,6 +47,26 @@ class Retention:
             ExecutorInbox.received_at,
             settings.executor_inbox_retention_days,
         )
+        days = settings.code_source_retention_days
+        removed = await self.services.code_sources.purge(days)
+        removed += await asyncio.to_thread(self._purge_legacy_sources, days)
+        if removed:
+            log.info("code_sources_purged files=%s", removed)
+
+    def _purge_legacy_sources(self, days: int) -> int:
+        """Files of the old hash-named layout (sources/<ab>/<sha>.py)."""
+        cutoff = time.time() - days * 86400
+        removed = 0
+        for folder in self.services.storage.sources_root.glob(
+            "[0-9a-f][0-9a-f]"
+        ):
+            for file in folder.glob("*.py"):
+                if file.stat().st_mtime < cutoff:
+                    file.unlink(missing_ok=True)
+                    removed += 1
+            if not any(folder.iterdir()):
+                folder.rmdir()
+        return removed
 
     async def _purge(self, model, key, stamp, days: int) -> None:
         """Delete in small batches.

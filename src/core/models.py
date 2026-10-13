@@ -249,3 +249,41 @@ class BatchReportJob(Timestamped, Base):
 
 
 Index("ix_runs_claim", Run.status, Run.lease_expires_at)
+
+
+class CodeSource(Base):
+    """One code file sent to the executor (a step of an operation).
+
+    The file is only the transport: the executor snapshots it at submit,
+    and that snapshot plus the notebook are the record of what ran. This
+    row ties the file to its run and to the executor step.
+    """
+
+    __tablename__ = "code_sources"
+    id: Mapped[str] = mapped_column(ID, primary_key=True, default=new_id)
+    user_id: Mapped[str] = mapped_column(ID)
+    project_id: Mapped[str] = mapped_column(ID)
+    session_id: Mapped[str] = mapped_column(ID, index=True)
+    run_id: Mapped[str] = mapped_column(ID, index=True)
+    tool_call_id: Mapped[str] = mapped_column(String(128))
+    # executor-relative path; also the idempotent key of the row
+    path: Mapped[str] = mapped_column(String(1024), unique=True)
+    sha256: Mapped[str] = mapped_column(String(64))
+    size_bytes: Mapped[int] = mapped_column(Integer)
+    kind: Mapped[str] = mapped_column(String(16))  # setup | tool | custom
+    skill: Mapped[str | None] = mapped_column(String(128))
+    tool: Mapped[str | None] = mapped_column(String(128))
+    call_key: Mapped[str | None] = mapped_column(String(32))
+    tool_version: Mapped[str | None] = mapped_column(String(64))
+    purpose: Mapped[str | None] = mapped_column(Text)
+    approved_by: Mapped[str | None] = mapped_column(ID)
+    edited: Mapped[bool | None] = mapped_column(Boolean)
+    execution_id: Mapped[str | None] = mapped_column(ID, index=True)
+    operation_id: Mapped[str | None] = mapped_column(ID)
+    step_id: Mapped[str | None] = mapped_column(ID)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, index=True
+    )
+    file_deleted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True)
+    )

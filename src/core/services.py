@@ -8,6 +8,7 @@ from core.config import Settings
 from core.db import Database
 from core.events import EventBus
 from core.executor.client import ExecutorClient
+from core.executor.sources import CodeSources
 from core.executor.storage import SharedStorage
 from core.memory.service import ProjectMemory
 from core.workflows.service import WorkflowService
@@ -23,6 +24,7 @@ class Services:
     events: EventBus
     executor: ExecutorClient
     storage: SharedStorage
+    code_sources: CodeSources
     memory: ProjectMemory
     workflows: WorkflowService
     embedder: Embeddings | None

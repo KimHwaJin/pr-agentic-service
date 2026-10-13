@@ -24,6 +24,7 @@ from core.db import Database
 from core.embeddings import build_embedder
 from core.events import EventBus
 from core.executor.client import ExecutorClient
+from core.executor.sources import CodeSources
 from core.executor.storage import SharedStorage
 from core.memory.service import ProjectMemory
 from core.services import Services
@@ -82,17 +83,19 @@ async def build_services(
         settings.embedding_dims,
         settings.workflow_similarity,
     )
+    storage = SharedStorage(
+        settings.storage_root,
+        settings.storage_executor_path,
+        settings.executor_result_root,
+    )
     services = Services(
         settings=settings,
         db=db,
         redis=redis,
         events=EventBus(db, redis, settings.redis_namespace),
         executor=executor,
-        storage=SharedStorage(
-            settings.executor_input_root,
-            settings.executor_result_root,
-            settings.executor_input_subdir,
-        ),
+        storage=storage,
+        code_sources=CodeSources(db, storage),
         memory=ProjectMemory(
             store,
             db,

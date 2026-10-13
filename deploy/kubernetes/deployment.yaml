@@ -26,7 +26,8 @@ spec:
             - {name: SSO_ADAPTER, value: company}
             - {name: SSO_ADAPTER_FACTORY, value: "company_sso:create_sdk"}
             - {name: COOKIE_SECURE, value: "true"}
-            - {name: EXECUTOR_INPUT_ROOT, value: /mnt/data/agent}
+            - {name: STORAGE_ROOT, value: /mnt/data/agent/pr-agentic-service}
+            - {name: STORAGE_EXECUTOR_PATH, value: pr-agentic-service}
             - {name: EXECUTOR_RESULT_ROOT, value: /mnt/data/executor}
           envFrom:
             - configMapRef: {name: pr-agentic-service-config}

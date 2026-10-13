@@ -16,15 +16,17 @@ Every executor mutation uses an idempotency key derived from
 or a pod crash the executor returns the same receipt.
 """
 
+import hashlib
 import json
 from typing import Any, TypeGuard
 
 from langchain.tools import ToolRuntime, tool
-from langchain_core.messages import ToolMessage
+from langchain_core.messages import HumanMessage, ToolMessage
 from langgraph.types import Command, interrupt
 
 from agent import plan_format
 from agent.codegen import (
+    SETUP,
     SETUP_TOOL,
     custom_step_code,
     parse_observations,
@@ -35,12 +37,15 @@ from agent.context import AnalysisState, RunContext
 from agent.reporter import collect_evidence, generate_report
 from core.db import new_id
 from core.executor.client import ExecutorError
+from core.executor.sources import SourceOwner, file_name
 from core.notebook_links import lab_url
 from core.workflows import spec
 from core.workflows.service import WorkflowError
 from core.workflows.view import call_views
 
 Runtime = ToolRuntime[RunContext, AnalysisState]
+# agent tools that send an executor operation (one folder each)
+EXECUTION_TOOLS = ("run_plan", "run_custom_code")
 
 
 def _reply(runtime: Runtime, content: str, **update: Any) -> Command:
@@ -57,6 +62,42 @@ def _reply(runtime: Runtime, content: str, **update: Any) -> Command:
 def _approved(plan: dict[str, Any] | None) -> TypeGuard[dict[str, Any]]:
     """A plan the user approved (custom code alone leaves one without it)."""
     return bool(plan and plan.get("document"))
+
+
+def _owner(runtime: Runtime) -> SourceOwner:
+    ctx = runtime.context
+    return SourceOwner(
+        ctx.user_id,
+        ctx.employee_id,
+        ctx.project_id,
+        ctx.session_id,
+        ctx.run_id,
+    )
+
+
+def _source_folder(runtime: Runtime, tool: str) -> str:
+    """This executor operation's folder: "<NN>-<tool>" by turn order.
+
+    NN counts the execution tool calls of this turn up to this one, read
+    from the checkpointed messages, so a re-run gets the same folder.
+    """
+    messages = runtime.state.get("messages", [])
+    start = next(
+        (
+            i
+            for i, m in enumerate(messages)
+            if isinstance(m, HumanMessage) and m.id == runtime.context.run_id
+        ),
+        0,
+    )
+    number = 0
+    for message in messages[start:]:
+        for call in getattr(message, "tool_calls", None) or []:
+            if call["name"] in EXECUTION_TOOLS:
+                number += 1
+            if call["id"] == runtime.tool_call_id:
+                return _owner(runtime).folder(number, tool)
+    return _owner(runtime).folder(number + 1, tool)
 
 
 def _key(runtime: Runtime, suffix: str) -> str:
@@ -495,17 +536,25 @@ async def _once(runtime: Runtime, name: str, effect) -> Any:
 
 
 async def _submit(
-    runtime: Runtime, steps: list[dict[str, Any]], labels: list[str]
+    runtime: Runtime,
+    steps: list[dict[str, Any]],
+    labels: list[str],
+    folder: str,
 ) -> tuple[dict, dict]:
     return tuple(
         await _once(
-            runtime, "submit", lambda: _submit_now(runtime, steps, labels)
+            runtime,
+            "submit",
+            lambda: _submit_now(runtime, steps, labels, folder),
         )
     )
 
 
 async def _submit_now(
-    runtime: Runtime, steps: list[dict[str, Any]], labels: list[str]
+    runtime: Runtime,
+    steps: list[dict[str, Any]],
+    labels: list[str],
+    folder: str,
 ) -> list[dict]:
     """Append to the live execution or open a new MULTI execution.
 
@@ -538,7 +587,14 @@ async def _submit_now(
     if not execution or not execution.get("alive"):
         # a fresh kernel: define the observation helper first
         timeout = settings.executor_step_timeout_seconds
-        steps = [setup_step(ctx.services.storage, timeout), *steps]
+        source = await ctx.services.code_sources.write(
+            SETUP + "\n",
+            owner=_owner(runtime),
+            tool_call_id=runtime.tool_call_id or "",
+            relative=f"{folder}/{file_name(0, SETUP_TOOL)}",
+            kind=SETUP_TOOL,
+        )
+        steps = [setup_step(source, timeout), *steps]
         labels = [SETUP_TOOL, *labels]
         for i, step in enumerate(steps):
             step["sequence"] = i
@@ -565,6 +621,10 @@ async def _submit_now(
     step_ids = {
         s["sequence"]: s["step_id"] for s in receipt["operation"]["steps"]
     }
+    await ctx.services.code_sources.link(
+        receipt,
+        {s["sequence"]: s["payload"]["source"]["path"] for s in steps},
+    )
     execution["steps"] = {
         **execution.get("steps", {}),
         **{
@@ -693,9 +753,22 @@ async def run_plan(
     tools = ctx.services.tool_catalog()
     timeout = ctx.services.settings.executor_step_timeout_seconds
     producers = {c.key: c.tool for c in spec.calls(plan["document"])}
+    folder = _source_folder(runtime, "run_plan")
     steps, labels = [], []
-    for call in segment:
+    for sequence, call in enumerate(segment, start=1):
         code = tool_step_code(call, plan["input_values"], tools, producers)
+        tool_code = tools.tools[call.tool].code.encode("utf-8")
+        source = await ctx.services.code_sources.write(
+            code,
+            owner=_owner(runtime),
+            tool_call_id=runtime.tool_call_id or "",
+            relative=f"{folder}/{file_name(sequence, 'tool', call.tool)}",
+            kind="tool",
+            skill=call.skill,
+            tool=call.tool,
+            call_key=call.key,
+            tool_version=hashlib.sha256(tool_code).hexdigest(),
+        )
         inputs = {
             k[len(call.key) + 1 :]: v
             for k, v in plan["input_values"].items()
@@ -703,10 +776,7 @@ async def run_plan(
         }
         steps.append(
             {
-                "payload": {
-                    "type": "PYTHON_EXECUTE",
-                    "source": ctx.services.storage.write_source(code),
-                },
+                "payload": {"type": "PYTHON_EXECUTE", "source": source},
                 "step_timeout_seconds": timeout,
                 "lineage": {
                     "skill_name": call.skill,
@@ -716,7 +786,7 @@ async def run_plan(
             }
         )
         labels.append(call.key)
-    receipt, execution = await _submit(runtime, steps, labels)
+    receipt, execution = await _submit(runtime, steps, labels, folder)
     event = _wait_operation(execution, receipt)
     execution, results, error = _apply_event(execution, event)
 
@@ -795,19 +865,26 @@ async def run_custom_code(
         return _reply(
             runtime, f"사용자가 코드 실행을 거절했습니다. {feedback}"
         )
+    edited = bool(answer.get("code")) and answer["code"] != code
     code = answer.get("code") or code
     plan = json.loads(
         json.dumps(runtime.state.get("plan") or {"custom": [], "calls": {}})
     )
     custom_id = f"custom-{len(plan.get('custom', [])) + 1}"
     timeout = ctx.services.settings.executor_step_timeout_seconds
+    folder = _source_folder(runtime, "run_custom_code")
+    source = await ctx.services.code_sources.write(
+        custom_step_code(code, observe or []),
+        owner=_owner(runtime),
+        tool_call_id=runtime.tool_call_id or "",
+        relative=f"{folder}/{file_name(1, 'custom', custom_id)}",
+        kind="custom",
+        purpose=purpose,
+        approved_by=ctx.user_id,
+        edited=edited,
+    )
     step = {
-        "payload": {
-            "type": "PYTHON_EXECUTE",
-            "source": ctx.services.storage.write_source(
-                custom_step_code(code, observe or [])
-            ),
-        },
+        "payload": {"type": "PYTHON_EXECUTE", "source": source},
         "step_timeout_seconds": timeout,
         "lineage": {
             "skill_name": "custom",
@@ -815,7 +892,7 @@ async def run_custom_code(
             "input_parameters": {"purpose": purpose},
         },
     }
-    receipt, execution = await _submit(runtime, [step], [custom_id])
+    receipt, execution = await _submit(runtime, [step], [custom_id], folder)
     event = _wait_operation(execution, receipt)
     execution, results, error = _apply_event(execution, event)
     step_id = receipt["operation"]["steps"][-1]["step_id"]

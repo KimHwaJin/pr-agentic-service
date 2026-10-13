@@ -170,13 +170,10 @@ def tool_step_code(
     )
 
 
-def setup_step(storage: Any, timeout: int | None) -> dict[str, Any]:
-    """The first step of every new execution (kernel)."""
+def setup_step(source: dict[str, str], timeout: int | None) -> dict[str, Any]:
+    """The first step of every new execution (kernel); code is SETUP."""
     return {
-        "payload": {
-            "type": "PYTHON_EXECUTE",
-            "source": storage.write_source(SETUP + "\n"),
-        },
+        "payload": {"type": "PYTHON_EXECUTE", "source": source},
         "step_timeout_seconds": timeout,
         "lineage": {"skill_name": "agentic", "tool_name": SETUP_TOOL},
     }
