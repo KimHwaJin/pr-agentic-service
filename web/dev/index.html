@@ -214,6 +214,8 @@
   .cand-tab .ct b { font-weight: 600; }
   .cand-tab .ct .n { width: 20px; height: 20px; border-radius: 50%; background: var(--hover); display: grid; place-items: center; font-size: 11px; font-weight: 600; flex: none; }
   .cand-tab.on .ct .n { background: var(--accent); color: #fff; }
+  .crat { font-size: 12.5px; color: var(--muted); margin: 6px 0 2px 26px; line-height: 1.5; }
+  .cand-tab .chain { margin-left: 26px; }
   .chain { display: flex; flex-wrap: wrap; gap: 4px 6px; margin-top: 6px; font-size: 11.5px; color: var(--muted); }
   .chain .sk { display: inline-flex; align-items: center; gap: 4px; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 2px 7px; }
   .chain .sk i { font-style: normal; color: var(--faint); }
@@ -631,6 +633,7 @@ function openHitlPanel(w, kicker, title, sub) {
   $('hitl').dataset.interrupt = w.interrupt_id; $('hitl').classList.add('open');
   $('hitlKicker').textContent = kicker; $('hitlTitle').textContent = title; $('hitlSub').textContent = sub || '';
   $('hitlBody').innerHTML = ''; $('hitlFoot').innerHTML = '';
+  if (document.querySelector(`.hitl-note[data-interrupt="${w.interrupt_id}"]`)) return;  // replayed by SSE after reload
   const note = document.createElement('div'); note.className = 'hitl-note'; note.dataset.interrupt = w.interrupt_id;
   note.innerHTML = `<span>●</span><span>${esc(title)} · 오른쪽 패널에서 확인해 주세요</span>`;
   note.onclick = () => $('hitl').classList.add('open');
@@ -681,10 +684,11 @@ function renderPlanApproval(w, resume) {
   const groupsOf = c => { const g = []; for (const call of c.calls) { if (!g.length || g.at(-1).skill !== call.skill) g.push({ skill: call.skill, desc: call.skill_description, calls: [] }); g.at(-1).calls.push(call); } return g; };
   const tabs = w.candidates.map((c, i) => `<button class="cand-tab ${i === 0 ? 'on' : ''}" data-i="${i}">
       <div class="ct"><span class="n">${i + 1}</span><b>${esc(c.title)}</b><span class="badge">${c.source ? '워크플로우' : '새 계획'}</span></div>
+      ${c.rationale ? `<div class="crat">${esc(c.rationale)}</div>` : ''}
       <div class="chain">${groupsOf(c).map(g => `<span class="sk">${esc(g.skill)} <i>·</i> ${g.calls.map(x => esc(x.tool) + (x.execution === 'conditional' ? '?' : '')).join(', ')}</span>`).join('<span>→</span>')}</div>
     </button>`).join('');
   const panes = w.candidates.map((c, i) => `<div class="cand-pane" data-i="${i}" style="${i ? 'display:none' : ''}">
-      ${c.rationale ? `<div class="rationale">${esc(c.rationale)}</div>` : ''}
+      <div class="skill-head" style="margin:4px 0 8px"><b>${i + 1}번 계획의 파라미터</b><span>skill을 눌러 값을 확인·입력하세요</span></div>
       ${groupsOf(c).map(g => `<details class="sg"><summary><span class="chev">›</span><span class="sname">${esc(g.skill)}</span><span class="cnt">tool ${g.calls.length}개 선택</span><span class="state"></span></summary>
         <div class="sg-body"><div class="sdesc">${esc(g.desc)}</div>
         ${g.calls.map(call => {
