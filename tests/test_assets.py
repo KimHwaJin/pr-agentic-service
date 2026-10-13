@@ -8,7 +8,11 @@ def test_tool_source_drops_docstring_and_keeps_inner_imports(tools):
 
 def test_tool_outputs_come_from_returned_dict_keys(tools):
     assert tools.tools["merge_data"].outputs == ("merged_data", "shape")
-    assert [p.name for p in tools.tools["merge_data"].params if p.required] == ["left_data", "right_data", "join_columns"]
+    assert [p.name for p in tools.tools["merge_data"].params if p.required] == [
+        "left_data",
+        "right_data",
+        "join_columns",
+    ]
 
 
 def test_skill_tool_table(skills):

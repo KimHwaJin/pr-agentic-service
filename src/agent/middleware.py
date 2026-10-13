@@ -9,12 +9,14 @@ import json
 from collections.abc import Awaitable, Callable
 from typing import Any
 
+import json_repair
 from langchain.agents.middleware import AgentMiddleware, ModelRequest, ModelResponse
 from langchain_core.messages import AIMessage, SystemMessage, ToolMessage
 
 from agent.context import AnalysisState, RunContext
 from agent.prompts import Prompt, load_prompt
 from core.memory.service import render_for_prompt
+from core.workflows import spec
 
 PERSONA_TOOLS = {
     "main": {"ask_user", "read_knowledge", "search_memory", "save_memory", "delete_memory", "start_analysis"},
@@ -102,7 +104,7 @@ def _plan_status(state: AnalysisState) -> str:
     plan, execution = state.get("plan"), state.get("execution")
     if not plan:
         return "승인된 계획 없음"
-    calls = {k: v["status"] for k, v in plan["calls"].items()}
+    calls = {f"#{i} {c.tool}": plan["calls"][c.key]["status"] for i, c in enumerate(spec.calls(plan["document"]))}
     kernel = "살아 있음(변수 재사용 가능)" if execution and execution.get("alive") else "없음(다음 실행 시 새 커널)"
     return f"계획: {plan['title']}\n호출 상태: {json.dumps(calls, ensure_ascii=False)}\n커널: {kernel}"
 
@@ -122,3 +124,32 @@ def _isolate(messages: list, persona: str) -> list:
             m = m.model_copy(update={"content": "(다른 담당자가 참고한 자료라 생략)"})
         out.append(m)
     return out
+
+
+class JsonArgumentsMiddleware(AgentMiddleware):
+    """Some served models (vLLM tool parsers) send nested object/array arguments as JSON strings.
+
+    Decode them before validation instead of letting the model retry the same call.
+    """
+
+    async def awrap_tool_call(self, request, handler):
+        schema = getattr(request.tool, "tool_call_schema", None)
+        properties = schema.model_json_schema().get("properties", {}) if schema else {}
+        args = request.tool_call.get("args") or {}
+        fixed = {}
+        for name, value in args.items():
+            if isinstance(value, str) and _structured(properties.get(name, {})):
+                try:
+                    fixed[name] = json.loads(value)
+                except ValueError:
+                    repaired = json_repair.loads(value)  # unbalanced braces etc.
+                    if isinstance(repaired, (dict, list)):
+                        fixed[name] = repaired
+        if fixed:
+            request = request.override(tool_call={**request.tool_call, "args": {**args, **fixed}})
+        return await handler(request)
+
+
+def _structured(prop: dict) -> bool:
+    options = prop.get("anyOf", [prop])
+    return any(option.get("type") in {"object", "array"} for option in options)

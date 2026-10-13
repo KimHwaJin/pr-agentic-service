@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from langchain.agents import create_agent
-from langchain.agents.middleware import SummarizationMiddleware, ToolErrorMiddleware
+from langchain.agents.middleware import ModelCallLimitMiddleware, SummarizationMiddleware, ToolErrorMiddleware
 from langchain_core.messages import AIMessage, AIMessageChunk, HumanMessage, ToolMessage
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.store.base import BaseStore
@@ -10,7 +10,7 @@ from langgraph.types import Command
 
 from agent.context import AnalysisState, RunContext
 from agent.llm import chat_model
-from agent.middleware import PersonaMiddleware
+from agent.middleware import JsonArgumentsMiddleware, PersonaMiddleware
 from agent.tools.analysis import (
     finish_analysis,
     propose_plans,
@@ -79,7 +79,9 @@ class AgentGraphs:
                 tools=TOOLS,
                 middleware=[
                     PersonaMiddleware(self.settings.prompts_root),
+                    JsonArgumentsMiddleware(),
                     ToolErrorMiddleware(on_error=_tool_error),
+                    ModelCallLimitMiddleware(run_limit=self.settings.agent_model_call_limit, exit_behavior="end"),
                     SummarizationMiddleware(model, trigger=("tokens", 60000), keep=("messages", 40)),
                 ],
                 state_schema=AnalysisState,

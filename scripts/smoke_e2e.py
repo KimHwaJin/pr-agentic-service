@@ -12,12 +12,13 @@ import time
 import httpx
 
 BASE = sys.argv[1] if len(sys.argv) > 1 else "http://localhost:8080"
+REQUEST = sys.argv[2] if len(sys.argv) > 2 else "NCE와 WT 데이터를 결합해서 탐색 분석해줘"
 client = httpx.Client(base_url=BASE, timeout=30, follow_redirects=False)
 client.get("/api/v1/auth/login/sso", params={"return_to": "/"})
 csrf = client.get("/api/v1/auth/session").json()["csrf_token"]
 client.headers["X-CSRF-Token"] = csrf
 project = client.get("/api/v1/users/me").json()["default_project_id"]
-started = client.post(f"/api/v1/projects/{project}/sessions", json={"message": "NCE와 WT 데이터를 결합해서 탐색 분석해줘"}).json()
+started = client.post(f"/api/v1/projects/{project}/sessions", json={"message": REQUEST}).json()
 session, run = started["session"]["id"], started["run"]["id"]
 print("session", session, "run", run)
 
@@ -37,7 +38,12 @@ while time.time() < deadline:
     state = client.get(f"/api/v1/runs/{run}").json()
     if state["status"] == "waiting_input":
         waiting = state["waiting"]
-        answer = {"action": "approve", "index": 0, "input_values": {}} if waiting["type"] == "plan_approval" else {"approve": True}
+        if waiting["type"] == "plan_approval":
+            answer = {"action": "approve", "index": 0, "input_values": {}}
+        elif waiting["type"] == "question":
+            answer = "기본값으로 진행해줘. 데이터는 NCE, 표본 500개."
+        else:
+            answer = {"approve": True}
         print("HITL", waiting["type"], "->", answer)
         client.post(f"/api/v1/runs/{run}/resume", json={"interrupt_id": waiting["interrupt_id"], "value": answer}).raise_for_status()
     elif state["status"] in {"succeeded", "failed", "cancelled"}:

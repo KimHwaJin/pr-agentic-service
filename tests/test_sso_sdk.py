@@ -5,7 +5,17 @@ from api_service.auth.sdk import login_url, verify_employee
 
 def _request(cookie: str | None = None, query: bytes = b"") -> Request:
     headers = [(b"cookie", cookie.encode())] if cookie else []
-    return Request({"type": "http", "method": "GET", "path": "/login", "query_string": query, "headers": headers, "server": ("api", 443), "scheme": "https"})
+    return Request(
+        {
+            "type": "http",
+            "method": "GET",
+            "path": "/login",
+            "query_string": query,
+            "headers": headers,
+            "server": ("api", 443),
+            "scheme": "https",
+        }
+    )
 
 
 class FakeSdk:

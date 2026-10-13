@@ -1,18 +1,14 @@
 """Agent prompts are Markdown files: ``prompts/<agent>.md`` with optional frontmatter.
 
 Frontmatter keys: ``skills`` (skill roots this agent may read: knowledge | analysis).
-Body placeholders use ``{name}`` and are filled with str.format_map (missing keys stay as-is).
+Body placeholders use ``{name}``; only the names passed to ``render`` are replaced.
 """
 
+import re
 from dataclasses import dataclass
 from pathlib import Path
 
 from core.assets import AssetLoader, split_frontmatter
-
-
-class _Keep(dict):
-    def __missing__(self, key: str) -> str:
-        return "{" + key + "}"
 
 
 @dataclass(frozen=True)
@@ -22,7 +18,8 @@ class Prompt:
     body: str
 
     def render(self, **values: object) -> str:
-        return self.body.format_map(_Keep(values))
+        """Fills {name} placeholders that are given; any other braces (JSON examples) stay as written."""
+        return re.sub(r"\{(\w+)\}", lambda m: str(values[m.group(1)]) if m.group(1) in values else m.group(0), self.body)
 
 
 _loaders: dict[Path, AssetLoader] = {}

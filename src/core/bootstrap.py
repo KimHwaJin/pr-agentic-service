@@ -51,7 +51,7 @@ async def build_services(settings: Settings) -> AsyncIterator[tuple[Services, As
     store = AsyncPostgresStore(pool, index=index)
     executor = ExecutorClient(settings.executor_base_url, settings.executor_timeout_seconds)
     workflows = WorkflowService(
-        db, embedder, settings.embedding_model, settings.embedding_dims, settings.workflow_similarity
+        db, embedder, settings.embedding_space, settings.embedding_dims, settings.workflow_similarity
     )
     services = Services(
         settings=settings,

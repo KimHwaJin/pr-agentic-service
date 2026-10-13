@@ -18,14 +18,14 @@ from langchain.tools import ToolRuntime, tool
 from langchain_core.messages import ToolMessage
 from langgraph.types import Command, interrupt
 
+from agent import plan_format
 from agent.codegen import custom_step_code, parse_observations, tool_step_code
 from agent.context import AnalysisState, RunContext
 from agent.reporter import collect_evidence, generate_report
 from core.db import new_id
 from core.executor.client import ExecutorError
 from core.workflows import spec
-
-AGENT_ACTOR = {"type": "AGENT", "id": "analyst"}
+from core.workflows.service import WorkflowError
 
 
 def _reply(runtime: ToolRuntime, content: str, **update: Any) -> Command:
@@ -80,9 +80,10 @@ async def search_workflows(query: str, runtime: ToolRuntime[RunContext, Analysis
     lines = []
     for h in hits:
         w = h["workflow"]
+        calls = json.dumps(plan_format.describe(w.document), ensure_ascii=False)
         lines.append(
             f"- workflow_id={w.id} similarity={h['similarity']} name={w.name}\n"
-            f"  user_request: {w.user_request}\n  document: {json.dumps(w.document, ensure_ascii=False)}"
+            f"  user_request: {w.user_request}\n  calls: {calls}"
         )
     return "\n".join(lines)
 
@@ -94,40 +95,52 @@ async def search_workflows(query: str, runtime: ToolRuntime[RunContext, Analysis
 async def propose_plans(candidates: list[dict[str, Any]], runtime: ToolRuntime[RunContext, AnalysisState]) -> Command:
     """Show plan candidates to the user and wait for one to be approved.
 
-    Each candidate: {"title", "rationale", "input_values": {"<step>.<tool>.<param>": value}} plus either
-    {"workflow_id": "<template id from search_workflows>"} or {"workflow": <Workflow 1.0 document>}.
-    Put recommended templates first, then new plans, up to the configured number of candidates.
-    Fill input_values with what the user's request already says; the user completes the rest.
+    Each candidate is either a registered template or a new plan written as a flat call list:
+      {"title": "...", "rationale": "...", "workflow_id": "<id from search_workflows>", "inputs": {...}}
+      {"title": "...", "rationale": "...", "calls": [
+          {"skill": "data_load", "tool": "extract_data", "args": {"data_type": "$input", "limit": 5000}},
+          {"skill": "data_load", "tool": "transform_nce", "args": {"data": "@0.data"}},
+          {"skill": "eda_analysis", "tool": "boxplot_eda", "args": {"data": "@1.data"}}],
+       "inputs": {"0.data_type": "nce"}}
+    args values: "$input" = value the user provides, "@<call index>.<output name>" = an earlier call's output,
+    anything else = a fixed value. Leave out args that should keep the tool default.
+    inputs prefill "$input" args as "<call index>.<param>" with what the user already said.
+    Templates first, then new plans; at most the configured number of candidates.
     """
     ctx = runtime.context
     services = ctx.services
     skills, tools = services.skills("analysis"), services.tool_catalog()
-    limit = services.settings.plan_candidates
     prepared, problems = [], []
-    for index, candidate in enumerate(candidates[:limit]):
+    for index, candidate in enumerate(candidates[: services.settings.plan_candidates]):
+        title = candidate.get("title") or f"계획 {index + 1}"
         source = None
-        if workflow_id := candidate.get("workflow_id"):
-            try:
+        try:
+            if workflow_id := candidate.get("workflow_id"):
                 template = await services.workflows.readable(workflow_id, ctx.user_id)
-            except Exception:  # noqa: BLE001
-                problems.append(f"후보 {index}: workflow_id {workflow_id}를 찾을 수 없습니다.")
-                continue
-            document = template.document
-            source = {"workflow_id": template.id, "revision": template.revision, "name": template.name}
-        else:
-            document = candidate.get("workflow") or {}
-            if isinstance(document.get("workflow"), dict):
-                document["workflow"]["actor"] = AGENT_ACTOR
+                document = template.document
+                keys = [c.key for c in spec.calls(document)]
+                source = {"workflow_id": template.id, "revision": template.revision, "name": template.name}
+            else:
+                document, keys = plan_format.to_workflow(
+                    candidate.get("calls") or [], name=title, user_request=ctx.user_text, skills=skills
+                )
+        except (plan_format.PlanFormatError, WorkflowError) as exc:
+            problems.append(f"후보 {index} ({title}): {exc}")
+            continue
         errors = spec.validate(document, skills, tools)
         if errors:
-            problems.append(f"후보 {index} ({candidate.get('title')}):\n  " + "\n  ".join(errors))
+            problems.append(f"후보 {index} ({title}):\n  " + "\n  ".join(_by_call_index(errors, keys)))
             continue
         document = spec.normalize(document)
         slots = spec.input_slots(document, tools)
-        values = {k: v for k, v in (candidate.get("input_values") or {}).items() if k in {s["key"] for s in slots}}
+        values = {
+            k: v
+            for k, v in plan_format.input_keys(candidate.get("inputs") or {}, keys).items()
+            if k in {s["key"] for s in slots}
+        }
         prepared.append(
             {
-                "title": candidate.get("title") or document["workflow"]["name"],
+                "title": title,
                 "rationale": candidate.get("rationale", ""),
                 "source": source,
                 "document": document,
@@ -136,7 +149,7 @@ async def propose_plans(candidates: list[dict[str, Any]], runtime: ToolRuntime[R
             }
         )
     if problems:
-        return _reply(runtime, "계획 검증 실패. 수정 후 다시 제안하세요.\n" + "\n".join(problems))
+        return _reply(runtime, "계획 검증 실패. 해당 후보만 고쳐 다시 제안하세요.\n" + "\n".join(problems))
     if not prepared:
         return _reply(runtime, "제안할 계획이 없습니다.")
 
@@ -167,43 +180,71 @@ async def propose_plans(candidates: list[dict[str, Any]], runtime: ToolRuntime[R
         "custom": [],
     }
     await ctx.emit("plan_approved", {"plan_id": plan["id"], "title": plan["title"], "document": plan["document"]})
-    return _reply(runtime, f"계획 승인됨: {plan['title']}. run_plan으로 실행하세요.", plan=plan)
+    calls = ", ".join(f"#{i} {c.tool}" for i, c in enumerate(spec.calls(plan["document"])))
+    return _reply(runtime, f"계획 승인됨: {plan['title']} ({calls}). run_plan으로 실행하세요.", plan=plan)
+
+
+def _by_call_index(errors: list[str], keys: list[str]) -> list[str]:
+    """Validation speaks steps[s].tools[t]; the model wrote call numbers."""
+    index = {f"steps[{k.split('.')[0]}].tools[{k.split('.')[1]}]": f"calls[{i}]" for i, k in enumerate(keys)}
+    out = []
+    for error in errors:
+        for where, call in index.items():
+            error = error.replace(where, call)
+        out.append(error)
+    return out
+
+
+def _call_key(plan: dict[str, Any], ref: str | int) -> str | None:
+    """Calls are numbered in plan order (#0, #1, ...) for the model; "<step>.<tool>" also works."""
+    order = [c.key for c in spec.calls(plan["document"])]
+    ref = str(ref).lstrip("#")
+    if ref.isdigit():
+        return order[int(ref)] if int(ref) < len(order) else None
+    return ref if ref in order else None
 
 
 @tool
-async def revise_call(call: str, arguments: dict[str, Any], runtime: ToolRuntime[RunContext, AnalysisState]) -> Command:
-    """Repair a failed or pending call of the approved plan by replacing its arguments.
+async def revise_call(call: str, args: dict[str, Any], runtime: ToolRuntime[RunContext, AnalysisState]) -> Command:
+    """Repair a failed or pending call of the approved plan by replacing its args.
 
-    call: "<step_index>.<tool_index>". arguments: full Workflow 1.0 arguments object for that call.
-    To change an input value only, pass {"<param>": {"source": "input"}} and set it with input_values.
+    call: the call number from the plan ("#2" or "2"). args: same notation as propose_plans
+    ("$input", "@<call>.<output>", or a fixed value). A fixed value replaces an input the user gave.
     """
     plan = runtime.state.get("plan")
     if not plan:
         return _reply(runtime, "승인된 계획이 없습니다.")
-    if plan["calls"].get(call, {}).get("status") == "succeeded":
-        return _reply(runtime, f"{call}은 이미 성공했습니다. 새 계획을 제안하세요.")
+    key = _call_key(plan, call)
+    if key is None:
+        return _reply(runtime, f"{call}번 호출이 없습니다.")
+    if plan["calls"][key]["status"] == "succeeded":
+        return _reply(runtime, f"#{call}은 이미 성공했습니다. 새 계획을 제안하세요.")
+    order = [c.key for c in spec.calls(plan["document"])]
+    position = order.index(key)
+    try:
+        arguments = {p: plan_format._argument(v, position, order, p) for p, v in args.items()}
+    except plan_format.PlanFormatError as exc:
+        return _reply(runtime, f"수정안 형식 오류: {exc}")
     document = json.loads(json.dumps(plan["document"]))
-    si, ti = (int(x) for x in call.split("."))
-    literal_values = {
-        k: v["value"]
-        for k, v in arguments.items()
-        if isinstance(v, dict) and v.get("source") == "input" and "value" in v
-    }
-    for k in literal_values:
-        arguments[k] = {"source": "input"}
+    si, ti = (int(x) for x in key.split("."))
     document["workflow"]["steps"][si]["tools"][ti]["arguments"] = arguments
     services = runtime.context.services
     errors = spec.validate(document, services.skills("analysis"), services.tool_catalog())
     if errors:
-        return _reply(runtime, "수정안 검증 실패:\n" + "\n".join(errors))
+        return _reply(runtime, "수정안 검증 실패:\n" + "\n".join(_by_call_index(errors, order)))
+    values = {
+        k: v
+        for k, v in plan["input_values"].items()
+        if not k.startswith(key + ".") or arguments.get(k[len(key) + 1 :], {}).get("source") == "input"
+    }
     plan = {
         **plan,
         "document": document,
-        "input_values": {**plan["input_values"], **{f"{call}.{k}": v for k, v in literal_values.items()}},
-        "calls": {**plan["calls"], call: {"status": "pending"}},
+        "input_values": values,
+        "calls": {**plan["calls"], key: {"status": "pending"}},
     }
-    await runtime.context.emit("plan_revised", {"call": call, "arguments": arguments})
-    return _reply(runtime, f"{call} 인자를 수정했습니다. run_plan으로 다시 실행하세요.", plan=plan)
+    await runtime.context.emit("plan_revised", {"call": position, "args": args})
+    return _reply(runtime, f"#{position} 인자를 수정했습니다. run_plan으로 다시 실행하세요.", plan=plan)
 
 
 # --- execution -----------------------------------------------------------------------------
@@ -360,7 +401,7 @@ async def run_plan(
     """Run the next calls of the approved plan on the executor and wait for their results.
 
     Runs pending calls in order and stops before a conditional call you have not decided yet.
-    decisions: {"<step>.<tool>": {"run": true|false, "reason": "..."}} for conditional calls, decided from
+    decisions: {"<call number>": {"run": true|false, "reason": "..."}} for conditional calls, decided from
     the condition in the skill's Tool list and the condition_tool's results you already observed.
     """
     ctx = runtime.context
@@ -368,16 +409,19 @@ async def run_plan(
     if not plan:
         return _reply(runtime, "승인된 계획이 없습니다. propose_plans로 먼저 승인을 받으세요.")
     plan = json.loads(json.dumps(plan))
+    decisions = {key: d for ref, d in (decisions or {}).items() if (key := _call_key(plan, ref))}
+    number = {c.key: i for i, c in enumerate(spec.calls(plan["document"]))}
     execution = runtime.state.get("execution")
     if not (execution and execution.get("alive")):
         # A new kernel has none of the earlier variables: re-run everything that had succeeded.
         for state in plan["calls"].values():
             if state["status"] == "succeeded":
                 state["status"] = "pending"
-    segment, undecided = _segment(plan, decisions or {})
+    segment, undecided = _segment(plan, decisions)
     if not segment:
         if undecided:
-            return _reply(runtime, f"조건부 호출 {undecided}의 실행 여부를 decisions로 정해 주세요.", plan=plan)
+            pending = [f"#{number[k]}" for k in undecided]
+            return _reply(runtime, f"조건부 호출 {pending}의 실행 여부를 decisions로 정해 주세요.", plan=plan)
         return _reply(runtime, "계획의 모든 호출이 끝났습니다. 결과를 해석하고 write_report를 호출하세요.", plan=plan)
 
     tools = ctx.services.tool_catalog()
@@ -405,15 +449,15 @@ async def run_plan(
         view = _step_view(runtime, results.get(step_id))
         status = {"SUCCEEDED": "succeeded", "NOT_RUN": "pending"}.get(view["status"], "failed")
         plan["calls"][call.key] = {"status": status, "step_id": step_id}
-        report[f"{call.key} {call.tool}"] = view
+        report[f"#{number[call.key]} {call.tool}"] = view
     await ctx.emit("execution_completed", {"execution_id": execution["id"], "results": report, "error": error})
     _, undecided = _segment(json.loads(json.dumps(plan)), {})
     summary = {
         "results": report,
         "operation_error": error,
         "kernel_alive": execution["alive"],
-        "remaining_conditional_calls": undecided,
-        "pending_calls": [k for k, v in plan["calls"].items() if v["status"] == "pending"],
+        "remaining_conditional_calls": [f"#{number[k]}" for k in undecided],
+        "pending_calls": [f"#{number[k]}" for k, v in plan["calls"].items() if v["status"] == "pending"],
     }
     return _reply(runtime, json.dumps(summary, ensure_ascii=False, default=str), plan=plan, execution=execution)
 

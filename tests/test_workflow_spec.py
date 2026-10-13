@@ -29,7 +29,11 @@ def test_unknown_output_and_forward_reference(adaptive, skills, tools):
 def test_always_call_cannot_depend_on_conditional(adaptive, skills, tools):
     steps = adaptive["workflow"]["steps"]
     steps[2]["tools"].append(
-        {"tool": "histogram_eda", "execution": "always", "arguments": {"data": {"source": "tool_output", "step_index": 2, "tool_index": 1, "output": "plot_path"}}}
+        {
+            "tool": "histogram_eda",
+            "execution": "always",
+            "arguments": {"data": {"source": "tool_output", "step_index": 2, "tool_index": 1, "output": "plot_path"}},
+        }
     )
     assert any("cannot depend on conditional" in e for e in spec.validate(adaptive, skills, tools))
 

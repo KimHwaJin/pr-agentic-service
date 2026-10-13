@@ -47,6 +47,7 @@ class Settings(BaseSettings):
     llm_timeout_seconds: float = 120.0
     llm_enable_thinking: bool | None = None
 
+    embedding_provider: Literal["none", "openai", "mock"] = "none"
     embedding_base_url: str = ""
     embedding_api_key: str = "EMPTY"
     embedding_model: str = ""
@@ -72,6 +73,7 @@ class Settings(BaseSettings):
     plan_candidates: int = Field(5, ge=1, le=10)
     workflow_similarity: float = 0.93
     agent_recursion_limit: int = 200
+    agent_model_call_limit: int = 40  # per turn; stops a model that keeps repeating a failing call
 
     # Project memory.
     memory_item_max_chars: int = 1000
@@ -100,6 +102,8 @@ class Settings(BaseSettings):
             raise ValueError("SSO_ADAPTER=dev is only allowed with ENV=local")
         if self.env in {"stg", "prd"} and not self.cookie_secure:
             raise ValueError("COOKIE_SECURE must be true outside local/dev")
+        if self.embedding_provider == "openai" and not (self.embedding_base_url and self.embedding_model):
+            raise ValueError("EMBEDDING_PROVIDER=openai needs EMBEDDING_BASE_URL and EMBEDDING_MODEL")
         if self.llm_default_alias not in self.llm_models:
             raise ValueError("LLM_DEFAULT_ALIAS must be a key of LLM_MODELS")
         return self
@@ -109,8 +113,10 @@ class Settings(BaseSettings):
         return self.database_url.replace("postgresql+psycopg://", "postgresql://")
 
     @property
-    def embeddings_enabled(self) -> bool:
-        return bool(self.embedding_base_url and self.embedding_model)
+    def embedding_space(self) -> str:
+        """Vectors from different models/dims never mix in search."""
+        model = "mock-ngram" if self.embedding_provider == "mock" else self.embedding_model
+        return f"{model}:{self.embedding_dims}"
 
 
 @lru_cache
