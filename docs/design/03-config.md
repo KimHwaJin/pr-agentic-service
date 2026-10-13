@@ -43,8 +43,8 @@ models:
     label: Qwen 3.8 27B
     default: true
     input: [text]
-  - name: qwen3-vl-30b-fp8
-    label: Qwen3 VL 30B
+  - name: example-vl-model
+    label: 예시 비전 모델
     input: [text, image]
     max_images: 8
 ```

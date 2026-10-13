@@ -28,9 +28,10 @@ batch_base_url: http://<pr-batch-host>:8100
 batch_jwt_secret: <batch-jwt-secret>
 batch_report_jwt_secret: <batch-report-jwt-secret>
 
+# Models served in this environment (fill in): name = served model name,
+# input: [text] or [text, image] as the deployed model supports.
 models:
-  - name: qwen38-27b-nvfp4
-    label: Qwen 3.8 27B
+  - name: <model-name>
+    label: <display name>
     default: true
-    input: [text, image]   # vision checked on the gateway 2026-10-14
-    max_images: 8
+    input: [text]

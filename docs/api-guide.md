@@ -43,7 +43,7 @@
 {"input": {"content": [
    {"type": "text", "text": "이 웨이퍼 맵에서 이상 패턴 찾아줘"},
    {"type": "image", "base64": "iVBOR…", "mime_type": "image/png", "name": "wafer.png"}
- ]}, "model": "qwen3-vl-30b-fp8"}
+ ]}, "model": "qwen38-27b-nvfp4"}
 
 // 재개: hitl_request(또는 Run.waiting)의 interrupt_id와 답(4장)
 {"command": {"resume": {"interrupt_id": "…", "value": {"action": "approve", "index": 0}}}}

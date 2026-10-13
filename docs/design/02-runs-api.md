@@ -105,8 +105,8 @@ models:
     label: Qwen 3.8 27B         # 화면 표시 이름 (선택, 없으면 name)
     default: true               # 정확히 하나
     input: [text]
-  - name: qwen3-vl-30b-fp8
-    label: Qwen3 VL 30B
+  - name: example-vl-model
+    label: 예시 비전 모델
     input: [text, image]
     max_images: 8
 ```
@@ -115,14 +115,14 @@ models:
 - `default: true`는 정확히 하나여야 하고, 기동 시 검사해서 0개나 2개 이상이면 시작하지 않습니다. `name` 중복도 같습니다.
 - 배포 환경에서는 ConfigMap·Secret을 쓸 수 없으므로, 설정 파일은 이미지에 복사해 읽습니다. 모델을 바꾸려면 파일 수정 후 이미지를 다시 빌드·배포합니다(로컬 compose는 마운트해서 바로 반영).
 - 지금의 `LLM_MODELS`, `LLM_DEFAULT_ALIAS` 환경변수는 없앱니다.
-- `qwen38-27b-nvfp4`도 이미지 입력을 받습니다(게이트웨이로 직접 확인, 2026-10-14). `qwen3-vl-30b-fp8`는 같은 날 백엔드 연결 오류였습니다. 도구 호출 동작은 넣기 전에 확인이 필요합니다.
+- 모델 이름과 이미지 입력 여부는 배포 환경마다 다르므로 환경별 설정 파일에서 운영자가 정합니다. 로컬에서는 `qwen38-27b-nvfp4` 하나만 씁니다. 도구 호출 동작은 넣기 전에 확인이 필요합니다.
 
 **모델 목록 API: `GET /api/v1/models`** (`/users/me`에서 분리)
 
 ```json
 {"items": [
   {"name": "qwen38-27b-nvfp4", "label": "Qwen 3.8 27B", "default": true,  "input": ["text"], "max_images": 0},
-  {"name": "qwen3-vl-30b-fp8", "label": "Qwen3 VL 30B", "default": false, "input": ["text", "image"], "max_images": 8}
+  {"name": "example-vl-model", "label": "예시 비전 모델", "default": false, "input": ["text", "image"], "max_images": 8}
 ]}
 ```
 
@@ -144,7 +144,7 @@ models:
       {"type": "image", "base64": "iVBOR…", "mime_type": "image/png", "name": "wafer_map.png"}
     ]
   },
-  "model": "qwen3-vl-30b-fp8"
+  "model": "example-vl-model"
 }
 ```
 
