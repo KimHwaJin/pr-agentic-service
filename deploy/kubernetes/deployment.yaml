@@ -1,0 +1,72 @@
+# One Deployment, one container. API, run scheduler, executor-event consumer and batch report
+# jobs all run in this process; CPU-based HPA scales the pods (see hpa.yaml).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pr-agentic-service
+spec:
+  replicas: 2
+  selector:
+    matchLabels: {app: pr-agentic-service}
+  template:
+    metadata:
+      labels: {app: pr-agentic-service}
+    spec:
+      # A pod that dies mid-turn is safe (another pod resumes from the checkpoint); a longer
+      # grace lets in-flight LLM calls finish instead of being repeated.
+      terminationGracePeriodSeconds: 60
+      securityContext: {runAsUser: 1000, runAsGroup: 1000, fsGroup: 1000}
+      containers:
+        - name: app
+          image: REGISTRY/pr-agentic-service:TAG
+          ports: [{containerPort: 8080}]
+          env:
+            - {name: ENV, value: prd}
+            - {name: RUN_MODE, value: all}
+            - {name: SSO_ADAPTER, value: company}
+            - {name: SSO_ADAPTER_FACTORY, value: "company_sso:create_sdk"}
+            - {name: COOKIE_SECURE, value: "true"}
+            - {name: EXECUTOR_INPUT_ROOT, value: /mnt/data/agent}
+            - {name: EXECUTOR_RESULT_ROOT, value: /mnt/data/executor}
+          envFrom:
+            - configMapRef: {name: pr-agentic-service-config}
+            - secretRef: {name: pr-agentic-service-secret}
+          readinessProbe:
+            httpGet: {path: /readyz, port: 8080}
+            periodSeconds: 5
+          livenessProbe:
+            httpGet: {path: /healthz, port: 8080}
+            periodSeconds: 15
+            failureThreshold: 4
+          lifecycle:
+            preStop:
+              exec: {command: ["sleep", "5"]}  # let the Service stop routing before shutdown
+          resources:
+            requests: {cpu: 500m, memory: 1Gi}
+            limits: {cpu: "2", memory: 2Gi}
+          volumeMounts:
+            - {name: shared, mountPath: /mnt/data}
+      volumes:
+        - name: shared
+          persistentVolumeClaim:
+            claimName: executor-shared-pvc  # the Agent/Executor RWX claim
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: pr-agentic-service
+spec:
+  selector: {app: pr-agentic-service}
+  ports: [{port: 80, targetPort: 8080}]
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: pr-agentic-service
+spec:
+  scaleTargetRef: {apiVersion: apps/v1, kind: Deployment, name: pr-agentic-service}
+  minReplicas: 2
+  maxReplicas: 6
+  metrics:
+    - type: Resource
+      resource: {name: cpu, target: {type: Utilization, averageUtilization: 60}}

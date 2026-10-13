@@ -1,6 +1,6 @@
 # pr-agentic-service 설계 v1
 
-상태: 인터뷰 완료(2026-10-13). 구현 기준 문서.
+상태: 인터뷰 완료, 1차 구현 완료(2026-10-13). 구현 기준 문서.
 
 ## 1. 확정 사항
 
@@ -66,19 +66,18 @@
 - 레벨은 세션 설정이며 Project 기본값을 상속한다. 시스템 기본값은 3.
 - 실패 복구도 레벨을 따른다 (레벨 1이면 인자 수정과 다른 tool 선택만 가능).
 
-## 4. executor 사용안
+## 4. executor 사용안 (구현 반영)
 
 | 상황 | 사용 방식 |
 | --- | --- |
-| 분석 시작 | MULTI execution 생성. 승인된 계획 1개 = Operation 1개 |
-| 실패 보완 | 같은 execution에 보정 Operation append (승인 범위 내 자동, 범위 밖이면 재승인) |
-| 후속 분석 | 같은 세션의 다음 질문도 커널이 살아 있으면 같은 execution에 append (변수 재사용) |
-| 대기 | `operation_wait_timeout_seconds` 30분. 세션 활동이 없으면 executor가 정리 |
-| 종료 | 리포트 작성 직후가 아니라, 대기 만료 직전 또는 세션 종료 시 `finalize`. 리포트에는 진행 중인 노트북 링크를 넣고 finalize 후 최종본으로 갱신 |
-| 장기 적재 | `load_data` Step이 오래 걸려도 run은 interrupt 상태로 대기. 사용자에게 "적재 중, 완료 시 알림" 표시. 세션은 그동안 잠김 |
-| 커널 유실 | 대기 만료나 장애로 execution이 끝났으면 새 execution을 열고 필요한 Step(로드 등)을 다시 실행 |
-
-근거: 세션당 run이 하나뿐이라 커널을 세션과 함께 유지해도 경합이 없다. 대신 30분 유휴 시 자동 정리로 용량을 회수한다. 다음 질문에서 변수를 재사용할 수 있어 "후속 질문" 경험이 좋아진다.
+| 분석 시작 | 세션의 커널이 없으면 MULTI execution 생성. 승인된 계획의 실행 구간 1개 = Operation 1개 (tool 호출 1개 = Step 1개) |
+| 조건부 tool | 조건부 호출 앞에서 Operation을 끊고, 앞 결과를 본 Agent의 판단(decisions)으로 다음 Operation을 append |
+| 실패 보완 | 인자 수정(`revise_call`) 후 재실행, 또는 레벨이 허락하면 Agent 코드(`run_custom_code`, 승인 필수)를 같은 커널에 append |
+| 후속 질문 | 커널이 살아 있으면 같은 execution에 append (이전 결과 변수 재사용) |
+| 대기 | `operation_wait_timeout_seconds` 30분. 만료되면 다음 실행 때 새 execution을 열고 성공했던 호출부터 다시 실행 |
+| 종료 | **리포트 작성 시 finalize**: executor의 리포트 Artifact 등록이 SUCCEEDED execution에서만 가능하므로, `write_report`가 finalize → 리포트 생성 → `append_to_notebook`으로 노트북에도 추가 |
+| 장기 적재 | `load_data` 류 Step이 오래 걸려도 run은 `waiting_executor`로 대기(Pod 점유 없음). 세션은 그동안 잠김 |
+| 재실행 안전 | executor 호출은 run·tool_call 기반 idempotency key를 쓰고, 결과를 LangGraph Store에 기록해 재개 시 다시 호출하지 않음 |
 
 ## 5. API / 프론트 연동 (초안)
 
@@ -97,24 +96,27 @@
 - 가져옴: `standalone/sso`의 흐름(로그인 flow, Redis 세션, CSRF)을 네이티브로 이식, skill `.md` 형식(frontmatter + Tool list 표), tool 파일 규약(파일명 = 함수명, 함수 내부 import), AST 기반 docstring 제거, 게이트웨이 대응(`tools=[]` 제거, thinking 옵션), PATH 소스 content-addressed 저장
 - 버림: 고정 단계 상태머신, 다중 worker·lease, DB 분리, 77필드 flat state, 승인 스냅샷에 전체 소스 저장
 
-## 7. 레포 구조 (초안)
+## 7. 레포 구조 (구현)
 
 ```text
-src/app/
-  api/            라우터, SSE, 의존성
-  auth/           SSO 로그인·세션·CSRF (네이티브), SDK adapter, dev adapter
-  domain/         User/Project/Session/Message/Run 모델과 서비스
-  runtime/        RunScheduler, lease, 이벤트 버스, executor 이벤트 consumer
-  agent/          그래프 조립, middleware, 도구, 코드 조립기
-  executor/       executor REST 클라이언트
-  memory/         Project memory (Store)
-prompts/          agent별 .md 프롬프트
-assets/skills/    분석 skill (.md)
-assets/tools/     분석 tool (.py)
-assets/knowledge/ 도메인 지식 skill (.md)
-web/dev/          테스트용 HTML
-migrations/       Alembic (하나)
+src/
+  main.py        RUN_MODE=all | api | worker
+  api_service/   라우터, SSO, 스키마 (agent를 import하지 않음)
+  agent/         그래프, persona middleware, 도구, 코드 조립, 리포트, prompts/*.md
+  worker/        run 스케줄러, executor 이벤트 consumer, 배치 리포트 작업
+  core/          설정, 모델, 이벤트 버스, executor 클라이언트, 메모리·Workflow 서비스, 카탈로그
+assets/          skills/ tools/ knowledge/
+migrations/  web/dev/  scripts/  tests/  deploy/kubernetes/
 ```
+
+의존 방향: `api_service → core`, `worker → agent → core`. 메모리·Workflow의 저장 규칙은 API와 Agent가 함께 지켜야 하므로 core에, Agent가 그것을 쓰는 방식(도구·프롬프트 주입)은 agent에 둔다.
+
+## 7.1 Agent 구성 (구현)
+
+- 그래프 하나에 persona 두 개(main, analyst). `start_analysis` / `finish_analysis` 도구로 전환하고, middleware가 매 모델 호출마다 해당 persona의 프롬프트·도구만 노출한다.
+- main은 `knowledge/`만, analyst는 분석 `skills/`와 tool 카탈로그만 읽는다. 상대 persona가 읽은 자료는 대화 이력에서 "(생략)"으로 가린다.
+- reporter는 도구 없는 단일 LLM 호출(대화형 리포트와 pr-batch 리포트 공용).
+- 프로젝트 지침과 메모리는 매 모델 호출 시 시스템 프롬프트에 넣고 메시지 이력에는 남기지 않는다.
 
 ## 8. Project memory (인터뷰 반영안)
 
