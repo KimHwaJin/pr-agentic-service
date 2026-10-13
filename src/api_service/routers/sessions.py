@@ -60,7 +60,13 @@ async def create_session(project_id: str, body: SessionCreate, services: Service
     await project_for(services, user, project_id, write=True)
     title = body.title or (body.message[:40] if body.message else "새 대화")
     async with services.db.sessions() as db:
-        session = ChatSession(project_id=project_id, user_id=user.id, title=title, code_level=body.code_level)
+        session = ChatSession(
+            project_id=project_id,
+            user_id=user.id,
+            title=title,
+            title_source="user" if body.title else "initial",
+            code_level=body.code_level,
+        )
         db.add(session)
         await db.commit()
     run = await start_run(services, user, session.id, body.message, body.model_alias) if body.message else None
@@ -93,6 +99,8 @@ async def update_session(session_id: str, body: SessionUpdate, services: Service
         session = await db.get(ChatSession, session_id)
         for key, value in body.model_dump(exclude_unset=True).items():
             setattr(session, key, value)
+        if body.title is not None:
+            session.title_source = "user"  # never auto-renamed again
         await db.commit()
         return session
 

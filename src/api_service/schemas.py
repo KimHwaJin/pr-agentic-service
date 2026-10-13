@@ -65,6 +65,7 @@ class SessionRead(Model):
     id: str
     project_id: str
     title: str
+    title_source: str
     code_level: int | None
     active_run_id: str | None
     created_at: datetime

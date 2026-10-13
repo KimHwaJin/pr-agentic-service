@@ -21,7 +21,7 @@
 | GET/PATCH/DELETE | `/projects/{id}` | `system_prompt`는 모든 Agent에 주입되는 프로젝트 지침입니다. 기본 프로젝트는 삭제할 수 없습니다. |
 | POST | `/projects/{id}/sessions` | `{message?, title?, code_level?, model_alias?}`. `message`가 있으면 세션을 만들고 바로 첫 턴을 시작합니다(응답 `{session, run}`). |
 | GET | `/projects/{id}/sessions` | 세션 목록. `active_run_id`가 있으면 작업 중입니다. |
-| GET/PATCH/DELETE | `/sessions/{id}` | `code_level`(1~4, null이면 프로젝트 기본값) 변경 |
+| GET/PATCH/DELETE | `/sessions/{id}` | `title`, `code_level`(1~4, null이면 프로젝트 기본값) 변경. `title_source`: `initial`(첫 메시지 앞부분) → `auto`(첫 답변 후 LLM 요약) / `user`(직접 변경, 이후 자동 변경 없음) |
 | GET | `/sessions/{id}/messages` | 화면용 대화 기록. assistant 메시지의 `attachments`에 리포트·노트북이 들어 있습니다. |
 | POST | `/sessions/{id}/messages` | `{content, model_alias?}` → 202 Run. **세션이 작업 중이면 409**입니다(세션당 동시 작업 1개). |
 | GET | `/runs/{id}` | `status`: `queued`, `running`, `waiting_input`, `waiting_executor`, `succeeded`, `failed`, `cancelled` |
@@ -52,6 +52,7 @@
 | `memory_updated` | `{action, item}` | 메모리 변경 알림 |
 | `workflow_saved` | `{workflow_id, name}` | 저장 알림 |
 | `run_error` | `{message}` | 실패 사유 |
+| `session_titled` | `{title}` | 세션 제목 자동 갱신 (목록·헤더 반영) |
 
 ## 4. HITL (사용자 확인)
 

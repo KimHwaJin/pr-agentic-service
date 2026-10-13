@@ -19,7 +19,9 @@ class Prompt:
 
     def render(self, **values: object) -> str:
         """Fills {name} placeholders that are given; any other braces (JSON examples) stay as written."""
-        return re.sub(r"\{(\w+)\}", lambda m: str(values[m.group(1)]) if m.group(1) in values else m.group(0), self.body)
+        return re.sub(
+            r"\{(\w+)\}", lambda m: str(values[m.group(1)]) if m.group(1) in values else m.group(0), self.body
+        )
 
 
 _loaders: dict[Path, AssetLoader] = {}

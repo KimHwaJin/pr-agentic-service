@@ -15,6 +15,7 @@ from sqlalchemy import or_, select, update
 
 from agent.context import RunContext
 from agent.graph import AgentGraphs
+from agent.titles import summarize_title
 from core.db import utcnow
 from core.events import runs_wake_channel
 from core.models import ChatSession, ExecutorInbox, Message, Project, Run, RunEvent, User
@@ -34,6 +35,7 @@ class RunScheduler:
         self.services, self.graphs, self.owner = services, graphs, owner
         self.settings = services.settings
         self.tasks: set[asyncio.Task] = set()
+        self.background: set[asyncio.Task] = set()  # fire-and-forget work such as session titles
         self.accepting = True
         self._wake = asyncio.Event()
 
@@ -271,9 +273,40 @@ class RunScheduler:
         await self._forget_tool_effects(run.id)
         if answer:
             await ctx.emit("message_final", {"content": answer})
+            title_task = asyncio.create_task(self._auto_title(run, ctx, answer))
+            self.background.add(title_task)
+            title_task.add_done_callback(self.background.discard)
         if error:
             await ctx.emit("run_error", {"message": error})
         await ctx.emit("run_status", {"status": status})
+
+    async def _auto_title(self, run: Run, ctx: RunContext, answer: str) -> None:
+        """Replace the first-message title with an LLM summary once; never touch a user's rename."""
+        async with self.services.db.sessions() as db:
+            claimed = await db.execute(
+                update(ChatSession)
+                .where(ChatSession.id == run.session_id, ChatSession.title_source == "initial")
+                .values(title_source="auto")
+            )
+            await db.commit()
+        if not claimed.rowcount:
+            return
+        try:
+            title = await summarize_title(self.settings, run.model_alias, ctx.user_text, answer)
+        except Exception:  # noqa: BLE001 - keep the first-message title
+            log.warning("auto_title_failed session=%s", run.session_id)
+            return
+        if not title:
+            return
+        async with self.services.db.sessions() as db:
+            renamed = await db.execute(
+                update(ChatSession)
+                .where(ChatSession.id == run.session_id, ChatSession.title_source == "auto")
+                .values(title=title)
+            )
+            await db.commit()
+        if renamed.rowcount:
+            await ctx.emit("session_titled", {"title": title})
 
     async def _forget_tool_effects(self, run_id: str) -> None:
         """Replay guards (agent.tools.analysis._once) are only needed while the run is alive."""

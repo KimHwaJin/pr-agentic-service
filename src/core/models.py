@@ -61,6 +61,8 @@ class ChatSession(Timestamped, Base):
     project_id: Mapped[str] = mapped_column(ID, ForeignKey("projects.id"), index=True)
     user_id: Mapped[str] = mapped_column(ID, ForeignKey("users.id"))
     title: Mapped[str] = mapped_column(String(200), default="새 대화")
+    # initial (from the first message) -> auto (LLM summary after the first answer) | user (renamed)
+    title_source: Mapped[str] = mapped_column(String(16), default="initial", server_default="initial")
     code_level: Mapped[int | None] = mapped_column(Integer)
     active_run_id: Mapped[str | None] = mapped_column(ID)
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

@@ -41,7 +41,7 @@
   /* main */
   main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
   header { height: 52px; flex: none; display: flex; align-items: center; gap: 10px; padding: 0 20px; }
-  header .title { font-weight: 500; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  header .title { font-weight: 500; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: text; }
   .chip { display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px; border: 1px solid var(--line); border-radius: 999px; font-size: 13px; color: var(--muted); background: var(--panel); }
   .chip select { border: 0; background: transparent; outline: none; }
   .ghost { padding: 6px 10px; border-radius: 8px; color: var(--muted); font-size: 13px; }
@@ -154,7 +154,7 @@
 
 <main>
   <header>
-    <div class="title" id="title">새 대화</div>
+    <div class="title" id="title" title="클릭해서 이름 바꾸기" onclick="renameSession()">새 대화</div>
     <label class="chip">모델 <select id="model"></select></label>
     <label class="chip">코드 레벨 <select id="level"><option value="">기본</option><option value="1">1 · tool만</option><option value="2">2 · 연결 코드</option><option value="3">3 · tool 우선</option><option value="4">4 · 자유 코드</option></select></label>
     <button class="ghost" onclick="toggleDrawer()">메모리 · 워크플로우</button>
@@ -250,6 +250,13 @@ async function openSession(id) {
   openStream(); loadSessions();
 }
 
+async function renameSession() {
+  if (!S.session) return;
+  const title = prompt('대화 이름', $('title').textContent); if (!title?.trim()) return;
+  const s = await api(`/sessions/${S.session}`, { method: 'PATCH', body: { title: title.trim() } });
+  $('title').textContent = s.title; loadSessions();
+}
+
 $('level').onchange = async e => { if (S.session) await api(`/sessions/${S.session}`, { method: 'PATCH', body: { code_level: e.target.value ? +e.target.value : null } }); };
 const input = $('input');
 function autosize() { input.style.height = 'auto'; input.style.height = Math.min(input.scrollHeight, 220) + 'px'; }
@@ -310,6 +317,7 @@ function openStream() {
   on('memory_updated', e => { step('ok', `메모리 ${e.data.action === 'deleted' ? '삭제' : '업데이트'} · ${e.data.item.title || ''}`); loadMemory(); });
   on('workflow_saved', e => { step('ok', `워크플로우 저장 · ${e.data.name}`); loadWorkflows(); });
   on('run_error', e => showError(e.data.message));
+  on('session_titled', e => { $('title').textContent = e.data.title; loadSessions(); });
 }
 
 /* rendering ---------------------------------------------------------------- */
