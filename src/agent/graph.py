@@ -22,6 +22,7 @@ from agent import compaction_rules
 from agent.context import AnalysisState, RunContext
 from agent.llm import chat_model
 from agent.middleware import JsonArgumentsMiddleware, PersonaMiddleware
+from agent.prompts import load_prompt
 from agent.tools.analysis import (
     finish_analysis,
     propose_plans,
@@ -110,7 +111,16 @@ class AgentGraphs:
                 middleware.append(compaction_rules.finished_analysis())
             middleware.append(
                 SummarizationMiddleware(
-                    model, trigger=("tokens", 60000), keep=("messages", 40)
+                    model,
+                    trigger=(
+                        "tokens",
+                        self.settings.agent_summary_trigger_tokens,
+                    ),
+                    keep=("messages", 40),
+                    summary_prompt=load_prompt(
+                        self.settings.prompts_root, "summary"
+                    ).body,
+                    trim_tokens_to_summarize=None,  # summarize all of it
                 )
             )
             self._graphs[name] = create_agent(
