@@ -120,7 +120,7 @@ class AgentGraphs:
                     keep=("tokens", trigger // 2),
                     summary_prompt=load_prompt(
                         self.settings.prompts_root, "summary"
-                    ).body,
+                    ).render(max_chars=self.settings.agent_summary_max_chars),
                     trim_tokens_to_summarize=None,  # summarize all of it
                 )
             )

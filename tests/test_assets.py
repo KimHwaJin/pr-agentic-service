@@ -41,6 +41,7 @@ def test_summary_prompt_keeps_the_messages_slot():
     from agent.prompts import load_prompt
     from core.config import ROOT
 
-    body = load_prompt(ROOT / "src/agent/prompts", "summary").body
-    assert "\n<messages>\n" in body
+    prompt = load_prompt(ROOT / "src/agent/prompts", "summary")
+    body = prompt.render(max_chars=6000)
+    assert "\n<messages>\n" in body and "6000자" in body
     assert body.format(messages="X").count("X") == 1  # no stray braces

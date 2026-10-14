@@ -53,7 +53,7 @@ create_agent(
         ToolErrorMiddleware,     # 도구 오류를 모델에게 메시지로 돌려줌
         ModelCallLimitMiddleware(run_limit=40),   # 한 턴 모델 호출 상한
         ToolResultCompactionMiddleware,  # 분석이 끝나면 그 분석의 긴 도구 결과를 줄임 (agent/compaction*.py)
-        SummarizationMiddleware(trigger=6만 토큰, keep=3만 토큰, prompts/summary.md, 입력 자르지 않음),
+        SummarizationMiddleware(trigger=3만 어림 토큰≈12만 자, keep=절반, prompts/summary.md(최대 6천 자), 입력 자르지 않음),
     ],
     state_schema=AnalysisState,  # messages + active_agent, plan, execution, reports, nudges, notice
     context_schema=RunContext,   # run마다 주입: services, run/session/project/user id, 모델, 코드 레벨, 프로젝트 지침
@@ -72,7 +72,7 @@ create_agent(
 flowchart TD
   S([턴 시작: HumanMessage id=run_id 추가]) --> BA
   BA["before_agent<br/>Persona: 프로젝트 메모리 불러오기, nudges·notice 초기화"] --> BM
-  BM["before_model<br/>ModelCallLimit: 40회 넘었나<br/>Summarization: 6만 토큰 넘으면 요약"] --> WM
+  BM["before_model<br/>ModelCallLimit: 40회 넘었나<br/>Summarization: 3만 어림 토큰(약 12만 자) 넘으면 요약"] --> WM
   subgraph WM["wrap_model_call (Persona)"]
     direction TB
     P1["active_agent의 .md 프롬프트 렌더<br/>(skill 목록, 코드 레벨, 계획 상태, 후보 수)"]

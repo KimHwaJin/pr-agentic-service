@@ -139,8 +139,12 @@ class Settings(BaseSettings):
     )
     # Shrink tool results of an analysis once finish_analysis closes it.
     agent_compact_finished_analysis: bool = True
-    # Conversation summarization starts past this many (estimated) tokens.
-    agent_summary_trigger_tokens: int = 60000
+    # Conversation summarization starts past this many estimated tokens
+    # (LangChain's 4 chars = 1 token; our Korean history is ~2 chars per
+    # real token, so 30000 is ~120k chars, ~55k real tokens: about 40% of a
+    # 128k window such as gpt-oss-120b). Half of it is kept after a summary.
+    agent_summary_trigger_tokens: int = 30000
+    agent_summary_max_chars: int = 6000  # length asked of the summary
 
     # Project memory.
     memory_item_max_chars: int = 1000
