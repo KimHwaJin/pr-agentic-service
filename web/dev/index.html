@@ -67,6 +67,18 @@
   .acts button:hover { border-color: var(--accent); color: var(--accent); }
   .acts button.danger:hover { border-color: var(--bad); color: var(--bad); }
   .muted { color: var(--muted); }
+  .seg { display: inline-flex; background: var(--code); border-radius: 10px; padding: 3px; gap: 2px; }
+  .seg button { border: 0; background: transparent; padding: 6px 14px; border-radius: 8px; font-size: 13px; color: var(--muted); cursor: pointer; }
+  .seg button.on { background: var(--panel); color: var(--ink); font-weight: 500; box-shadow: 0 1px 2px rgba(0,0,0,.08); }
+  .seg .n { font-size: 11px; color: var(--faint); margin-left: 4px; }
+  .pool-sec { margin: 6px 0 22px; }
+  .pool-sec h3 { display: flex; align-items: center; gap: 10px; font-size: 15px; font-weight: 600; margin: 0 0 10px; }
+  .pool-sec h3 .dot { width: 10px; height: 10px; border-radius: 3px; }
+  .pool-sec h3 .meta { font-size: 12px; font-weight: 400; color: var(--muted); }
+  .pool-INTERACTIVE { --pool: #3b6fd6; } .pool-BATCH { --pool: #8a5cc7; }
+  .pool-sec h3 .dot { background: var(--pool); }
+  .pool-sec .rt { border-top: 3px solid var(--pool); }
+  .pool-tag { font-size: 11px; padding: 1px 8px; border-radius: 999px; color: #fff; background: var(--pool); }
   .rt-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(330px, 1fr)); gap: 14px; margin-bottom: 18px; }
   .rt { border: 1px solid var(--line); border-radius: 14px; background: var(--panel); padding: 14px 16px; box-shadow: var(--shadow); }
   .rt-head { display: flex; align-items: center; gap: 8px; margin-bottom: 2px; }
@@ -1199,7 +1211,7 @@ function runtimeCard(t) {
   const [pcls, plabel] = level(res.pressure_score || 0);
   const act = (a, label, danger) => `<button class="${danger ? 'danger' : ''}" onclick="runtimeAction('${t.target_id}','${a}','${esc(t.name)}')">${label}</button>`;
   return `<div class="rt">
-    <div class="rt-head"><b title="${esc(t.name)}">${esc(t.name)}</b><span class="badge">${esc(t.runtime.pool)}</span>${statusBadge(st.status)}</div>
+    <div class="rt-head"><b title="${esc(t.name)}">${esc(t.name)}</b><span class="pool-tag">${t.runtime.pool === 'BATCH' ? '배치' : '인터랙티브'}</span>${statusBadge(st.status)}</div>
     <div class="rt-sub mono">${esc(t.runtime.connection_config?.endpoint || '')} · ${short(t.target_id)}${st.enabled ? '' : ' · 사용 중지'}</div>
     ${res.cpu ? `<div class="rt-gauges">
         ${ring(cpu.utilization, 'CPU', `${(cpu.used_cores ?? 0).toFixed(2)} / ${cpu.capacity_cores ?? '-'} 코어`)}
@@ -1213,18 +1225,29 @@ function runtimeCard(t) {
     ${h.last_error ? `<div style="color:var(--bad);font-size:12px;margin-top:6px">${esc(h.last_error)}</div>` : ''}
   </div>`;
 }
+const POOLS = [['ALL', '전체'], ['INTERACTIVE', '인터랙티브'], ['BATCH', '배치']];
+const POOL_TEXT = { INTERACTIVE: '인터랙티브 · 채팅 분석 실행', BATCH: '배치 · 예약·대량 실행' };
+function setPool(pool) { SYS.pool = pool; renderRuntimes(true); }
 async function renderRuntimes(quiet = false) {
   if (!quiet) $('sysBody').innerHTML = '<div class="muted">불러오는 중…</div>';
   const [pools, targets] = await Promise.all([api('/executor/runtime-pools'), api('/executor/runtime-targets?limit=200')]);
+  const pick = SYS.pool || 'ALL';
+  const count = p => targets.items.filter(t => p === 'ALL' || t.runtime.pool === p).length;
+  const sections = pools.items
+    .filter(p => pick === 'ALL' || p.runtime.pool === pick)
+    .map(p => {
+      const pool = p.runtime.pool, items = targets.items.filter(t => t.runtime.pool === pool);
+      return `<section class="pool-sec pool-${esc(pool)}">
+        <h3><span class="dot"></span>${esc(POOL_TEXT[pool] || pool)} ${p.state.accepting_new_executions ? statusBadge('ACTIVE') : statusBadge('OFFLINE')}
+          <span class="meta">대상 ${p.targets.active}/${p.targets.total} 활성 · 비우는 중 ${p.targets.draining} · 오프라인 ${p.targets.offline} · 용량 ${p.capacity.available}/${p.capacity.configured}${p.state.saturated ? ' · <span style="color:var(--bad)">포화</span>' : ''}</span></h3>
+        <div class="rt-grid">${items.map(runtimeCard).join('') || '<div class="muted">런타임이 없습니다.</div>'}</div></section>`;
+    }).join('');
+  const top = `<div class="toolbar"><div class="seg">${POOLS.map(([k, label]) => `<button class="${k === pick ? 'on' : ''}" onclick="setPool('${k}')">${label}<span class="n">${count(k)}</span></button>`).join('')}</div>
+      <span class="muted" style="font-size:12px;margin-left:auto">10초마다 자동 갱신</span></div>${sections}`;
   const form = $('rtName') ? null : `<div class="card" style="margin-top:18px"><h4>런타임 등록 · 수정</h4><div class="sub">같은 이름이면 수정됩니다. 등록하면 바로 점검합니다.</div>
-      <div class="toolbar"><input id="rtName" placeholder="이름 (영문·숫자·._-)"><select id="rtPool"><option>INTERACTIVE</option><option>BATCH</option></select>
+      <div class="toolbar"><input id="rtName" placeholder="이름 (영문·숫자·._-)"><select id="rtPool"><option value="INTERACTIVE">인터랙티브</option><option value="BATCH">배치</option></select>
         <input id="rtEndpoint" placeholder="http://jupyter:8888" style="width:240px"><input id="rtCredential" placeholder="토큰 (선택)" type="password"><input id="rtMax" placeholder="최대 동시 실행 (선택)" type="number" style="width:150px">
         <button class="btn primary" onclick="registerRuntime()">등록</button></div></div>`;
-  const top = `<div class="cards">${pools.items.map(p => `<div class="stat"><b>${esc(p.runtime.type)} · ${esc(p.runtime.pool)} ${p.state.accepting_new_executions ? statusBadge('ACTIVE') : statusBadge('OFFLINE')}</b>
-      대상 ${p.targets.active}/${p.targets.total} 활성 · 비우는 중 ${p.targets.draining} · 오프라인 ${p.targets.offline}<br>
-      용량 ${p.capacity.available} / ${p.capacity.configured} 사용 가능${p.state.saturated ? ' · <span style="color:var(--bad)">포화</span>' : ''}</div>`).join('')}</div>
-    <div class="toolbar"><span class="muted" style="font-size:12px">10초마다 자동 갱신</span></div>
-    <div class="rt-grid">${targets.items.map(runtimeCard).join('')}</div>`;
   if (form) $('sysBody').innerHTML = `<div id="rtLive">${top}</div>${form}`;
   else $('rtLive').innerHTML = top;
 }
