@@ -10,6 +10,7 @@ with XPENDING + XCLAIM.
 import asyncio
 import json
 import logging
+from datetime import timedelta
 from typing import Any
 
 from redis.asyncio import Redis
@@ -17,7 +18,8 @@ from redis.exceptions import ResponseError
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
 
-from core.db import Database
+from core.db import Database, utcnow
+from core.executor.client import ExecutorClient, ExecutorError
 from core.models import ExecutorInbox, Run
 
 log = logging.getLogger(__name__)
@@ -65,6 +67,18 @@ async def wake_waiting_run(
         run.status, run.waiting = "queued", None
         await session.commit()
         return run.id
+
+
+async def deliver(db: Database, event: dict[str, Any]) -> str | None:
+    """Store a wake event once and queue the run waiting on it."""
+    async with db.sessions() as session:
+        await session.execute(
+            insert(ExecutorInbox).values(**event).on_conflict_do_nothing()
+        )
+        await session.commit()
+    return await wake_waiting_run(
+        db, event["execution_id"], event["event_type"], event["payload"]
+    )
 
 
 class ExecutorEventConsumer:
@@ -148,18 +162,96 @@ class ExecutorEventConsumer:
             await self.redis.xack(self.stream, self.group, message_id)
             return
         if event["event_type"] in WAKE_TYPES:
-            async with self.db.sessions() as session:
-                await session.execute(
-                    insert(ExecutorInbox)
-                    .values(**event)
-                    .on_conflict_do_nothing()
-                )
-                await session.commit()
-            run_id = await wake_waiting_run(
-                self.db, event["execution_id"], event["event_type"], payload
-            )
+            run_id = await deliver(self.db, event)
             if run_id:
                 await self.on_wake(run_id)
         else:
             await self.on_progress(event["execution_id"], event)
         await self.redis.xack(self.stream, self.group, message_id)
+
+
+class MissedEventRecovery:
+    """Runs still waiting on the executor after ``after_seconds``.
+
+    The stream is the fast path; if its event never reaches us (Redis lost
+    it, the consumer was down past the stream's retention), the run would
+    wait forever. This asks the executor's own event timeline for the event
+    the run waits for and delivers it the same way.
+    """
+
+    def __init__(
+        self,
+        db: Database,
+        executor: ExecutorClient,
+        on_wake,
+        after_seconds: float,
+        interval_seconds: float = 60,
+    ):
+        self.db, self.executor, self.on_wake = db, executor, on_wake
+        self.after = timedelta(seconds=after_seconds)
+        self.interval = interval_seconds
+
+    async def run_forever(self) -> None:
+        while True:
+            try:
+                await self.sweep()
+            except asyncio.CancelledError:
+                raise
+            except Exception:  # noqa: BLE001 - try again next round
+                log.exception("missed_event_recovery_error")
+            await asyncio.sleep(self.interval)
+
+    async def sweep(self) -> list[str]:
+        async with self.db.sessions() as session:
+            waiting = (
+                await session.scalars(
+                    select(Run)
+                    .where(
+                        Run.status == "waiting_executor",
+                        Run.updated_at < utcnow() - self.after,
+                    )
+                    .limit(50)
+                )
+            ).all()
+        woken = []
+        for run in waiting:
+            if run_id := await self._recover(run):
+                woken.append(run_id)
+                await self.on_wake(run_id)
+        return woken
+
+    async def _recover(self, run: Run) -> str | None:
+        execution_id = (run.waiting or {}).get("execution_id")
+        if not execution_id:
+            return None
+        try:
+            events = await self.executor.events(execution_id)
+        except ExecutorError as exc:
+            log.warning(
+                "missed_event_lookup_failed run_id=%s status=%s",
+                run.id,
+                exc.status,
+            )
+            return None
+        for item in events:
+            if item.get("event_type") in WAKE_TYPES and matches(
+                run.waiting or {}, item["event_type"], item.get("payload", {})
+            ):
+                run_id = await deliver(
+                    self.db,
+                    {
+                        "event_id": str(item["event_id"]),
+                        "execution_id": execution_id,
+                        "event_type": item["event_type"],
+                        "event_sequence": int(item["event_sequence"]),
+                        "payload": item.get("payload", {}),
+                    },
+                )
+                if run_id:
+                    log.warning(
+                        "executor_event_recovered run_id=%s event=%s",
+                        run_id,
+                        item["event_type"],
+                    )
+                return run_id
+        return None

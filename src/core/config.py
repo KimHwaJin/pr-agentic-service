@@ -113,6 +113,8 @@ class Settings(BaseSettings):
     # local mount of the executor's SHARED_STORAGE_ROOT (results)
     executor_result_root: Path = ROOT / ".local/shared"
     executor_event_stream: str = "executor.events"
+    # a run still waiting this long asks the executor for its event
+    executor_event_recovery_seconds: float = 120
     executor_runtime_profile: str = "default"
     executor_operation_wait_seconds: int = Field(1800, ge=30)
     executor_step_timeout_seconds: int | None = None

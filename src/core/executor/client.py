@@ -119,6 +119,24 @@ class ExecutorClient:
     async def get(self, execution_id: str) -> dict[str, Any]:
         return await self._call("GET", f"/executions/{execution_id}")
 
+    async def events(self, execution_id: str) -> list[dict[str, Any]]:
+        """The execution's durable event timeline, oldest first."""
+        items: list[dict[str, Any]] = []
+        cursor = None
+        while True:
+            page = await self._call(
+                "GET",
+                f"/executions/{execution_id}/events",
+                params={
+                    "limit": 200,
+                    **({"cursor": cursor} if cursor else {}),
+                },
+            )
+            items += page["items"]
+            cursor = page.get("next_cursor")
+            if not cursor:
+                return items
+
     async def result(self, execution_id: str) -> dict[str, Any]:
         return await self._call("GET", f"/executions/{execution_id}/result")
 

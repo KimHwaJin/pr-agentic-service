@@ -8,7 +8,7 @@ from agent.graph import AgentGraphs
 from core.bootstrap import PgPool
 from core.services import Services
 from worker.batch_reports import BatchReportWorker
-from worker.executor_events import ExecutorEventConsumer
+from worker.executor_events import ExecutorEventConsumer, MissedEventRecovery
 from worker.maintenance import Retention
 from worker.scheduler import RunScheduler
 
@@ -35,6 +35,12 @@ class Worker:
             on_wake=self.scheduler.notify,
             on_progress=self.scheduler.progress,
         )
+        self.recovery = MissedEventRecovery(
+            services.db,
+            services.executor,
+            on_wake=self.scheduler.notify,
+            after_seconds=settings.executor_event_recovery_seconds,
+        )
         self.reports = BatchReportWorker(services, self.owner)
         self.retention = Retention(services)
         self.tasks: list[asyncio.Task] = []
@@ -46,6 +52,9 @@ class Worker:
             ),
             asyncio.create_task(
                 self.consumer.run_forever(), name="executor-events"
+            ),
+            asyncio.create_task(
+                self.recovery.run_forever(), name="missed-executor-events"
             ),
             asyncio.create_task(
                 self.reports.run_forever(), name="batch-reports"
