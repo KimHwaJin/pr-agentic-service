@@ -36,6 +36,11 @@ async def current_user(request: Request) -> User:
     return user
 
 
+def forget_user(user_id: str) -> None:
+    """Drop the cached user so a role change applies to the next request."""
+    _USER_CACHE.pop(user_id, None)
+
+
 async def admin_user(user: Annotated[User, Depends(current_user)]) -> User:
     if user.role != "admin":
         raise HTTPException(403, "Administrator only.")

@@ -34,6 +34,8 @@ class ModelList(Model):
 class Me(Model):
     user: UserRead
     default_project_id: str | None
+    # local dev login only: POST /auth/dev/role switches user <-> admin
+    can_switch_role: bool = False
 
 
 class UserAdminUpdate(Model):

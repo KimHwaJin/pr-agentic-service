@@ -20,8 +20,12 @@ async def me(services: ServicesDep, user: UserDep):
                 Project.deleted_at.is_(None),
             )
         )
+    settings = services.settings
     return Me(
-        user=UserRead.model_validate(user), default_project_id=default_project
+        user=UserRead.model_validate(user),
+        default_project_id=default_project,
+        can_switch_role=settings.env == "local"
+        and settings.sso_adapter == "dev",
     )
 
 

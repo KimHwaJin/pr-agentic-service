@@ -11,7 +11,9 @@
 | 3 | 이후 모든 호출 | `credentials: "include"`로 쿠키를 보냅니다. GET 외 요청에는 `X-CSRF-Token: <csrf_token>` 헤더가 필요합니다. |
 | - | `POST /api/v1/auth/logout` | 서비스 세션만 종료합니다(사내 SSO 전체 로그아웃 아님). |
 
-`GET /api/v1/users/me` → `{user, default_project_id}`
+`GET /api/v1/users/me` → `{user, default_project_id, can_switch_role}`
+
+`POST /api/v1/auth/dev/role` `{role: "user" | "admin"}`: 로컬 개발 로그인(`ENV=local`, `SSO_ADAPTER=dev`)에서만 있는 API로, 현재 사용자를 관리자와 일반 사용자 사이에서 바꿉니다(`can_switch_role`이 true일 때만). 다른 환경에서는 404입니다.
 
 `GET /api/v1/models` → `{items: [{name, label, default, input: ["text"] | ["text","image"], max_images}]}`: 고를 수 있는 모델(설정 파일 `config.<ENV>.yml`의 `models`). 요청의 `model`에는 `name`을 보내고, 화면에는 `label`(없으면 `name`)을 보여 줍니다. `input`에 `image`가 있는 모델만 이미지를 받습니다.
 
