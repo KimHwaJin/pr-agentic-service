@@ -67,6 +67,10 @@
   .acts button:hover { border-color: var(--accent); color: var(--accent); }
   .acts button.danger:hover { border-color: var(--bad); color: var(--bad); }
   .muted { color: var(--muted); }
+  .rt-headrow { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
+  .rt-headrow > div { flex: 1; display: flex; align-items: baseline; gap: 10px; }
+  .rt-headrow b { font-size: 17px; }
+  .rt-headrow .muted { font-size: 13px; }
   .refresh { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; font-size: 12px; }
   .refresh select { border: 1px solid var(--line); border-radius: 8px; padding: 4px 8px; background: var(--panel); font-size: 12px; }
   .refresh .ghost { padding: 3px 8px; font-size: 14px; }
@@ -1261,11 +1265,12 @@ async function renderRuntimes(quiet = false) {
           <span class="meta">대상 ${p.targets.active}/${p.targets.total} 활성 · 비우는 중 ${p.targets.draining} · 오프라인 ${p.targets.offline} · 용량 ${p.capacity.available}/${p.capacity.configured}${p.state.saturated ? ' · <span style="color:var(--bad)">포화</span>' : ''}</span></h3>
         <div class="rt-grid">${items.map(runtimeCard).join('') || '<div class="muted">런타임이 없습니다.</div>'}</div></section>`;
     }).join('');
-  const top = `<div class="toolbar"><div class="seg">${POOLS.map(([k, label]) => `<button class="${k === pick ? 'on' : ''}" onclick="setPool('${k}')">${label}<span class="n">${count(k)}</span></button>`).join('')}</div>
+  const top = `<div class="rt-headrow"><div><b>런타임</b><span class="muted">executor가 분석 코드를 실행하는 Jupyter 서버</span></div>
+      <button class="btn primary" onclick="openRuntimeModal()">+ 런타임 추가</button></div>
+    <div class="toolbar"><div class="seg">${POOLS.map(([k, label]) => `<button class="${k === pick ? 'on' : ''}" onclick="setPool('${k}')">${label}<span class="n">${count(k)}</span></button>`).join('')}</div>
       <span class="refresh"><span class="muted">${fmtTime(new Date().toISOString())} 갱신</span>
         <button class="ghost" title="지금 새로 고침" onclick="renderRuntimes(true)">↻</button>
-        <select onchange="setRefresh(+this.value)" title="자동 새로 고침 주기">${REFRESH.map(([sec, label]) => `<option value="${sec}" ${sec === SYS.refresh ? 'selected' : ''}>${label}</option>`).join('')}</select>
-        <button class="btn primary" style="padding:5px 12px;font-size:13px" onclick="openRuntimeModal()">+ 런타임 추가</button></span></div>${sections}`;
+        <select onchange="setRefresh(+this.value)" title="자동 새로 고침 주기">${REFRESH.map(([sec, label]) => `<option value="${sec}" ${sec === SYS.refresh ? 'selected' : ''}>${label}</option>`).join('')}</select></span></div>${sections}`;
   if (quiet && $('rtLive')) $('rtLive').innerHTML = top;
   else $('sysBody').innerHTML = `<div id="rtLive">${top}</div>`;
   SYS.targets = Object.fromEntries(targets.items.map(t => [t.target_id, t]));
