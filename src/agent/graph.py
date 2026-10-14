@@ -233,7 +233,13 @@ def _tool_error(exc: Exception, request: Any) -> str:
     """
     if isinstance(exc, ExecutorError):
         return f"executor 오류 {exc.status}: {exc.body}"
-    return f"도구 실행 오류 ({type(exc).__name__}): {exc}"
+    message = f"도구 실행 오류 ({type(exc).__name__}): {exc}"
+    if isinstance(exc, TypeError) and "argument" in str(exc):
+        # the call did not match the function: say what it takes
+        schema = getattr(getattr(request, "tool", None), "args", None) or {}
+        if schema:
+            message += f"\n이 도구의 인자: {', '.join(schema)}"
+    return message
 
 
 def _dangling_tool_results(messages: list) -> list[ToolMessage]:

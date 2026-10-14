@@ -18,6 +18,7 @@ or a pod crash the executor returns the same receipt.
 
 import hashlib
 import json
+import re
 from typing import Any, TypeGuard
 
 from langchain.tools import ToolRuntime, tool
@@ -35,6 +36,7 @@ from agent.codegen import (
 )
 from agent.context import AnalysisState, RunContext
 from agent.reporter import collect_evidence, generate_report
+from core.assets import SkillCatalog, ToolCatalog
 from core.db import new_id
 from core.executor.client import ExecutorError
 from core.executor.sources import SourceOwner, file_name
@@ -209,6 +211,7 @@ async def propose_plans(
     services = ctx.services
     skills, tools = services.skills("analysis"), services.tool_catalog()
     prepared, problems = [], []
+    references: dict[str, set[str]] = {}
     for index, candidate in enumerate(
         candidates[: services.settings.plan_candidates]
     ):
@@ -226,6 +229,9 @@ async def propose_plans(
                     "revision": template.revision,
                     "name": template.name,
                 }
+            elif not candidate.get("calls"):
+                problems.append(f"후보 {index} ({title}): {NO_CALLS}")
+                continue
             else:
                 document, keys = plan_format.to_workflow(
                     candidate.get("calls") or [],
@@ -242,6 +248,8 @@ async def propose_plans(
                 f"후보 {index} ({title}):\n  "
                 + "\n  ".join(_by_call_index(errors, keys))
             )
+            for kind, names in _referenced(errors).items():
+                references.setdefault(kind, set()).update(names)
             continue
         document = spec.normalize(document)
         slots = spec.input_slots(document, tools)
@@ -269,7 +277,8 @@ async def propose_plans(
         return _reply(
             runtime,
             "계획 검증 실패. 해당 후보만 고쳐 다시 제안하세요.\n"
-            + "\n".join(problems),
+            + "\n".join(problems)
+            + _plan_help(references, skills, tools),
         )
     if not prepared:
         return _reply(runtime, "제안할 계획이 없습니다.")
@@ -385,6 +394,62 @@ def _by_call_index(errors: list[str], keys: list[str]) -> list[str]:
     return out
 
 
+NO_CALLS = (
+    "`calls`(호출 목록)도 `workflow_id`도 없습니다. 새 계획이면 `calls`에 "
+    "tool 호출을 순서대로 넣고, 등록된 워크플로우를 쓰려면 "
+    "search_workflows의 `workflow_id`를 넣으세요. 예: "
+    '{"title": "...", "calls": [{"skill": "<skill>", "tool": "<tool>", '
+    '"args": {"<param>": "$input"}}]}'
+)
+# validation messages name the tool they are about (core.workflows.spec)
+_ABOUT_TOOL = re.compile(
+    r"'(\w+)' (?:has no parameter|is missing required parameter|has no output)"
+    r"|unknown tool '(\w+)'|tool '(\w+)' does not belong"
+)
+_ABOUT_SKILL = re.compile(r"unknown skill '(\w+)'")
+
+
+def _referenced(errors: list[str]) -> dict[str, set[str]]:
+    """Tools and skills the validation errors are about."""
+    found: dict[str, set[str]] = {"tools": set(), "skills": set()}
+    for error in errors:
+        for m in _ABOUT_TOOL.finditer(error):
+            found["tools"].add(next(g for g in m.groups() if g))
+        found["skills"].update(_ABOUT_SKILL.findall(error))
+    return found
+
+
+def _plan_help(
+    found: dict[str, set[str]], skills: SkillCatalog, tools: ToolCatalog
+) -> str:
+    """What the model needs to fix the plan: real signatures and owners."""
+    lines = []
+    for name in sorted(found.get("tools", ())):
+        if name in tools.tools:
+            owner = next(
+                (
+                    s.name
+                    for s in skills.skills.values()
+                    if any(t.tool == name for t in s.tools)
+                ),
+                None,
+            )
+            where = f" (skill `{owner}`)" if owner else ""
+            lines.append(f"### {name}{where}\n{tools.describe(name)}")
+        else:
+            close = [t for t in tools.tools if name in t or t in name]
+            hint = f" 비슷한 tool: {close}" if close else ""
+            lines.append(f"### {name}\n없는 tool입니다.{hint}")
+    for name in sorted(found.get("skills", ())):
+        lines.append(
+            f"### skill {name}\n없는 skill입니다. 있는 skill: "
+            f"{sorted(skills.skills)}"
+        )
+    if not lines:
+        return ""
+    return "\n\n## 고칠 때 참고 (실제 정의)\n" + "\n\n".join(lines)
+
+
 def _call_key(plan: dict[str, Any], ref: str | int) -> str | None:
     """Resolves a call reference to its "<step>.<tool>" key.
 
@@ -441,7 +506,13 @@ async def revise_call(
     if errors:
         return _reply(
             runtime,
-            "수정안 검증 실패:\n" + "\n".join(_by_call_index(errors, order)),
+            "수정안 검증 실패:\n"
+            + "\n".join(_by_call_index(errors, order))
+            + _plan_help(
+                _referenced(errors),
+                services.skills("analysis"),
+                services.tool_catalog(),
+            ),
         )
     values = {
         k: v

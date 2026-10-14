@@ -113,7 +113,8 @@ def validate(
         for param in params.values():
             if param.required and param.name not in call.arguments:
                 errors.append(
-                    f"{where}: required parameter '{param.name}' is missing"
+                    f"{where}: '{call.tool}' is missing required parameter "
+                    f"'{param.name}'"
                 )
         for name, arg in call.arguments.items():
             if arg["source"] != "tool_output":
