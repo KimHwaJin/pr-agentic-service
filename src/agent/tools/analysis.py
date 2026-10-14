@@ -401,15 +401,16 @@ def _call_key(plan: dict[str, Any], ref: str | int) -> str | None:
 @tool
 async def revise_call(
     call: str,
-    args: dict[str, Any],
+    new_args: dict[str, Any],
     runtime: Runtime,
 ) -> Command:
     """Repair a failed or pending call of the approved plan by replacing its
     args.
 
-    call: the call number from the plan ("#2" or "2"). args: same notation
-    as propose_plans ("$input", "@<call>.<output>", or a fixed value). A
-    fixed value replaces an input the user gave.
+    call: the call number from the plan ("#2" or "2").
+    new_args: the call's args by name, in the propose_plans notation
+    ("$input", "@<call>.<output>", or a fixed value). A fixed value
+    replaces an input the user gave.
     """
     plan = runtime.state.get("plan")
     if not _approved(plan):
@@ -426,7 +427,7 @@ async def revise_call(
     try:
         arguments = {
             p: plan_format._argument(v, position, order, p)
-            for p, v in args.items()
+            for p, v in new_args.items()
         }
     except plan_format.PlanFormatError as exc:
         return _reply(runtime, f"수정안 형식 오류: {exc}")
@@ -455,7 +456,7 @@ async def revise_call(
         "calls": {**plan["calls"], key: {"status": "pending"}},
     }
     await runtime.context.emit(
-        "plan_revised", {"call": position, "args": args}
+        "plan_revised", {"call": position, "args": new_args}
     )
     return _reply(
         runtime,
