@@ -1,9 +1,9 @@
 """What stays of an analysis once finish_analysis has closed it.
 
 Kept: the task, the analyst's conclusions, report ids and the report's
-summary/results, what ran and how it ended. Cleared: catalog documents,
-raw observations; their originals stay in the notebook,
-run events, executor and catalog.
+summary/results, what ran and how it ended, skill/tool documents (latest
+copy of each). Cleared: search results, raw observations; their
+originals stay in the notebook, run events, executor and catalog.
 
 Call arguments stay as written (the plan candidates included): the model
 imitates its earlier calls, and compacted arguments became invalid calls.
@@ -15,6 +15,7 @@ from typing import Any
 from agent.compaction import Rule, ToolResultCompactionMiddleware
 
 PLACEHOLDER = "[정리됨] 끝난 분석의 {tool} 결과 (필요하면 다시 조회)"
+SUPERSEDED = "[정리됨] 같은 {tool} 결과가 뒤에 다시 있음"
 REPORT_SECTIONS = ("요약", "주요 결과")
 REPORT_MAX = 1500
 TABLES = ("DataFrame", "Series", "ndarray")
@@ -77,8 +78,9 @@ def report_brief(content: str) -> str:
 
 
 RULES = {
-    "read_skill": Rule(result="clear"),
-    "read_tool": Rule(result="clear"),
+    # documents the next analysis may plan from without reading them again
+    "read_skill": Rule(latest_only=True),
+    "read_tool": Rule(latest_only=True),
     "search_tools": Rule(result="clear"),
     "search_workflows": Rule(result="clear"),
     "run_plan": Rule(result=execution_brief),
@@ -94,4 +96,5 @@ def finished_analysis() -> ToolResultCompactionMiddleware:
         rules=RULES,
         placeholder=PLACEHOLDER,
         truncated=" ...(생략)",
+        superseded=SUPERSEDED,
     )

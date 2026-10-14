@@ -155,5 +155,28 @@ def test_end_tool_update_carries_the_compacted_segment():
     assert [m.id for m in result.update["messages"]] == ["tm-f", "tm-r"]
 
 
+def test_latest_only_keeps_the_last_copy_of_a_repeated_read():
+    middleware = ToolResultCompactionMiddleware(
+        start_tools={"start_analysis"},
+        end_tools={"finish_analysis"},
+        rules={"read_skill": Rule(latest_only=True)},
+    )
+    first = _analysis()
+    again = [
+        _call("start_analysis", "s2"),
+        _result("넘김", "s2"),
+        _call("read_skill", "r2", {"name": "data_load"}),
+        _result("skill 문서 " * 200, "r2"),
+        _call("read_skill", "r3", {"name": "eda"}),
+        _result("다른 문서", "r3"),
+    ]
+    # second analysis still running: its copy wins, the first is cleared
+    (changed,) = middleware.compact([*first, *again])
+    assert changed.id == "tm-r"
+    assert changed.content == "[compacted: read_skill, repeated later]"
+    # a document read once stays
+    assert middleware.compact(first) == []
+
+
 def test_service_rules_assemble():
     assert finished_analysis().end_tools == {"finish_analysis"}

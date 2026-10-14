@@ -19,6 +19,7 @@ checkpointed history once, at a point the agent defines.
 Generic: knows nothing about the tools it compacts; callers pass the rules.
 """
 
+import json
 from collections.abc import Callable, Collection, Mapping, Sequence
 from dataclasses import dataclass, replace
 from typing import Any, Literal
@@ -39,6 +40,9 @@ ArgsRule = Literal["keep", "clear"] | Callable[[dict[str, Any]], dict]
 class Rule:
     result: ResultRule = "keep"
     args: ArgsRule = "keep"
+    # clear a result once the same call (tool + args) returns again later;
+    # for reference reads the next segment may rely on without re-reading
+    latest_only: bool = False
 
 
 KEEP = Rule()
@@ -60,11 +64,13 @@ class ToolResultCompactionMiddleware(AgentMiddleware):
         default: Rule = KEEP,
         placeholder: str = "[compacted: {tool}]",
         truncated: str = " ...[compacted]",
+        superseded: str = "[compacted: {tool}, repeated later]",
     ):
         super().__init__()
         self.end_tools, self.start_tools = set(end_tools), set(start_tools)
         self.rules, self.default = dict(rules or {}), default
         self.placeholder, self.truncated = placeholder, truncated
+        self.superseded = superseded
 
     def wrap_tool_call(self, request, handler):
         return self._with_compaction(request, handler(request))
@@ -103,6 +109,7 @@ class ToolResultCompactionMiddleware(AgentMiddleware):
             if isinstance(m, AIMessage)
             for call in m.tool_calls
         }
+        superseded = self._superseded(messages)
         changed: list[AnyMessage] = []
         start: int | None = None if self.start_tools else 0
         for i, message in enumerate(messages):
@@ -116,17 +123,38 @@ class ToolResultCompactionMiddleware(AgentMiddleware):
             ):
                 if start is not None:
                     for m in messages[start:i]:
-                        new = self._rewrite(m, names)
+                        new = self._rewrite(m, names, superseded)
                         if new is not None:
                             changed.append(new)
                 start = None if self.start_tools else i + 1
         return changed
 
+    def _superseded(self, messages: Sequence[AnyMessage]) -> set[str]:
+        """Tool call ids of latest_only results repeated by a later call."""
+        keys = {
+            call["id"]: (
+                call["name"],
+                json.dumps(call["args"], sort_keys=True),
+            )
+            for m in messages
+            if isinstance(m, AIMessage)
+            for call in m.tool_calls
+            if self._rule(call["name"]).latest_only
+        }
+        latest: dict[tuple[str, str], str] = {}
+        for m in messages:
+            if isinstance(m, ToolMessage) and m.tool_call_id in keys:
+                latest[keys[m.tool_call_id]] = m.tool_call_id
+        return set(keys) - set(latest.values())
+
     def _rule(self, tool: str | None) -> Rule:
         return self.rules.get(tool or "", self.default)
 
     def _rewrite(
-        self, message: AnyMessage, names: dict[str, str]
+        self,
+        message: AnyMessage,
+        names: dict[str, str],
+        superseded: set[str],
     ) -> AnyMessage | None:
         if message.response_metadata.get(MARK):
             return None
@@ -138,7 +166,11 @@ class ToolResultCompactionMiddleware(AgentMiddleware):
                 if isinstance(message.content, str)
                 else message.text
             )
-            new = self._result(self._rule(tool).result, content, tool)
+            new = (
+                self.superseded.format(tool=tool)
+                if message.tool_call_id in superseded
+                else self._result(self._rule(tool).result, content, tool)
+            )
             if new != content:
                 update["content"] = new
         elif isinstance(message, AIMessage) and message.tool_calls:
