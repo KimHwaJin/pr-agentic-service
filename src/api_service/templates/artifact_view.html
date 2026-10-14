@@ -157,14 +157,45 @@ function renderNotebook(nb) {
   });
 }
 
-fetch('/api/v1/artifacts/__ID__/content', {credentials: 'include'})
-  .then(r => { if (!r.ok) throw new Error(r.status); return r.text(); })
-  .then(body => {
-    if (KIND === 'notebook') renderNotebook(JSON.parse(body));
-    else {
-      doc.innerHTML = `<article class="report md">${md(body)}</article>`;
-      doc.querySelectorAll('pre code').forEach(el => hljs.highlightElement(el));
-    }
-  })
-  .catch(e => { doc.innerHTML = `<div class="state">불러오지 못했습니다 (${esc(e.message)})</div>`; });
+const CONTENT = '/api/v1/artifacts/__ID__/content';
+
+// CSV -> table (quoted fields, first row as header), capped for the page
+function csvTable(text, maxRows = 2000) {
+  const rows = []; let row = [], cell = '', quoted = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (quoted) { if (c === '"' && text[i + 1] === '"') { cell += '"'; i++; } else if (c === '"') quoted = false; else cell += c; }
+    else if (c === '"') quoted = true;
+    else if (c === ',') { row.push(cell); cell = ''; }
+    else if (c === '\n' || c === '\r') { if (c === '\r' && text[i + 1] === '\n') i++; row.push(cell); rows.push(row); row = []; cell = ''; if (rows.length > maxRows) break; }
+    else cell += c;
+  }
+  if (cell || row.length) { row.push(cell); rows.push(row); }
+  const [head = [], ...body] = rows;
+  const num = v => v !== '' && !isNaN(v);
+  return `<div class="out"><div class="html"><table><thead><tr>${head.map(h => `<th>${esc(h)}</th>`).join('')}</tr></thead><tbody>${
+    body.map(r => `<tr>${r.map(v => `<td style="text-align:${num(v) ? 'right' : 'left'}">${esc(v)}</td>`).join('')}</tr>`).join('')}</tbody></table></div></div>
+    ${rows.length > maxRows ? `<div class="state">앞 ${maxRows}행만 표시합니다. 전체는 다운로드하세요.</div>` : ''}`;
+}
+
+if (KIND === 'image') {
+  doc.innerHTML = `<section class="cell"><div class="out"><img alt="" src="${CONTENT}"></div></section>`;
+} else if (KIND === 'download') {
+  doc.innerHTML = `<div class="state">이 형식은 화면에서 볼 수 없습니다. 위의 다운로드를 사용하세요.</div>`;
+} else {
+  fetch(CONTENT, {credentials: 'include'})
+    .then(r => { if (!r.ok) throw new Error(r.status); return r.text(); })
+    .then(body => {
+      if (KIND === 'notebook') renderNotebook(JSON.parse(body));
+      else if (KIND === 'csv') doc.innerHTML = `<section class="cell">${csvTable(body)}</section>`;
+      else if (KIND === 'text') {
+        let text = body; try { text = JSON.stringify(JSON.parse(body), null, 2); } catch {}
+        doc.innerHTML = `<section class="cell"><div class="out"><pre style="max-height:none">${esc(text)}</pre></div></section>`;
+      } else {
+        doc.innerHTML = `<article class="report md">${md(body)}</article>`;
+        doc.querySelectorAll('pre code').forEach(el => hljs.highlightElement(el));
+      }
+    })
+    .catch(e => { doc.innerHTML = `<div class="state">불러오지 못했습니다 (${esc(e.message)})</div>`; });
+}
 </script></body></html>

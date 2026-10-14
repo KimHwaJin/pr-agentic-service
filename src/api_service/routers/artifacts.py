@@ -87,12 +87,13 @@ async def artifact_content(
 async def artifact_view(
     artifact_id: str, services: ServicesDep, user: UserDep
 ):
-    """Landing page linked from chat.
+    """Landing page linked from chat and the system view.
 
-    Renders a report (.md) or a notebook (.ipynb).
+    Renders reports (.md), notebooks, images, CSV tables and text files;
+    anything else gets a download link.
     """
     artifact = await _owned_artifact(services, user, artifact_id)
-    notebook = artifact["type"] == "NOTEBOOK"
+    kind = _view_kind(artifact)
     lab = _lab_url(services, user, artifact)
     lab_button = (
         '<a class="btn primary" target="_blank" rel="noopener" '
@@ -108,11 +109,35 @@ async def artifact_view(
                 or artifact["name"]
             ),
         )
-        .replace("__BADGE__", "NOTEBOOK" if notebook else "REPORT")
+        .replace("__BADGE__", escape(artifact["type"]))
         .replace("__LAB__", lab_button)
         .replace("__ID__", escape(artifact_id))
-        .replace("__KIND__", "notebook" if notebook else "markdown")
+        .replace("__KIND__", kind)
     )
+
+
+def _view_kind(artifact: dict) -> str:
+    """How the landing page draws it: by media type, then file name."""
+    media = (artifact.get("storage") or {}).get("media_type") or ""
+    name = artifact.get("name", "").lower()
+    if artifact["type"] == "NOTEBOOK" or name.endswith(".ipynb"):
+        return "notebook"
+    if media.startswith("image/") or name.endswith(IMAGE_SUFFIXES):
+        return "image"
+    if media == "text/csv" or name.endswith((".csv", ".tsv")):
+        return "csv"
+    if media == "text/markdown" or name.endswith(".md"):
+        return "markdown"
+    if (
+        media.startswith("text/")
+        or media == "application/json"
+        or (name.endswith((".txt", ".log", ".json", ".py")))
+    ):
+        return "text"
+    return "download"
+
+
+IMAGE_SUFFIXES = (".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg")
 
 
 VIEW = (
