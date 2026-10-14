@@ -52,7 +52,7 @@ create_agent(
         JsonArgumentsMiddleware, # 문자열로 온 JSON 인자 복구
         ToolErrorMiddleware,     # 도구 오류를 모델에게 메시지로 돌려줌
         ModelCallLimitMiddleware(run_limit=40),   # 한 턴 모델 호출 상한
-        ToolResultCompactionMiddleware,  # 분석이 끝나면 그 분석의 긴 도구 결과를 줄임 (agent/compaction*.py)
+        ToolResultCompactionMiddleware,  # 분석이 끝나면 그 분석의 긴 도구 결과를 줄임 (agent/middleware/compaction*.py)
         SummarizationMiddleware(trigger=3만 어림 토큰≈12만 자, keep=절반, prompts/summary.md(최대 6천 자), 입력 자르지 않음),
     ],
     state_schema=AnalysisState,  # messages + active_agent, plan, execution, reports, nudges, notice
@@ -219,9 +219,12 @@ stateDiagram-v2
 | 파일 | 역할 |
 | --- | --- |
 | `agent/graph.py` | 그래프 조립(`create_agent`), `run_turn`(시작·재개·이어 받기, 스트리밍) |
-| `agent/middleware.py` | `PersonaMiddleware`(담당자·프롬프트·도구·메모리·이미지·멈춤 방지), `JsonArgumentsMiddleware`, 담당자별 도구 표 |
-| `agent/compaction.py` | 범용 미들웨어: 구간(시작·끝 도구)이 끝나면 도구 결과를 규칙대로 줄이거나 지움 |
-| `agent/compaction_rules.py` | 우리 규칙: 검색 결과·관측값 정리, skill·tool 문서는 최신본 유지, 리포트는 요약·주요 결과만, 호출 인자는 그대로 |
+| `agent/middleware/persona.py` | `PersonaMiddleware`(담당자·프롬프트·도구·메모리·이미지·멈춤 방지), 담당자별 도구 표 |
+| `agent/middleware/json_arguments.py` | `JsonArgumentsMiddleware`: 문자열로 온 JSON 인자 복구 |
+| `agent/middleware/summarization.py` | LangChain 요약 미들웨어 + 진행 이벤트(`activity`, `context_summarized`) |
+| `agent/middleware/compaction.py` | 범용 미들웨어: 구간(시작·끝 도구)이 끝나면 도구 결과를 규칙대로 줄이거나 지움 |
+| `agent/middleware/compaction_rules.py` | 우리 규칙: 검색 결과·관측값 정리, skill·tool 문서는 최신본 유지, 리포트는 요약·주요 결과만, 호출 인자는 그대로 |
+| `agent/activity.py` | 오래 걸리는 작업의 진행 이벤트(`ctx.activity(kind)`)와 문구 표 |
 | `agent/context.py` | `RunContext`(run마다 주입), `AnalysisState`(체크포인트에 남는 상태) |
 | `agent/tools/main.py`, `common.py`, `analysis.py` | 도구들 |
 | `agent/plan_format.py` | 모델이 쓰는 호출 목록 ↔ Workflow 1.0 문서 |

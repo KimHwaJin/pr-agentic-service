@@ -39,7 +39,7 @@ def test_parse_observations():
 
 
 def test_json_string_arguments_are_decoded():
-    from agent.middleware import _structured
+    from agent.middleware.json_arguments import _structured
 
     assert _structured({"type": "array"}) and _structured(
         {"anyOf": [{"type": "object"}, {"type": "null"}]}

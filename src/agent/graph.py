@@ -17,12 +17,15 @@ from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.store.base import BaseStore
 from langgraph.types import Command
 
-from agent import compaction_rules
 from agent.context import AnalysisState, RunContext
 from agent.llm import chat_model
-from agent.middleware import JsonArgumentsMiddleware, PersonaMiddleware
+from agent.middleware import (
+    JsonArgumentsMiddleware,
+    PersonaMiddleware,
+    ReportingSummarizationMiddleware,
+    compaction_rules,
+)
 from agent.prompts import load_prompt
-from agent.summarization import ReportingSummarizationMiddleware
 from agent.tools.analysis import (
     finish_analysis,
     propose_plans,

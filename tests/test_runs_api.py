@@ -132,7 +132,7 @@ def test_images_reach_only_vision_models_for_recent_turns():
 
     from langchain_core.messages import AIMessage, HumanMessage
 
-    from agent.middleware import _with_images
+    from agent.middleware.persona import _with_images
 
     def turn(image_id: str) -> HumanMessage:
         return HumanMessage(

@@ -2,7 +2,7 @@ from types import SimpleNamespace
 
 from langchain_core.messages import AIMessage, RemoveMessage
 
-from agent.middleware import ANALYST_NUDGES, PersonaMiddleware
+from agent.middleware.persona import ANALYST_NUDGES, PersonaMiddleware
 from core.config import ROOT
 
 

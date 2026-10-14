@@ -12,7 +12,7 @@ imitates its earlier calls, and compacted arguments became invalid calls.
 import json
 from typing import Any
 
-from agent.compaction import Rule, ToolResultCompactionMiddleware
+from agent.middleware.compaction import Rule, ToolResultCompactionMiddleware
 
 PLACEHOLDER = "[정리됨] 끝난 분석의 {tool} 결과 (필요하면 다시 조회)"
 SUPERSEDED = "[정리됨] 같은 {tool} 결과가 뒤에 다시 있음"

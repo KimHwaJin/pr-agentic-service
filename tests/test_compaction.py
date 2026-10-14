@@ -2,8 +2,8 @@ import json
 
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 
-from agent.compaction import Rule, ToolResultCompactionMiddleware
-from agent.compaction_rules import (
+from agent.middleware.compaction import Rule, ToolResultCompactionMiddleware
+from agent.middleware.compaction_rules import (
     execution_brief,
     finished_analysis,
     report_brief,

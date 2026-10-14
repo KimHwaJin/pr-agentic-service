@@ -3,7 +3,7 @@
 Stored once under ``<STORAGE_ROOT>/images/users/<employee>/projects/<p>/
 sessions/<s>/<image_id>.<ext>`` and referenced by id everywhere else (the
 chat history, the agent checkpoint). The bytes reach the model only at call
-time (see ``agent.middleware``), so checkpoints stay small.
+time (see ``agent.middleware.persona``), so checkpoints stay small.
 """
 
 import base64
