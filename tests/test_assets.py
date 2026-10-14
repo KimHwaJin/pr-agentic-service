@@ -22,3 +22,16 @@ def test_skill_tool_table(skills):
     assert eda["compute_statistics"].execution == "always"
     assert eda["boxplot_eda"].execution == "conditional"
     assert eda["boxplot_eda"].condition_tool == "compute_statistics"
+
+
+def test_tool_parameters_reach_the_model_under_their_own_names():
+    # a parameter named "args" is renamed to "v__args" in the tool schema,
+    # so the model's calls never match the function
+    from langchain_core.utils.function_calling import convert_to_openai_tool
+
+    from agent.graph import TOOLS
+
+    for tool in TOOLS:
+        sent = convert_to_openai_tool(tool)["function"]["parameters"]
+        names = set(sent.get("properties", {}))
+        assert not {n for n in names if n.startswith("v__")}, tool.name
