@@ -27,10 +27,6 @@ notebook_lab_base_url: http://localhost:8888
 
 batch_base_url: http://host.docker.internal:8100
 
-# Experiment: summarize early to test summary quality (default 60000).
-# History is compacted after each analysis, so 20000 is never reached.
-agent_summary_trigger_tokens: 8000
-
 # Chat models offered to users. Only these are used; exactly one default.
 # Only qwen38-27b-nvfp4 is served on the local gateway.
 models:
