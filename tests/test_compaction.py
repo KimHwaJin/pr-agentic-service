@@ -6,7 +6,6 @@ from agent.compaction import Rule, ToolResultCompactionMiddleware
 from agent.compaction_rules import (
     execution_brief,
     finished_analysis,
-    plan_titles,
     report_brief,
 )
 
@@ -135,22 +134,25 @@ def test_report_brief_keeps_summary_and_results():
     assert "긴 설명" not in brief and "샘플" not in brief
 
 
-def test_plan_titles():
-    args = {
-        "candidates": [
-            {
-                "title": "A",
-                "calls": [{"tool": "x", "args": {}}, {"tool": "y"}],
-            },
-            {"title": "B", "workflow_id": "w1", "inputs": {"0.a": 1}},
-        ]
-    }
-    assert plan_titles(args) == {
-        "candidates": [
-            {"title": "A", "tools": "x → y"},
-            {"title": "B", "workflow_id": "w1"},
-        ]
-    }
+def test_end_tool_update_carries_the_compacted_segment():
+    import asyncio
+    from types import SimpleNamespace
+
+    from langgraph.types import Command
+
+    messages = _analysis()
+    *state, end = messages
+    request = SimpleNamespace(
+        tool_call={"name": "finish_analysis", "id": "f", "args": {}},
+        state={"messages": state},
+    )
+
+    async def handler(_):
+        return Command(update={"messages": [end], "active_agent": "main"})
+
+    result = asyncio.run(_middleware().awrap_tool_call(request, handler))
+    assert result.update["active_agent"] == "main"
+    assert [m.id for m in result.update["messages"]] == ["tm-f", "tm-r"]
 
 
 def test_service_rules_assemble():

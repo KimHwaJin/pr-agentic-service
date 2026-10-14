@@ -107,7 +107,6 @@ class AgentGraphs:
                 ),
             ]
             if self.settings.agent_compact_finished_analysis:
-                # before summarization, so it counts the compacted history
                 middleware.append(compaction_rules.finished_analysis())
             middleware.append(
                 SummarizationMiddleware(

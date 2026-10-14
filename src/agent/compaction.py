@@ -6,6 +6,11 @@ tools, from the end of the previous segment) to the result of one of
 arguments inside it are rewritten by per-tool rules and saved back under
 the same message ids, so every later model call (and summarization) sees
 the compact version. A segment that is still running is never touched.
+The rewrite rides on the end tool's own state update.
+
+Prefer rules on results over rules on arguments: a model copies the shape
+of its own earlier calls, so arguments rewritten into a shape the tool
+does not accept get imitated in later calls.
 
 Unlike ``ContextEditingMiddleware`` (which edits each model request when a
 token threshold is passed and leaves the history as is), this changes the
@@ -15,11 +20,12 @@ Generic: knows nothing about the tools it compacts; callers pass the rules.
 """
 
 from collections.abc import Callable, Collection, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any, Literal
 
 from langchain.agents.middleware import AgentMiddleware
 from langchain_core.messages import AIMessage, AnyMessage, ToolMessage
+from langgraph.types import Command
 
 MARK = "compacted"  # response_metadata flag on rewritten messages
 
@@ -60,12 +66,34 @@ class ToolResultCompactionMiddleware(AgentMiddleware):
         self.rules, self.default = dict(rules or {}), default
         self.placeholder, self.truncated = placeholder, truncated
 
-    def before_model(self, state, runtime) -> dict[str, Any] | None:
-        changed = self.compact(state["messages"])
-        return {"messages": changed} if changed else None
+    def wrap_tool_call(self, request, handler):
+        return self._with_compaction(request, handler(request))
 
-    async def abefore_model(self, state, runtime) -> dict[str, Any] | None:
-        return self.before_model(state, runtime)
+    async def awrap_tool_call(self, request, handler):
+        return self._with_compaction(request, await handler(request))
+
+    def _with_compaction(self, request, result: Any) -> Any:
+        """Adds the compacted segment to the end tool's own update.
+
+        Done inside the tool step, so it adds no graph step (recursion limit)
+        and lands in the same checkpoint as the end tool's result.
+        """
+        if request.tool_call["name"] not in self.end_tools:
+            return result
+        if isinstance(result, Command):
+            if not isinstance(result.update, dict):
+                return result
+            update: dict[str, Any] = result.update
+            produced = list(update.get("messages", []))
+        else:
+            update, produced = {}, [result]
+        changed = self.compact([*request.state["messages"], *produced])
+        if not changed:
+            return result
+        messages = [*produced, *changed]
+        if isinstance(result, Command):
+            return replace(result, update={**update, "messages": messages})
+        return Command(update={"messages": messages})
 
     def compact(self, messages: Sequence[AnyMessage]) -> list[AnyMessage]:
         """Rewritten copies (same ids) of messages in ended segments."""

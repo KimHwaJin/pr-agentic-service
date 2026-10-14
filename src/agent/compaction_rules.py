@@ -2,8 +2,11 @@
 
 Kept: the task, the analyst's conclusions, report ids and the report's
 summary/results, what ran and how it ended. Cleared: catalog documents,
-plan candidates, raw observations; their originals stay in the notebook,
+raw observations; their originals stay in the notebook,
 run events, executor and catalog.
+
+Call arguments stay as written (the plan candidates included): the model
+imitates its earlier calls, and compacted arguments became invalid calls.
 """
 
 import json
@@ -73,33 +76,11 @@ def report_brief(content: str) -> str:
     return f"{head}\n\n{body}" if body else head
 
 
-def plan_titles(args: dict[str, Any]) -> dict[str, Any]:
-    """propose_plans arguments -> candidate titles and their tool chain."""
-    candidates = args.get("candidates")
-    if not isinstance(candidates, list):
-        return {"candidates": "[정리됨]"}
-    brief = []
-    for c in candidates:
-        if not isinstance(c, dict):
-            continue
-        item: dict[str, Any] = {"title": c.get("title")}
-        if c.get("workflow_id"):
-            item["workflow_id"] = c["workflow_id"]
-        calls = [
-            x.get("tool") for x in c.get("calls") or [] if isinstance(x, dict)
-        ]
-        if calls:
-            item["tools"] = " → ".join(map(str, calls))
-        brief.append(item)
-    return {"candidates": brief}
-
-
 RULES = {
     "read_skill": Rule(result="clear"),
     "read_tool": Rule(result="clear"),
     "search_tools": Rule(result="clear"),
     "search_workflows": Rule(result="clear"),
-    "propose_plans": Rule(args=plan_titles),
     "run_plan": Rule(result=execution_brief),
     "run_custom_code": Rule(result=execution_brief),
     "write_report": Rule(result=report_brief),
