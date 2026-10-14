@@ -369,6 +369,21 @@
   @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .cond { background: #3a2f1f; color: #e3b46b; } :root:not([data-theme="light"]) .tag.agent { background: #2b3546; color: #9fb7dc; } :root:not([data-theme="light"]) .param.need input { background: #3a2c25; border-color: #6b4535; } }
 
   .wfcard .wf-steps { margin-top: 2px; }
+  .wfcard .wf-steps b { color: var(--ink); font-weight: 600; }
+  /* workflow flow: skills contain tools */
+  .flow { display: flex; flex-direction: column; gap: 12px; }
+  .flow-skill { border: 1px solid var(--line); border-left: 4px solid var(--accent); border-radius: 12px; background: var(--code); padding: 12px 14px 10px; }
+  .flow-skill-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .flow-skill-head b { font-size: 15px; }
+  .flow-skill-head .seq { width: 22px; height: 22px; border-radius: 7px; background: var(--accent); color: #fff; display: grid; place-items: center; font-size: 12px; font-weight: 600; }
+  .flow-skill-head .cnt { margin-left: auto; font-size: 12px; color: var(--muted); }
+  .flow-skill .desc { font-size: 12.5px; color: var(--muted); margin: 4px 0 10px 30px; line-height: 1.5; }
+  .kind { font-size: 10px; font-weight: 700; letter-spacing: .06em; padding: 2px 7px; border-radius: 5px; }
+  .kind.skill { background: var(--accent); color: #fff; }
+  .kind.tool { border: 1px solid var(--faint); color: var(--muted); background: var(--panel); }
+  .flow-tools { margin-left: 10px; padding-left: 16px; border-left: 2px dashed var(--line); display: flex; flex-direction: column; gap: 6px; }
+  .flow-tools .tool-row { margin: 0; position: relative; }
+  .flow-tools .tool-row::before { content: ""; position: absolute; left: -18px; top: 18px; width: 14px; border-top: 2px dashed var(--line); }
   .wfcard .pname .badge { margin-left: auto; }
   .wf { border: 1px solid var(--line); border-radius: 12px; background: var(--panel); margin-bottom: 8px; overflow: hidden; }
   .wf > summary { list-style: none; cursor: pointer; padding: 11px 13px; }
@@ -1064,8 +1079,8 @@ function renderWorkflows() {
     <div class="pcard wfcard" role="button" tabindex="0" onclick="openWorkflow('${w.id}')">
       <div class="pname">${esc(w.name)}${w.lifecycle === 'template' ? '<span class="badge rec">공개</span>' : '<span class="badge">내 후보</span>'}</div>
       <div class="pdesc">${esc(w.user_request)}</div>
-      <div class="wf-steps">${w.steps.map((st, i) => `<span><i>${i + 1}</i>${esc(st.skill)} · ${st.tools.map(t => esc(t.tool) + (t.execution === 'conditional' ? '?' : '')).join(', ')}</span>`).join('')}</div>
-      <div class="pmeta">tool ${w.call_count}개 · ${ago(w.updated_at)} 수정${w.tags.length ? ' · ' + w.tags.map(esc).join(', ') : ''}</div>
+      <div class="wf-steps">${w.steps.map((st, i) => `<span><i>${i + 1}</i><b>${esc(st.skill)}</b> → ${st.tools.map(t => esc(t.tool) + (t.execution === 'conditional' ? '?' : '')).join(', ')}</span>`).join('')}</div>
+      <div class="pmeta">skill ${w.steps.length}개 · tool ${w.call_count}개 · ${ago(w.updated_at)} 수정${w.tags.length ? ' · ' + w.tags.map(esc).join(', ') : ''}</div>
     </div>`).join('') || '<div style="color:var(--faint)">워크플로우가 없습니다</div>';
 }
 ['wfSearch', 'wfFilter', 'wfSort'].forEach(id => $(id).addEventListener(id === 'wfSearch' ? 'input' : 'change', renderWorkflows));
@@ -1081,12 +1096,14 @@ function workflowDetail(w) {
     : p.source === 'input' ? '<span class="tag user">실행할 때 입력</span>' : p.source === 'default' ? `<span class="tsum">기본값 ${esc(p.default ?? '')}</span>` : `<code>${esc(fmt(p.value))}</code>`;
   return `<div class="wf-goal" style="margin-bottom:8px">${esc(w.user_request)}</div>
     ${w.user_queries.length ? `<div class="wf-sec">이런 질문에 추천됩니다</div><ul class="wf-q">${w.user_queries.map(q => `<li>${esc(q)}</li>`).join('')}</ul>` : ''}
-    <div class="wf-sec">실행 흐름</div>
-    ${groups.map((g, gi) => `<div class="skill-head"><span class="seq">${gi + 1}</span><b>${esc(g.skill)}</b><span>${esc(g.desc)}</span></div>
-      ${g.calls.map(call => `<details class="tool-row"><summary><span class="chev">›</span><span class="no">#${call.index}</span><b>${esc(call.tool)}</b>${call.execution === 'conditional' ? '<span class="badge">조건부</span>' : ''}<span class="tsum">${esc(call.summary)}</span></summary>
+    <div class="wf-sec">실행 흐름 <span class="muted" style="font-weight:400">· skill(분석 단계) 안에 tool(실행 함수)이 순서대로 들어 있습니다</span></div>
+    <div class="flow">${groups.map((g, gi) => `<section class="flow-skill">
+      <div class="flow-skill-head"><span class="seq">${gi + 1}</span><span class="kind skill">SKILL</span><b>${esc(g.skill)}</b><span class="cnt">tool ${g.calls.length}개</span></div>
+      ${g.desc ? `<div class="desc">${esc(g.desc)}</div>` : ''}
+      <div class="flow-tools">${g.calls.map(call => `<details class="tool-row"><summary><span class="chev">›</span><span class="kind tool">TOOL</span><span class="no">#${call.index}</span><b>${esc(call.tool)}</b>${call.execution === 'conditional' ? '<span class="badge">조건부</span>' : ''}<span class="tsum">${esc(call.summary)}</span></summary>
         <div class="tool-body">${call.condition ? `<div class="cond">실행 조건: ${esc(call.condition)}</div>` : ''}
           ${call.params.map(p => `<div class="param"><div class="pl"><code>${esc(p.name)}</code>${p.type ? ` <small>${esc(p.type)}</small>` : ''}</div><div>${value(p)}</div>${p.doc ? `<div class="help">${esc(p.doc)}</div>` : ''}</div>`).join('')}
-        </div></details>`).join('')}`).join('')}
+        </div></details>`).join('')}</div></section>`).join('')}</div>
     <div class="wf-meta">r${w.revision} · ${ago(w.updated_at)} 수정${w.tags.length ? ' · ' + w.tags.map(esc).join(', ') : ''}</div>
     <div class="actions">${w.mine && w.lifecycle === 'candidate' ? `<button class="btn" onclick="promote('${w.id}')">공개(승격)</button>` : ''}
       ${w.mine || S.isAdmin ? `<button class="btn" style="color:var(--bad)" onclick="deleteWorkflow('${w.id}', '${esc(w.name).replace(/'/g, '&#39;')}')">삭제</button>` : ''}</div>`;
