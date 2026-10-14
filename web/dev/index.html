@@ -1292,18 +1292,19 @@ function openRuntimeModal(targetId = null) {
   $('rtTitle').textContent = t ? `런타임 수정 · ${t.name}` : '런타임 추가';
   $('rtName').value = t ? t.name : ''; $('rtName').disabled = !!t;
   $('rtPool').value = t ? t.runtime.pool : (SYS.pool && SYS.pool !== 'ALL' ? SYS.pool : 'INTERACTIVE');
-  $('rtEndpoint').value = t ? (t.runtime.connection_config?.endpoint || '') : '';
+  $('rtEndpoint').value = t ? (t.runtime.connection_config?.endpoint || '') : ''; $('rtEndpoint').disabled = !!t;
   $('rtCredential').value = ''; $('rtCredential').placeholder = t ? '비우면 기존 토큰 유지' : 'Jupyter 토큰 (필수)';
   $('rtMax').value = t ? (t.capacity?.max_concurrent_executions ?? '') : '';
   $('rtHint').innerHTML = t
-    ? '이름은 바꿀 수 없습니다. 저장하면 이 런타임이 다시 사용 가능 상태가 되고 바로 점검합니다.<br>주소나 풀은 실행 중이거나 정리 중인 작업이 있으면 바꿀 수 없습니다(먼저 비우기).'
+    ? '수정할 수 있는 것은 풀, 토큰, 최대 동시 실행입니다. 이름과 주소는 런타임을 가리키는 값이라 바꾸려면 새로 추가하세요.<br>저장하면 이 런타임이 다시 사용 가능 상태가 되고 바로 점검합니다. 풀은 실행 중이거나 정리 중인 작업이 있으면 바꿀 수 없습니다(먼저 비우기).'
     : '저장하면 바로 점검해서, 정상이면 ACTIVE로 새 실행을 받기 시작합니다.';
-  $('rtModal').classList.add('open'); (t ? $('rtEndpoint') : $('rtName')).focus();
+  $('rtModal').classList.add('open'); (t ? $('rtPool') : $('rtName')).focus();
 }
 async function saveRuntime() {
   const t = SYS.editing, max = $('rtMax').value ? +$('rtMax').value : null, credential = $('rtCredential').value;
   const name = t ? t.name : $('rtName').value.trim();
   if (!name || !$('rtEndpoint').value.trim()) return alert('이름과 주소를 입력하세요.');
+  // editing keeps the registered address (it identifies the runtime)
   if (!t && !credential) return alert('새 런타임은 토큰이 필요합니다.');
   const body = { idempotency_key: crypto.randomUUID(), name, runtime_type: 'JUPYTER', pool: $('rtPool').value,
     connection_config: { endpoint: $('rtEndpoint').value.trim() }, ...(credential ? { credential } : {}), ...(max ? { max_concurrent_executions: max } : {}) };
