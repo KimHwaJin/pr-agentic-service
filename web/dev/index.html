@@ -466,7 +466,7 @@
       <div class="field"><label>풀</label><select id="rtPool"><option value="INTERACTIVE">Interactive</option><option value="BATCH">Batch</option></select></div>
       <div class="field"><label>Jupyter 주소</label><input id="rtEndpoint" placeholder="http://jupyter:8888"></div>
       <div class="field"><label>토큰</label><input id="rtCredential" type="password" placeholder=""></div>
-      <div class="field"><label>최대 동시 실행</label><input id="rtMax" type="number" min="1" max="1000" placeholder="비우면 executor 기본값"></div>
+      <div class="field"><label>최대 동시 실행</label><input id="rtMax" inputmode="numeric" placeholder="1~1000, 비우면 executor 기본값"></div>
       <div class="muted" style="font-size:12px;line-height:1.6" id="rtHint"></div>
     </div>
     <div class="modal-foot"><button class="btn" onclick="$('rtModal').classList.remove('open')">취소</button><button class="btn primary" id="rtSave" onclick="saveRuntime()">저장</button></div>
@@ -1301,7 +1301,10 @@ function openRuntimeModal(targetId = null) {
   $('rtModal').classList.add('open'); (t ? $('rtPool') : $('rtName')).focus();
 }
 async function saveRuntime() {
-  const t = SYS.editing, max = $('rtMax').value ? +$('rtMax').value : null, credential = $('rtCredential').value;
+  const t = SYS.editing, credential = $('rtCredential').value, maxText = $('rtMax').value.trim();
+  if (maxText && !/^\d+$/.test(maxText)) return alert('최대 동시 실행은 숫자로 입력하세요.');
+  const max = maxText ? +maxText : null;
+  if (max !== null && (max < 1 || max > 1000)) return alert('최대 동시 실행은 1~1000 사이여야 합니다.');
   const name = t ? t.name : $('rtName').value.trim();
   if (!name || !$('rtEndpoint').value.trim()) return alert('이름과 주소를 입력하세요.');
   // editing keeps the registered address (it identifies the runtime)
