@@ -180,6 +180,8 @@
   .flow span { display: inline-block; background: var(--code); border-radius: 6px; padding: 1px 7px; margin: 2px 2px; }
   .field { display: grid; grid-template-columns: 180px 1fr; gap: 8px; align-items: center; margin: 6px 0; font-size: 13px; }
   .field label { color: var(--muted); overflow: hidden; text-overflow: ellipsis; }
+  .field select { border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; background: var(--bg); font-size: 13px; }
+  .field input:disabled { opacity: .6; }
   .field input, .card textarea, .card input.wide { width: 100%; border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; background: var(--bg); }
   .card textarea { min-height: 90px; font-family: "SF Mono", Menlo, monospace; font-size: 13px; }
   .actions { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; align-items: center; }
@@ -454,6 +456,20 @@
     <div class="modal-head"><h2 id="execTitle">실행</h2><button class="ghost" onclick="$('execModal').classList.remove('open')">닫기</button></div>
     <div class="systabs" id="execTabs" style="padding:12px 22px 0;margin:0"></div>
     <div class="modal-body" id="execBody"></div>
+  </div>
+</div>
+<div class="modal-back" id="rtModal" onclick="if (event.target === this) this.classList.remove('open')">
+  <div class="modal" style="width:min(560px,100%)">
+    <div class="modal-head"><h2 id="rtTitle">런타임 추가</h2><button class="ghost" onclick="$('rtModal').classList.remove('open')">닫기</button></div>
+    <div class="modal-body">
+      <div class="field"><label>이름</label><input id="rtName" placeholder="영문·숫자·._- (예: jupyter-prod-1)"></div>
+      <div class="field"><label>풀</label><select id="rtPool"><option value="INTERACTIVE">Interactive</option><option value="BATCH">Batch</option></select></div>
+      <div class="field"><label>Jupyter 주소</label><input id="rtEndpoint" placeholder="http://jupyter:8888"></div>
+      <div class="field"><label>토큰</label><input id="rtCredential" type="password" placeholder=""></div>
+      <div class="field"><label>최대 동시 실행</label><input id="rtMax" type="number" min="1" max="1000" placeholder="비우면 executor 기본값"></div>
+      <div class="muted" style="font-size:12px;line-height:1.6" id="rtHint"></div>
+    </div>
+    <div class="modal-foot"><button class="btn" onclick="$('rtModal').classList.remove('open')">취소</button><button class="btn primary" id="rtSave" onclick="saveRuntime()">저장</button></div>
   </div>
 </div>
 <div class="modal-back" id="projectModal" onclick="if (event.target === this) closeProjectModal()">
@@ -1213,7 +1229,7 @@ function runtimeCard(t) {
   const used = cap.active_execution_count ?? 0, max = cap.max_concurrent_executions || 0;
   const [pcls, plabel] = level(res.pressure_score || 0);
   const act = (a, label, danger) => `<button class="${danger ? 'danger' : ''}" onclick="runtimeAction('${t.target_id}','${a}','${esc(t.name)}')">${label}</button>`;
-  return `<div class="rt">
+  return `<div class="rt" style="cursor:pointer" title="눌러서 수정" onclick="openRuntimeModal('${t.target_id}')">
     <div class="rt-head"><b title="${esc(t.name)}">${esc(t.name)}</b><span class="pool-tag">${t.runtime.pool === 'BATCH' ? 'Batch' : 'Interactive'}</span>${statusBadge(st.status)}</div>
     <div class="rt-sub mono">${esc(t.runtime.connection_config?.endpoint || '')} · ${short(t.target_id)}${st.enabled ? '' : ' · 사용 중지'}</div>
     ${res.cpu ? `<div class="rt-gauges">
@@ -1224,7 +1240,7 @@ function runtimeCard(t) {
     <div class="slots">실행 슬롯 <b style="color:var(--ink)">${used}</b> / ${max || '-'} 사용 중 · 세션 ${cap.active_session_count ?? 0}
       <div class="bar"><span style="width:${max ? Math.max(used / max * 100, used ? 1 : 0) : 0}%"></span></div></div>
     <div class="rt-foot"><span title="${esc(res.source || '')}${res.estimated ? ' (추정)' : ''}">${res.fresh === false ? '⚠ 오래된 측정 · ' : ''}측정 ${fmtTime(res.observed_at || h.last_check_at)}</span>
-      <span class="acts">${act('probe', '점검')}${act('drain', '비우기', true)}${act('activate', '활성화')}${act('disable', '사용 중지', true)}${act('purge', '제거', true)}</span></div>
+      <span class="acts" onclick="event.stopPropagation()">${act('probe', '점검')}${act('drain', '비우기', true)}${act('activate', '활성화')}${act('disable', '사용 중지', true)}${act('purge', '제거', true)}</span></div>
     ${h.last_error ? `<div style="color:var(--bad);font-size:12px;margin-top:6px">${esc(h.last_error)}</div>` : ''}
   </div>`;
 }
@@ -1248,13 +1264,11 @@ async function renderRuntimes(quiet = false) {
   const top = `<div class="toolbar"><div class="seg">${POOLS.map(([k, label]) => `<button class="${k === pick ? 'on' : ''}" onclick="setPool('${k}')">${label}<span class="n">${count(k)}</span></button>`).join('')}</div>
       <span class="refresh"><span class="muted">${fmtTime(new Date().toISOString())} 갱신</span>
         <button class="ghost" title="지금 새로 고침" onclick="renderRuntimes(true)">↻</button>
-        <select onchange="setRefresh(+this.value)" title="자동 새로 고침 주기">${REFRESH.map(([sec, label]) => `<option value="${sec}" ${sec === SYS.refresh ? 'selected' : ''}>${label}</option>`).join('')}</select></span></div>${sections}`;
-  const form = $('rtName') ? null : `<div class="card" style="margin-top:18px"><h4>런타임 등록 · 수정</h4><div class="sub">같은 이름이면 수정됩니다. 등록하면 바로 점검합니다.</div>
-      <div class="toolbar"><input id="rtName" placeholder="이름 (영문·숫자·._-)"><select id="rtPool"><option value="INTERACTIVE">Interactive</option><option value="BATCH">Batch</option></select>
-        <input id="rtEndpoint" placeholder="http://jupyter:8888" style="width:240px"><input id="rtCredential" placeholder="토큰 (선택)" type="password"><input id="rtMax" placeholder="최대 동시 실행 (선택)" type="number" style="width:150px">
-        <button class="btn primary" onclick="registerRuntime()">등록</button></div></div>`;
-  if (form) $('sysBody').innerHTML = `<div id="rtLive">${top}</div>${form}`;
-  else $('rtLive').innerHTML = top;
+        <select onchange="setRefresh(+this.value)" title="자동 새로 고침 주기">${REFRESH.map(([sec, label]) => `<option value="${sec}" ${sec === SYS.refresh ? 'selected' : ''}>${label}</option>`).join('')}</select>
+        <button class="btn primary" style="padding:5px 12px;font-size:13px" onclick="openRuntimeModal()">+ 런타임 추가</button></span></div>${sections}`;
+  if (quiet && $('rtLive')) $('rtLive').innerHTML = top;
+  else $('sysBody').innerHTML = `<div id="rtLive">${top}</div>`;
+  SYS.targets = Object.fromEntries(targets.items.map(t => [t.target_id, t]));
 }
 /* auto refresh, Grafana style: off / 5s ... 5m, remembered per browser */
 const REFRESH = [[0, '자동 갱신 끔'], [5, '5초'], [10, '10초'], [30, '30초'], [60, '1분'], [300, '5분']];
@@ -1272,12 +1286,31 @@ async function runtimeAction(id, action, name) {
   await api(`/executor/runtime-targets/${id}/${action}`, { method: 'POST', body });
   renderRuntimes();
 }
-async function registerRuntime() {
-  const max = $('rtMax').value ? +$('rtMax').value : null;
-  const body = { idempotency_key: crypto.randomUUID(), name: $('rtName').value.trim(), runtime_type: 'JUPYTER', pool: $('rtPool').value,
-    connection_config: { endpoint: $('rtEndpoint').value.trim() }, ...($('rtCredential').value ? { credential: $('rtCredential').value } : {}), ...(max ? { max_concurrent_executions: max } : {}) };
-  await api('/executor/runtime-targets', { method: 'POST', body });
-  renderRuntimes();
+function openRuntimeModal(targetId = null) {
+  const t = targetId ? SYS.targets[targetId] : null;
+  SYS.editing = t;
+  $('rtTitle').textContent = t ? `런타임 수정 · ${t.name}` : '런타임 추가';
+  $('rtName').value = t ? t.name : ''; $('rtName').disabled = !!t;
+  $('rtPool').value = t ? t.runtime.pool : (SYS.pool && SYS.pool !== 'ALL' ? SYS.pool : 'INTERACTIVE');
+  $('rtEndpoint').value = t ? (t.runtime.connection_config?.endpoint || '') : '';
+  $('rtCredential').value = ''; $('rtCredential').placeholder = t ? '비우면 기존 토큰 유지' : 'Jupyter 토큰 (필수)';
+  $('rtMax').value = t ? (t.capacity?.max_concurrent_executions ?? '') : '';
+  $('rtHint').innerHTML = t
+    ? '이름은 바꿀 수 없습니다. 저장하면 이 런타임이 다시 사용 가능 상태가 되고 바로 점검합니다.<br>주소나 풀은 실행 중이거나 정리 중인 작업이 있으면 바꿀 수 없습니다(먼저 비우기).'
+    : '저장하면 바로 점검해서, 정상이면 ACTIVE로 새 실행을 받기 시작합니다.';
+  $('rtModal').classList.add('open'); (t ? $('rtEndpoint') : $('rtName')).focus();
+}
+async function saveRuntime() {
+  const t = SYS.editing, max = $('rtMax').value ? +$('rtMax').value : null, credential = $('rtCredential').value;
+  const name = t ? t.name : $('rtName').value.trim();
+  if (!name || !$('rtEndpoint').value.trim()) return alert('이름과 주소를 입력하세요.');
+  if (!t && !credential) return alert('새 런타임은 토큰이 필요합니다.');
+  const body = { idempotency_key: crypto.randomUUID(), name, runtime_type: 'JUPYTER', pool: $('rtPool').value,
+    connection_config: { endpoint: $('rtEndpoint').value.trim() }, ...(credential ? { credential } : {}), ...(max ? { max_concurrent_executions: max } : {}) };
+  $('rtSave').disabled = true;
+  try { await api('/executor/runtime-targets', { method: 'POST', body }); $('rtModal').classList.remove('open'); renderRuntimes(true); }
+  catch { alert('저장하지 못했습니다. 화면 위쪽의 오류 메시지를 확인하세요.'); }
+  finally { $('rtSave').disabled = false; }
 }
 
 /* maintenance */
