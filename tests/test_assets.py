@@ -35,3 +35,12 @@ def test_tool_parameters_reach_the_model_under_their_own_names():
         sent = convert_to_openai_tool(tool)["function"]["parameters"]
         names = set(sent.get("properties", {}))
         assert not {n for n in names if n.startswith("v__")}, tool.name
+
+
+def test_summary_prompt_keeps_the_messages_slot():
+    from agent.prompts import load_prompt
+    from core.config import ROOT
+
+    body = load_prompt(ROOT / "src/agent/prompts", "summary").body
+    assert "\n<messages>\n" in body
+    assert body.format(messages="X").count("X") == 1  # no stray braces

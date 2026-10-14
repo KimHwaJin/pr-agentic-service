@@ -18,9 +18,11 @@ from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.store.base import BaseStore
 from langgraph.types import Command
 
+from agent import compaction_rules
 from agent.context import AnalysisState, RunContext
 from agent.llm import chat_model
 from agent.middleware import JsonArgumentsMiddleware, PersonaMiddleware
+from agent.prompts import load_prompt
 from agent.tools.analysis import (
     finish_analysis,
     propose_plans,
@@ -104,10 +106,24 @@ class AgentGraphs:
                     run_limit=self.settings.agent_model_call_limit,
                     exit_behavior="end",
                 ),
-                SummarizationMiddleware(
-                    model, trigger=("tokens", 60000), keep=("messages", 40)
-                ),
             ]
+            if self.settings.agent_compact_finished_analysis:
+                middleware.append(compaction_rules.finished_analysis())
+            trigger = self.settings.agent_summary_trigger_tokens
+            middleware.append(
+                SummarizationMiddleware(
+                    model,
+                    trigger=("tokens", trigger),
+                    # by tokens, so a summary always lands below the trigger
+                    # (a message count can stay above it and re-summarize on
+                    # every call)
+                    keep=("tokens", trigger // 2),
+                    summary_prompt=load_prompt(
+                        self.settings.prompts_root, "summary"
+                    ).body,
+                    trim_tokens_to_summarize=None,  # summarize all of it
+                )
+            )
             self._graphs[name] = create_agent(
                 model,
                 tools=TOOLS,
