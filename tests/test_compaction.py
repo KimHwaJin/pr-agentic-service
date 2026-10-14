@@ -1,16 +1,13 @@
-import asyncio
-from types import SimpleNamespace
+import json
 
-from langchain_core.messages import (
-    AIMessage,
-    HumanMessage,
-    RemoveMessage,
-    ToolMessage,
+from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
+
+from agent.compaction import Rule, ToolResultCompactionMiddleware
+from agent.compaction_rules import (
+    execution_brief,
+    finished_analysis,
+    report_brief,
 )
-from langgraph.types import Command
-
-from agent.compaction import KEEP, REMOVE, Rule, ToolResultCompactionMiddleware
-from agent.compaction_rules import analysis_note, finished_analysis
 
 
 def _call(name, call_id, args=None, msg_id=None):
@@ -32,8 +29,8 @@ def _analysis(end=True):
         _result("분석 담당에게 넘김", "s"),
         _call("read_skill", "r", {"name": "data_load"}),
         _result("skill 문서 " * 200, "r"),
-        _call("write_report", "w", {"title": "t"}),
-        _result("리포트 게시 완료 (report=a, notebook=b).\n\n본문", "w"),
+        _call("note", "n"),
+        _result("짧은 결과", "n"),
     ]
     if end:
         messages += [
@@ -47,76 +44,104 @@ def _middleware(**kwargs):
     return ToolResultCompactionMiddleware(
         start_tools={"start_analysis"},
         end_tools={"finish_analysis"},
-        rules={"start_analysis": KEEP, "finish_analysis": KEEP},
-        default=REMOVE,
+        rules={"read_skill": Rule(result="clear")},
         **kwargs,
     )
-
-
-def _removed(changed):
-    return {m.id for m in changed if isinstance(m, RemoveMessage)}
 
 
 def test_running_segment_is_untouched():
     assert _middleware().compact(_analysis(end=False)) == []
 
 
-def test_finished_segment_drops_calls_and_results():
+def test_finished_segment_is_rewritten_under_the_same_ids():
     changed = _middleware().compact(_analysis())
-    assert _removed(changed) == {"ai-r", "tm-r", "ai-w", "tm-w"}
+    assert [m.id for m in changed] == ["tm-r"]
+    assert changed[0].content == "[compacted: read_skill]"
+    assert changed[0].tool_call_id == "r"
+
+
+def test_compaction_runs_once():
+    messages = _analysis()
+    changed = {m.id: m for m in _middleware().compact(messages)}
+    messages = [changed.get(m.id, m) for m in messages]
+    assert _middleware().compact(messages) == []
 
 
 def test_messages_outside_segments_are_kept():
     messages = [
         _call("read_skill", "before"),
-        _result("outside", "before"),
+        _result("outside " * 50, "before"),
         *_analysis(),
     ]
-    assert "tm-before" not in _removed(_middleware().compact(messages))
+    assert [m.id for m in _middleware().compact(messages)] == ["tm-r"]
 
 
-def test_mixed_calls_keep_the_kept_call():
-    both = AIMessage(
-        "",
-        id="ai-both",
-        tool_calls=[
-            {"name": "read_skill", "args": {}, "id": "x"},
-            {"name": "finish_analysis", "args": {}, "id": "f"},
-        ],
+def test_without_start_tools_each_end_closes_what_came_before():
+    middleware = ToolResultCompactionMiddleware(
+        end_tools={"finish_analysis"}, default=Rule(result=10)
     )
-    messages = [
-        _call("start_analysis", "s"),
-        _result("넘김", "s"),
-        both,
-        _result("doc", "x"),
-        _result("분석 종료", "f"),
-    ]
-    changed = {m.id: m for m in _middleware().compact(messages)}
-    assert isinstance(changed["tm-x"], RemoveMessage)
-    kept = changed["ai-both"]
-    assert isinstance(kept, AIMessage)
-    assert [c["id"] for c in kept.tool_calls] == ["f"]
+    changed = middleware.compact(_analysis())
+    assert [m.id for m in changed] == ["tm-r"]  # the only one over 10
 
 
-def test_result_rules_rewrite_under_the_same_id():
+def test_argument_rules():
     middleware = ToolResultCompactionMiddleware(
         end_tools={"finish_analysis"},
-        rules={"read_skill": Rule(result="clear")},
+        rules={"read_skill": Rule(args="clear")},
     )
     (changed,) = middleware.compact(_analysis())
-    assert (
-        changed.id == "tm-r" and changed.content == "[compacted: read_skill]"
-    )
-    assert (
-        middleware.compact(
-            [changed if m.id == "tm-r" else m for m in _analysis()]
-        )
-        == []
-    )
+    assert isinstance(changed, AIMessage)
+    assert changed.tool_calls[0]["args"] == {"name": "[compacted: read_skill]"}
+    assert changed.tool_calls[0]["id"] == "r"
 
 
-def test_end_tool_update_carries_note_and_removals():
-    *state, end = _analysis()
+def test_execution_brief_keeps_status_variables_and_errors():
+    body = {
+        "results": {
+            "#0 extract_data": {
+                "status": "SUCCEEDED",
+                "observations": [
+                    {
+                        "var": "_r0",
+                        "value": {"type": "DataFrame", "shape": [9, 3]},
+                    }
+                ],
+                "stdout": "x" * 1000,
+            },
+            "#1 boxplot": {
+                "status": "FAILED",
+                "observations": [],
+                "error": "KeyError: 'a'\nTraceback ...",
+            },
+        },
+        "operation_error": None,
+    }
+    brief = execution_brief(json.dumps(body))
+    assert "#0 extract_data: SUCCEEDED (_r0(DataFrame [9, 3]))" in brief
+    assert "#1 boxplot: FAILED 오류: KeyError: 'a'" in brief
+    assert "x" * 50 not in brief
+
+
+def test_report_brief_keeps_summary_and_results():
+    content = (
+        "리포트 게시 완료 (report=a, notebook=b).\n\n# 제목\n\n"
+        "## 1. 요약\n상관 0.33\n\n## 2. 수행한 분석\n긴 설명\n\n"
+        "## 3. 주요 결과\nSN OPEN 0.3256\n\n## 6. 한계\n샘플"
+    )
+    brief = report_brief(content)
+    assert brief.startswith("리포트 게시 완료 (report=a, notebook=b).")
+    assert "상관 0.33" in brief and "SN OPEN 0.3256" in brief
+    assert "긴 설명" not in brief and "샘플" not in brief
+
+
+def test_end_tool_update_carries_the_compacted_segment():
+    import asyncio
+    from types import SimpleNamespace
+
+    from langgraph.types import Command
+
+    messages = _analysis()
+    *state, end = messages
     request = SimpleNamespace(
         tool_call={"name": "finish_analysis", "id": "f", "args": {}},
         state={"messages": state},
@@ -125,27 +150,32 @@ def test_end_tool_update_carries_note_and_removals():
     async def handler(_):
         return Command(update={"messages": [end], "active_agent": "main"})
 
-    middleware = _middleware(note=analysis_note)
-    result = asyncio.run(middleware.awrap_tool_call(request, handler))
+    result = asyncio.run(_middleware().awrap_tool_call(request, handler))
     assert result.update["active_agent"] == "main"
-    first, *rest = result.update["messages"]
-    assert first.id == "tm-f"
-    assert "report=a, notebook=b" in first.content
-    assert _removed(rest) == {"ai-r", "tm-r", "ai-w", "tm-w"}
+    assert [m.id for m in result.update["messages"]] == ["tm-f", "tm-r"]
 
 
-def test_other_tools_pass_through():
-    request = SimpleNamespace(
-        tool_call={"name": "read_skill", "id": "r", "args": {}},
-        state={"messages": _analysis(end=False)},
+def test_latest_only_keeps_the_last_copy_of_a_repeated_read():
+    middleware = ToolResultCompactionMiddleware(
+        start_tools={"start_analysis"},
+        end_tools={"finish_analysis"},
+        rules={"read_skill": Rule(latest_only=True)},
     )
-
-    async def handler(_):
-        return "doc"
-
-    assert (
-        asyncio.run(_middleware().awrap_tool_call(request, handler)) == "doc"
-    )
+    first = _analysis()
+    again = [
+        _call("start_analysis", "s2"),
+        _result("넘김", "s2"),
+        _call("read_skill", "r2", {"name": "data_load"}),
+        _result("skill 문서 " * 200, "r2"),
+        _call("read_skill", "r3", {"name": "eda"}),
+        _result("다른 문서", "r3"),
+    ]
+    # second analysis still running: its copy wins, the first is cleared
+    (changed,) = middleware.compact([*first, *again])
+    assert changed.id == "tm-r"
+    assert changed.content == "[compacted: read_skill, repeated later]"
+    # a document read once stays
+    assert middleware.compact(first) == []
 
 
 def test_service_rules_assemble():
