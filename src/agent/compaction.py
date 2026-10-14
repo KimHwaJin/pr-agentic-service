@@ -131,8 +131,8 @@ class ToolResultCompactionMiddleware(AgentMiddleware):
 
     def _superseded(self, messages: Sequence[AnyMessage]) -> set[str]:
         """Tool call ids of latest_only results repeated by a later call."""
-        keys = {
-            call["id"]: (
+        keys: dict[str, tuple[str, str]] = {
+            call["id"] or "": (
                 call["name"],
                 json.dumps(call["args"], sort_keys=True),
             )
