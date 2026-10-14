@@ -387,6 +387,15 @@
   .wfc-tools .chip.cond { border-style: dashed; color: var(--muted); }
   .wfc-tools .arr { color: var(--faint); font-size: 11px; }
   .wfc-more { font-size: 11px; color: var(--muted); }
+  .wfc-flow { position: relative; }
+  .wfc-help { position: absolute; top: 6px; right: 6px; width: 20px; height: 20px; border-radius: 50%; border: 1px solid var(--line); background: var(--panel); color: var(--muted); font-size: 11px; font-weight: 700; cursor: pointer; display: grid; place-items: center; padding: 0; }
+  .wfc-help:hover { color: var(--accent); border-color: var(--accent); }
+  .legend { position: fixed; z-index: 40; width: 300px; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 12px 40px rgba(0,0,0,.18); padding: 12px 14px; font-size: 12.5px; display: none; }
+  .legend.open { display: block; }
+  .legend h5 { margin: 0 0 8px; font-size: 13px; }
+  .legend .row { display: grid; grid-template-columns: 120px 1fr; gap: 8px; align-items: center; padding: 5px 0; border-top: 1px solid var(--line); }
+  .legend .row:first-of-type { border-top: 0; }
+  .legend .row > span:last-child { color: var(--muted); line-height: 1.45; }
   .wfc-foot { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 12px; color: var(--faint); }
   .wfc-foot .tag { background: var(--hover); color: var(--muted); padding: 1px 8px; border-radius: 999px; font-size: 11px; }
   .wfcard .wf-steps b { color: var(--ink); font-weight: 600; }
@@ -496,6 +505,14 @@
   <div class="hitl-head"><div class="kicker" id="hitlKicker">확인 필요</div><h3 id="hitlTitle"></h3><div class="sub" id="hitlSub"></div></div>
   <div class="hitl-body" id="hitlBody"></div>
   <div class="hitl-foot" id="hitlFoot"></div>
+</div>
+<div class="legend" id="wfLegend" onclick="event.stopPropagation()">
+  <h5>카드 읽는 법</h5>
+  <div class="row"><span class="wfc-skill"><i style="font-style:normal;display:inline-grid;place-items:center;width:15px;height:15px;border-radius:4px;background:var(--accent);color:#fff;font-size:9.5px;margin-right:5px">1</i>data_load</span><span><b>skill</b> · 분석 단계. 번호는 단계 순서</span></div>
+  <div class="row"><span class="wfc-tools"><span class="chip">extract_data</span></span><span><b>tool</b> · 실제로 실행되는 함수. 항상 실행</span></div>
+  <div class="row"><span class="wfc-tools"><span class="chip cond">boxplot_eda</span></span><span><b>조건부 tool</b> · 앞 결과를 보고 에이전트가 실행 여부를 정함</span></div>
+  <div class="row"><span class="wfc-tools"><span class="chip">a</span><span class="arr">→</span><span class="chip">b</span></span><span><b>실행 순서</b> · 화살표 방향으로 실행. 다음 skill로 이어짐</span></div>
+  <div class="row"><span><span class="badge rec">공개</span> <span class="badge">내 후보</span></span><span>공개는 비슷한 질문에 계획 후보로 추천됨. 내 후보는 나만 보임</span></div>
 </div>
 <div class="modal-back" id="wfModal" onclick="if (event.target === this) this.classList.remove('open')">
   <div class="modal" style="width:min(820px,100%)">
@@ -1105,11 +1122,22 @@ function renderWorkflows() {
     <div class="pcard wfcard" role="button" tabindex="0" onclick="openWorkflow('${w.id}')">
       <div class="wfc-head"><span class="wfc-icon">${icon}</span><div class="t"><b>${esc(w.name)}</b><span>${esc(w.user_request)}</span></div>
         ${w.lifecycle === 'template' ? '<span class="badge rec">공개</span>' : '<span class="badge">내 후보</span>'}</div>
-      <div class="wfc-flow">${shown.map((st, i) => stage(st, i, i === w.steps.length - 1)).join('')}
+      <div class="wfc-flow"><button class="wfc-help" title="카드 읽는 법" onclick="showLegend(event, this)">?</button>${shown.map((st, i) => stage(st, i, i === w.steps.length - 1)).join('')}
         ${w.steps.length > shown.length ? `<div class="wfc-more">+ ${w.steps.length - shown.length}단계 더</div>` : ''}</div>
       <div class="wfc-foot">skill ${w.steps.length} · tool ${w.call_count} · ${ago(w.updated_at)} 수정${w.tags.slice(0, 4).map(t => `<span class="tag">${esc(t)}</span>`).join('')}</div>
     </div>`; }).join('') || '<div style="color:var(--faint)">워크플로우가 없습니다</div>';
 }
+function showLegend(e, btn) {
+  e.stopPropagation();
+  const lg = $('wfLegend'), r = btn.getBoundingClientRect();
+  if (lg.classList.contains('open') && lg.dataset.for === String(r.top)) { lg.classList.remove('open'); return; }
+  lg.dataset.for = String(r.top); lg.classList.add('open');
+  const left = Math.min(r.right - lg.offsetWidth, window.innerWidth - lg.offsetWidth - 12);
+  const below = r.bottom + 8 + lg.offsetHeight < window.innerHeight;
+  lg.style.left = `${Math.max(12, left)}px`; lg.style.top = `${below ? r.bottom + 8 : r.top - lg.offsetHeight - 8}px`;
+}
+document.addEventListener('click', () => $('wfLegend').classList.remove('open'));
+$('workflowsView').addEventListener('scroll', () => $('wfLegend').classList.remove('open'));
 ['wfSearch', 'wfFilter', 'wfSort'].forEach(id => $(id).addEventListener(id === 'wfSearch' ? 'input' : 'change', renderWorkflows));
 async function openWorkflow(id) {
   $('wfTitle').textContent = '불러오는 중…'; $('wfBody').innerHTML = ''; $('wfModal').classList.add('open');
