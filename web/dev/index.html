@@ -796,8 +796,11 @@ async function runHistory(runId) {
   const steps = items.filter(e => e.type !== 'execution_completed');
   if (steps.length) {
     const act = document.createElement('details'); act.className = 'activity'; act.dataset.done = '1';
-    act.innerHTML = `<summary><span class="done-ico"></span><span class="t">작업 ${steps.length}단계</span><span class="chev">›</span></summary><div class="steps">${steps.map(e =>
-      `<div class="step"><span class="ico">${e.type === 'plan_approved' ? '✓' : '·'}</span><span>${esc(e.type === 'plan_approved' ? `계획 승인 · ${e.data.title}` : (TOOL_TEXT[e.data.name] || (() => e.data.name))(e.data.args || {}))}</span></div>`).join('')}</div>`;
+    const line = e => e.type === 'plan_approved' ? ['✓', `계획 승인 · ${e.data.title}`]
+      : e.type === 'context_summarized' ? ['✓', `이전 대화 정리 · 메시지 ${e.data.messages}개를 요약`]
+      : ['·', (TOOL_TEXT[e.data.name] || (() => e.data.name))(e.data.args || {})];
+    act.innerHTML = `<summary><span class="done-ico"></span><span class="t">작업 ${steps.length}단계</span><span class="chev">›</span></summary><div class="steps">${steps.map(e => { const [ico, text] = line(e);
+      return `<div class="step"><span class="ico">${ico}</span><span>${esc(text)}</span></div>`; }).join('')}</div>`;
     out.push(act);
   }
   items.filter(e => e.type === 'execution_completed').forEach((e, i) => out.push(resultCard(e.data, i + 1)));
