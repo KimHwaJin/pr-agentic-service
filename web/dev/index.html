@@ -67,6 +67,9 @@
   .acts button:hover { border-color: var(--accent); color: var(--accent); }
   .acts button.danger:hover { border-color: var(--bad); color: var(--bad); }
   .muted { color: var(--muted); }
+  .refresh { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; font-size: 12px; }
+  .refresh select { border: 1px solid var(--line); border-radius: 8px; padding: 4px 8px; background: var(--panel); font-size: 12px; }
+  .refresh .ghost { padding: 3px 8px; font-size: 14px; }
   .seg { display: inline-flex; background: var(--code); border-radius: 10px; padding: 3px; gap: 2px; }
   .seg button { border: 0; background: transparent; padding: 6px 14px; border-radius: 8px; font-size: 13px; color: var(--muted); cursor: pointer; }
   .seg button.on { background: var(--panel); color: var(--ink); font-weight: 500; box-shadow: 0 1px 2px rgba(0,0,0,.08); }
@@ -1243,7 +1246,9 @@ async function renderRuntimes(quiet = false) {
         <div class="rt-grid">${items.map(runtimeCard).join('') || '<div class="muted">런타임이 없습니다.</div>'}</div></section>`;
     }).join('');
   const top = `<div class="toolbar"><div class="seg">${POOLS.map(([k, label]) => `<button class="${k === pick ? 'on' : ''}" onclick="setPool('${k}')">${label}<span class="n">${count(k)}</span></button>`).join('')}</div>
-      <span class="muted" style="font-size:12px;margin-left:auto">10초마다 자동 갱신</span></div>${sections}`;
+      <span class="refresh"><span class="muted">${fmtTime(new Date().toISOString())} 갱신</span>
+        <button class="ghost" title="지금 새로 고침" onclick="renderRuntimes(true)">↻</button>
+        <select onchange="setRefresh(+this.value)" title="자동 새로 고침 주기">${REFRESH.map(([sec, label]) => `<option value="${sec}" ${sec === SYS.refresh ? 'selected' : ''}>${label}</option>`).join('')}</select></span></div>${sections}`;
   const form = $('rtName') ? null : `<div class="card" style="margin-top:18px"><h4>런타임 등록 · 수정</h4><div class="sub">같은 이름이면 수정됩니다. 등록하면 바로 점검합니다.</div>
       <div class="toolbar"><input id="rtName" placeholder="이름 (영문·숫자·._-)"><select id="rtPool"><option value="INTERACTIVE">Interactive</option><option value="BATCH">Batch</option></select>
         <input id="rtEndpoint" placeholder="http://jupyter:8888" style="width:240px"><input id="rtCredential" placeholder="토큰 (선택)" type="password"><input id="rtMax" placeholder="최대 동시 실행 (선택)" type="number" style="width:150px">
@@ -1251,7 +1256,15 @@ async function renderRuntimes(quiet = false) {
   if (form) $('sysBody').innerHTML = `<div id="rtLive">${top}</div>${form}`;
   else $('rtLive').innerHTML = top;
 }
-setInterval(() => { if (SYS.tab === 'runtimes' && $('systemView').style.display !== 'none' && !document.hidden && $('rtLive')) renderRuntimes(true).catch(() => {}); }, 10000);
+/* auto refresh, Grafana style: off / 5s ... 5m, remembered per browser */
+const REFRESH = [[0, '자동 갱신 끔'], [5, '5초'], [10, '10초'], [30, '30초'], [60, '1분'], [300, '5분']];
+SYS.refresh = (() => { try { const v = +localStorage.getItem('agentic.refresh'); return REFRESH.some(([s]) => s === v) ? v : 10; } catch { return 10; } })();
+function setRefresh(sec) {
+  SYS.refresh = sec; try { localStorage.setItem('agentic.refresh', String(sec)); } catch {}
+  clearInterval(SYS.timer);
+  if (sec) SYS.timer = setInterval(() => { if (SYS.tab === 'runtimes' && $('systemView').style.display !== 'none' && !document.hidden && $('rtLive')) renderRuntimes(true).catch(() => {}); }, sec * 1000);
+}
+setRefresh(SYS.refresh);
 const RT_ACTIONS = { probe: '지금 점검합니다', drain: '새 작업 배정을 멈추고, 진행 중인 작업은 마저 끝냅니다', activate: '다시 배정 대상으로 돌립니다', disable: '사용을 중지합니다 (실행 이력은 남음)', purge: '사용 중지된 대상을 목록에서 제거합니다' };
 async function runtimeAction(id, action, name) {
   if (action !== 'probe' && !confirm(`${name}: ${RT_ACTIONS[action]}. 진행할까요?`)) return;
