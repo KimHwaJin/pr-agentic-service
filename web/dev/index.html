@@ -1053,7 +1053,7 @@ async function logout() {
 const SYS = { tab: 'executions', cursor: null };
 const fmtTime = iso => iso ? new Date(iso).toLocaleString('ko-KR', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }) : '';
 function dur(a, b) { if (!a || !b) return ''; const s = (new Date(b) - new Date(a)) / 1000; return s < 60 ? `${s.toFixed(1)}초` : `${Math.floor(s / 60)}분 ${Math.round(s % 60)}초`; }
-const short = id => id ? `<span class="mono" title="${esc(id)}">${esc(String(id).slice(0, 8))}</span>` : '<span class="muted">-</span>';
+const short = id => id ? `<span class="mono" title="${esc(id)} (클릭하면 복사)" style="cursor:copy" onclick="event.stopPropagation();navigator.clipboard.writeText('${esc(id)}')">${esc(String(id).slice(0, 8))}</span>` : '<span class="muted">-</span>';
 function statusBadge(st) {
   const cls = ['SUCCEEDED', 'ACTIVE', 'AVAILABLE'].includes(st) ? 'ok' : ['FAILED', 'CANCELLED', 'OFFLINE', 'DISABLED'].includes(st) ? 'bad' : '';
   return `<span class="badge ${cls}">${esc(st || '-')}</span>`;
@@ -1082,6 +1082,7 @@ function renderExecutions() {
       <input id="fxUser" placeholder="사번" style="width:110px">
       <select id="fxProject"><option value="">모든 프로젝트</option>${S.projects.map(p => `<option value="${esc(p.id)}">${esc(p.name)}</option>`).join('')}</select>
       <input id="fxSession" placeholder="세션 ID" style="width:200px">
+      <input id="fxExec" placeholder="실행 ID로 바로 열기" style="width:240px" onkeydown="if (event.key === 'Enter' && this.value.trim()) openExecution(this.value.trim())">
       <select id="fxStatus">${statuses.map(s => `<option value="${s}">${s || '모든 상태'}</option>`).join('')}</select>
       <button class="btn" onclick="loadExecutions()">조회</button></div>
     <table class="tbl"><thead><tr><th>실행</th><th>상태</th><th>사용자</th><th>프로젝트 / 세션</th><th>방식</th><th>단계</th><th>시작</th><th>소요</th></tr></thead><tbody id="execRows"></tbody></table>
@@ -1106,7 +1107,7 @@ async function loadExecutions(more = false) {
 const EXEC_TABS = [['overview', '개요'], ['steps', '단계'], ['events', '이벤트'], ['result', '결과'], ['notebook', '노트북'], ['artifacts', '산출물'], ['diagnostics', '진단'], ['attempts', '시도']];
 function openExecution(id) {
   SYS.exec = id;
-  $('execTitle').innerHTML = `실행 ${short(id)}`;
+  $('execTitle').innerHTML = `실행 <span class="mono" style="font-size:13px;font-weight:400">${esc(id)}</span> <button class="ghost" title="복사" onclick="navigator.clipboard.writeText('${esc(id)}')">복사</button>`;
   $('execTabs').innerHTML = EXEC_TABS.map(([k, label]) => `<button class="systab" data-ex="${k}" onclick="execTab('${k}')">${label}</button>`).join('');
   $('execModal').classList.add('open'); execTab('overview');
 }
@@ -1119,7 +1120,7 @@ async function execTab(tab) {
 }
 async function execOverview(base) {
   const e = await api(base); const c = e.context || {}, r = e.runtime || {}, lc = e.lifecycle || {};
-  const kv = [['상태', statusBadge(e.state?.status) + (e.state?.cancellation_reason ? ` ${esc(e.state.cancellation_reason)}` : '')], ['방식', `${esc(lc.operation_mode || '')} · ${esc(e.trigger_type || '')}`],
+  const kv = [['실행 ID', `<span class="mono">${esc(e.execution_id)}</span>`], ['상태', statusBadge(e.state?.status) + (e.state?.cancellation_reason ? ` ${esc(e.state.cancellation_reason)}` : '')], ['방식', `${esc(lc.operation_mode || '')} · ${esc(e.trigger_type || '')}`],
     ['사용자', esc(c.user_id)], ['프로젝트', `${esc(projectName(c.project_id) || '')} <span class="mono">${esc(c.project_id || '-')}</span>`], ['세션', `<span class="mono">${esc(c.session_id || '-')}</span>`], ['run (task_id)', `<span class="mono">${esc(c.task_id || '-')}</span>`],
     ['런타임', `${esc(r.type)} / ${esc(r.pool)} / ${esc(r.profile)} · target ${short(r.target_id)}`], ['생성', fmtTime(e.created_at)], ['시작 · 종료', `${fmtTime(lc.started_at)} → ${fmtTime(lc.finished_at)} (${dur(lc.started_at, lc.finished_at)})`],
     ['재시도 · 복구', `${esc(e.retry?.strategy)} ${e.retry?.count ?? 0}회 · 복구 ${e.recovery?.count ?? 0}회`], ['노트북', `${esc(e.workspace?.notebook_projection?.status || '-')}`], ['실패', e.failure ? `<span style="color:var(--bad)">${esc(JSON.stringify(e.failure))}</span>` : '-']];
