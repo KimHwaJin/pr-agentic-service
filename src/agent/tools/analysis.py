@@ -972,9 +972,10 @@ async def write_report(title: str, focus: str, runtime: Runtime) -> Command:
         )
 
     evidence = await collect_evidence(ctx.services, execution["id"], plan)
-    markdown = await generate_report(
-        ctx, title=title, focus=focus, evidence=evidence
-    )
+    async with ctx.activity("report_writing"):
+        markdown = await generate_report(
+            ctx, title=title, focus=focus, evidence=evidence
+        )
     artifact = await executor.create_report(
         execution["id"],
         idempotency_key=_key(runtime, "report"),
@@ -1073,13 +1074,14 @@ async def save_workflow(
         )
     document["workflow"]["name"] = answer.get("name") or name
     document["workflow"]["actor"] = {"type": "USER", "id": ctx.employee_id}
-    workflow = await ctx.services.workflows.create(
-        author_id=ctx.user_id,
-        document=document,
-        user_queries=answer.get("user_queries") or user_queries,
-        tags=answer.get("tags") or tags or [],
-        source_run_id=ctx.run_id,
-    )
+    async with ctx.activity("workflow_saving"):  # embeds the queries
+        workflow = await ctx.services.workflows.create(
+            author_id=ctx.user_id,
+            document=document,
+            user_queries=answer.get("user_queries") or user_queries,
+            tags=answer.get("tags") or tags or [],
+            source_run_id=ctx.run_id,
+        )
     await ctx.emit(
         "workflow_saved", {"workflow_id": workflow.id, "name": workflow.name}
     )

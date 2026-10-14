@@ -791,7 +791,7 @@ async function renderMessages(sessionId, cursor = null) {
   return frag;
 }
 async function runHistory(runId) {
-  const { items } = await api(`/runs/${runId}/events?types=tool_call,plan_approved,execution_completed`);
+  const { items } = await api(`/runs/${runId}/events?types=tool_call,plan_approved,execution_completed,context_summarized`);
   const out = [];
   const steps = items.filter(e => e.type !== 'execution_completed');
   if (steps.length) {
@@ -894,6 +894,8 @@ function openStream() {
   on('artifact', e => addFiles([e.data]));
   on('memory_updated', e => { step('ok', `메모리 ${e.data.action === 'deleted' ? '삭제' : '업데이트'} · ${e.data.item.title || ''}`); });
   on('workflow_saved', e => { step('ok', `워크플로우 저장 · ${e.data.name}`); loadWorkflows(); });
+  on('activity', e => { if (e.data.state === 'started') { S.activityId = e.data.id; setActivityTitle(e.data.label); } else if (S.activityId === e.data.id) { S.activityId = null; setActivityTitle('생각하는 중'); } });
+  on('context_summarized', e => step('ok', `이전 대화 정리 · 메시지 ${e.data.messages}개를 요약`));
   on('run_error', e => showError(e.data.message));
   on('session_titled', e => { $('title').textContent = e.data.title; loadSessions(); });
 }

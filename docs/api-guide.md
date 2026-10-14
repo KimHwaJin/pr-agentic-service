@@ -31,7 +31,7 @@
 | GET | `/sessions/{id}/messages?limit=&cursor=` | 대화 기록(읽기 전용). 최근 `limit`개(페이지 안에서는 오래된 → 최신 순), `next_cursor`로 더 이전 메시지. user 메시지의 `attachments`에 보낸 이미지(`{kind: image, image_id, name, width, height}`), assistant 메시지의 `attachments`에 리포트·노트북, `run_id`로 그 턴의 이벤트를 조회합니다. |
 | POST | `/sessions/{id}/runs` | **에이전트 실행.** 새 턴 `{input, model?}` 또는 재개 `{command: {resume: {interrupt_id, value}}}` → 202 `{run, resumed}`. 아래 "에이전트 실행" 참고. |
 | GET | `/sessions/{id}/runs?limit=&cursor=` | run 이력 `{items, next_cursor}` |
-| GET | `/runs/{id}/events?types=` | 그 턴의 저장된 이벤트를 순서대로 반환(작업 단계, 계획 승인, 실행 결과, 결과물 등). 지난 대화를 다시 그릴 때 씁니다. `types=execution_completed,artifact`처럼 거를 수 있습니다. 토큰·executor 진행 이벤트는 저장하지 않습니다. |
+| GET | `/runs/{id}/events?types=` | 그 턴의 저장된 이벤트를 순서대로 반환(작업 단계, 계획 승인, 실행 결과, 결과물 등). 지난 대화를 다시 그릴 때 씁니다. `types=execution_completed,artifact`처럼 거를 수 있습니다. 토큰·executor 진행·activity 이벤트는 저장하지 않습니다. |
 | GET | `/runs/{id}` | `status`: `queued`, `running`, `waiting_input`, `waiting_executor`, `succeeded`, `failed`, `cancelled` |
 | POST | `/runs/{id}/cancel` | 취소. 실행 중인 executor 작업도 취소됩니다. |
 
@@ -94,6 +94,8 @@
 | `artifact` | `{kind: report\|notebook, artifact_id, title, lab_url}` | 링크 `/view/artifacts/{artifact_id}`, 노트북은 `lab_url`로 JupyterLab에서 열기 (5장) |
 | `memory_updated` | `{action, item}` | 메모리 변경 알림 |
 | `workflow_saved` | `{workflow_id, name}` | 저장 알림 |
+| `activity` | 시작: `{id, kind, state: "started", label, ...}` / 끝: `{id, kind, state: finished\|failed\|paused, elapsed_ms}` | 오래 걸리는 작업의 진행 표시. 시작 이벤트의 `label`(예: "이전 대화를 정리하는 중")을 상태 문구로 띄우고, 같은 `id`의 끝 이벤트가 오면 내립니다. `kind`: `answering`, `planning`(모델 호출), `summarizing`, `report_writing`, `workflow_saving`. 저장하지 않는 실시간 이벤트입니다. 코드 실행 대기는 `run_status`(waiting_executor)와 `execution_progress`로 옵니다 |
+| `context_summarized` | `{messages, summary_chars}` | 이전 대화가 요약으로 정리됨. 대화 중간에 구분선으로 표시합니다(저장됨) |
 | `run_error` | `{message}` | 실패 사유 |
 | `session_titled` | `{title}` | 세션 제목 자동 갱신 (목록·헤더 반영) |
 

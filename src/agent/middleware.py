@@ -189,22 +189,24 @@ class PersonaMiddleware(AgentMiddleware[AnalysisState, RunContext]):
             ctx.cache.get("memory", ""),
         ]
         system = "\n\n".join([system, *filter(None, extras)])
-        return await handler(
-            request.override(
-                system_message=SystemMessage(system),
-                tools=[
-                    t
-                    for t in request.tools
-                    if getattr(t, "name", None) in allowed
-                ],
-                messages=[
-                    *await _with_images(
-                        _isolate(request.messages, persona), ctx
-                    ),
-                    *_notice(request.state),
-                ],
+        kind = "planning" if persona == "analyst" else "answering"
+        async with ctx.activity(kind):
+            return await handler(
+                request.override(
+                    system_message=SystemMessage(system),
+                    tools=[
+                        t
+                        for t in request.tools
+                        if getattr(t, "name", None) in allowed
+                    ],
+                    messages=[
+                        *await _with_images(
+                            _isolate(request.messages, persona), ctx
+                        ),
+                        *_notice(request.state),
+                    ],
+                )
             )
-        )
 
 
 async def _with_images(messages: list, ctx: RunContext) -> list:

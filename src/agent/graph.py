@@ -5,7 +5,6 @@ from langchain.agents import create_agent
 from langchain.agents.middleware import (
     AgentMiddleware,
     ModelCallLimitMiddleware,
-    SummarizationMiddleware,
     ToolErrorMiddleware,
 )
 from langchain_core.messages import (
@@ -23,6 +22,7 @@ from agent.context import AnalysisState, RunContext
 from agent.llm import chat_model
 from agent.middleware import JsonArgumentsMiddleware, PersonaMiddleware
 from agent.prompts import load_prompt
+from agent.summarization import ReportingSummarizationMiddleware
 from agent.tools.analysis import (
     finish_analysis,
     propose_plans,
@@ -111,7 +111,7 @@ class AgentGraphs:
                 middleware.append(compaction_rules.finished_analysis())
             trigger = self.settings.agent_summary_trigger_tokens
             middleware.append(
-                SummarizationMiddleware(
+                ReportingSummarizationMiddleware(
                     model,
                     trigger=("tokens", trigger),
                     # by tokens, so a summary always lands below the trigger

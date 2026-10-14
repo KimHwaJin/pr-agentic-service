@@ -3,6 +3,7 @@ from typing import Any, NotRequired
 
 from langchain.agents import AgentState
 
+from agent.activity import activity
 from core.services import Services
 
 
@@ -34,6 +35,11 @@ class RunContext:
         await self.services.events.emit(
             self.session_id, self.run_id, type, data, durable
         )
+
+    def activity(self, kind: str, label: str | None = None, **detail: Any):
+        """``async with ctx.activity(kind):`` around slow work (see
+        agent.activity)."""
+        return activity(self.emit, kind, label, **detail)
 
 
 class AnalysisState(AgentState):
