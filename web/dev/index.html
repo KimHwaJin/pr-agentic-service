@@ -388,7 +388,7 @@
   .wfc-tools .arr { color: var(--faint); font-size: 11px; }
   .wfc-more { font-size: 11px; color: var(--muted); }
   .wfc-flow { position: relative; }
-  .wfc-help { position: absolute; top: 6px; right: 6px; width: 20px; height: 20px; border-radius: 50%; border: 1px solid var(--line); background: var(--panel); color: var(--muted); font-size: 11px; font-weight: 700; cursor: pointer; display: grid; place-items: center; padding: 0; }
+  .wfc-help { flex: none; margin-top: -1px; width: 20px; height: 20px; border-radius: 50%; border: 1px solid var(--line); background: var(--panel); color: var(--muted); font-size: 11px; font-weight: 700; cursor: pointer; display: grid; place-items: center; padding: 0; }
   .wfc-help:hover { color: var(--accent); border-color: var(--accent); }
   .legend { position: fixed; z-index: 40; width: 300px; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 12px 40px rgba(0,0,0,.18); padding: 12px 14px; font-size: 12.5px; display: none; }
   .legend.open { display: block; }
@@ -1121,8 +1121,8 @@ function renderWorkflows() {
     return `
     <div class="pcard wfcard" role="button" tabindex="0" onclick="openWorkflow('${w.id}')">
       <div class="wfc-head"><span class="wfc-icon">${icon}</span><div class="t"><b>${esc(w.name)}</b><span>${esc(w.user_request)}</span></div>
-        ${w.lifecycle === 'template' ? '<span class="badge rec">공개</span>' : '<span class="badge">내 후보</span>'}</div>
-      <div class="wfc-flow"><button class="wfc-help" title="카드 읽는 법" onclick="showLegend(event, this)">?</button>${shown.map((st, i) => stage(st, i, i === w.steps.length - 1)).join('')}
+        ${w.lifecycle === 'template' ? '<span class="badge rec">공개</span>' : '<span class="badge">내 후보</span>'}<button class="wfc-help" title="카드 읽는 법" onclick="showLegend(event, this)">?</button></div>
+      <div class="wfc-flow">${shown.map((st, i) => stage(st, i, i === w.steps.length - 1)).join('')}
         ${w.steps.length > shown.length ? `<div class="wfc-more">+ ${w.steps.length - shown.length}단계 더</div>` : ''}</div>
       <div class="wfc-foot">skill ${w.steps.length} · tool ${w.call_count} · ${ago(w.updated_at)} 수정${w.tags.slice(0, 4).map(t => `<span class="tag">${esc(t)}</span>`).join('')}</div>
     </div>`; }).join('') || '<div style="color:var(--faint)">워크플로우가 없습니다</div>';
