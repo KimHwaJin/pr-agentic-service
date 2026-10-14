@@ -52,6 +52,10 @@ dev = [
     "ruff>=0.17.0",
     "ty>=0.0.86",
 ]
+phoenix = [
+    "arize-phoenix-otel>=0.17.2",
+    "openinference-instrumentation-langchain>=0.1.79",
+]
 
 [tool.ty.environment]
 python-version = "3.12"

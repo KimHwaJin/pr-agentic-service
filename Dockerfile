@@ -10,7 +10,8 @@ WORKDIR /app
 
 # Third-party dependencies are cached separately from application changes.
 COPY pyproject.toml uv.lock ./
-RUN uv sync --locked --no-dev --no-install-project
+# --group phoenix: optional tracing (docs/phoenix-tracing.md); drop it to remove
+RUN uv sync --locked --no-dev --group phoenix --no-install-project
 
 # Settings per environment; ENV (Deployment env, or --build-arg ENV=...) picks config.<ENV>.yml.
 ARG ENV=local
@@ -21,7 +22,7 @@ COPY assets ./assets
 COPY web ./web
 COPY src ./src
 # UID 1000 matches the Executor image so both can read and write the shared PV.
-RUN uv sync --locked --no-dev \
+RUN uv sync --locked --no-dev --group phoenix \
     && useradd --create-home --uid 1000 agentic \
     && chown -R agentic:agentic /app
 

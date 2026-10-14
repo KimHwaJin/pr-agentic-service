@@ -12,6 +12,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 
+import tracing_phoenix  # optional; removable (docs/phoenix-tracing.md)
 from api_service.app import mount_api, start_api
 from core.bootstrap import build_services
 from core.config import get_settings
@@ -26,6 +27,7 @@ for noisy in ("httpx", "httpx2", "openai"):
         logging.WARNING
     )  # one INFO line per LLM/executor call is load
 settings = get_settings()
+tracing_phoenix.setup()
 mode = os.environ.get("RUN_MODE", "all")
 api_enabled, worker_enabled = mode in {"all", "api"}, mode in {"all", "worker"}
 

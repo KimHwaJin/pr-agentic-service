@@ -15,6 +15,10 @@ x-app-env: &app-env
   LOG_LEVEL: INFO
   DATABASE_URL: postgresql+psycopg://${PG_USER:-executor}:${PG_PASSWORD:-executor}@postgres:5432/${PG_DB:-agentic}
   LLM_API_KEY: ${LLM_API_KEY:-EMPTY}
+  # Phoenix tracing (optional, docs/phoenix-tracing.md): set these in .env
+  PHOENIX_COLLECTOR_ENDPOINT: ${PHOENIX_COLLECTOR_ENDPOINT:-}
+  PHOENIX_API_KEY: ${PHOENIX_API_KEY:-}
+  PHOENIX_PROJECT_NAME: ${PHOENIX_PROJECT_NAME:-pr-agentic-service-local}
 
 services:
   db-init:
@@ -47,6 +51,7 @@ services:
       - ./config.local.yml:/app/config.local.yml:ro
     extra_hosts:
       - "model.frodo.com:10.250.110.99"
+      - "phoenix.frodo.com:10.250.110.100"  # Phoenix tracing (optional)
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/readyz')"]
       interval: 10s
