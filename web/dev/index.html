@@ -1211,7 +1211,7 @@ function runtimeCard(t) {
   const [pcls, plabel] = level(res.pressure_score || 0);
   const act = (a, label, danger) => `<button class="${danger ? 'danger' : ''}" onclick="runtimeAction('${t.target_id}','${a}','${esc(t.name)}')">${label}</button>`;
   return `<div class="rt">
-    <div class="rt-head"><b title="${esc(t.name)}">${esc(t.name)}</b><span class="pool-tag">${t.runtime.pool === 'BATCH' ? '배치' : '인터랙티브'}</span>${statusBadge(st.status)}</div>
+    <div class="rt-head"><b title="${esc(t.name)}">${esc(t.name)}</b><span class="pool-tag">${t.runtime.pool === 'BATCH' ? 'Batch' : 'Interactive'}</span>${statusBadge(st.status)}</div>
     <div class="rt-sub mono">${esc(t.runtime.connection_config?.endpoint || '')} · ${short(t.target_id)}${st.enabled ? '' : ' · 사용 중지'}</div>
     ${res.cpu ? `<div class="rt-gauges">
         ${ring(cpu.utilization, 'CPU', `${(cpu.used_cores ?? 0).toFixed(2)} / ${cpu.capacity_cores ?? '-'} 코어`)}
@@ -1225,8 +1225,8 @@ function runtimeCard(t) {
     ${h.last_error ? `<div style="color:var(--bad);font-size:12px;margin-top:6px">${esc(h.last_error)}</div>` : ''}
   </div>`;
 }
-const POOLS = [['ALL', '전체'], ['INTERACTIVE', '인터랙티브'], ['BATCH', '배치']];
-const POOL_TEXT = { INTERACTIVE: '인터랙티브 · 채팅 분석 실행', BATCH: '배치 · 예약·대량 실행' };
+const POOLS = [['ALL', 'All'], ['INTERACTIVE', 'Interactive'], ['BATCH', 'Batch']];
+const POOL_TEXT = { INTERACTIVE: 'Interactive · 채팅 분석 실행', BATCH: 'Batch · 예약·대량 실행' };
 function setPool(pool) { SYS.pool = pool; renderRuntimes(true); }
 async function renderRuntimes(quiet = false) {
   if (!quiet) $('sysBody').innerHTML = '<div class="muted">불러오는 중…</div>';
@@ -1245,7 +1245,7 @@ async function renderRuntimes(quiet = false) {
   const top = `<div class="toolbar"><div class="seg">${POOLS.map(([k, label]) => `<button class="${k === pick ? 'on' : ''}" onclick="setPool('${k}')">${label}<span class="n">${count(k)}</span></button>`).join('')}</div>
       <span class="muted" style="font-size:12px;margin-left:auto">10초마다 자동 갱신</span></div>${sections}`;
   const form = $('rtName') ? null : `<div class="card" style="margin-top:18px"><h4>런타임 등록 · 수정</h4><div class="sub">같은 이름이면 수정됩니다. 등록하면 바로 점검합니다.</div>
-      <div class="toolbar"><input id="rtName" placeholder="이름 (영문·숫자·._-)"><select id="rtPool"><option value="INTERACTIVE">인터랙티브</option><option value="BATCH">배치</option></select>
+      <div class="toolbar"><input id="rtName" placeholder="이름 (영문·숫자·._-)"><select id="rtPool"><option value="INTERACTIVE">Interactive</option><option value="BATCH">Batch</option></select>
         <input id="rtEndpoint" placeholder="http://jupyter:8888" style="width:240px"><input id="rtCredential" placeholder="토큰 (선택)" type="password"><input id="rtMax" placeholder="최대 동시 실행 (선택)" type="number" style="width:150px">
         <button class="btn primary" onclick="registerRuntime()">등록</button></div></div>`;
   if (form) $('sysBody').innerHTML = `<div id="rtLive">${top}</div>${form}`;
