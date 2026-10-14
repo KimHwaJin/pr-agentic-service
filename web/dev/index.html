@@ -67,6 +67,22 @@
   .acts button:hover { border-color: var(--accent); color: var(--accent); }
   .acts button.danger:hover { border-color: var(--bad); color: var(--bad); }
   .muted { color: var(--muted); }
+  .rt-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(330px, 1fr)); gap: 14px; margin-bottom: 18px; }
+  .rt { border: 1px solid var(--line); border-radius: 14px; background: var(--panel); padding: 14px 16px; box-shadow: var(--shadow); }
+  .rt-head { display: flex; align-items: center; gap: 8px; margin-bottom: 2px; }
+  .rt-head b { font-size: 15px; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .rt-sub { font-size: 12px; color: var(--muted); margin-bottom: 12px; }
+  .rt-gauges { display: flex; gap: 18px; align-items: center; }
+  .gauge { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); }
+  .gauge svg { width: 64px; height: 64px; flex: none; }
+  .gauge .v { font-size: 13px; color: var(--ink); font-weight: 600; display: block; }
+  .slots { margin-top: 12px; font-size: 12px; color: var(--muted); }
+  .slots .bar { height: 8px; border-radius: 4px; background: var(--line); overflow: hidden; margin: 4px 0; }
+  .slots .bar span { display: block; height: 100%; border-radius: 4px; background: var(--accent); }
+  .lvl { font-size: 11px; padding: 1px 7px; border-radius: 999px; }
+  .lvl.ok { background: #e3f1e7; color: var(--ok); } .lvl.warn { background: #fdf0d9; color: #a15c07; } .lvl.bad { background: #fde8e6; color: var(--bad); }
+  .rt-foot { display: flex; align-items: center; gap: 8px; margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--line); font-size: 12px; color: var(--muted); }
+  .rt-foot .acts { margin-left: auto; }
   .sys-pre { background: var(--code); padding: 10px 12px; border-radius: 8px; overflow: auto; max-height: 360px; font-size: 12px; margin: 6px 0; }
   .avatar { width: 30px; height: 30px; border-radius: 50%; background: #d9cfc0; display: grid; place-items: center; font-weight: 600; font-size: 13px; color: #5a4a35; }
 
@@ -1164,25 +1180,55 @@ async function execAttempts(base) {
 }
 
 /* runtimes */
-async function renderRuntimes() {
-  $('sysBody').innerHTML = '<div class="muted">불러오는 중…</div>';
+const level = u => u >= .85 ? ['bad', '높음'] : u >= .6 ? ['warn', '주의'] : ['ok', '여유'];
+const LEVEL_COLOR = { ok: 'var(--ok)', warn: '#c27a0e', bad: 'var(--bad)' };
+const gb = b => b >= 1024 ** 3 ? `${(b / 1024 ** 3).toFixed(1)}GB` : `${Math.round(b / 1024 ** 2)}MB`;
+function ring(util, label, detail) {
+  const u = Math.max(0, Math.min(1, util || 0)), [cls] = level(u), r = 26, c = 2 * Math.PI * r;
+  return `<div class="gauge" title="${esc(label)} ${(u * 100).toFixed(1)}% · ${esc(detail)}">
+    <svg viewBox="0 0 64 64"><circle cx="32" cy="32" r="${r}" fill="none" stroke="var(--line)" stroke-width="6"/>
+      <circle cx="32" cy="32" r="${r}" fill="none" stroke="${LEVEL_COLOR[cls]}" stroke-width="6" stroke-linecap="round"
+        stroke-dasharray="${Math.max(u * c, u > 0 ? 2 : 0)} ${c}" transform="rotate(-90 32 32)"/>
+      <text x="32" y="36" text-anchor="middle" font-size="13" font-weight="600" fill="currentColor">${Math.round(u * 100)}%</text></svg>
+    <div>${label}<span class="v">${esc(detail)}</span></div></div>`;
+}
+function runtimeCard(t) {
+  const st = t.state || {}, cap = t.capacity || {}, h = t.health || {}, res = t.resources || {};
+  const cpu = res.cpu || {}, mem = res.memory || {};
+  const used = cap.active_execution_count ?? 0, max = cap.max_concurrent_executions || 0;
+  const [pcls, plabel] = level(res.pressure_score || 0);
+  const act = (a, label, danger) => `<button class="${danger ? 'danger' : ''}" onclick="runtimeAction('${t.target_id}','${a}','${esc(t.name)}')">${label}</button>`;
+  return `<div class="rt">
+    <div class="rt-head"><b title="${esc(t.name)}">${esc(t.name)}</b><span class="badge">${esc(t.runtime.pool)}</span>${statusBadge(st.status)}</div>
+    <div class="rt-sub mono">${esc(t.runtime.connection_config?.endpoint || '')} · ${short(t.target_id)}${st.enabled ? '' : ' · 사용 중지'}</div>
+    ${res.cpu ? `<div class="rt-gauges">
+        ${ring(cpu.utilization, 'CPU', `${(cpu.used_cores ?? 0).toFixed(2)} / ${cpu.capacity_cores ?? '-'} 코어`)}
+        ${ring(mem.utilization, '메모리', `${gb(mem.used_bytes ?? 0)} / ${gb(mem.capacity_bytes ?? 0)}`)}
+        <div class="gauge"><div>부하<span class="v"><span class="lvl ${pcls}">${plabel}</span> ${((res.pressure_score || 0) * 100).toFixed(1)}%</span>프로세스 ${res.process_count ?? '-'}개</div></div>
+      </div>` : `<div class="muted" style="font-size:13px">자원 정보 없음${res.last_error ? ` · ${esc(res.last_error)}` : ''}</div>`}
+    <div class="slots">실행 슬롯 <b style="color:var(--ink)">${used}</b> / ${max || '-'} 사용 중 · 세션 ${cap.active_session_count ?? 0}
+      <div class="bar"><span style="width:${max ? Math.max(used / max * 100, used ? 1 : 0) : 0}%"></span></div></div>
+    <div class="rt-foot"><span title="${esc(res.source || '')}${res.estimated ? ' (추정)' : ''}">${res.fresh === false ? '⚠ 오래된 측정 · ' : ''}측정 ${fmtTime(res.observed_at || h.last_check_at)}</span>
+      <span class="acts">${act('probe', '점검')}${act('drain', '비우기', true)}${act('activate', '활성화')}${act('disable', '사용 중지', true)}${act('purge', '제거', true)}</span></div>
+    ${h.last_error ? `<div style="color:var(--bad);font-size:12px;margin-top:6px">${esc(h.last_error)}</div>` : ''}
+  </div>`;
+}
+async function renderRuntimes(quiet = false) {
+  if (!quiet) $('sysBody').innerHTML = '<div class="muted">불러오는 중…</div>';
   const [pools, targets] = await Promise.all([api('/executor/runtime-pools'), api('/executor/runtime-targets?limit=200')]);
-  $('sysBody').innerHTML = `<div class="cards">${pools.items.map(p => `<div class="stat"><b>${esc(p.runtime.type)} · ${esc(p.runtime.pool)} ${p.state.accepting_new_executions ? statusBadge('ACTIVE') : statusBadge('OFFLINE')}</b>
-      대상 ${p.targets.active}/${p.targets.total} 활성 · 비우는 중 ${p.targets.draining} · 오프라인 ${p.targets.offline}<br>
-      용량 ${p.capacity.available} / ${p.capacity.configured} 사용 가능${p.state.saturated ? ' · <span style="color:var(--bad)">포화</span>' : ''}</div>`).join('')}</div>
-    <table class="tbl"><thead><tr><th>이름</th><th>풀</th><th>주소</th><th>상태</th><th>사용 중 / 최대</th><th>최근 점검</th><th>작업</th></tr></thead><tbody>${targets.items.map(t => {
-      const st = t.state || {}, cap = t.capacity || {}, h = t.health || {};
-      const act = (a, label, danger) => `<button class="${danger ? 'danger' : ''}" onclick="runtimeAction('${t.target_id}','${a}','${esc(t.name)}')">${label}</button>`;
-      return `<tr><td><b>${esc(t.name)}</b><br>${short(t.target_id)}</td><td>${esc(t.runtime.pool)}</td><td class="mono">${esc(t.runtime.connection_config?.endpoint || '')}</td>
-        <td>${statusBadge(st.status)}${st.enabled ? '' : ' <span class="muted">사용 중지</span>'}</td><td>${cap.active_execution_count ?? 0} / ${cap.max_concurrent_executions ?? '-'}</td>
-        <td>${fmtTime(h.last_check_at)}${h.last_error ? `<div style="color:var(--bad)">${esc(h.last_error)}</div>` : ''}</td>
-        <td class="acts">${act('probe', '점검')}${act('drain', '비우기', true)}${act('activate', '활성화')}${act('disable', '사용 중지', true)}${act('purge', '제거', true)}</td></tr>`;
-    }).join('')}</tbody></table>
-    <div class="card" style="margin-top:18px"><h4>런타임 등록 · 수정</h4><div class="sub">같은 이름이면 수정됩니다. 등록하면 바로 점검합니다.</div>
+  const form = $('rtName') ? null : `<div class="card" style="margin-top:18px"><h4>런타임 등록 · 수정</h4><div class="sub">같은 이름이면 수정됩니다. 등록하면 바로 점검합니다.</div>
       <div class="toolbar"><input id="rtName" placeholder="이름 (영문·숫자·._-)"><select id="rtPool"><option>INTERACTIVE</option><option>BATCH</option></select>
         <input id="rtEndpoint" placeholder="http://jupyter:8888" style="width:240px"><input id="rtCredential" placeholder="토큰 (선택)" type="password"><input id="rtMax" placeholder="최대 동시 실행 (선택)" type="number" style="width:150px">
         <button class="btn primary" onclick="registerRuntime()">등록</button></div></div>`;
+  const top = `<div class="cards">${pools.items.map(p => `<div class="stat"><b>${esc(p.runtime.type)} · ${esc(p.runtime.pool)} ${p.state.accepting_new_executions ? statusBadge('ACTIVE') : statusBadge('OFFLINE')}</b>
+      대상 ${p.targets.active}/${p.targets.total} 활성 · 비우는 중 ${p.targets.draining} · 오프라인 ${p.targets.offline}<br>
+      용량 ${p.capacity.available} / ${p.capacity.configured} 사용 가능${p.state.saturated ? ' · <span style="color:var(--bad)">포화</span>' : ''}</div>`).join('')}</div>
+    <div class="toolbar"><span class="muted" style="font-size:12px">10초마다 자동 갱신</span></div>
+    <div class="rt-grid">${targets.items.map(runtimeCard).join('')}</div>`;
+  if (form) $('sysBody').innerHTML = `<div id="rtLive">${top}</div>${form}`;
+  else $('rtLive').innerHTML = top;
 }
+setInterval(() => { if (SYS.tab === 'runtimes' && $('systemView').style.display !== 'none' && !document.hidden && $('rtLive')) renderRuntimes(true).catch(() => {}); }, 10000);
 const RT_ACTIONS = { probe: '지금 점검합니다', drain: '새 작업 배정을 멈추고, 진행 중인 작업은 마저 끝냅니다', activate: '다시 배정 대상으로 돌립니다', disable: '사용을 중지합니다 (실행 이력은 남음)', purge: '사용 중지된 대상을 목록에서 제거합니다' };
 async function runtimeAction(id, action, name) {
   if (action !== 'probe' && !confirm(`${name}: ${RT_ACTIONS[action]}. 진행할까요?`)) return;
