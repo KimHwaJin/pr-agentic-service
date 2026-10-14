@@ -109,14 +109,15 @@ class AgentGraphs:
             ]
             if self.settings.agent_compact_finished_analysis:
                 middleware.append(compaction_rules.finished_analysis())
+            trigger = self.settings.agent_summary_trigger_tokens
             middleware.append(
                 SummarizationMiddleware(
                     model,
-                    trigger=(
-                        "tokens",
-                        self.settings.agent_summary_trigger_tokens,
-                    ),
-                    keep=("messages", 40),
+                    trigger=("tokens", trigger),
+                    # by tokens, so a summary always lands below the trigger
+                    # (a message count can stay above it and re-summarize on
+                    # every call)
+                    keep=("tokens", trigger // 2),
                     summary_prompt=load_prompt(
                         self.settings.prompts_root, "summary"
                     ).body,
