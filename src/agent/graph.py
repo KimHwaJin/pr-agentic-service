@@ -18,6 +18,7 @@ from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.store.base import BaseStore
 from langgraph.types import Command
 
+from agent import compaction_rules
 from agent.context import AnalysisState, RunContext
 from agent.llm import chat_model
 from agent.middleware import JsonArgumentsMiddleware, PersonaMiddleware
@@ -104,10 +105,15 @@ class AgentGraphs:
                     run_limit=self.settings.agent_model_call_limit,
                     exit_behavior="end",
                 ),
+            ]
+            if self.settings.agent_compact_finished_analysis:
+                # before summarization, so it counts the compacted history
+                middleware.append(compaction_rules.finished_analysis())
+            middleware.append(
                 SummarizationMiddleware(
                     model, trigger=("tokens", 60000), keep=("messages", 40)
-                ),
-            ]
+                )
+            )
             self._graphs[name] = create_agent(
                 model,
                 tools=TOOLS,

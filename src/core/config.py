@@ -137,6 +137,8 @@ class Settings(BaseSettings):
     agent_model_call_limit: int = (
         40  # per turn; stops a model that keeps repeating a failing call
     )
+    # Shrink tool results of an analysis once finish_analysis closes it.
+    agent_compact_finished_analysis: bool = True
 
     # Project memory.
     memory_item_max_chars: int = 1000
