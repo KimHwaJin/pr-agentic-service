@@ -15,6 +15,19 @@ from api_service.schemas.base import Model
 from api_service.schemas.hitl import ResumeValue
 from core.config import get_settings
 
+RunStatus = Literal[
+    "queued",  # waiting for a worker
+    "running",
+    "waiting_input",  # a hitl_request is open (waiting.kind == "input")
+    "waiting_executor",  # code runs on the executor
+    "succeeded",
+    "failed",
+    "cancelled",
+]
+MessageRole = Literal["user", "assistant"]
+# user: set by the user; initial: the first message; auto: the model named it
+TitleSource = Literal["user", "initial", "auto"]
+
 
 class TextBlock(Model):
     type: Literal["text"]
@@ -127,7 +140,7 @@ class ChatSessionRead(Model):
     id: str
     project_id: str
     title: str
-    title_source: str
+    title_source: TitleSource
     code_level: int | None
     project_code_level: int | None = Field(None, exclude=True)
     active_run_id: str | None
@@ -148,7 +161,7 @@ class ChatSessionRead(Model):
 class MessageRead(Model):
     id: str
     run_id: str | None
-    role: str
+    role: MessageRole
     content: str
     attachments: list[dict[str, Any]]
     created_at: datetime
@@ -157,7 +170,7 @@ class MessageRead(Model):
 class RunRead(Model):
     id: str
     session_id: str
-    status: str
+    status: RunStatus
     model: str
     waiting: dict[str, Any] | None
     error: str | None
@@ -192,7 +205,7 @@ class RunEventRead(Model):
 
 class RunEvents(Model):
     run_id: str
-    status: str
+    status: RunStatus
     items: list[RunEventRead]
 
 
