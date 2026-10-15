@@ -5,6 +5,7 @@ from typing import Annotated, Any, Literal
 
 from pydantic import Field, computed_field, model_validator
 
+from api_service.schemas.answers import ResumeValue
 from api_service.schemas.base import Model
 from core.config import get_settings
 
@@ -58,7 +59,19 @@ class RunInput(Model):
 
 class Resume(Model):
     interrupt_id: str
-    value: Any
+    value: ResumeValue = Field(
+        description="질문 종류(hitl_request.type)에 맞는 답. 서버가 그 종류의 "
+        "모델로 다시 검사합니다"
+    )
+
+    @model_validator(mode="wrap")
+    @classmethod
+    def _as_sent(cls, data: Any, handler: Any) -> "Resume":
+        """Keep the answer as sent; its model depends on the question."""
+        resume = handler(data)
+        if isinstance(data, dict) and "value" in data:
+            resume.__dict__["value"] = data["value"]
+        return resume
 
 
 class RunCommand(Model):

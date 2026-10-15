@@ -178,3 +178,64 @@ def test_images_reach_only_vision_models_for_recent_turns():
 
 async def _ready(value):
     return value
+
+
+def test_answer_shapes_follow_the_question_type():
+    def fields(waiting, value):
+        return {e["field"] for e in answers.validate(waiting, value)}
+
+    code = {"type": "code_approval"}
+    assert fields(code, {"approve": True, "code": "x = 1"}) == set()
+    assert fields(code, {"approve": "y"}) == {"value.approve"}
+    assert fields(code, {"approve": True, "tags": []}) == {"value.tags"}
+    memory = {"type": "memory_change"}
+    assert fields(memory, {"approve": False, "feedback": "아니"}) == set()
+    save = {"type": "workflow_save"}
+    assert (
+        fields(save, {"approve": True, "name": "n", "user_queries": ["q"]})
+        == set()
+    )
+    assert fields(save, {"approve": True, "user_queries": ["q", 3]}) == {
+        "value.user_queries.1"
+    }
+    assert fields(PLAN, {"action": "go"}) == {"value.action"}
+    assert fields(PLAN, {"action": "approve", "index": "0"}) == {"value.index"}
+    assert fields(PLAN, {"action": "cancel", "index": 0}) == {"value.index"}
+    question = {"type": "question", "fields": []}
+    assert fields(question, "네") == set()
+    assert fields(question, 5) == {"value"}
+
+
+def test_resume_value_is_kept_as_sent():
+    for value in [
+        {"action": "approve", "index": 1},
+        {"approve": True},
+        "L1",
+        {"lot": "L1", "text": "메모"},
+    ]:
+        body = RunCreate.model_validate(
+            {"command": {"resume": {"interrupt_id": "i", "value": value}}}
+        )
+        assert body.command is not None
+        assert body.command.resume.value == value
+        dumped = body.model_dump(mode="json")["command"]["resume"]["value"]
+        assert dumped == value  # the idempotency hash sees the same body
+
+
+def test_openapi_documents_the_answer_models():
+    from fastapi import FastAPI
+
+    from api_service.app import mount_api
+
+    app = FastAPI()
+    mount_api(app, Settings())
+    spec = app.openapi()["components"]["schemas"]
+    for name in [
+        "PlanApprove",
+        "PlanRevise",
+        "PlanCancel",
+        "CodeApprovalAnswer",
+        "MemoryChangeAnswer",
+        "WorkflowSaveAnswer",
+    ]:
+        assert name in spec, name

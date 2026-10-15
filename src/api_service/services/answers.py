@@ -5,7 +5,12 @@ answer is refused here with field-level errors instead of reaching the agent
 and coming back as the same question.
 """
 
+from collections.abc import Mapping
 from typing import Any
+
+from pydantic import TypeAdapter, ValidationError
+
+from api_service.schemas.answers import ANSWERS
 
 Errors = list[dict[str, str]]
 
@@ -19,14 +24,54 @@ def _empty(value: Any) -> bool:
 
 
 def validate(waiting: dict[str, Any], value: Any) -> Errors:
+    """Shape first (the answer model of this question type), then content
+    (fields, candidates and inputs of this very question)."""
+    kind = waiting.get("type", "")
+    model = ANSWERS.get(kind)
+    if model is None:
+        return []
+    try:
+        TypeAdapter(model).validate_python(value, strict=True)
+    except ValidationError as exc:
+        if kind == "question":  # neither branch of str | dict fits
+            return [
+                _err("value", "답 문자열 또는 {필드: 값} 객체가 필요합니다")
+            ]
+        return [_shape_error(e, kind) for e in exc.errors()]
     check = {
         "question": _question,
         "plan_approval": _plan,
-        "code_approval": _approval,
-        "memory_change": _approval,
         "workflow_save": _workflow,
-    }.get(waiting.get("type", ""))
+    }.get(kind)
     return check(waiting, value) if check else []
+
+
+_MESSAGES = {
+    "missing": "필수 입력입니다",
+    "extra_forbidden": "알 수 없는 항목입니다",
+    "bool_type": "true 또는 false가 필요합니다",
+    "int_type": "정수여야 합니다",
+    "greater_than_equal": "0 이상이어야 합니다",
+    "string_type": "문자열이어야 합니다",
+    "dict_type": "객체가 필요합니다",
+    "model_type": "객체가 필요합니다",
+    "model_attributes_type": "객체가 필요합니다",
+    "list_type": "목록이어야 합니다",
+    "union_tag_invalid": "approve, revise, cancel 중 하나",
+    "union_tag_not_found": "approve, revise, cancel 중 하나",
+}
+_PLAN_TAGS = {"approve", "revise", "cancel"}
+
+
+def _shape_error(error: Mapping[str, Any], kind: str) -> dict[str, str]:
+    loc = [str(p) for p in error["loc"]]
+    if kind == "plan_approval":
+        if loc and loc[0] in _PLAN_TAGS:
+            loc = loc[1:]  # the plan answer's union tag, not a field
+        if error["type"].startswith("union_tag"):
+            loc = ["action"]
+    field = ".".join(["value", *loc])
+    return _err(field, _MESSAGES.get(error["type"], error["msg"]))
 
 
 def from_text(waiting: dict[str, Any], text: str) -> Any:
@@ -60,20 +105,16 @@ def _question(waiting: dict[str, Any], value: Any) -> Errors:
 
 
 def _plan(waiting: dict[str, Any], value: Any) -> Errors:
-    if not isinstance(value, dict):
-        return [_err("value", "객체가 필요합니다")]
-    action = value.get("action")
+    action = value["action"]
     if action == "cancel":
         return []
     if action == "revise":
         if _empty(value.get("feedback")):
             return [_err("value.feedback", "수정 요청 내용을 입력하세요")]
         return []
-    if action != "approve":
-        return [_err("value.action", "approve, revise, cancel 중 하나")]
     candidates = waiting.get("candidates") or []
     index = value.get("index", 0)
-    if not isinstance(index, int) or not 0 <= index < len(candidates):
+    if not 0 <= index < len(candidates):
         return [
             _err("value.index", f"0~{len(candidates) - 1} 사이여야 합니다")
         ]
@@ -81,8 +122,6 @@ def _plan(waiting: dict[str, Any], value: Any) -> Errors:
     errors: Errors = []
     inputs = value.get("input_values") or {}
     overrides = value.get("overrides") or {}
-    if not isinstance(inputs, dict) or not isinstance(overrides, dict):
-        return [_err("value", "input_values, overrides는 객체여야 합니다")]
     params = {
         p["key"]
         for call in candidate.get("calls") or []
@@ -104,26 +143,12 @@ def _plan(waiting: dict[str, Any], value: Any) -> Errors:
     return errors
 
 
-def _approval(waiting: dict[str, Any], value: Any) -> Errors:
-    if not isinstance(value, dict) or not isinstance(
-        value.get("approve"), bool
-    ):
-        return [_err("value.approve", "true 또는 false가 필요합니다")]
-    code = value.get("code")
-    if code is not None and not isinstance(code, str):
-        return [_err("value.code", "문자열이어야 합니다")]
-    return []
-
-
 def _workflow(waiting: dict[str, Any], value: Any) -> Errors:
-    errors = _approval(waiting, value)
-    if errors or not value["approve"]:
-        return errors
     queries = value.get("user_queries")
-    if queries is not None and not (
-        isinstance(queries, list)
-        and queries
-        and all(isinstance(q, str) and q.strip() for q in queries)
+    if (
+        value["approve"]
+        and queries is not None
+        and not (queries and all(q.strip() for q in queries))
     ):
         return [_err("value.user_queries", "질문 예시를 1개 이상 입력하세요")]
     return []
