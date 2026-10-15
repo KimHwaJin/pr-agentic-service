@@ -3,9 +3,17 @@
 ``run.waiting`` holds the question (type, candidates, fields ...), so a wrong
 answer is refused here with field-level errors instead of reaching the agent
 and coming back as the same question.
+
+Adding a question type: its answer model goes in
+``api_service.schemas.answers.ANSWERS``; here, an ``AnswerRules`` entry in
+``RULES`` says what else to check and what a typed chat message means.
+Shape errors (unknown fields, wrong types, a missing tag) come from the
+model; tests check that every question the agent asks has both.
 """
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
+from dataclasses import dataclass
+from functools import cache
 from typing import Any
 
 from pydantic import TypeAdapter, ValidationError
@@ -13,6 +21,7 @@ from pydantic import TypeAdapter, ValidationError
 from api_service.schemas.answers import ANSWERS
 
 Errors = list[dict[str, str]]
+Waiting = dict[str, Any]
 
 
 def _err(field: str, message: str) -> dict[str, str]:
@@ -23,27 +32,65 @@ def _empty(value: Any) -> bool:
     return value is None or (isinstance(value, str) and not value.strip())
 
 
-def validate(waiting: dict[str, Any], value: Any) -> Errors:
+def _no_check(waiting: Waiting, value: Any) -> Errors:
+    return []
+
+
+def _refuse(waiting: Waiting, text: str) -> Any:
+    """Typed text on an approval: no, and why."""
+    return {"approve": False, "feedback": text}
+
+
+@dataclass(frozen=True)
+class AnswerRules:
+    # content checks against this very question (after the shape check)
+    check: Callable[[Waiting, Any], Errors] = _no_check
+    # what a chat message typed while the question is pending answers
+    from_text: Callable[[Waiting, str], Any] = _refuse
+    # message when the answer fits no shape at all (None: per field)
+    shape_message: str | None = None
+
+
+def validate(waiting: Waiting, value: Any) -> Errors:
     """Shape first (the answer model of this question type), then content
     (fields, candidates and inputs of this very question)."""
     kind = waiting.get("type", "")
     model = ANSWERS.get(kind)
     if model is None:
         return []
+    rules = RULES.get(kind, AnswerRules())
     try:
-        TypeAdapter(model).validate_python(value, strict=True)
+        _adapter(kind).validate_python(value, strict=True)
     except ValidationError as exc:
-        if kind == "question":  # neither branch of str | dict fits
-            return [
-                _err("value", "답 문자열 또는 {필드: 값} 객체가 필요합니다")
-            ]
-        return [_shape_error(e, kind) for e in exc.errors()]
-    check = {
-        "question": _question,
-        "plan_approval": _plan,
-        "workflow_save": _workflow,
-    }.get(kind)
-    return check(waiting, value) if check else []
+        if rules.shape_message:
+            return [_err("value", rules.shape_message)]
+        return [_shape_error(e, kind, value) for e in exc.errors()]
+    return rules.check(waiting, value)
+
+
+def from_text(waiting: Waiting, text: str) -> Any:
+    """What a chat message typed while a question is pending answers."""
+    kind = waiting.get("type", "")
+    return RULES.get(kind, AnswerRules()).from_text(waiting, text)
+
+
+@cache
+def _adapter(kind: str) -> TypeAdapter:
+    return TypeAdapter(ANSWERS[kind])
+
+
+@cache
+def _tags(kind: str) -> tuple[str, ...]:
+    """Tag values of a discriminated answer union (empty otherwise)."""
+    schema = _adapter(kind).json_schema()
+    key = (schema.get("discriminator") or {}).get("propertyName")
+    if not key:
+        return ()
+    defs = schema.get("$defs") or {}
+    return tuple(  # in declaration order
+        defs[branch["$ref"].rsplit("/", 1)[-1]]["properties"][key]["const"]
+        for branch in schema.get("oneOf") or ()
+    )
 
 
 _MESSAGES = {
@@ -57,35 +104,24 @@ _MESSAGES = {
     "model_type": "객체가 필요합니다",
     "model_attributes_type": "객체가 필요합니다",
     "list_type": "목록이어야 합니다",
-    "union_tag_invalid": "approve, revise, cancel 중 하나",
-    "union_tag_not_found": "approve, revise, cancel 중 하나",
 }
-_PLAN_TAGS = {"approve", "revise", "cancel"}
 
 
-def _shape_error(error: Mapping[str, Any], kind: str) -> dict[str, str]:
+def _shape_error(
+    error: Mapping[str, Any], kind: str, value: Any
+) -> dict[str, str]:
     loc = [str(p) for p in error["loc"]]
-    if kind == "plan_approval":
-        if loc and loc[0] in _PLAN_TAGS:
-            loc = loc[1:]  # the plan answer's union tag, not a field
-        if error["type"].startswith("union_tag"):
-            loc = ["action"]
+    tags = _tags(kind)
+    if error["type"] in {"union_tag_invalid", "union_tag_not_found"}:
+        key = str((error.get("ctx") or {}).get("discriminator", "")).strip("'")
+        return _err(f"value.{key}", f"{', '.join(tags)} 중 하나")
+    if tags and loc and loc[0] in tags:
+        loc = loc[1:]  # the union branch (tag value), not a field
     field = ".".join(["value", *loc])
     return _err(field, _MESSAGES.get(error["type"], error["msg"]))
 
 
-def from_text(waiting: dict[str, Any], text: str) -> Any:
-    """What a chat message typed while a question is pending answers."""
-    kind = waiting.get("type")
-    if kind == "question":
-        fields = [f.get("key") for f in waiting.get("fields") or []]
-        return {fields[0]: text} if len(fields) == 1 else text
-    if kind == "plan_approval":
-        return {"action": "revise", "feedback": text}
-    return {"approve": False, "feedback": text}
-
-
-def _question(waiting: dict[str, Any], value: Any) -> Errors:
+def _question(waiting: Waiting, value: Any) -> Errors:
     fields = waiting.get("fields") or []
     if not fields:
         if isinstance(value, str) and value.strip():
@@ -104,7 +140,7 @@ def _question(waiting: dict[str, Any], value: Any) -> Errors:
     ]
 
 
-def _plan(waiting: dict[str, Any], value: Any) -> Errors:
+def _plan(waiting: Waiting, value: Any) -> Errors:
     action = value["action"]
     if action == "cancel":
         return []
@@ -143,7 +179,7 @@ def _plan(waiting: dict[str, Any], value: Any) -> Errors:
     return errors
 
 
-def _workflow(waiting: dict[str, Any], value: Any) -> Errors:
+def _workflow(waiting: Waiting, value: Any) -> Errors:
     queries = value.get("user_queries")
     if (
         value["approve"]
@@ -152,3 +188,26 @@ def _workflow(waiting: dict[str, Any], value: Any) -> Errors:
     ):
         return [_err("value.user_queries", "질문 예시를 1개 이상 입력하세요")]
     return []
+
+
+def _question_text(waiting: Waiting, text: str) -> Any:
+    fields = [f.get("key") for f in waiting.get("fields") or []]
+    return {fields[0]: text} if len(fields) == 1 else text
+
+
+def _plan_text(waiting: Waiting, text: str) -> Any:
+    return {"action": "revise", "feedback": text}
+
+
+# question type -> how to check its answer (the model is in ANSWERS)
+RULES: dict[str, AnswerRules] = {
+    "question": AnswerRules(
+        check=_question,
+        from_text=_question_text,
+        shape_message="답 문자열 또는 {필드: 값} 객체가 필요합니다",
+    ),
+    "plan_approval": AnswerRules(check=_plan, from_text=_plan_text),
+    "code_approval": AnswerRules(),
+    "memory_change": AnswerRules(),
+    "workflow_save": AnswerRules(check=_workflow),
+}

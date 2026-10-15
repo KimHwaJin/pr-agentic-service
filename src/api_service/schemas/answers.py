@@ -6,7 +6,7 @@ union; the server picks the model from the question the run waits on
 (``api_service.services.answers``).
 """
 
-from typing import Annotated, Any, Literal
+from typing import TYPE_CHECKING, Annotated, Any, Literal, Union
 
 from pydantic import Field
 
@@ -81,7 +81,8 @@ QuestionAnswer = Annotated[
     ),
 ]
 
-# question type -> the answer it takes
+# question type -> the answer it takes. A new question type adds its model
+# here (and its rules in api_service.services.answers.RULES).
 ANSWERS: dict[str, Any] = {
     "question": QuestionAnswer,
     "plan_approval": PlanAnswer,
@@ -90,10 +91,10 @@ ANSWERS: dict[str, Any] = {
     "workflow_save": WorkflowSaveAnswer,
 }
 
-ResumeValue = (
-    PlanAnswer
-    | CodeApprovalAnswer
-    | MemoryChangeAnswer
-    | WorkflowSaveAnswer
-    | QuestionAnswer
-)
+# command.resume.value: any of them (the request names no question type).
+# Built from ANSWERS so a new type shows up without touching this line;
+# type checkers cannot follow a union built at runtime, hence Any for them.
+if TYPE_CHECKING:
+    ResumeValue = Any
+else:
+    ResumeValue = Union[tuple(ANSWERS.values())]  # noqa: UP007

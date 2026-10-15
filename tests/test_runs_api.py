@@ -239,3 +239,41 @@ def test_openapi_documents_the_answer_models():
         "WorkflowSaveAnswer",
     ]:
         assert name in spec, name
+
+
+def _asked_question_types() -> set[str]:
+    """``type`` of every interrupt({...}) the agent tools raise."""
+    import ast
+
+    from core.config import ROOT
+
+    kinds: set[str] = set()
+    for path in (ROOT / "src/agent/tools").glob("*.py"):
+        for node in ast.walk(ast.parse(path.read_text("utf-8"))):
+            if (
+                isinstance(node, ast.Call)
+                and getattr(node.func, "id", None) == "interrupt"
+                and node.args
+                and isinstance(node.args[0], ast.Dict)
+            ):
+                for key, value in zip(
+                    node.args[0].keys, node.args[0].values, strict=True
+                ):
+                    if (
+                        isinstance(key, ast.Constant)
+                        and key.value == "type"
+                        and isinstance(value, ast.Constant)
+                        and isinstance(value.value, str)
+                    ):
+                        kinds.add(value.value)
+    return kinds
+
+
+def test_every_question_the_agent_asks_has_an_answer_model_and_rules():
+    from api_service.schemas.answers import ANSWERS
+    from api_service.services.answers import RULES
+
+    asked = _asked_question_types() - {"executor_wait"}  # resumed by events
+    assert asked, "no interrupts found: the scan is broken"
+    assert asked <= set(ANSWERS), asked - set(ANSWERS)
+    assert set(RULES) == set(ANSWERS)
