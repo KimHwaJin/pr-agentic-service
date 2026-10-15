@@ -298,7 +298,9 @@ async def run_events(
         rows = (
             await db.scalars(query.order_by(RunEvent.id).limit(5000))
         ).all()
-    return RunEvents(run_id=run_id, status=run.status, items=rows)
+    return RunEvents.model_validate(
+        {"run_id": run_id, "status": run.status, "items": rows}
+    )
 
 
 @router.post("/runs/{run_id}/cancel", response_model=RunRead, status_code=202)
