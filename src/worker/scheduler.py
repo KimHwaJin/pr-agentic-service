@@ -267,6 +267,8 @@ class RunScheduler:
                 owned = await get_row(db, Run, run.id, lock=True)
                 if owned.lease_owner != self.owner:
                     raise LeaseLost(run.id)
+                if owned.cancel_requested:  # cancelled while it was running
+                    raise asyncio.CancelledError
                 event = await self._arrived_event(db, waiting)
                 if event:  # the executor finished before we started waiting
                     owned.status, owned.waiting = "queued", None
@@ -295,9 +297,15 @@ class RunScheduler:
                 await self.notify(run.id)
             return
         async with self.services.db.sessions() as db:
-            await db.execute(
+            parked = await db.execute(
                 update(Run)
-                .where(Run.id == run.id, Run.lease_owner == self.owner)
+                .where(
+                    Run.id == run.id,
+                    Run.lease_owner == self.owner,
+                    # cancel asked while it ran: finish it instead (the
+                    # cancel route locks the row, so this cannot interleave)
+                    Run.cancel_requested.is_(False),
+                )
                 .values(
                     status="waiting_input",
                     waiting={
@@ -311,6 +319,10 @@ class RunScheduler:
                 )
             )
             await db.commit()
+        if not affected(parked):
+            if await self._cancel_requested(run.id):
+                raise asyncio.CancelledError
+            raise LeaseLost(run.id)
         await ctx.emit(
             "hitl_request", {"interrupt_id": interrupt["id"], **value}
         )
