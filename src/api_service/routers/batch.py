@@ -19,8 +19,8 @@ from fastapi import APIRouter, Header, HTTPException, Request, Response
 from sqlalchemy import select
 
 from api_service.deps import ServicesDep, UserDep
-from api_service.routers.artifacts import _owned_artifact
 from api_service.schemas import BatchScriptFromNotebook, ReportJobCreate
+from api_service.services.access import owned_artifact
 from core.models import BatchReportJob
 
 router = APIRouter(tags=["batch"])
@@ -59,7 +59,7 @@ async def notebook_to_batch_script(
 
     It becomes a pr-batch NOTEBOOK script.
     """
-    artifact = await _owned_artifact(services, user, body.artifact_id)
+    artifact = await owned_artifact(services, user, body.artifact_id)
     if artifact["type"] != "NOTEBOOK":
         raise HTTPException(
             422, "Only notebook artifacts can become batch scripts."

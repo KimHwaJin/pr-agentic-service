@@ -6,29 +6,14 @@ Proxy + landing page.
 from html import escape
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter
 from fastapi.responses import HTMLResponse, StreamingResponse
 
-from api_service.deps import ServicesDep, UserDep, session_for
-from core.executor.client import ExecutorError
+from api_service.deps import ServicesDep, UserDep
+from api_service.services.access import owned_artifact
 from core.notebook_links import lab_url
 
 router = APIRouter(tags=["artifacts"])
-
-
-async def _owned_artifact(services, user, artifact_id: str) -> dict:
-    try:
-        artifact = await services.executor.artifact(artifact_id)
-        execution = await services.executor.get(
-            artifact["produced_by"]["execution_id"]
-        )
-    except ExecutorError:
-        raise HTTPException(404, "Artifact not found.") from None
-    session_id = execution["context"].get("session_id")
-    if not session_id:
-        raise HTTPException(404, "Artifact not found.")
-    await session_for(services, user, session_id)
-    return artifact
 
 
 @router.get("/api/v1/artifacts/{artifact_id}")
@@ -39,7 +24,7 @@ async def artifact_detail(
 
     For notebooks also ``lab_url`` (open in JupyterLab).
     """
-    artifact = await _owned_artifact(services, user, artifact_id)
+    artifact = await owned_artifact(services, user, artifact_id)
     return {
         **artifact,
         "view_url": f"/view/artifacts/{artifact_id}",
@@ -61,7 +46,7 @@ def _lab_url(services, user, artifact: dict) -> str | None:
 async def artifact_content(
     artifact_id: str, services: ServicesDep, user: UserDep
 ):
-    artifact = await _owned_artifact(services, user, artifact_id)
+    artifact = await owned_artifact(services, user, artifact_id)
     response, body = await services.executor.stream_artifact(artifact_id)
     media = artifact["storage"].get("media_type") or response.headers.get(
         "content-type", "application/octet-stream"
@@ -92,7 +77,7 @@ async def artifact_view(
     Renders reports (.md), notebooks, images, CSV tables and text files;
     anything else gets a download link.
     """
-    artifact = await _owned_artifact(services, user, artifact_id)
+    artifact = await owned_artifact(services, user, artifact_id)
     kind = _view_kind(artifact)
     lab = _lab_url(services, user, artifact)
     lab_button = (

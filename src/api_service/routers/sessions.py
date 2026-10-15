@@ -23,12 +23,12 @@ from api_service.schemas import (
     SessionStart,
     SessionUpdate,
 )
+from api_service.services.access import execution_of_session
 from api_service.services.runs import create_run
 from core.db import get_row, utcnow
 from core.executor.client import ExecutorError
 from core.models import (
     ChatSession,
-    CodeSource,
     Message,
     Run,
     RunEvent,
@@ -399,25 +399,6 @@ def _sse(event: dict) -> str:
     return f"{head}event: {event['type']}\ndata: {data}\n\n"
 
 
-async def _execution_of_session(
-    services: Services, execution_id: str, session_id: str
-) -> bool:
-    """Our index answers without calling the executor per image."""
-    async with services.db.sessions() as db:
-        owner = await db.scalar(
-            select(CodeSource.session_id)
-            .where(CodeSource.execution_id == execution_id)
-            .limit(1)
-        )
-    if owner is not None:
-        return owner == session_id
-    try:  # executions sent before the code index existed
-        execution = await services.executor.get(execution_id)
-    except ExecutorError:
-        return False
-    return execution["context"].get("session_id") == session_id
-
-
 @router.get("/sessions/{session_id}/outputs")
 async def step_output_file(
     session_id: str,
@@ -433,7 +414,7 @@ async def step_output_file(
     await session_for(services, user, session_id)
     if not path.startswith(f"executions/{execution_id}/"):
         raise HTTPException(404, "Not found.")
-    if not await _execution_of_session(services, execution_id, session_id):
+    if not await execution_of_session(services, execution_id, session_id):
         raise HTTPException(404, "Not found.")
     file = services.storage.resolve_result(path)
     if not Path(file).is_file():
