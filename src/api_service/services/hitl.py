@@ -1,12 +1,12 @@
-"""Checks a HITL answer against the question the run is waiting on.
+"""Checks a HITL reply against the question the run is waiting on.
 
 ``run.waiting`` holds the question (type, candidates, fields ...), so a wrong
-answer is refused here with field-level errors instead of reaching the agent
+reply is refused here with field-level errors instead of reaching the agent
 and coming back as the same question.
 
-Adding a question type: its answer model goes in
-``api_service.schemas.answers.ANSWERS``; here, an ``AnswerRules`` entry in
-``RULES`` says what else to check and what a typed chat message means.
+Adding a question type: its reply model goes in
+``api_service.schemas.hitl.REPLIES``; here, a ``ReplyRules`` entry in
+``REPLY_RULES`` says what else to check and what a typed chat message means.
 Shape errors (unknown fields, wrong types, a missing tag) come from the
 model; tests check that every question the agent asks has both.
 """
@@ -18,7 +18,7 @@ from typing import Any
 
 from pydantic import TypeAdapter, ValidationError
 
-from api_service.schemas.answers import ANSWERS
+from api_service.schemas.hitl import REPLIES
 
 Errors = list[dict[str, str]]
 Waiting = dict[str, Any]
@@ -42,23 +42,23 @@ def _refuse(waiting: Waiting, text: str) -> Any:
 
 
 @dataclass(frozen=True)
-class AnswerRules:
+class ReplyRules:
     # content checks against this very question (after the shape check)
     check: Callable[[Waiting, Any], Errors] = _no_check
-    # what a chat message typed while the question is pending answers
+    # what a chat message typed while the question is pending means
     from_text: Callable[[Waiting, str], Any] = _refuse
-    # message when the answer fits no shape at all (None: per field)
+    # message when the reply fits no shape at all (None: per field)
     shape_message: str | None = None
 
 
 def validate(waiting: Waiting, value: Any) -> Errors:
-    """Shape first (the answer model of this question type), then content
+    """Shape first (the reply model of this question type), then content
     (fields, candidates and inputs of this very question)."""
     kind = waiting.get("type", "")
-    model = ANSWERS.get(kind)
+    model = REPLIES.get(kind)
     if model is None:
         return []
-    rules = RULES.get(kind, AnswerRules())
+    rules = REPLY_RULES.get(kind, ReplyRules())
     try:
         _adapter(kind).validate_python(value, strict=True)
     except ValidationError as exc:
@@ -69,19 +69,19 @@ def validate(waiting: Waiting, value: Any) -> Errors:
 
 
 def from_text(waiting: Waiting, text: str) -> Any:
-    """What a chat message typed while a question is pending answers."""
+    """What a chat message typed while a question is pending means."""
     kind = waiting.get("type", "")
-    return RULES.get(kind, AnswerRules()).from_text(waiting, text)
+    return REPLY_RULES.get(kind, ReplyRules()).from_text(waiting, text)
 
 
 @cache
 def _adapter(kind: str) -> TypeAdapter:
-    return TypeAdapter(ANSWERS[kind])
+    return TypeAdapter(REPLIES[kind])
 
 
 @cache
 def _tags(kind: str) -> tuple[str, ...]:
-    """Tag values of a discriminated answer union (empty otherwise)."""
+    """Tag values of a discriminated reply union (empty otherwise)."""
     schema = _adapter(kind).json_schema()
     key = (schema.get("discriminator") or {}).get("propertyName")
     if not key:
@@ -199,15 +199,15 @@ def _plan_text(waiting: Waiting, text: str) -> Any:
     return {"action": "revise", "feedback": text}
 
 
-# question type -> how to check its answer (the model is in ANSWERS)
-RULES: dict[str, AnswerRules] = {
-    "question": AnswerRules(
+# question type -> how to check its reply (the model is in REPLIES)
+REPLY_RULES: dict[str, ReplyRules] = {
+    "question": ReplyRules(
         check=_question,
         from_text=_question_text,
         shape_message="답 문자열 또는 {필드: 값} 객체가 필요합니다",
     ),
-    "plan_approval": AnswerRules(check=_plan, from_text=_plan_text),
-    "code_approval": AnswerRules(),
-    "memory_change": AnswerRules(),
-    "workflow_save": AnswerRules(check=_workflow),
+    "plan_approval": ReplyRules(check=_plan, from_text=_plan_text),
+    "code_approval": ReplyRules(),
+    "memory_change": ReplyRules(),
+    "workflow_save": ReplyRules(check=_workflow),
 }

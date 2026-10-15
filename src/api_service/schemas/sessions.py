@@ -11,8 +11,8 @@ from pydantic import (
     model_validator,
 )
 
-from api_service.schemas.answers import ResumeValue
 from api_service.schemas.base import Model
+from api_service.schemas.hitl import ResumeValue
 from core.config import get_settings
 
 
@@ -82,7 +82,7 @@ class Resume(Model):
     @model_validator(mode="wrap")
     @classmethod
     def _as_sent(cls, data: Any, handler: Any) -> "Resume":
-        """Keep the answer as sent; its model depends on the question."""
+        """Keep the reply as sent; its model depends on the question."""
         resume = handler(data)
         if isinstance(data, dict) and "value" in data:
             resume.__dict__["value"] = data["value"]

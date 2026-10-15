@@ -18,7 +18,7 @@ from api_service.schemas.sessions import (
     RunStart,
     TextBlock,
 )
-from api_service.services import answers
+from api_service.services import hitl
 from core import images as image_store
 from core.db import get_row
 from core.models import ChatSession, Image, Message, Run, RunRequest, User
@@ -80,7 +80,7 @@ async def create_run(
                 assert body.input is not None
                 waiting = active.waiting or {}
                 text = body.input.text
-                value = answers.from_text(waiting, text)
+                value = hitl.from_text(waiting, text)
                 run, resumed = active, True
             elif active is not None:
                 raise ApiError(
@@ -167,7 +167,7 @@ def _resume(active: Run | None, resume: Resume) -> Run:
             "The turn is waiting for a different question.",
             run=RunRead.model_validate(active),
         )
-    errors = answers.validate(waiting, resume.value)
+    errors = hitl.validate(waiting, resume.value)
     if errors:
         raise ApiError(
             422, "invalid_answer", "The answer is not valid.", errors=errors

@@ -1,9 +1,10 @@
-"""Answers to a paused turn (``command.resume.value``), one per question type.
+"""Replies to a hitl_request (``command.resume.value``), one per question
+type.
 
 The request carries no question type, so the request schema documents the
 union; the server picks the model from the question the run waits on
-(``run.waiting.type``) and checks the answer against it
-(``api_service.services.answers``).
+(``run.waiting.type``) and checks the reply against it
+(``api_service.services.hitl``).
 """
 
 from typing import TYPE_CHECKING, Annotated, Any, Literal, Union
@@ -13,7 +14,7 @@ from pydantic import Field
 from api_service.schemas.base import Model
 
 
-class PlanApprove(Model):
+class PlanApproveReply(Model):
     """plan_approval: run candidate ``index``."""
 
     action: Literal["approve"]
@@ -28,25 +29,26 @@ class PlanApprove(Model):
     )
 
 
-class PlanRevise(Model):
+class PlanReviseReply(Model):
     """plan_approval: ask for a different plan."""
 
     action: Literal["revise"]
     feedback: str
 
 
-class PlanCancel(Model):
+class PlanCancelReply(Model):
     """plan_approval: stop the analysis."""
 
     action: Literal["cancel"]
 
 
-PlanAnswer = Annotated[
-    PlanApprove | PlanRevise | PlanCancel, Field(discriminator="action")
+PlanReply = Annotated[
+    PlanApproveReply | PlanReviseReply | PlanCancelReply,
+    Field(discriminator="action"),
 ]
 
 
-class CodeApprovalAnswer(Model):
+class CodeApprovalReply(Model):
     """code_approval: run (optionally edited) code, or refuse."""
 
     approve: bool
@@ -54,14 +56,14 @@ class CodeApprovalAnswer(Model):
     feedback: str | None = Field(None, description="거절 사유 (선택)")
 
 
-class MemoryChangeAnswer(Model):
+class MemoryChangeReply(Model):
     """memory_change: apply the proposed project memory change or not."""
 
     approve: bool
     feedback: str | None = None
 
 
-class WorkflowSaveAnswer(Model):
+class WorkflowSaveReply(Model):
     """workflow_save: save the plan as a workflow (values may be edited)."""
 
     approve: bool
@@ -73,7 +75,7 @@ class WorkflowSaveAnswer(Model):
     feedback: str | None = None
 
 
-QuestionAnswer = Annotated[
+QuestionReply = Annotated[
     str | dict[str, Any],
     Field(
         description="question: 답 문자열, 또는 fields가 있으면 "
@@ -81,20 +83,20 @@ QuestionAnswer = Annotated[
     ),
 ]
 
-# question type -> the answer it takes. A new question type adds its model
-# here (and its rules in api_service.services.answers.RULES).
-ANSWERS: dict[str, Any] = {
-    "question": QuestionAnswer,
-    "plan_approval": PlanAnswer,
-    "code_approval": CodeApprovalAnswer,
-    "memory_change": MemoryChangeAnswer,
-    "workflow_save": WorkflowSaveAnswer,
+# question type -> the reply it takes. A new question type adds its model
+# here (and its rules in api_service.services.hitl.REPLY_RULES).
+REPLIES: dict[str, Any] = {
+    "question": QuestionReply,
+    "plan_approval": PlanReply,
+    "code_approval": CodeApprovalReply,
+    "memory_change": MemoryChangeReply,
+    "workflow_save": WorkflowSaveReply,
 }
 
 # command.resume.value: any of them (the request names no question type).
-# Built from ANSWERS so a new type shows up without touching this line;
+# Built from REPLIES so a new type shows up without touching this line;
 # type checkers cannot follow a union built at runtime, hence Any for them.
 if TYPE_CHECKING:
     ResumeValue = Any
 else:
-    ResumeValue = Union[tuple(ANSWERS.values())]  # noqa: UP007
+    ResumeValue = Union[tuple(REPLIES.values())]  # noqa: UP007

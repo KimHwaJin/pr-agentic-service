@@ -6,7 +6,7 @@ from PIL import Image as PILImage
 from pydantic import ValidationError
 
 from api_service.schemas.sessions import RunCreate
-from api_service.services import answers
+from api_service.services import hitl
 from core.config import ModelSpec, Settings
 from core.images import MAX_SIDE, ImageError, prepare
 
@@ -67,36 +67,36 @@ def test_content_blocks_split_text_and_images():
         )
 
 
-def test_plan_answers_are_checked_against_the_question():
+def test_plan_replies_are_checked_against_the_question():
     ok = {
         "action": "approve",
         "index": 0,
         "input_values": {"0.0.lot_cd": "L1"},
     }
-    assert answers.validate(PLAN, ok) == []
-    missing = answers.validate(PLAN, {"action": "approve", "index": 0})
+    assert hitl.validate(PLAN, ok) == []
+    missing = hitl.validate(PLAN, {"action": "approve", "index": 0})
     assert missing[0]["field"] == "value.input_values.0.0.lot_cd"
-    assert answers.validate(PLAN, {"action": "approve", "index": 3})
+    assert hitl.validate(PLAN, {"action": "approve", "index": 3})
     unknown = {**ok, "overrides": {"9.9.x": 1}}
-    assert answers.validate(PLAN, unknown)[0]["field"].startswith(
+    assert hitl.validate(PLAN, unknown)[0]["field"].startswith(
         "value.overrides"
     )
-    assert answers.validate(PLAN, {"action": "revise", "feedback": ""})
+    assert hitl.validate(PLAN, {"action": "revise", "feedback": ""})
 
 
-def test_typed_text_answers_the_pending_question():
-    assert answers.from_text(PLAN, "LOT 바꿔") == {
+def test_typed_text_replies_to_the_pending_question():
+    assert hitl.from_text(PLAN, "LOT 바꿔") == {
         "action": "revise",
         "feedback": "LOT 바꿔",
     }
     code = {"type": "code_approval"}
-    assert answers.from_text(code, "그만") == {
+    assert hitl.from_text(code, "그만") == {
         "approve": False,
         "feedback": "그만",
     }
     question = {"type": "question", "fields": [{"key": "lot"}]}
-    assert answers.from_text(question, "L1") == {"lot": "L1"}
-    assert answers.validate({"type": "code_approval"}, {"approve": "y"})
+    assert hitl.from_text(question, "L1") == {"lot": "L1"}
+    assert hitl.validate({"type": "code_approval"}, {"approve": "y"})
 
 
 def test_model_catalog_needs_one_default():
@@ -180,9 +180,9 @@ async def _ready(value):
     return value
 
 
-def test_answer_shapes_follow_the_question_type():
+def test_reply_shapes_follow_the_question_type():
     def fields(waiting, value):
-        return {e["field"] for e in answers.validate(waiting, value)}
+        return {e["field"] for e in hitl.validate(waiting, value)}
 
     code = {"type": "code_approval"}
     assert fields(code, {"approve": True, "code": "x = 1"}) == set()
@@ -222,7 +222,7 @@ def test_resume_value_is_kept_as_sent():
         assert dumped == value  # the idempotency hash sees the same body
 
 
-def test_openapi_documents_the_answer_models():
+def test_openapi_documents_the_reply_models():
     from fastapi import FastAPI
 
     from api_service.app import mount_api
@@ -231,12 +231,12 @@ def test_openapi_documents_the_answer_models():
     mount_api(app, Settings())
     spec = app.openapi()["components"]["schemas"]
     for name in [
-        "PlanApprove",
-        "PlanRevise",
-        "PlanCancel",
-        "CodeApprovalAnswer",
-        "MemoryChangeAnswer",
-        "WorkflowSaveAnswer",
+        "PlanApproveReply",
+        "PlanReviseReply",
+        "PlanCancelReply",
+        "CodeApprovalReply",
+        "MemoryChangeReply",
+        "WorkflowSaveReply",
     ]:
         assert name in spec, name
 
@@ -269,11 +269,11 @@ def _asked_question_types() -> set[str]:
     return kinds
 
 
-def test_every_question_the_agent_asks_has_an_answer_model_and_rules():
-    from api_service.schemas.answers import ANSWERS
-    from api_service.services.answers import RULES
+def test_every_question_the_agent_asks_has_a_reply_model_and_rules():
+    from api_service.schemas.hitl import REPLIES
+    from api_service.services.hitl import REPLY_RULES
 
     asked = _asked_question_types() - {"executor_wait"}  # resumed by events
     assert asked, "no interrupts found: the scan is broken"
-    assert asked <= set(ANSWERS), asked - set(ANSWERS)
-    assert set(RULES) == set(ANSWERS)
+    assert asked <= set(REPLIES), asked - set(REPLIES)
+    assert set(REPLY_RULES) == set(REPLIES)

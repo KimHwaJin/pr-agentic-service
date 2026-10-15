@@ -101,7 +101,7 @@
 
 ## 4. HITL (사용자 확인)
 
-`hitl_request.type`별 화면과 `POST /sessions/{id}/runs`의 `command.resume.value`입니다. 질문 종류마다 답 모델이 정해져 있고 OpenAPI(`Resume.value`)에 나옵니다: `PlanApprove`·`PlanRevise`·`PlanCancel`(`action`으로 구분), `CodeApprovalAnswer`, `MemoryChangeAnswer`, `WorkflowSaveAnswer`, question은 문자열 또는 객체.
+`hitl_request.type`별 화면과 `POST /sessions/{id}/runs`의 `command.resume.value`입니다. 질문 종류마다 답(reply) 모델이 정해져 있고 OpenAPI(`Resume.value`)에 나옵니다: `PlanApproveReply`·`PlanReviseReply`·`PlanCancelReply`(`action`으로 구분), `CodeApprovalReply`, `MemoryChangeReply`, `WorkflowSaveReply`, question은 문자열 또는 객체(`QuestionReply`).
 
 서버는 run이 기다리는 질문 종류의 모델로 답을 검사합니다(모르는 항목, 틀린 타입은 거절). 그다음 질문 내용과 맞는지 검사합니다(후보 번호 범위, 필수 입력칸, 계획에 없는 파라미터). 맞지 않으면 422 `invalid_answer`와 `errors[]`(`field`, `message`)를 돌려줍니다. 문자열도 객체도 아닌 값(숫자, 목록 등)은 본문 검사에서 422 `invalid_body`가 됩니다.
 
