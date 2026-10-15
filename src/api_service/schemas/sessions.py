@@ -3,7 +3,13 @@
 from datetime import datetime
 from typing import Annotated, Any, Literal
 
-from pydantic import Field, computed_field, model_validator
+from pydantic import (
+    Field,
+    ValidationError,
+    computed_field,
+    field_validator,
+    model_validator,
+)
 
 from api_service.schemas.answers import ResumeValue
 from api_service.schemas.base import Model
@@ -63,6 +69,15 @@ class Resume(Model):
         description="질문 종류(hitl_request.type)에 맞는 답. 서버가 그 종류의 "
         "모델로 다시 검사합니다"
     )
+
+    @field_validator("value", mode="wrap")
+    @classmethod
+    def _one_error(cls, value: Any, handler: Any) -> Any:
+        """Neither an object nor a string: one error, not one per branch."""
+        try:
+            return handler(value)
+        except ValidationError:
+            raise ValueError("답 객체 또는 문자열이 필요합니다") from None
 
     @model_validator(mode="wrap")
     @classmethod
