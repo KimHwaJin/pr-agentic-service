@@ -21,6 +21,7 @@ from typing import Any
 from redis.asyncio import Redis
 from sqlalchemy import select
 
+from core.contracts import events as contracts
 from core.db import Database
 from core.models import RunEvent
 
@@ -46,6 +47,7 @@ class EventBus:
         data: dict[str, Any],
         durable: bool = True,
     ) -> None:
+        contracts.check(type, data)  # the shape readers rely on
         event: dict[str, Any] = {"type": type, "run_id": run_id, "data": data}
         if durable:
             async with self.db.sessions() as db:

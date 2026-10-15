@@ -15,17 +15,9 @@ from api_service.schemas.base import Model
 from api_service.schemas.hitl import ResumeValue
 from core.config import get_settings
 from core.contracts.attachments import Attachment
+from core.contracts.events import RunStatus, StoredEvent
 from core.contracts.hitl import PauseRequest
 
-RunStatus = Literal[
-    "queued",  # waiting for a worker
-    "running",
-    "waiting_input",  # a hitl_request is open (waiting.kind == "input")
-    "waiting_executor",  # code runs on the executor
-    "succeeded",
-    "failed",
-    "cancelled",
-]
 MessageRole = Literal["user", "assistant"]
 # user: set by the user; initial: the first message; auto: the model named it
 TitleSource = Literal["user", "initial", "auto"]
@@ -200,17 +192,12 @@ class RunPage(Model):
     next_cursor: str | None
 
 
-class RunEventRead(Model):
-    id: int
-    type: str
-    data: dict[str, Any]
-    created_at: datetime
-
-
 class RunEvents(Model):
     run_id: str
     status: RunStatus
-    items: list[RunEventRead]
+    items: list[StoredEvent] = Field(
+        description="type마다 data 모양이 정해져 있음 (SSE와 같음)"
+    )
 
 
 class RunStart(Model):
