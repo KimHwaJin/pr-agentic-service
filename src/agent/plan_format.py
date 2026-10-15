@@ -152,7 +152,10 @@ def apply_overrides(
 ) -> tuple[dict, dict]:
     """Applies user edits from the approval screen.
 
-    An input key fills the input; any other parameter becomes a fixed value.
+    An input key fills the input; a fixed or default parameter becomes a
+    fixed value. The approval reply is checked before (api_service.services
+    .hitl), so an unknown or non-editable key here is a bug: it raises
+    instead of being dropped.
     """
     document = json.loads(json.dumps(document))
     values = dict(input_values)
@@ -162,7 +165,7 @@ def apply_overrides(
             si, ti, param = key.split(".", 2)
             call = steps[int(si)]["tools"][int(ti)]
         except (ValueError, IndexError):
-            continue
+            raise PlanFormatError(f"'{key}': no such parameter") from None
         arg = call.get("arguments", {}).get(param)
         if arg and arg["source"] == "input":
             values[key] = value
@@ -171,4 +174,8 @@ def apply_overrides(
                 "source": "literal",
                 "value": value,
             }
+        else:
+            raise PlanFormatError(
+                f"'{key}': set by an earlier call's output, not editable"
+            )
     return document, values

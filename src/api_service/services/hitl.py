@@ -155,28 +155,98 @@ def _plan(waiting: Waiting, value: Any) -> Errors:
             _err("value.index", f"0~{len(candidates) - 1} 사이여야 합니다")
         ]
     candidate = candidates[index]
-    errors: Errors = []
-    inputs = value.get("input_values") or {}
-    overrides = value.get("overrides") or {}
     params = {
-        p["key"]
+        p["key"]: p
         for call in candidate.get("calls") or []
         for p in call.get("params") or []
     }
-    errors += [
-        _err(f"value.overrides.{key}", "이 계획에 없는 파라미터입니다")
-        for key in overrides
-        if params and key not in params
-    ]
-    given = {**(candidate.get("input_values") or {}), **inputs, **overrides}
-    errors += [
+    slots = {s["key"] for s in candidate.get("input_slots") or []}
+    inputs = value.get("input_values") or {}
+    overrides = value.get("overrides") or {}
+    errors: Errors = []
+    for key, given in inputs.items():
+        field = f"value.input_values.{key}"
+        if key not in slots:
+            errors.append(_err(field, _NOT_SLOT[_source(params, key)]))
+        elif problem := _type_problem(params[key].get("type"), given):
+            errors.append(_err(field, problem))
+    for key, given in overrides.items():
+        field = f"value.overrides.{key}"
+        source = _source(params, key)
+        if source not in _EDITABLE:
+            errors.append(_err(field, _NOT_EDITABLE[source]))
+        elif problem := _type_problem(params[key].get("type"), given):
+            errors.append(_err(field, problem))
+    given = {**(candidate.get("input_values") or {}), **inputs}
+    return errors + [
         _err(f"value.input_values.{slot['key']}", "필수 입력입니다")
         for slot in candidate.get("input_slots") or []
         if slot.get("required")
         and _empty(given.get(slot["key"]))
         and _empty(slot.get("value"))
     ]
-    return errors
+
+
+# overrides change what the agent decided: a fixed value or a tool default
+_EDITABLE = {"literal", "default"}
+_NOT_EDITABLE = {
+    "input": "입력칸 값은 input_values로 보내세요",
+    "tool_output": "앞 단계 결과로 정해지는 값이라 바꿀 수 없습니다",
+    None: "이 계획에 없는 파라미터입니다",
+}
+_NOT_SLOT = {
+    "literal": "입력칸이 아닙니다. Agent가 정한 값은 overrides로 바꾸세요",
+    "default": "입력칸이 아닙니다. 기본값은 overrides로 바꾸세요",
+    "tool_output": "앞 단계 결과로 정해지는 값이라 바꿀 수 없습니다",
+    "input": "입력칸이 아닙니다",
+    None: "이 계획에 없는 입력칸입니다",
+}
+
+
+def _source(params: dict[str, dict], key: str) -> str | None:
+    param = params.get(key)
+    return param.get("source") if param else None
+
+
+# tool parameter annotations we can check; anything else is not checked
+_TYPES: dict[str, tuple[type, ...]] = {
+    "int": (int,),
+    "float": (int, float),
+    "bool": (bool,),
+    "str": (str,),
+    "list": (list,),
+    "dict": (dict,),
+    "None": (type(None),),
+}
+_TYPE_NAMES = {
+    "int": "정수",
+    "float": "숫자",
+    "bool": "true/false",
+    "str": "문자열",
+    "list": "목록",
+    "dict": "객체",
+    "None": "null",
+}
+
+
+def _type_problem(annotation: str | None, value: Any) -> str | None:
+    """A message when ``value`` fits none of the annotation's basic types.
+
+    Only plain annotations such as ``int | None`` or ``list`` are checked;
+    an unknown or missing annotation accepts any value.
+    """
+    if not annotation:
+        return None
+    names = [part.strip().split("[", 1)[0] for part in annotation.split("|")]
+    if any(name not in _TYPES for name in names):
+        return None
+    for name in names:
+        kinds = _TYPES[name]
+        if isinstance(value, bool) and bool not in kinds:
+            continue  # JSON true/false is not a number here
+        if isinstance(value, kinds):
+            return None
+    return " 또는 ".join(_TYPE_NAMES[n] for n in names) + " 값이 필요합니다"
 
 
 def _workflow(waiting: Waiting, value: Any) -> Errors:

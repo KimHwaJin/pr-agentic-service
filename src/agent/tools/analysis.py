@@ -321,9 +321,14 @@ async def propose_plans(
         **(choice.get("input_values") or {}),
         **(choice.get("overrides") or {}),
     }
-    document, values = plan_format.apply_overrides(
-        chosen["document"], chosen["input_values"], edits
-    )
+    try:
+        document, values = plan_format.apply_overrides(
+            chosen["document"], chosen["input_values"], edits
+        )
+    except plan_format.PlanFormatError as exc:
+        return _reply(
+            runtime, f"사용자가 수정한 값을 반영하지 못했습니다: {exc}"
+        )
     errors = spec.validate(document, skills, tools)
     if errors:
         return _reply(
@@ -343,11 +348,7 @@ async def propose_plans(
             f"필수 입력값이 비어 있습니다: {missing}. "
             "ask_user로 받은 뒤 다시 제안하세요.",
         )
-    changed = [
-        k
-        for k in (choice.get("overrides") or {})
-        if k not in chosen["input_values"]
-    ]
+    changed = list(choice.get("overrides") or {})  # never input slots
     plan = {
         "id": new_id(),
         "title": chosen["title"],

@@ -17,7 +17,18 @@ PLAN = {
         {
             "input_values": {},
             "input_slots": [{"key": "0.0.lot_cd", "required": True}],
-            "calls": [{"params": [{"key": "0.0.lot_cd"}, {"key": "1.0.n"}]}],
+            "calls": [
+                {
+                    "params": [
+                        {
+                            "key": "0.0.lot_cd",
+                            "source": "input",
+                            "type": "str",
+                        },
+                        {"key": "1.0.n", "source": "literal", "type": "int"},
+                    ]
+                }
+            ],
         }
     ],
 }
@@ -277,3 +288,131 @@ def test_every_question_the_agent_asks_has_a_reply_model_and_rules():
     assert asked, "no interrupts found: the scan is broken"
     assert asked <= set(REPLIES), asked - set(REPLIES)
     assert set(REPLY_RULES) == set(REPLIES)
+
+
+def test_plan_approve_keys_go_where_they_belong():
+    def errors(**value):
+        reply = {"action": "approve", "index": 0, **value}
+        return {
+            e["field"]: e["message"] for e in hitl.validate(PLAN_FULL, reply)
+        }
+
+    ok = {"0.0.lot_cd": "L1"}
+    assert errors(input_values=ok, overrides={"1.0.n": 5, "1.0.k": 3}) == {}
+    # an input slot is filled with input_values, not overrides
+    assert (
+        "input_values"
+        in errors(input_values=ok, overrides={"0.0.lot_cd": "L2"})[
+            "value.overrides.0.0.lot_cd"
+        ]
+    )
+    # a fixed value is changed with overrides, not input_values
+    wrong = errors(input_values={**ok, "1.0.n": 5})
+    assert "overrides" in wrong["value.input_values.1.0.n"]
+    # an earlier call's output cannot be changed; unknown keys are refused
+    assert (
+        "바꿀 수 없"
+        in errors(input_values=ok, overrides={"1.0.data": 1})[
+            "value.overrides.1.0.data"
+        ]
+    )
+    assert (
+        "없는 입력칸"
+        in errors(input_values={**ok, "0.0.lot": "x"})[
+            "value.input_values.0.0.lot"
+        ]
+    )
+
+
+def test_plan_approve_values_match_basic_types():
+    def errors(inputs, overrides):
+        reply = {
+            "action": "approve",
+            "input_values": inputs,
+            "overrides": overrides,
+        }
+        return {e["field"] for e in hitl.validate(PLAN_FULL, reply)}
+
+    assert errors({"0.0.lot_cd": "123"}, {"1.0.n": 5, "1.0.k": None}) == set()
+    assert errors({"0.0.lot_cd": 123}, {}) == {"value.input_values.0.0.lot_cd"}
+    assert errors({"0.0.lot_cd": "L1"}, {"1.0.n": "5"}) == {
+        "value.overrides.1.0.n"
+    }
+    assert errors({"0.0.lot_cd": "L1"}, {"1.0.n": True}) == {
+        "value.overrides.1.0.n"
+    }
+    # not a plain annotation (or none): any value
+    assert errors({"0.0.lot_cd": "L1"}, {"1.0.any": {"x": [1]}}) == set()
+
+
+PLAN_FULL = {
+    "type": "plan_approval",
+    "candidates": [
+        {
+            "input_values": {},
+            "input_slots": [{"key": "0.0.lot_cd", "required": True}],
+            "calls": [
+                {
+                    "params": [
+                        {
+                            "key": "0.0.lot_cd",
+                            "source": "input",
+                            "type": "str | None",
+                        },
+                        {
+                            "key": "1.0.data",
+                            "source": "tool_output",
+                            "type": None,
+                        },
+                        {"key": "1.0.n", "source": "literal", "type": "int"},
+                        {
+                            "key": "1.0.k",
+                            "source": "default",
+                            "type": "int | None",
+                        },
+                        {
+                            "key": "1.0.any",
+                            "source": "default",
+                            "type": "pd.DataFrame",
+                        },
+                    ]
+                }
+            ],
+        }
+    ],
+}
+
+
+def test_apply_overrides_refuses_what_it_cannot_apply():
+    import pytest
+
+    from agent import plan_format
+
+    document = {
+        "workflow": {
+            "steps": [
+                {"skill": "s", "tools": [{"tool": "a", "arguments": {}}]},
+                {
+                    "skill": "s",
+                    "tools": [
+                        {
+                            "tool": "b",
+                            "arguments": {
+                                "data": {
+                                    "source": "tool_output",
+                                    "step_index": 0,
+                                    "tool_index": 0,
+                                    "output": "data",
+                                }
+                            },
+                        }
+                    ],
+                },
+            ]
+        }
+    }
+    _, values = plan_format.apply_overrides(document, {}, {"0.0.n": 1})
+    with pytest.raises(plan_format.PlanFormatError):
+        plan_format.apply_overrides(document, {}, {"1.0.data": 1})
+    with pytest.raises(plan_format.PlanFormatError):
+        plan_format.apply_overrides(document, {}, {"9.9.x": 1})
