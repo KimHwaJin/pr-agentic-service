@@ -17,7 +17,7 @@ log = logging.getLogger(__name__)
 NO_STORE = {"Cache-Control": "no-store"}
 
 
-class SessionRead(BaseModel):
+class LoginSessionRead(BaseModel):
     user_id: str
     csrf_token: str
     expires_at: int
@@ -171,10 +171,10 @@ class SsoService:
 
     async def session(
         self, request: Request, response: Response
-    ) -> SessionRead:
+    ) -> LoginSessionRead:
         session = await self.authenticate(request)
         response.headers.update(NO_STORE)
-        return SessionRead(**session.__dict__)
+        return LoginSessionRead(**session.__dict__)
 
     async def logout(self, request: Request) -> Response:
         await self.authenticate(request)

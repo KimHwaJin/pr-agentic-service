@@ -11,6 +11,7 @@ from api_service import pagination
 from api_service.deps import ServicesDep, UserDep, project_for, session_for
 from api_service.errors import ApiError
 from api_service.schemas.sessions import (
+    ChatSessionRead,
     MessagePage,
     RunCreate,
     RunEvents,
@@ -19,7 +20,6 @@ from api_service.schemas.sessions import (
     RunStart,
     SessionCreate,
     SessionPage,
-    SessionRead,
     SessionStart,
     SessionUpdate,
 )
@@ -92,7 +92,9 @@ async def create_session(
         run = started.run
     async with services.db.sessions() as db:
         session = await db.get(ChatSession, session.id)
-    return SessionStart(session=SessionRead.model_validate(session), run=run)
+    return SessionStart(
+        session=ChatSessionRead.model_validate(session), run=run
+    )
 
 
 @router.get("/projects/{project_id}/sessions", response_model=SessionPage)
@@ -130,12 +132,12 @@ async def list_sessions(
     )
 
 
-@router.get("/sessions/{session_id}", response_model=SessionRead)
+@router.get("/sessions/{session_id}", response_model=ChatSessionRead)
 async def get_session(session_id: str, services: ServicesDep, user: UserDep):
     return await session_for(services, user, session_id)
 
 
-@router.patch("/sessions/{session_id}", response_model=SessionRead)
+@router.patch("/sessions/{session_id}", response_model=ChatSessionRead)
 async def update_session(
     session_id: str, body: SessionUpdate, services: ServicesDep, user: UserDep
 ):

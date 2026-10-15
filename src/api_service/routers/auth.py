@@ -3,7 +3,7 @@ from typing import Literal
 from fastapi import APIRouter, HTTPException, Request, Response
 
 from api_service import deps
-from api_service.auth.service import SessionRead
+from api_service.auth.service import LoginSessionRead
 from api_service.deps import ServicesDep, UserDep
 from api_service.schemas.base import Model
 from api_service.schemas.users import UserRead
@@ -26,8 +26,8 @@ async def callback(request: Request, flow_id: str) -> Response:
     return await request.app.state.sso.callback(request, flow_id)
 
 
-@router.get("/session", response_model=SessionRead)
-async def session(request: Request, response: Response) -> SessionRead:
+@router.get("/session", response_model=LoginSessionRead)
+async def session(request: Request, response: Response) -> LoginSessionRead:
     """Current login and the CSRF token to send as X-CSRF-Token on writes."""
     return await request.app.state.sso.session(request, response)
 

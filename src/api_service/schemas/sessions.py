@@ -95,7 +95,7 @@ class SessionUpdate(Model):
     code_level: int | None = Field(None, ge=1, le=4)
 
 
-class SessionRead(Model):
+class ChatSessionRead(Model):
     id: str
     project_id: str
     title: str
@@ -139,7 +139,7 @@ class RunRead(Model):
 
 
 class SessionPage(Model):
-    items: list[SessionRead]
+    items: list[ChatSessionRead]
     next_cursor: (
         str | None
     )  # pass back as ?cursor= for the next (older) page; null on the last page
@@ -174,5 +174,5 @@ class RunStart(Model):
 
 
 class SessionStart(Model):
-    session: SessionRead
+    session: ChatSessionRead
     run: RunRead | None
