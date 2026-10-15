@@ -14,6 +14,7 @@ from pydantic import (
 from api_service.schemas.base import Model
 from api_service.schemas.hitl import ResumeValue
 from core.config import get_settings
+from core.contracts.attachments import Attachment
 from core.contracts.hitl import PauseRequest
 
 RunStatus = Literal[
@@ -164,7 +165,7 @@ class MessageRead(Model):
     run_id: str | None
     role: MessageRole
     content: str
-    attachments: list[dict[str, Any]]
+    attachments: list[Attachment]
     created_at: datetime
 
 
