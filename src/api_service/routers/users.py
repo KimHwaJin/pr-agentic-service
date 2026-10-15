@@ -2,7 +2,7 @@ from fastapi import APIRouter, HTTPException
 from sqlalchemy import select
 
 from api_service.deps import AdminDep, ServicesDep, UserDep
-from api_service.schemas import Me, UserAdminUpdate, UserRead
+from api_service.schemas.users import Me, UserAdminUpdate, UserRead
 from core.models import Project, ProjectMember, User
 
 router = APIRouter(tags=["users"])

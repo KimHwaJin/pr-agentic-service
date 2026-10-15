@@ -5,7 +5,8 @@ from fastapi import APIRouter, HTTPException, Request, Response
 from api_service import deps
 from api_service.auth.service import SessionRead
 from api_service.deps import ServicesDep, UserDep
-from api_service.schemas import Model, UserRead
+from api_service.schemas.base import Model
+from api_service.schemas.users import UserRead
 from core.db import get_row
 from core.models import User
 

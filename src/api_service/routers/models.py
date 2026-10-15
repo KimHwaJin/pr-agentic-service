@@ -1,7 +1,7 @@
 from fastapi import APIRouter
 
 from api_service.deps import ServicesDep, UserDep
-from api_service.schemas import ModelList
+from api_service.schemas.users import ModelList
 
 router = APIRouter(tags=["models"])
 

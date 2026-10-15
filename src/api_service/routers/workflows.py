@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException, Response
 
 from api_service.deps import ServicesDep, UserDep
-from api_service.schemas import (
+from api_service.schemas.workflows import (
     WorkflowClone,
     WorkflowCreate,
     WorkflowDetail,

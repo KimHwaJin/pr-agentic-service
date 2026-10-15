@@ -10,7 +10,7 @@ import hashlib
 import json
 
 from api_service.errors import ApiError
-from api_service.schemas import (
+from api_service.schemas.sessions import (
     Resume,
     RunCreate,
     RunInput,

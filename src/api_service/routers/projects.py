@@ -2,7 +2,7 @@ from fastapi import APIRouter, HTTPException, Response
 from sqlalchemy import select
 
 from api_service.deps import ServicesDep, UserDep, project_for
-from api_service.schemas import (
+from api_service.schemas.projects import (
     MemoryCreate,
     MemoryUpdate,
     ProjectCreate,

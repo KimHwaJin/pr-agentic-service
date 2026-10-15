@@ -10,7 +10,7 @@ from sqlalchemy import delete, select, update
 from api_service import pagination
 from api_service.deps import ServicesDep, UserDep, project_for, session_for
 from api_service.errors import ApiError
-from api_service.schemas import (
+from api_service.schemas.sessions import (
     MessagePage,
     RunCreate,
     RunEvents,

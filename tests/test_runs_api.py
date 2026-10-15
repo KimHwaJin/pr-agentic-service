@@ -5,7 +5,7 @@ import pytest
 from PIL import Image as PILImage
 from pydantic import ValidationError
 
-from api_service.schemas import RunCreate
+from api_service.schemas.sessions import RunCreate
 from api_service.services import answers
 from core.config import ModelSpec, Settings
 from core.images import MAX_SIDE, ImageError, prepare
