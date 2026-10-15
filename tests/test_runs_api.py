@@ -283,11 +283,55 @@ def _asked_question_types() -> set[str]:
 def test_every_question_the_agent_asks_has_a_reply_model_and_rules():
     from api_service.schemas.hitl import REPLIES
     from api_service.services.hitl import REPLY_RULES
+    from core.contracts.hitl import REQUESTS
 
-    asked = _asked_question_types() - {"executor_wait"}  # resumed by events
-    assert asked, "no interrupts found: the scan is broken"
+    paused = _asked_question_types()
+    assert paused, "no interrupts found: the scan is broken"
+    assert paused <= set(REQUESTS), paused - set(REQUESTS)
+    asked = paused - {"executor_wait"}  # resumed by events, not people
     assert asked <= set(REPLIES), asked - set(REPLIES)
     assert set(REPLY_RULES) == set(REPLIES)
+    assert set(REPLIES) == set(REQUESTS) - {"executor_wait"}
+
+
+def test_pause_models_read_what_the_tools_raise():
+    from pydantic import TypeAdapter
+
+    from core.contracts.hitl import PauseRequest
+
+    pause = TypeAdapter(PauseRequest)
+    question = pause.validate_python(
+        {
+            "interrupt_id": "i",
+            "type": "question",
+            "question": "LOT?",
+            "options": [],
+            "fields": [
+                {
+                    "key": "lot",
+                    "label": "LOT",
+                    "type": "string",
+                    "required": True,
+                }
+            ],
+        }
+    )
+    assert question.type == "question"
+    wait = pause.validate_python(
+        {
+            "interrupt_id": "i",
+            "kind": "executor",
+            "type": "executor_wait",
+            "execution_id": "x",
+            "operation_id": None,
+            "steps": ["finalize"],
+        }
+    )
+    assert wait.type == "executor_wait"
+    with pytest.raises(ValidationError):
+        pause.validate_python({"interrupt_id": "i", "type": "nope"})
+    with pytest.raises(ValidationError):  # a question needs its text
+        pause.validate_python({"interrupt_id": "i", "type": "question"})
 
 
 def test_plan_approve_keys_go_where_they_belong():

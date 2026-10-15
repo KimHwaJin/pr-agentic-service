@@ -1,10 +1,15 @@
-"""Replies to a hitl_request (``command.resume.value``), one per question
-type.
+"""Human-in-the-loop replies: ``command.resume.value``, one per question.
 
-The request carries no question type, so the request schema documents the
-union; the server picks the model from the question the run waits on
-(``run.waiting.type``) and checks the reply against it
-(``api_service.services.hitl``).
+What a paused run asks lives in ``core.contracts.hitl`` (``REQUESTS``,
+``PauseRequest``): the agent produces it, the API shows it as
+``RunRead.waiting`` and the ``hitl_request`` event.
+
+The resume request carries no question type, so its schema documents the
+union of replies; the server picks the model from the question the run
+waits on (``run.waiting.type``) and checks the reply against it
+(``api_service.services.hitl``). A new question type adds its request to
+``core.contracts.hitl.REQUESTS``, its reply to ``REPLIES`` and its rules
+to ``services.hitl.REPLY_RULES``; tests fail when one is missing.
 """
 
 from typing import TYPE_CHECKING, Annotated, Any, Literal, Union
@@ -12,6 +17,8 @@ from typing import TYPE_CHECKING, Annotated, Any, Literal, Union
 from pydantic import Field
 
 from api_service.schemas.base import Model
+
+# --- replies: command.resume.value -------------------------------------------
 
 
 class PlanApproveReply(Model):

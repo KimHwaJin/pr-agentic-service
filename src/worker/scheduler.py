@@ -12,11 +12,13 @@ import logging
 from datetime import timedelta
 from typing import Any
 
+from pydantic import TypeAdapter
 from sqlalchemy import or_, select, update
 
 from agent.context import RunContext
 from agent.graph import AgentGraphs
 from agent.titles import summarize_title
+from core.contracts.hitl import PauseRequest
 from core.db import affected, get_row, utcnow
 from core.events import runs_wake_channel
 from core.executor.client import ExecutorError
@@ -34,6 +36,7 @@ from core.services import Services
 from worker.executor_events import matches
 
 log = logging.getLogger(__name__)
+_PAUSE: TypeAdapter = TypeAdapter(PauseRequest)
 TERMINAL = {"succeeded", "failed", "cancelled"}
 
 
@@ -257,6 +260,8 @@ class RunScheduler:
         self, run: Run, ctx: RunContext, interrupt: dict[str, Any]
     ) -> None:
         value = interrupt["value"]
+        # the pause contract readers rely on (RunRead.waiting, hitl_request)
+        _PAUSE.validate_python({"interrupt_id": interrupt["id"], **value})
         if value.get("type") == "executor_wait":
             waiting = {
                 "kind": "executor",

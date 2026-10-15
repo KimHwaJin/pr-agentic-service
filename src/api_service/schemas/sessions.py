@@ -14,6 +14,7 @@ from pydantic import (
 from api_service.schemas.base import Model
 from api_service.schemas.hitl import ResumeValue
 from core.config import get_settings
+from core.contracts.hitl import PauseRequest
 
 RunStatus = Literal[
     "queued",  # waiting for a worker
@@ -172,7 +173,9 @@ class RunRead(Model):
     session_id: str
     status: RunStatus
     model: str
-    waiting: dict[str, Any] | None
+    waiting: PauseRequest | None = Field(
+        description="멈춘 이유 (type으로 구분). 진행 중이거나 끝났으면 null"
+    )
     error: str | None
     created_at: datetime
     updated_at: datetime
