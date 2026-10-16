@@ -132,6 +132,24 @@ class Settings(BaseSettings):
     skills_root: Path = ROOT / "assets/skills"
     tools_root: Path = ROOT / "assets/tools"
     knowledge_root: Path = ROOT / "assets/knowledge"
+    # Extra catalogs on top of the three roots above, in order: each holds
+    # skills/, tools/ and knowledge/ (any may be missing). A later catalog
+    # replaces a skill, tool or knowledge entry of the same name. Removing
+    # an entry here restores the base catalog.
+    catalog_extensions: list[Path] = []
+
+    def catalog_roots(self, kind: str) -> list[Path]:
+        """Base root and extension roots for skills | tools | knowledge."""
+        base = {
+            "skills": self.skills_root,
+            "tools": self.tools_root,
+            "knowledge": self.knowledge_root,
+        }[kind]
+        return [base] + [
+            (ext if ext.is_absolute() else ROOT / ext) / kind
+            for ext in self.catalog_extensions
+        ]
+
     default_code_level: int = Field(3, ge=1, le=4)
     plan_candidates: int = Field(5, ge=1, le=10)
     workflow_similarity: float = 0.93

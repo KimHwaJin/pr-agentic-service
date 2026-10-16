@@ -11,6 +11,7 @@ function without its docstring.
 import ast
 import re
 import time
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -116,6 +117,16 @@ class SkillCatalog:
                 body,
                 tuple(rows),
             )
+        return catalog
+
+    @classmethod
+    def load_many(cls, roots: Sequence[Path]) -> "SkillCatalog":
+        """Roots in order; a later root replaces a skill of the same name
+        (an extension can override a base skill)."""
+        catalog = cls()
+        for root in roots:
+            if root.exists():
+                catalog.skills.update(cls.load(root).skills)
         return catalog
 
     def index(self) -> str:
@@ -239,6 +250,17 @@ class ToolCatalog:
                 catalog.errors[str(path)] = str(exc)
         return catalog
 
+    @classmethod
+    def load_many(cls, roots: Sequence[Path]) -> "ToolCatalog":
+        """Roots in order; a later root replaces a tool of the same name."""
+        catalog = cls()
+        for root in roots:
+            if root.exists():
+                part = cls.load(root)
+                catalog.tools.update(part.tools)
+                catalog.errors.update(part.errors)
+        return catalog
+
     def describe(self, name: str) -> str:
         tool = self.tools[name]
         outputs = list(tool.outputs)
@@ -251,12 +273,19 @@ class AssetLoader:
     Changes are checked at most every few seconds.
     """
 
-    def __init__(self, root: Path, factory, check_seconds: float = 5.0):
+    def __init__(
+        self,
+        root: Path | Sequence[Path],
+        factory,
+        check_seconds: float = 5.0,
+    ):
+        """``factory`` gets ``root`` as given: a path, or the roots."""
         self.root, self.factory, self.check_seconds = (
             root,
             factory,
             check_seconds,
         )
+        self._roots = [root] if isinstance(root, Path) else list(root)
         self._stamp: tuple | None = None
         self._checked = 0.0
         self._value = None
@@ -269,7 +298,9 @@ class AssetLoader:
         ):
             return self._value
         self._checked = now
-        files = sorted(self.root.rglob("*")) if self.root.exists() else []
+        files = sorted(
+            p for r in self._roots if r.exists() for p in r.rglob("*")
+        )
         stamp = tuple(
             (str(p), p.stat().st_mtime_ns) for p in files if p.is_file()
         )

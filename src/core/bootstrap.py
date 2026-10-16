@@ -106,9 +106,15 @@ async def build_services(
         ),
         workflows=workflows,
         embedder=embedder,
-        analysis_skills=AssetLoader(settings.skills_root, SkillCatalog.load),
-        knowledge=AssetLoader(settings.knowledge_root, SkillCatalog.load),
-        tools=AssetLoader(settings.tools_root, ToolCatalog.load),
+        analysis_skills=AssetLoader(
+            settings.catalog_roots("skills"), SkillCatalog.load_many
+        ),
+        knowledge=AssetLoader(
+            settings.catalog_roots("knowledge"), SkillCatalog.load_many
+        ),
+        tools=AssetLoader(
+            settings.catalog_roots("tools"), ToolCatalog.load_many
+        ),
     )
     if settings.auto_migrate:
         await migrate(services, pool)

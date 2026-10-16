@@ -27,6 +27,10 @@ notebook_lab_base_url: http://localhost:8888
 
 batch_base_url: http://host.docker.internal:8100
 
+# Test catalog on top of assets/ (catalogs/analysis_test/README.md).
+# Remove this line to go back to the base catalog.
+catalog_extensions: [catalogs/analysis_test]
+
 # Chat models offered to users. Only these are used; exactly one default.
 # Only qwen38-27b-nvfp4 is served on the local gateway.
 models:

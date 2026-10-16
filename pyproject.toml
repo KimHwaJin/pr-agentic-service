@@ -56,14 +56,24 @@ phoenix = [
     "arize-phoenix-otel>=0.17.2",
     "openinference-instrumentation-langchain>=0.1.79",
 ]
+# runs the test catalog's tools in tests (catalogs/, not shipped)
+catalog-test = [
+    "matplotlib>=3.10",
+    "numpy>=2.2",
+    "pandas>=2.3",
+    "scikit-learn>=1.7",
+    "scipy>=1.15",
+    "statsmodels>=0.14",
+]
 
 [tool.ty.environment]
 python-version = "3.12"
 extra-paths = ["src", "scripts"]
 
-# assets/tools run in the executor's Jupyter kernel, whose packages are not in this venv.
+# assets/ and catalogs/ tools run in the executor's Jupyter kernel, whose
+# packages are not in this venv.
 [[tool.ty.overrides]]
-include = ["assets/**"]
+include = ["assets/**", "catalogs/**"]
 
 [tool.ty.overrides.rules]
 unresolved-import = "ignore"

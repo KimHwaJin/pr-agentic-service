@@ -46,6 +46,7 @@ services:
       - ${EXECUTOR_SHARED_DIR:-../executor/shared_dir}:/mnt/executor-shared
       # Skills/tools/knowledge and prompts are read live, so edits apply without a rebuild.
       - ./assets:/app/assets:ro
+      - ./catalogs:/app/catalogs:ro
       - ./src/agent/prompts:/app/src/agent/prompts:ro
       - ./web:/app/web:ro
       - ./config.local.yml:/app/config.local.yml:ro

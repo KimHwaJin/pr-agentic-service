@@ -19,6 +19,7 @@ ENV ENV=${ENV}
 COPY config.*.yml alembic.ini ./
 COPY migrations ./migrations
 COPY assets ./assets
+COPY catalogs ./catalogs
 COPY web ./web
 COPY src ./src
 # UID 1000 matches the Executor image so both can read and write the shared PV.
