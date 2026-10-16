@@ -78,11 +78,12 @@
 - 각 이벤트의 `event:` 이름이 아래 type이고, `data`는 `{id?, type, run_id, data}`입니다. 안쪽 `data`의 모양은 type마다 정해져 있고, OpenAPI의 `RunEvents.items`(`<Type>Event` schema, 예: `ToolCallEvent`)에 그대로 나옵니다. 서버는 이벤트를 보내기 전에 이 모델로 검사합니다.
 - `id`가 있는 이벤트는 저장되어 재연결 시 `Last-Event-ID`로 이어 받습니다. 커서 없이 연결하면 진행 중인 run의 이벤트를 처음부터 다시 받습니다.
 - `token`은 저장하지 않는 실시간 이벤트입니다. 완료되면 `message_final`로 확정 답변이 옵니다.
+- `token`으로 흘러온 글 뒤에 `tool_call`이 오면 그 글은 사용자에게 하는 답이 아니라 도구를 부르기 전의 중간 출력입니다("스킬을 확인하겠습니다" 같은 진행 멘트). 채팅 답변에서 빼고 단계 표시 아래 접힌 영역 등에 따로 보여 줍니다. 사용자에게 하는 말은 `message_final` 하나이고, 지난 대화를 다시 열 때도 이것만 메시지로 남습니다.
 
 | type | data | 화면 처리 |
 | --- | --- | --- |
 | `run_status` | `{status, execution_id?, operation_id?, steps?}` | 상태 표시. `waiting_executor`면 실행 중 단계 표시, `waiting_input`이면 확인 카드(입력창 글도 답으로 받음) |
-| `token` | `{text}` | 답변 스트리밍 |
+| `token` | `{text}` | 답변 스트리밍. 뒤이어 `tool_call`이 오면 중간 출력으로 옮김 |
 | `message_final` | `{content}` | 확정 답변 (Markdown) |
 | `tool_call` | `{name, args}` | 백그라운드 메시지 (Agent가 하는 일) |
 | `agent_switched` | `{agent: main\|analyst, task?}` | 담당 전환 표시 |
