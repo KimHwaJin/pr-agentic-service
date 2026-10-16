@@ -1,0 +1,106 @@
+# Agent scenarios for the analysis_test catalog (scripts/run_scenarios.py).
+#
+# turns: user messages, in order (one session per scenario)
+# inputs: values for empty plan input slots, by parameter name
+# answers: replies to the agent's questions, in order
+# expect:
+#   status: final status of the last turn (default succeeded)
+#   facts: regexes that must appear in the last turn's answer or report
+#   plan_skills / plan_tools: must appear in an approved plan of the scenario
+#   calls: agent tools that must be called (e.g. ask_user, revise_call)
+#   question: true = the agent must ask, false = it must not
+#   auto_approved: a registered workflow ran without the approval card
+# cancel_when: cancel the run once it reaches this status
+
+- id: s01_nce_eda
+  title: NCE 기술통계 (기준선)
+  turns: ["NCE 데이터 기술통계와 분포 보여줘"]
+  expect:
+    plan_skills: [data_load, eda_analysis]
+    facts: ["DNW|MBO"]
+
+- id: s02_quality_chain
+  title: 품질 점검 → 정리 → EDA
+  turns: ["NCE 데이터 품질을 먼저 점검하고, 문제가 있으면 정리한 뒤에 기술통계를 보여줘"]
+  expect:
+    plan_skills: [data_load, data_quality, eda_analysis]
+    plan_tools: [check_missing, check_duplicates]
+    facts: ["PMX", "중복"]
+
+- id: s03_lot_compare
+  title: LOT 비교 검정
+  turns: ["NCE의 SN OPEN 측정값이 LOT별로 차이가 있는지 통계적으로 검정해줘"]
+  inputs: {value_column: "SN OPEN MASK MACRO.max_val"}
+  expect:
+    plan_skills: [statistical_test]
+    facts: ["L3"]
+
+- id: s04_edge_effect
+  title: WT edge 효과
+  turns: ["WT 데이터에서 wafer 가장자리 불량이 중심보다 많은지 확인해줘"]
+  expect:
+    plan_skills: [wafer_map]
+    facts: ["edge|가장자리", "(1\\.[7-9]|2\\.[0-4])\\d*\\s*배|약\\s*2배|두\\s*배"]
+
+- id: s05_fdc_drift
+  title: FDC 압력 drift
+  turns: ["FDC 압력 센서(CH_PRESSURE)에 시간에 따른 변화가 있었는지 설비별로 확인해줘"]
+  inputs: {value_column: "CH_PRESSURE"}
+  expect:
+    plan_skills: [time_series]
+    facts: ["ETCH_B", "09-1[789]|9월\\s*1[789]일|09/1[789]"]
+
+- id: s06_spc_cpk
+  title: SPC 관리도와 Cpk (규격 한계 질문)
+  turns: ["ETCH_A 설비 CH_PRESSURE의 관리 상태와 Cpk를 봐줘"]
+  inputs: {value_column: "CH_PRESSURE", process: "ETCH_A", lsl: 47, usl: 53}
+  answers: ["규격 하한(LSL)은 47, 상한(USL)은 53이야"]
+  expect:
+    plan_skills: [spc]
+    plan_tools: [process_capability]
+    facts: ["Cpk"]
+
+- id: s07_yield_cause
+  title: 수율 저하 원인 후보
+  turns: ["수율이 낮은 원인 후보를 찾아줘"]
+  inputs: {target_column: "yield_pct"}
+  expect:
+    plan_skills: [modeling]
+    facts: ["ETCH_B|avg_pressure|압력"]
+
+- id: s08_follow_up
+  title: 결합 분석 후 후속 질문
+  turns:
+    - "NCE와 WT를 결합해서 SN OPEN 측정값과 불량(PT1H.p_f)의 관계를 봐줘"
+    - "아까 결과에서 L3 LOT만 따로 다시 봐줘"
+  expect:
+    plan_tools: [merge_data]
+    facts: ["L3"]
+
+- id: s09_ambiguous
+  title: 모호한 요청 → 확인 질문
+  turns: ["공정에 이상 있어?"]
+  answers: ["FDC 압력 센서(CH_PRESSURE) 기준으로 설비별로 봐줘"]
+  inputs: {value_column: "CH_PRESSURE"}
+  expect:
+    question: true
+
+- id: s10_recover
+  title: 실패 복구 (시험 tool)
+  turns: ["시험: NCE 데이터에 fragile_transform을 mode='multiply'로 적용해 보고, 실패하면 원인을 보고 고쳐서 다시 실행해줘"]
+  expect:
+    plan_tools: [fragile_transform]
+    facts: ["scale|offset"]
+
+- id: s11_workflow_auto
+  title: 등록 워크플로우 자동 승인
+  turns: ["NCE 데이터 기술통계와 분포 보여줘"]
+  expect:
+    auto_approved: true
+
+- id: s12_cancel
+  title: 긴 실행 취소 (시험 tool)
+  turns: ["시험: slow_operation을 120초로 실행해줘"]
+  cancel_when: waiting_executor
+  expect:
+    status: cancelled
