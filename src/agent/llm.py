@@ -36,12 +36,30 @@ def chat_model(settings: Settings, name: str) -> BaseChatModel:
     return _models[name]
 
 
-def _build(settings: Settings, name: str) -> BaseChatModel:
-    extra_body: dict[str, Any] = {}
+def request_extras(settings: Settings, name: str) -> dict[str, Any]:
+    """Extra request body: llm_enable_thinking, then the model's params.
+
+    A model's params win; nested dicts (chat_template_kwargs) merge one
+    level deep so a model can add kwargs without repeating the default.
+    """
+    extra: dict[str, Any] = {}
     if settings.llm_enable_thinking is not None:
-        extra_body["chat_template_kwargs"] = {
+        extra["chat_template_kwargs"] = {
             "enable_thinking": settings.llm_enable_thinking
         }
+    spec = settings.model(name)
+    for key, value in (spec.params if spec else {}).items():
+        base = extra.get(key)
+        extra[key] = (
+            {**base, **value}
+            if isinstance(base, dict) and isinstance(value, dict)
+            else value
+        )
+    return extra
+
+
+def _build(settings: Settings, name: str) -> BaseChatModel:
+    extra_body = request_extras(settings, name)
     return GatewayChatOpenAI(
         model=name,
         base_url=settings.llm_base_url,

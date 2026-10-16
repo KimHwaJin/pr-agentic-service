@@ -47,7 +47,12 @@ models:
     label: 예시 비전 모델
     input: [text, image]
     max_images: 8
+  - name: gpt-oss-120b
+    params:               # 이 모델 요청 본문에만 붙는 값
+      reasoning_effort: low
 ```
+
+`params`는 그 모델로 보내는 요청에만 그대로 붙습니다(값은 검사하지 않음). 전역 `llm_enable_thinking`이 먼저 `chat_template_kwargs.enable_thinking`으로 들어가고, 모델의 `params`가 그 위를 덮습니다(`chat_template_kwargs`처럼 dict인 값은 키 단위로 합침). `params`는 서버 설정이라 모델 목록 API 응답에는 나가지 않습니다.
 
 ### 2.2 어느 파일을 읽을지
 

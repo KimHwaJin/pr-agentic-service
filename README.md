@@ -75,7 +75,7 @@ uv run uvicorn main:app --app-dir src --port 8080
   def create_sdk(request, callback_url):
       return SSO(request)  # request는 Flask 호환 뷰(args, cookies, environ, url)
   ```
-- **LLM**: `llm_base_url`, `llm_api_key`, `llm_enable_thinking`, 그리고 사용자에게 보여 줄 모델 목록 `models`(게이트웨이 모델 이름, 표시 이름, `default: true` 하나, 이미지 입력 가능 여부). 목록에 적힌 모델만 씁니다.
+- **LLM**: `llm_base_url`, `llm_api_key`, `llm_enable_thinking`, 그리고 사용자에게 보여 줄 모델 목록 `models`(게이트웨이 모델 이름, 표시 이름, `default: true` 하나, 이미지 입력 가능 여부, 모델별 요청 파라미터 `params` 예: `reasoning_effort`). 목록에 적힌 모델만 씁니다.
 - **임베딩**: `EMBEDDING_BASE_URL`, `EMBEDDING_MODEL`, `EMBEDDING_DIMS`(HNSW 인덱스는 2,000차원 이하).
 - **skill/tool**: `SKILLS_ROOT`, `TOOLS_ROOT`, `KNOWLEDGE_ROOT`(기본은 레포의 `assets/`). 파일이 바뀌면 다음 run부터 반영됩니다.
 - **executor**: `EXECUTOR_BASE_URL`, 결과 PVC 마운트 경로 `EXECUTOR_RESULT_ROOT`(executor의 SHARED_STORAGE_ROOT).

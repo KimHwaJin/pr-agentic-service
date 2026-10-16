@@ -9,7 +9,7 @@ the repo root (baked into the image; ``CONFIG_FILE`` overrides the path),
 import os
 from functools import lru_cache
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 from dotenv import dotenv_values
 from pydantic import BaseModel, Field, model_validator
@@ -38,6 +38,9 @@ class ModelSpec(BaseModel):
     default: bool = False
     input: list[Literal["text", "image"]] = ["text"]
     max_images: int = Field(0, ge=0, le=32)
+    # Extra request body fields for this model only (e.g. reasoning_effort,
+    # chat_template_kwargs). Server-side; never sent to clients.
+    params: dict[str, Any] = Field(default_factory=dict, exclude=True)
 
     @property
     def vision(self) -> bool:
