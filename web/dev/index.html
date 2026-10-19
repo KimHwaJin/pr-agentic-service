@@ -1392,9 +1392,10 @@ async function renderReports() {
   const batchName = id => (BT.batches.find(b => b.id === id) || {}).name || (id ? id.slice(0, 8) : '-');
   $('batchBody').innerHTML = `<div class="toolbar"><select onchange="BT.reportState=this.value; batchTab('reports')">${['', ...Object.keys(REPORT_STATE)].map(k => `<option value="${k}" ${k === state ? 'selected' : ''}>${k ? REPORT_STATE[k] : '모든 상태'}</option>`).join('')}</select>
       <button class="ghost" onclick="batchTab('reports')">↻</button></div>
-    ${page.items.length ? `<table class="tbl"><thead><tr><th>상태</th><th>리포트</th><th>배치</th><th>실행</th><th>생성</th><th>완료</th></tr></thead><tbody>${page.items.map(r => `
+    ${page.items.length ? `<table class="tbl"><thead><tr><th>상태</th><th>리포트</th><th>배치</th><th>생성</th><th>완료</th><th>실행</th></tr></thead><tbody>${page.items.map(r => `
       <tr class="click" onclick="openReport('${r.id}')"><td>${withError(reportBadge(r.state), r.error)}</td><td><b>${esc(r.title || '작성 중')}</b></td>
-        <td>${esc(batchName(r.batch_id))}</td><td>${short(r.execution_id)}</td><td>${fmtTime(r.created_at)}</td><td>${fmtTime(r.finished_at)}</td></tr>`).join('')}</tbody></table>`
+        <td>${esc(batchName(r.batch_id))}</td><td>${fmtTime(r.created_at)}</td><td>${fmtTime(r.finished_at)}</td>
+        <td onclick="event.stopPropagation()"><a href="#" class="mono" title="executor 실행 상세 보기" onclick="event.preventDefault(); openExecution('${r.execution_id}')">${esc(r.execution_id.slice(0, 8))}</a></td></tr>`).join('')}</tbody></table>`
       : '<div class="muted">리포트가 없습니다. 배치 실행이 성공하면 자동으로 만들어집니다.</div>'}`;
 }
 
