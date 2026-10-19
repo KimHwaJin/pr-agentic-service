@@ -1306,7 +1306,7 @@ function runReason(r) {
   if (r.status === 'SKIPPED' && r.skip_reason) lines.push(SKIP_TEXT[r.skip_reason] || r.skip_reason);
   if (r.status === 'CANCELLED' || r.cancel_requested) lines.push(`${CANCEL_TEXT[r.cancel_source] || '취소'}${r.cancel_reason ? `: ${r.cancel_reason}` : ''}`);
   if (r.failure_type) lines.push(`실패: ${FAILURE_TEXT[r.failure_type] || r.failure_type} (${r.failure_type})`);
-  if (r.notebook_status === 'FAILED') lines.push('노트북 생성 실패');
+  if (r.notebook_status === 'FAILED' && r.status !== 'CANCELLED') lines.push('노트북 생성 실패');
   if (r.last_error && r.status !== 'COMPLETED') lines.push(`마지막 연결 오류: ${r.last_error}`);
   return lines.join('\n');
 }
