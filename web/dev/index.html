@@ -1492,7 +1492,12 @@ async function logout() {
 
 /* system (admin): executor executions, runtimes, maintenance ------------------- */
 const SYS = { tab: 'runtimes', cursor: null };
-const fmtTime = iso => iso ? new Date(iso).toLocaleString('ko-KR', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }) : '';
+// every date on the page: YYYY-MM-DD HH:mm:ss, local time
+const fmtTime = iso => {
+  if (!iso) return '';
+  const d = new Date(iso), p = n => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+};
 function dur(a, b) { if (!a || !b) return ''; const s = (new Date(b) - new Date(a)) / 1000; return s < 60 ? `${s.toFixed(1)}초` : `${Math.floor(s / 60)}분 ${Math.round(s % 60)}초`; }
 const short = id => id ? `<span class="mono" title="${esc(id)} (클릭하면 복사)" style="cursor:copy" onclick="event.stopPropagation();navigator.clipboard.writeText('${esc(id)}')">${esc(String(id).slice(0, 8))}</span>` : '<span class="muted">-</span>';
 function statusBadge(st) {
