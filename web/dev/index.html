@@ -1297,11 +1297,11 @@ async function loadRuns(id) {
   const body = $('runsBody'); body.innerHTML = '<div class="muted">불러오는 중…</div>';
   const [runs, reports] = await Promise.all([api(`/batch/batches/${id}/runs?limit=50`), api(`/batch-reports?batch_id=${id}&limit=100`)]);
   const byExec = Object.fromEntries(reports.items.map(r => [r.execution_id, r]));
-  body.innerHTML = runs.items.length ? `<table class="tbl"><thead><tr><th>실행</th><th>상태</th><th>방식</th><th>시작</th><th>종료</th><th>소요</th><th>노트북</th><th>리포트</th></tr></thead><tbody>${runs.items.map(r => {
+  body.innerHTML = runs.items.length ? `<table class="tbl"><thead><tr><th>상태</th><th>실행</th><th>방식</th><th>시작</th><th>종료</th><th>소요</th><th>노트북</th><th>리포트</th></tr></thead><tbody>${runs.items.map(r => {
     const rep = r.execution_id && byExec[r.execution_id];
     const nb = r.result?.notebook_artifact_id;
     const start = r.started_at || r.submitted_at, end = r.finished_at || r.completed_at;
-    return `<tr><td>${short(r.id)}</td><td>${statusBadge(r.status)}${r.last_error ? `<div style="color:var(--bad);font-size:12px">${esc(r.last_error).slice(0, 200)}</div>` : ''}</td>
+    return `<tr><td>${withError(statusBadge(r.status), r.last_error)}</td><td>${short(r.id)}</td>
       <td>${esc(r.trigger)}</td><td>${fmtTime(start) || '<span class="muted">-</span>'}</td><td>${fmtTime(end) || '<span class="muted">-</span>'}</td><td>${dur(start, end)}</td>
       <td>${nb ? `<a target="_blank" href="/view/artifacts/${nb}">보기</a>` : '<span class="muted">-</span>'}</td>
       <td>${rep ? `<a href="#" onclick="event.preventDefault(); $('runsModal').classList.remove('open'); openReport('${rep.id}')">${reportBadge(rep.state)}</a>` : `<span class="muted">${r.status === 'SUCCEEDED' ? '대기 중' : '-'}</span>`}</td></tr>`;
@@ -1374,9 +1374,9 @@ async function renderReports() {
   const batchName = id => (BT.batches.find(b => b.id === id) || {}).name || (id ? id.slice(0, 8) : '-');
   $('batchBody').innerHTML = `<div class="toolbar"><select onchange="BT.reportState=this.value; batchTab('reports')">${['', ...Object.keys(REPORT_STATE)].map(k => `<option value="${k}" ${k === state ? 'selected' : ''}>${k ? REPORT_STATE[k] : '모든 상태'}</option>`).join('')}</select>
       <button class="ghost" onclick="batchTab('reports')">↻</button></div>
-    ${page.items.length ? `<table class="tbl"><thead><tr><th>리포트</th><th>배치</th><th>상태</th><th>실행</th><th>생성</th><th>완료</th></tr></thead><tbody>${page.items.map(r => `
-      <tr class="click" onclick="openReport('${r.id}')"><td><b>${esc(r.title || '작성 중')}</b>${r.error ? `<div style="color:var(--bad);font-size:12px">${esc(r.error).slice(0, 200)}</div>` : ''}</td>
-        <td>${esc(batchName(r.batch_id))}</td><td>${reportBadge(r.state)}</td><td>${short(r.execution_id)}</td><td>${fmtTime(r.created_at)}</td><td>${fmtTime(r.finished_at)}</td></tr>`).join('')}</tbody></table>`
+    ${page.items.length ? `<table class="tbl"><thead><tr><th>상태</th><th>리포트</th><th>배치</th><th>실행</th><th>생성</th><th>완료</th></tr></thead><tbody>${page.items.map(r => `
+      <tr class="click" onclick="openReport('${r.id}')"><td>${withError(reportBadge(r.state), r.error)}</td><td><b>${esc(r.title || '작성 중')}</b></td>
+        <td>${esc(batchName(r.batch_id))}</td><td>${short(r.execution_id)}</td><td>${fmtTime(r.created_at)}</td><td>${fmtTime(r.finished_at)}</td></tr>`).join('')}</tbody></table>`
       : '<div class="muted">리포트가 없습니다. 배치 실행이 성공하면 자동으로 만들어집니다.</div>'}`;
 }
 
@@ -1499,6 +1499,8 @@ function statusBadge(st) {
   const cls = ['SUCCEEDED', 'COMPLETED', 'ACTIVE', 'AVAILABLE'].includes(st) ? 'ok' : ['FAILED', 'CANCELLED', 'OFFLINE', 'DISABLED'].includes(st) ? 'bad' : '';
   return `<span class="badge ${cls}">${esc(st || '-')}</span>`;
 }
+// a status badge whose error shows on hover, so rows keep one height
+const withError = (badge, error) => error ? `<span title="${esc(error)}" style="cursor:help;white-space:nowrap">${badge} <span style="color:var(--bad)">⚠</span></span>` : badge;
 const pre = v => `<pre class="sys-pre">${esc(JSON.stringify(v, null, 2))}</pre>`;
 const projectName = id => (S.projects.find(p => p.id === id) || {}).name;
 const qs = o => Object.entries(o).filter(([, v]) => v !== '' && v != null).map(([k, v]) => `${k}=${encodeURIComponent(v)}`).join('&');
@@ -1548,7 +1550,7 @@ function renderExecutions() {
       <input id="fxExec" placeholder="실행 ID로 바로 열기" style="width:240px" onkeydown="if (event.key === 'Enter' && this.value.trim()) openExecution(this.value.trim())">
       <select id="fxStatus">${statuses.map(s => `<option value="${s}">${s || '모든 상태'}</option>`).join('')}</select>
       <button class="btn" onclick="loadExecutions()">조회</button></div>
-    <table class="tbl"><thead><tr><th>실행</th><th>상태</th><th>사용자</th><th>프로젝트 / 세션</th><th>방식</th><th>단계</th><th>시작</th><th>종료</th><th>소요</th></tr></thead><tbody id="execRows"></tbody></table>
+    <table class="tbl"><thead><tr><th>상태</th><th>실행</th><th>사용자</th><th>프로젝트 / 세션</th><th>방식</th><th>단계</th><th>시작</th><th>종료</th><th>소요</th></tr></thead><tbody id="execRows"></tbody></table>
     <div style="text-align:center;margin:12px" id="execMore"></div>`;
   loadExecutions();
 }
@@ -1559,7 +1561,7 @@ async function loadExecutions(more = false) {
   await ensureUsers(page.items.map(e => e.context?.user_id));
   const rows = page.items.map(e => {
     const c = e.context || {}, lc = e.lifecycle || {};
-    return `<tr class="click" onclick="openExecution('${esc(e.execution_id)}')"><td>${short(e.execution_id)}</td><td>${statusBadge(e.state?.status)}</td>
+    return `<tr class="click" onclick="openExecution('${esc(e.execution_id)}')"><td>${withError(statusBadge(e.state?.status), e.failure?.message)}</td><td>${short(e.execution_id)}</td>
       <td>${userLabel(c.user_id)}</td><td>${esc(projectName(c.project_id) || '')} ${c.project_id ? '' : '<span class="muted">-</span>'}<br>${short(c.session_id)}</td>
       <td>${esc(e.operation_mode || '')}<br><span class="muted">${esc(e.trigger_type || '')}</span></td><td>${e.step_count ?? ''}</td>
       <td>${fmtTime(lc.started_at || e.created_at)}</td><td>${lc.finished_at ? fmtTime(lc.finished_at) : '<span class="muted">진행 중</span>'}</td><td>${dur(lc.started_at, lc.finished_at)}</td></tr>`;
