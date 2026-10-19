@@ -583,8 +583,8 @@
       <div class="field"><label>일정</label><select id="bmKind" onchange="syncScheduleInput()">
         <option value="KEEP" id="bmKeep" hidden>기존 일정 유지</option><option value="">수동 실행만</option><option value="INTERVAL">일정 간격 (분)</option><option value="DAILY">매일 정해진 시각</option><option value="CRON">Cron</option></select></div>
       <div class="field" id="bmValueRow" style="display:none"><label id="bmValueLabel">값</label><input id="bmValue"></div>
-      <div class="field bm-window" style="display:none"><label>시작 시각 (선택)</label><input id="bmStart" type="datetime-local"></div>
-      <div class="field bm-window" style="display:none"><label>종료 시각 (선택)</label><input id="bmEnd" type="datetime-local"></div>
+      <div class="field bm-window" style="display:none"><label id="bmStartLabel">시작 시각 (선택)</label><input id="bmStart" type="datetime-local"></div>
+      <div class="field bm-window" style="display:none"><label id="bmEndLabel">종료 시각 (선택)</label><input id="bmEnd" type="datetime-local"></div>
       <div class="muted" style="font-size:12px;line-height:1.6">시간대는 Asia/Seoul입니다. 시작 시각 전과 종료 시각 뒤에는 돌지 않고, 간격 일정은 시작 시각부터 셉니다(비우면 만든 시각). 만든 뒤 켜기를 눌러야 일정이 동작합니다. 겹치는 실행과 놓친 실행은 건너뜁니다(pr-batch 기본 정책).</div>
     </div>
     <div class="modal-foot"><button class="btn" onclick="$('batchModal').classList.remove('open')">취소</button><button class="btn primary" id="bmSave" onclick="saveBatch()">만들기</button></div>
@@ -1268,6 +1268,11 @@ function batchTab(name) {
 }
 function scheduleText(s) {
   if (!s) return '수동 실행만';
+  if (s.definition?.kind === 'CALENDAR') {  // calendar schedules: whole days
+    const a = s.start_at && fmtTime(s.start_at).slice(0, 10), b = s.end_at && fmtTime(s.end_at).slice(0, 10);
+    const days = a && b ? `${a} ~ ${b}` : a ? `${a}부터` : b ? `${b}까지` : '';
+    return days ? `${days} ${scheduleKind(s)}` : scheduleKind(s);
+  }
   const window = [s.start_at && `${fmtTime(s.start_at).slice(0, 16)}부터`, s.end_at && `${fmtTime(s.end_at).slice(0, 16)}까지`].filter(Boolean).join(' ');
   return window ? `${window} · ${scheduleKind(s)}` : scheduleKind(s);
 }
@@ -1396,13 +1401,21 @@ function scheduleForm(sch) {
   const d = sch.definition || {}, start = local(sch.start_at), end = local(sch.end_at);
   if (d.kind === 'INTERVAL') return { kind: 'INTERVAL', value: String(d.seconds / 60), start, end };
   if (d.kind === 'CRON') return { kind: 'CRON', value: d.expression, start, end };
-  if (d.kind === 'CALENDAR' && d.frequency === 'DAILY') return { kind: 'DAILY', value: String(d.at).slice(0, 5), start, end };
+  if (d.kind === 'CALENDAR' && d.frequency === 'DAILY') return { kind: 'DAILY', value: String(d.at).slice(0, 5), start: start.slice(0, 10), end: end.slice(0, 10) };
   return { kind: 'KEEP', value: '', start, end };
 }
 function syncScheduleInput() {
   const kind = $('bmKind').value;
   $('bmValueRow').style.display = kind && kind !== 'KEEP' ? '' : 'none';
   document.querySelectorAll('.bm-window').forEach(el => el.style.display = kind && kind !== 'KEEP' ? '' : 'none');
+  // 매일: the window is whole days (from the start date to the end date, both included)
+  const daily = kind === 'DAILY';
+  for (const id of ['bmStart', 'bmEnd']) {
+    const el = $(id), type = daily ? 'date' : 'datetime-local';
+    if (el.type !== type) { const v = el.value; el.type = type; el.value = !v ? '' : daily ? v.slice(0, 10) : `${v}T00:00`; }
+  }
+  $('bmStartLabel').textContent = daily ? '시작일 (선택)' : '시작 시각 (선택)';
+  $('bmEndLabel').textContent = daily ? '종료일 (선택, 그날 포함)' : '종료 시각 (선택)';
   $('bmValueLabel').textContent = { INTERVAL: '간격 (분, 1 이상)', DAILY: '시각 (HH:MM)', CRON: 'Cron 식 (예: 0 9 * * MON-FRI)' }[kind] || '';
   $('bmValue').placeholder = { INTERVAL: '60', DAILY: '09:00', CRON: '0 9 * * *' }[kind] || '';
 }
@@ -1413,7 +1426,8 @@ async function saveBatch() {
   if (!name) return $('bmName').focus();
   if (kind && !value) return $('bmValue').focus();
   const definition = kind === 'INTERVAL' ? { kind, seconds: Math.round(+value * 60) } : kind === 'DAILY' ? { kind: 'CALENDAR', frequency: 'DAILY', at: `${value}:00`.slice(0, 8) } : kind === 'CRON' ? { kind, expression: value } : null;
-  const schedule = definition ? { definition, ...seoul('start_at', $('bmStart').value), ...seoul('end_at', $('bmEnd').value) } : null;
+  const daily = kind === 'DAILY', start = $('bmStart').value, end = $('bmEnd').value;
+  const schedule = definition ? { definition, ...seoul('start_at', daily && start ? `${start}T00:00:00` : start), ...seoul('end_at', daily && end ? `${end}T23:59:59` : end) } : null;
   const body = { name, script_id: $('bmScript').value, runtime: { type: 'JUPYTER', profile: $('bmRuntime').value },
     ...(version ? { script_version_number: +version } : {}), ...(schedule ? { schedule } : {}) };
   const b = BT.editing, was = BT.scheduleForm || {};
