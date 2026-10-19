@@ -186,6 +186,7 @@
   .field label { color: var(--muted); overflow: hidden; text-overflow: ellipsis; }
   .field select { border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; background: var(--bg); font-size: 13px; }
   .field input:disabled { opacity: .6; }
+  .field textarea, #weDoc { width: 100%; border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; background: var(--bg); resize: vertical; }
   .field input, .card textarea, .card input.wide { width: 100%; border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; background: var(--bg); }
   .card textarea { min-height: 90px; font-family: "SF Mono", Menlo, monospace; font-size: 13px; }
   .actions { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; align-items: center; }
@@ -1672,7 +1673,7 @@ async function searchPreview(id) {
   const w = await api(`/workflows/${id}`);
   const box = $('wfPreview');
   box.innerHTML = `<div class="wf-sec">추천 확인 <span class="muted" style="font-weight:400">· 채팅에서 이 질문을 하면 어떤 워크플로우가 추천되는지 봅니다 (공개된 것만 추천 대상)</span></div>
-    <div class="row" style="display:flex;gap:8px"><input id="wpQuery" style="flex:1" value="${esc(w.user_queries[0] || '')}" onkeydown="if (event.key === 'Enter' && !event.isComposing) runPreview('${id}')"><button class="btn" onclick="runPreview('${id}')">검색</button></div>
+     <div class="toolbar" style="display:flex;gap:8px"><input id="wpQuery" style="flex:1" value="${esc(w.user_queries[0] || '')}" onkeydown="if (event.key === 'Enter' && !event.isComposing) runPreview('${id}')"><button class="btn" onclick="runPreview('${id}')">검색</button></div>
     <div id="wpResult"></div>`;
   box.scrollIntoView({ block: 'nearest' });
   runPreview(id);
