@@ -449,6 +449,7 @@
   <button class="nav" onclick="newSession()"><span class="circle"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 5v14M5 12h14"/></svg></span>새 대화</button>
   <button class="nav" id="navProjects" onclick="showProjects()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 7h16l-1.5 12h-13z"/><path d="M6 4h12"/></svg>프로젝트</button>
   <button class="nav" id="navWorkflows" onclick="showWorkflows()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="6" cy="6" r="2.5"/><circle cx="18" cy="18" r="2.5"/><path d="M6 8.5v4a3 3 0 0 0 3 3h6.5"/></svg>워크플로우</button>
+  <button class="nav" id="navExecutions" onclick="showExecutions()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 4l14 8-14 8z"/></svg>실행</button>
   <button class="nav" id="navBatches" onclick="showBatches()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3.5" y="5" width="17" height="15" rx="2"/><path d="M3.5 10h17M8 3v4M16 3v4M9 15l2 2 4-4"/></svg>배치</button>
   <button class="nav" id="navSystem" onclick="showSystem()" style="display:none"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg>시스템</button>
   <div class="section"><span class="name" id="projectName">-</span>
@@ -467,10 +468,9 @@
   <div id="scroll"><div id="log"></div></div>
   <div id="systemView" style="display:none;flex:1;overflow:auto">
     <div class="page">
-      <div class="page-head"><h1>시스템</h1><span class="muted" style="font-size:13px">executor 실행·런타임·점검 (관리자)</span></div>
+      <div class="page-head"><h1>시스템</h1><span class="muted" style="font-size:13px">executor 런타임·점검 (관리자)</span></div>
       <div class="systabs">
-        <button class="systab on" data-sys="executions" onclick="sysTab('executions')">실행</button>
-        <button class="systab" data-sys="runtimes" onclick="sysTab('runtimes')">런타임</button>
+        <button class="systab on" data-sys="runtimes" onclick="sysTab('runtimes')">런타임</button>
         <button class="systab" data-sys="maintenance" onclick="sysTab('maintenance')">점검</button>
       </div>
       <div id="sysBody"></div>
@@ -484,6 +484,12 @@
       <div class="muted" style="font-size:13px;margin:-8px 0 14px">분석 담당이 저장한 실행 흐름입니다. 공개된 것은 비슷한 질문이 오면 계획 후보로 추천됩니다.</div>
       <label class="page-search"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><input id="wfSearch" placeholder="워크플로우 검색 (이름, 목적, skill, tool)"></label>
       <div class="grid" id="wfGrid"></div>
+    </div>
+  </div>
+  <div id="executionsView" style="display:none;flex:1;overflow:auto">
+    <div class="page">
+      <div class="page-head"><h1>실행</h1><span class="muted" style="font-size:13px" id="execScope">executor에서 돌아간 분석·배치 실행</span></div>
+      <div id="execListBody"></div>
     </div>
   </div>
   <div id="batchesView" style="display:none;flex:1;overflow:auto">
@@ -703,7 +709,7 @@ $('sessionSearch').addEventListener('input', renderSessions);
 
 /* projects view ------------------------------------------------------------- */
 function hidePages() {
-  for (const [view, nav] of [['projectsView', 'navProjects'], ['workflowsView', 'navWorkflows'], ['batchesView', 'navBatches'], ['systemView', 'navSystem']]) {
+  for (const [view, nav] of [['projectsView', 'navProjects'], ['workflowsView', 'navWorkflows'], ['executionsView', 'navExecutions'], ['batchesView', 'navBatches'], ['systemView', 'navSystem']]) {
     $(view).style.display = 'none'; $(nav).classList.remove('active');
   }
 }
@@ -992,6 +998,7 @@ function addFiles(items) {
 function showError(msg) {
   const d = document.createElement('div'); d.className = 'error'; d.textContent = msg;
   if ($('systemView').style.display !== 'none') { $('sysBody').prepend(d); return; }
+  if ($('executionsView').style.display !== 'none') { $('execListBody').prepend(d); return; }
   logEl().appendChild(d); scrollDown();
 }
 
@@ -1484,7 +1491,7 @@ async function logout() {
 }
 
 /* system (admin): executor executions, runtimes, maintenance ------------------- */
-const SYS = { tab: 'executions', cursor: null };
+const SYS = { tab: 'runtimes', cursor: null };
 const fmtTime = iso => iso ? new Date(iso).toLocaleString('ko-KR', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }) : '';
 function dur(a, b) { if (!a || !b) return ''; const s = (new Date(b) - new Date(a)) / 1000; return s < 60 ? `${s.toFixed(1)}초` : `${Math.floor(s / 60)}분 ${Math.round(s % 60)}초`; }
 const short = id => id ? `<span class="mono" title="${esc(id)} (클릭하면 복사)" style="cursor:copy" onclick="event.stopPropagation();navigator.clipboard.writeText('${esc(id)}')">${esc(String(id).slice(0, 8))}</span>` : '<span class="muted">-</span>';
@@ -1504,14 +1511,16 @@ function showSystem() {
 function sysTab(name) {
   SYS.tab = name;
   document.querySelectorAll('.systab[data-sys]').forEach(t => t.classList.toggle('on', t.dataset.sys === name));
-  ({ executions: renderExecutions, runtimes: renderRuntimes, maintenance: renderMaintenance })[name]();
+  ({ runtimes: renderRuntimes, maintenance: renderMaintenance })[name]();
 }
 
-/* executions */
+/* executions (own nav; the relay shows a user their own, an admin everyone's) */
+function showExecutions() { showPage('executionsView', 'navExecutions'); renderExecutions(); }
 function renderExecutions() {
   const statuses = ['', 'QUEUED', 'DISPATCHED', 'RUNNING', 'WAITING_FOR_OPERATION', 'FINALIZING', 'CANCEL_REQUESTED', 'CANCELLED', 'SUCCEEDED', 'FAILED'];
-  $('sysBody').innerHTML = `<div class="toolbar">
-      <input id="fxUser" placeholder="사용자 ID" style="width:110px">
+  $('execScope').textContent = S.isAdmin ? 'executor에서 돌아간 분석·배치 실행 · 관리자: 전체 사용자' : 'executor에서 돌아간 내 분석·배치 실행';
+  $('execListBody').innerHTML = `<div class="toolbar">
+      ${S.isAdmin ? '<input id="fxUser" placeholder="사용자 ID" style="width:110px">' : ''}
       <select id="fxProject"><option value="">모든 프로젝트</option>${S.projects.map(p => `<option value="${esc(p.id)}">${esc(p.name)}</option>`).join('')}</select>
       <input id="fxSession" placeholder="세션 ID" style="width:200px">
       <input id="fxExec" placeholder="실행 ID로 바로 열기" style="width:240px" onkeydown="if (event.key === 'Enter' && this.value.trim()) openExecution(this.value.trim())">
@@ -1522,7 +1531,7 @@ function renderExecutions() {
   loadExecutions();
 }
 async function loadExecutions(more = false) {
-  const q = qs({ user_id: $('fxUser').value.trim(), project_id: $('fxProject').value, session_id: $('fxSession').value.trim(), status: $('fxStatus').value, limit: 30, cursor: more ? SYS.cursor : '' });
+  const q = qs({ user_id: $('fxUser')?.value.trim() || '', project_id: $('fxProject').value, session_id: $('fxSession').value.trim(), status: $('fxStatus').value, limit: 30, cursor: more ? SYS.cursor : '' });
   const page = await api(`/executor/executions?${q}`);
   SYS.cursor = page.next_cursor;
   const rows = page.items.map(e => {
@@ -1536,11 +1545,12 @@ async function loadExecutions(more = false) {
   $('execMore').innerHTML = page.has_more ? '<button class="ghost" onclick="loadExecutions(true)">더 보기</button>' : '';
 }
 
+const ADMIN_EXEC_TABS = ['diagnostics', 'attempts'];
 const EXEC_TABS = [['overview', '개요'], ['steps', '단계'], ['events', '이벤트'], ['result', '결과'], ['notebook', '노트북'], ['artifacts', '산출물'], ['diagnostics', '진단'], ['attempts', '시도']];
 function openExecution(id) {
   SYS.exec = id;
   $('execTitle').innerHTML = `실행 <span class="mono" style="font-size:13px;font-weight:400">${esc(id)}</span> <button class="ghost" title="복사" onclick="navigator.clipboard.writeText('${esc(id)}')">복사</button>`;
-  $('execTabs').innerHTML = EXEC_TABS.map(([k, label]) => `<button class="systab" data-ex="${k}" onclick="execTab('${k}')">${label}</button>`).join('');
+  $('execTabs').innerHTML = EXEC_TABS.filter(([k]) => S.isAdmin || !ADMIN_EXEC_TABS.includes(k)).map(([k, label]) => `<button class="systab" data-ex="${k}" onclick="execTab('${k}')">${label}</button>`).join('');
   $('execModal').classList.add('open'); execTab('overview');
 }
 async function execTab(tab) {
