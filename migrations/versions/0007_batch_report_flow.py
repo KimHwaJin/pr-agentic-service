@@ -1,7 +1,8 @@
 """batch reports started from executor events, their progress events
 
 pr-batch no longer asks for reports: a job is made per successful BATCH
-execution, owned by the execution's user (users.id).
+execution, owned by the execution's user (users.id). User ids stored by
+this service move from employee numbers to users.id.
 
 Revision ID: 0007
 Revises: 0006
@@ -17,7 +18,33 @@ branch_labels = None
 depends_on = None
 
 
+TO_UUID = """
+UPDATE batch_report_jobs j SET owner_id = u.id
+FROM users u WHERE j.owner_id = u.employee_id;
+UPDATE workflows w
+SET document = jsonb_set(w.document, '{workflow,actor,id}', to_jsonb(u.id))
+FROM users u
+WHERE w.document #>> '{workflow,actor,type}' = 'USER'
+  AND w.document #>> '{workflow,actor,id}' = u.employee_id;
+"""
+
+TO_EMPLOYEE = """
+UPDATE batch_report_jobs j SET owner_id = u.employee_id
+FROM users u WHERE j.owner_id = u.id;
+UPDATE workflows w
+SET document = jsonb_set(
+    w.document, '{workflow,actor,id}', to_jsonb(u.employee_id)
+)
+FROM users u
+WHERE w.document #>> '{workflow,actor,type}' = 'USER'
+  AND w.document #>> '{workflow,actor,id}' = u.id;
+"""
+
+
 def upgrade() -> None:
+    for statement in TO_UUID.split(";"):
+        if statement.strip():
+            op.execute(statement)
     op.drop_column("batch_report_jobs", "request_hash")
     op.alter_column(
         "batch_report_jobs", "request", new_column_name="execution"
@@ -56,6 +83,9 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    for statement in TO_EMPLOYEE.split(";"):
+        if statement.strip():
+            op.execute(statement)
     op.drop_table("batch_report_events")
     for column in ("owner_id", "execution_id", "batch_id"):
         op.drop_index(

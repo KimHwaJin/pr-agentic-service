@@ -25,7 +25,10 @@ executor_result_root: /mnt/executor-shared
 executor_runtime_profile: default
 notebook_lab_base_url: http://localhost:8888
 
+# pr-batch compose (../pr-batch) on the host port 8100. The secret is its
+# local-only default BATCH_AUTH_SECRET (issuer prj_re, audience pr-batch).
 batch_base_url: http://host.docker.internal:8100
+batch_jwt_secret: local-only-insecure-secret-change-me-0123456789
 
 # Test catalog on top of assets/ (catalogs/analysis_test/README.md).
 # Remove this line to go back to the base catalog.
