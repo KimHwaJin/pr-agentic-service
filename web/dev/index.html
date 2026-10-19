@@ -1426,7 +1426,7 @@ async function showScriptVersion(versionId) {
     };
     const c = detail.cells;
     $('nbBody').innerHTML = `<div class="muted" style="font-size:12.5px;margin-bottom:12px">셀 ${c.total}개 · 실행 ${c.executable} · 건너뜀 ${c.skipped} (마크다운·raw·빈 코드 셀은 원본에만 남고 실행하지 않습니다) · <span class="mono">sha256 ${esc(detail.sha256.slice(0, 12))}</span> · ${(detail.size_bytes / 1024).toFixed(1)}KB
-      · <a href="${API}${base}/content" target="_blank">원본 파일</a> · <a href="/dev/notebook.html?script=${BT.script.id}&version=${versionId}" target="_blank">노트북 전체 보기</a></div>` +
+      · <a href="${API}${base}/content" target="_blank">원본 파일</a> · <a href="/view/batch-scripts/${BT.script.id}/versions/${versionId}" target="_blank">노트북 전체 보기</a></div>` +
       nb.cells.map((cell, i) => {
         const m = marks[i] || {}, run = m.executed;
         const badge = run ? `<span class="badge ok">Step ${m.sequence}</span>` : '<span class="badge">건너뜀</span>';

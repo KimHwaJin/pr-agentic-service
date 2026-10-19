@@ -3,6 +3,7 @@
 Proxy + landing page.
 """
 
+import json
 from html import escape
 from pathlib import Path
 
@@ -86,18 +87,38 @@ async def artifact_view(
         if lab
         else ""
     )
+    return render_view(
+        title=(artifact.get("metadata") or {}).get("title")
+        or artifact["name"],
+        badge=artifact["type"],
+        lab_button=lab_button,
+        content=f"/api/v1/artifacts/{escape(artifact_id)}/content",
+        kind=kind,
+    )
+
+
+def render_view(
+    *,
+    title: str,
+    badge: str,
+    content: str,
+    kind: str,
+    lab_button: str = "",
+    cells: list[dict] | None = None,
+) -> str:
+    """The landing page for one file.
+
+    ``content`` is where the page fetches it from. ``cells`` (batch scripts
+    only) marks each notebook cell as a Step or skipped.
+    """
+    marks = json.dumps(cells).replace("<", "\\u003c") if cells else "null"
     return (
-        VIEW.replace(
-            "__TITLE__",
-            escape(
-                (artifact.get("metadata") or {}).get("title")
-                or artifact["name"]
-            ),
-        )
-        .replace("__BADGE__", escape(artifact["type"]))
+        VIEW.replace("__TITLE__", escape(title))
+        .replace("__BADGE__", escape(badge))
         .replace("__LAB__", lab_button)
-        .replace("__ID__", escape(artifact_id))
+        .replace("__CONTENT__", content)
         .replace("__KIND__", kind)
+        .replace("__CELLS__", marks)
     )
 
 

@@ -30,6 +30,9 @@ main { max-width: 980px; margin: 0 auto; padding: 24px 16px 80px; }
 .cell-head .kind { font-size: 12px; color: var(--muted); }
 .cell-head .sp { flex: 1; }
 .status { font-size: 12px; color: var(--muted); }
+.run { font-size: 11.5px; padding: 1px 8px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); }
+.run.on { color: #2f7d4f; border-color: currentColor; }
+.cell.skip { opacity: .65; }
 .status.err { color: var(--bad); font-weight: 600; }
 pre, code { font: 12.5px/1.55 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
 .src { margin: 0; padding: 12px 14px; background: var(--code); overflow: auto; }
@@ -69,11 +72,13 @@ details.def pre { max-height: 420px; }
 <div class="top"><div class="in">
   <span class="badge">__BADGE__</span><h1>__TITLE__</h1>
   __LAB__
-  <a class="btn" href="/api/v1/artifacts/__ID__/content" download>⬇<span> 다운로드</span></a>
+  <a class="btn" href="__CONTENT__" download>⬇<span> 다운로드</span></a>
 </div></div>
 <main id="doc"><div class="state">불러오는 중…</div></main>
 <script>
 const KIND = '__KIND__';
+// batch scripts only: [{index, executed, sequence}] from pr-batch, else null
+const CELLS = __CELLS__;
 // The observation helper agent/codegen.py appends to every executor cell.
 const OBSERVE = /try: {2}# render figures[\s\S]*?print\("AGENTIC_OBSERVATION "[^\n]*\n?/;
 const doc = document.getElementById('doc');
@@ -121,12 +126,20 @@ function outputs(cell) {
   return parts;
 }
 
+// Step N / 건너뜀 of a batch script cell (only when CELLS is given)
+function runMark(index) {
+  const m = CELLS && CELLS.find(c => c.index === index);
+  if (!m) return {cls: '', badge: ''};
+  return m.executed ? {cls: '', badge: `<span class="run on">Step ${m.sequence}</span>`} : {cls: ' skip', badge: '<span class="run">건너뜀</span>'};
+}
+
 function renderNotebook(nb) {
   let html = '', toc = '', step = 0;
-  for (const cell of nb.cells || []) {
+  for (const [index, cell] of (nb.cells || []).entries()) {
     const source = txt(cell.source);
+    const mark = runMark(index);
     if (cell.cell_type === 'markdown') {
-      html += `<section class="cell"><div class="md">${md(source)}</div></section>`;
+      html += `<section class="cell${mark.cls}">${mark.badge ? `<div class="cell-head"><span class="kind">마크다운</span><span class="sp"></span>${mark.badge}</div>` : ''}<div class="md">${md(source)}</div></section>`;
       continue;
     }
     if (cell.cell_type !== 'code') continue;
@@ -138,10 +151,10 @@ function renderNotebook(nb) {
     const label = setup ? '실행 준비' : (name || '사용자 코드');
     toc += `<a href="#${id}" class="${failed ? 'err' : ''}">${step}. ${esc(label)}</a>`;
     const count = cell.execution_count == null ? ' ' : cell.execution_count;
-    html += `<section class="cell" id="${id}">
+    html += `<section class="cell${mark.cls}" id="${id}">
       <div class="cell-head"><span class="num">[${count}]</span><span class="name">${esc(label)}</span>
         <span class="kind">${name ? '분석 도구' : (setup ? '에이전트가 넣은 셀' : '')}</span><span class="sp"></span>
-        <span class="status ${failed ? 'err' : ''}">${failed ? '실패' : (outs.length ? `출력 ${outs.length}` : '')}</span></div>
+        <span class="status ${failed ? 'err' : ''}">${failed ? '실패' : (outs.length ? `출력 ${outs.length}` : '')}</span>${mark.badge}</div>
       <pre class="src"><code class="hljs">${py(main)}</code></pre>
       ${def ? `<details class="def"><summary>${setup ? '코드 보기' : '함수 코드 보기'} (${def.split('\n').length}줄)</summary><pre class="src"><code class="hljs">${py(def)}</code></pre></details>` : ''}
       ${outs.length ? `<div class="outs">${outs.join('')}</div>` : ''}
@@ -157,7 +170,7 @@ function renderNotebook(nb) {
   });
 }
 
-const CONTENT = '/api/v1/artifacts/__ID__/content';
+const CONTENT = '__CONTENT__';
 
 // CSV -> table (quoted fields, first row as header), capped for the page
 function csvTable(text, maxRows = 2000) {
