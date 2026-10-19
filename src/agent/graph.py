@@ -104,7 +104,7 @@ class AgentGraphs:
             middleware: list[AgentMiddleware[Any, Any, Any]] = [
                 PersonaMiddleware(self.settings.prompts_root),
                 JsonArgumentsMiddleware(),
-                ToolErrorMiddleware(on_error=_tool_error),
+                ToolErrorMiddleware(on_error=tool_error),
                 ModelCallLimitMiddleware(
                     run_limit=self.settings.agent_model_call_limit,
                     exit_behavior="end",
@@ -179,7 +179,7 @@ class AgentGraphs:
                 ]
             }
 
-        tokens = TokenBuffer(ctx.services.events, ctx.session_id, ctx.run_id)
+        tokens = TokenBuffer(ctx.emit)
         stream = graph.astream(
             command,
             config,
@@ -206,7 +206,7 @@ class AgentGraphs:
                                 "tool_call",
                                 {
                                     "name": call["name"],
-                                    "args": _brief(call["args"]),
+                                    "args": brief_args(call["args"]),
                                 },
                             )
         await tokens.flush()
@@ -226,7 +226,7 @@ class AgentGraphs:
         return TurnResult(None, last.text if last else "")
 
 
-def _tool_error(exc: Exception, request: Any) -> str:
+def tool_error(exc: Exception, request: Any) -> str:
     """Executor/validation problems go back to the model.
 
     The model can then adapt instead of failing the run.
@@ -255,7 +255,7 @@ def _dangling_tool_results(messages: list) -> list[ToolMessage]:
     ]
 
 
-def _brief(args: dict[str, Any], limit: int = 600) -> dict[str, Any]:
+def brief_args(args: dict[str, Any], limit: int = 600) -> dict[str, Any]:
     return {
         k: (v if len(repr(v)) <= limit else repr(v)[:limit] + "...")
         for k, v in args.items()

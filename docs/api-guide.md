@@ -145,7 +145,7 @@
 | POST | `/runtime-targets/{id}/probe`, `/drain`, `/activate`, `/disable`, `/purge` | 관리자. 다시 점검 / 새 작업 배정 중지(진행 중은 마저) / 배정 복귀 / 사용 중지 / 사용 중지된 대상 제거 |
 | POST | `/maintenance/drain`, `/maintenance/activate`, `/maintenance/runs` | 관리자. executor 전체의 새 실행 접수 중지 / 재개 / 진행 중 실행을 멈추는 점검 작업 생성 |
 
-POST의 `actor`는 클라이언트 값 대신 서버가 요청한 관리자(`{"type": "USER", "id": <사번>}`)로 채웁니다. 나머지 본문(`idempotency_key` 등)은 executor 형식 그대로입니다.
+POST의 `actor`는 클라이언트 값 대신 서버가 요청한 관리자(`{"type": "USER", "id": <users.id>}`)로 채웁니다. executor·pr-batch에 넘기는 사용자 ID(`context.user_id`, actor, JWT `sub`)는 모두 사번이 아닌 `users.id`(UUID)입니다. 화면에 이름·사번이 필요하면 `/users`로 찾습니다. 나머지 본문(`idempotency_key` 등)은 executor 형식 그대로입니다.
 
 executor가 응답하지 않으면 502 `executor_unavailable`입니다.
 
@@ -177,4 +177,18 @@ category: `background`(프로젝트 배경), `analysis_preferences`(분석 선�
 
 - `/api/v1/batch/{path}` → pr-batch `/api/v1/{path}`로 그대로 중계됩니다(`Idempotency-Key`, `If-Match` 헤더 전달). 사용자 인증은 이 서비스가 처리합니다.
 - `POST /api/v1/batch/scripts/from-notebook` `{artifact_id, name?}`: 세션 노트북을 배치 스크립트로 등록합니다.
-- pr-batch가 호출하는 `/internal/v1/execution-reports`는 서비스 간 API라 프론트에서 쓰지 않습니다.
+- 배치 실행의 노트북·리포트 artifact는 `/api/v1/artifacts/{id}`로 볼 수 있습니다(배치 소유자 = 실행의 `context.user_id`만).
+
+## 9. 배치 리포트
+
+배치 실행이 성공(`SUCCEEDED`)하면 서버가 리포트 작업을 하나 만들어 Agent로 결과를 분석하고, 리포트를 executor Artifact로 저장해 실행 노트북 끝에 붙입니다. 실패한 실행은 리포트가 없습니다. 같은 배치의 이전 실행 요약을 읽고 달라진 점을 함께 씁니다. 모두 내 배치 실행의 작업만 보입니다(`/api/v1/batch/*`와 다른 경로입니다).
+
+| Method | Path (`/api/v1` 아래) | 설명 |
+| --- | --- | --- |
+| GET | `/batch-reports?batch_id=&execution_id=&status=&cursor=&limit=` | 최신순 목록. `status`는 `QUEUED`, `COLLECTING`(노트북 준비 대기), `GENERATING`(Agent 작성 중), `MATERIALIZING`, `SUCCEEDED`, `FAILED` 중 쉼표로 여러 개 |
+| GET | `/batch-reports/{id}` | 상세: `markdown`, `summary`(다음 실행이 비교할 요약), `artifact_id`, `error`, `failed_stage`, `owner`(이름·사번), `execution`(trigger·context·metadata) |
+| GET | `/batch-reports/{id}/events?types=` | 저장된 진행 이벤트. 채팅 `GET /runs/{id}/events`와 같은 모양(`run_id` = 리포트 id) |
+| GET | `/batch-reports/{id}/stream` | SSE. 저장된 이벤트를 먼저 보내고 실시간 이벤트(`token`, `activity` 포함)를 이어서 보냅니다. `Last-Event-ID`(또는 `?after=`)로 이어 받기 |
+| POST | `/batch-reports/{id}/retry` | `FAILED` 작업만 다시 대기열로. 이미 쓴 리포트가 있으면 저장만 다시 합니다 |
+
+이벤트 종류와 `data`는 채팅 SSE와 같아서 채팅 컴포넌트를 그대로 쓸 수 있습니다: `run_status`(`queued` → `running` → [`waiting_executor`] → `succeeded`|`failed`), `token`, `activity`, `tool_call`, `artifact`(리포트·노트북), `message_final`(리포트 Markdown), `run_error`.

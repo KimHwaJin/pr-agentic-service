@@ -3,7 +3,7 @@
 from types import SimpleNamespace
 
 from agent import plan_format
-from agent.graph import _tool_error
+from agent.graph import tool_error
 from agent.tools.analysis import _plan_help, _referenced
 from core.workflows import spec
 
@@ -70,5 +70,5 @@ def test_argument_mismatch_lists_the_tool_arguments():
     exc = TypeError(
         "revise_call() got an unexpected keyword argument 'v__args'"
     )
-    message = _tool_error(exc, request)
+    message = tool_error(exc, request)
     assert message.endswith("이 도구의 인자: call, new_args")

@@ -30,6 +30,7 @@ scripts/         mock_llm.py(게이트웨이 대역), smoke_e2e.py(종단 점검
 - 컨테이너 하나에 API와 worker가 함께 돕니다. run은 PostgreSQL 큐에서 lease로 가져가 실행하고, 사용자 확인(HITL)이나 executor 결과를 기다리는 동안에는 Pod를 점유하지 않습니다. Pod가 죽으면 다른 Pod가 LangGraph 체크포인트에서 이어 갑니다.
 - 메인 Agent가 대화하다가 필요하면 분석 담당(analyst)으로 넘깁니다. analyst는 skill을 읽고 Workflow 1.0 형식으로 계획 후보를 만들어 승인을 받은 뒤, tool 함수(docstring 제거) + 호출 코드를 executor MULTI 실행에 Step으로 보냅니다. 조건부 tool은 앞 결과를 보고 판단해 같은 커널에 이어 실행합니다.
 - 분석이 끝나면 노트북을 확정(finalize)하고 리포트를 executor Artifact로 저장합니다.
+- 배치(pr-batch) 실행이 성공하면 worker가 배치 리포트 Agent로 결과를 분석해 리포트를 저장합니다. 같은 배치의 이전 실행 요약을 기억해 비교합니다(`/api/v1/batch-reports`).
 
 ## Docker Compose로 실행
 
@@ -81,5 +82,5 @@ uv run uvicorn main:app --app-dir src --port 8080
 - **executor**: `EXECUTOR_BASE_URL`, 결과 PVC 마운트 경로 `EXECUTOR_RESULT_ROOT`(executor의 SHARED_STORAGE_ROOT).
 - **설정 파일**: 레포 루트의 `config.<ENV>.yml`(local, dev, stg, prd)을 이미지에 넣고, `ENV`로 어느 파일을 읽을지 고릅니다. 우선순위는 파일 < `.env` < 환경변수입니다. 모델 목록(`models`), executor 경로(`storage_root`, `storage_executor_path`, `executor_result_root`), 비밀값이 모두 이 파일에 있습니다. 자세한 규칙은 [docs/design/03-config.md](docs/design/03-config.md).
 - **JupyterLab 링크**: `NOTEBOOK_LAB_BASE_URL`(Lab 서버 주소), Lab 루트가 Jupyter 공유 저장소 루트와 다르면 `NOTEBOOK_LAB_PATH_PREFIX`.
-- **pr-batch**: `BATCH_BASE_URL`, `BATCH_JWT_SECRET`(pr-batch의 BATCH_AUTH_SECRET), `BATCH_REPORT_JWT_SECRET`.
+- **pr-batch**: `BATCH_BASE_URL`, `BATCH_JWT_SECRET`(pr-batch의 BATCH_AUTH_SECRET). 배치 리포트는 `BATCH_REPORT_MODEL`(비우면 기본 모델), `BATCH_REPORT_COLLECT_TIMEOUT_SECONDS`, `BATCH_REPORT_MEMORY_RUNS`.
 - 배포 예시: [deploy/kubernetes/deployment.yml](deploy/kubernetes/deployment.yml)

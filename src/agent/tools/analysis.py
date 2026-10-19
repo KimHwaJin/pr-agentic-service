@@ -70,7 +70,6 @@ def _owner(runtime: Runtime) -> SourceOwner:
     ctx = runtime.context
     return SourceOwner(
         ctx.user_id,
-        ctx.employee_id,
         ctx.project_id,
         ctx.session_id,
         ctx.run_id,
@@ -674,7 +673,7 @@ async def _submit_now(
         receipt = await executor.submit(
             idempotency_key=_key(runtime, "submit"),
             context={
-                "user_id": ctx.employee_id,
+                "user_id": ctx.user_id,
                 "task_id": ctx.run_id,
                 "project_id": ctx.project_id,
                 "session_id": ctx.session_id,
@@ -1090,7 +1089,7 @@ async def write_report(title: str, focus: str, runtime: Runtime) -> Command:
                 "lab_url": lab_url(
                     settings,
                     notebook["storage"].get("relative_path"),
-                    ctx.employee_id,
+                    ctx.user_id,
                 ),
             },
         )
@@ -1145,7 +1144,7 @@ async def save_workflow(
             f" 사용자 메시지: {feedback}" if feedback else ""
         )
     document["workflow"]["name"] = answer.get("name") or name
-    document["workflow"]["actor"] = {"type": "USER", "id": ctx.employee_id}
+    document["workflow"]["actor"] = {"type": "USER", "id": ctx.user_id}
     async with ctx.activity("workflow_saving"):  # embeds the queries
         workflow = await ctx.services.workflows.create(
             author_id=ctx.user_id,

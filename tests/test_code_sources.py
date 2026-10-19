@@ -6,18 +6,18 @@ from langchain_core.messages import AIMessage, HumanMessage
 from core.executor.sources import SourceOwner, file_name
 from core.executor.storage import SharedStorage
 
-OWNER = SourceOwner("u-1", "00123", "p-1", "s-1", "r-1")
+OWNER = SourceOwner("u-1", "p-1", "s-1", "r-1")
 
 
 def test_paths_follow_owner_run_and_operation():
     folder = OWNER.folder(2, "run_plan")
     assert folder == (
-        "users/00123/projects/p-1/sessions/s-1/runs/r-1/02-run_plan"
+        "users/u-1/projects/p-1/sessions/s-1/runs/r-1/02-run_plan"
     )
     assert file_name(0, "setup") == "00-setup.py"
     assert file_name(3, "tool", "merge_data") == "03-tool-merge_data.py"
     assert (
-        SourceOwner("u", "a/../b", "p", "s", "r")
+        SourceOwner("a/../b", "p", "s", "r")
         .folder(1, "x")
         .startswith("users/a-..-b/")
     )
@@ -53,7 +53,6 @@ def test_operation_folder_counts_execution_calls_of_this_turn():
     ]
     context = SimpleNamespace(
         user_id="u-1",
-        employee_id="00123",
         project_id="p-1",
         session_id="s-1",
         run_id="r-1",

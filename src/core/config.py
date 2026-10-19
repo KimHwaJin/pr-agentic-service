@@ -199,9 +199,15 @@ class Settings(BaseSettings):
     batch_base_url: str = "http://localhost:8100"
     batch_jwt_secret: str = ""  # we sign: iss=agentic, aud=pr-batch
     batch_jwt_issuer: str = "prj_re"
-    batch_report_jwt_secret: str = (
-        ""  # pr-batch signs: iss=pr-batch, aud=prj_re-report
-    )
+    # Reports of successful BATCH executions (worker.batch_reports).
+    # empty = the default model
+    batch_report_model: str = ""
+    # how long COLLECTING waits for the executor's notebook projection
+    batch_report_collect_timeout_seconds: int = 1800
+    batch_report_poll_seconds: float = 10
+    # previous runs' summaries the agent reads (memory per batch)
+    batch_report_memory_runs: int = Field(5, ge=0, le=50)
+    batch_report_model_call_limit: int = 20
 
     @model_validator(mode="after")
     def _guard(self) -> "Settings":

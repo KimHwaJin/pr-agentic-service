@@ -38,7 +38,7 @@ def _lab_url(services, user, artifact: dict) -> str | None:
     return lab_url(
         services.settings,
         artifact["storage"].get("relative_path"),
-        user.employee_id,
+        user.id,
     )
 
 

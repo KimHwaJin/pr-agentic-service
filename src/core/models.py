@@ -233,26 +233,64 @@ class WorkflowQueryVector(Base):
 
 
 class BatchReportJob(Timestamped, Base):
+    """The report of one successful BATCH execution (worker.batch_reports).
+
+    One per execution: ``idempotency_key`` is ``batch-report:{execution_id}``.
+    ``owner_id`` is the execution's ``context.user_id`` (users.id); only that
+    user sees the job. ``execution`` keeps the trigger/context/metadata the
+    job was started from.
+    """
+
     __tablename__ = "batch_report_jobs"
     __table_args__ = (UniqueConstraint("idempotency_key"),)
     id: Mapped[str] = mapped_column(ID, primary_key=True, default=new_id)
     idempotency_key: Mapped[str] = mapped_column(String(200))
-    request_hash: Mapped[str] = mapped_column(String(64))
-    owner_id: Mapped[str] = mapped_column(String(64))
-    execution_id: Mapped[str] = mapped_column(ID)
-    batch_run_id: Mapped[str] = mapped_column(String(64))
-    request: Mapped[dict[str, Any]] = mapped_column(JSONB)
+    owner_id: Mapped[str] = mapped_column(String(64), index=True)
+    execution_id: Mapped[str] = mapped_column(ID, index=True)
+    batch_id: Mapped[str | None] = mapped_column(String(64), index=True)
+    batch_run_id: Mapped[str | None] = mapped_column(String(64))
+    execution: Mapped[dict[str, Any]] = mapped_column(JSONB)
     # QUEUED -> COLLECTING -> GENERATING -> MATERIALIZING -> SUCCEEDED | FAILED
     state: Mapped[str] = mapped_column(
         String(16), default="QUEUED", index=True
     )
     failed_stage: Mapped[str | None] = mapped_column(String(16))
+    title: Mapped[str | None] = mapped_column(String(200))
     markdown: Mapped[str | None] = mapped_column(Text)
+    # what the next run of the batch reads (batch memory)
+    summary: Mapped[str | None] = mapped_column(Text)
     artifact_id: Mapped[str | None] = mapped_column(ID)
     error: Mapped[str | None] = mapped_column(Text)
     lease_owner: Mapped[str | None] = mapped_column(String(128))
+    # also "not before" while COLLECTING waits for the notebook
     lease_expires_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True)
+    )
+    # start of the current wait for the notebook (a retry waits anew)
+    collecting_since: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True)
+    )
+    finished_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True)
+    )
+
+
+class BatchReportEvent(Base):
+    """Progress of a report job, in the chat event format.
+
+    ``{id, type, run_id=job id, data}`` with the types of
+    ``core.contracts.events`` so the chat components draw a job too.
+    """
+
+    __tablename__ = "batch_report_events"
+    id: Mapped[int] = mapped_column(
+        BigInteger, primary_key=True, autoincrement=True
+    )
+    job_id: Mapped[str] = mapped_column(ID, index=True)
+    type: Mapped[str] = mapped_column(String(40))
+    data: Mapped[dict[str, Any]] = mapped_column(JSONB)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow
     )
 
 

@@ -30,7 +30,6 @@ from core.models import (
     Project,
     Run,
     RunEvent,
-    User,
 )
 from core.services import Services
 from worker.executor_events import matches
@@ -171,7 +170,6 @@ class RunScheduler:
         async with self.services.db.sessions() as db:
             session = await get_row(db, ChatSession, run.session_id)
             project = await get_row(db, Project, run.project_id)
-            user = await get_row(db, User, run.user_id)
         level = (
             session.code_level
             or project.code_level
@@ -183,7 +181,6 @@ class RunScheduler:
             session_id=run.session_id,
             project_id=run.project_id,
             user_id=run.user_id,
-            employee_id=user.employee_id,
             model=run.model,
             code_level=level,
             project_prompt=project.system_prompt,

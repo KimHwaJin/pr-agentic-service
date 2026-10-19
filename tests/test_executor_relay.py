@@ -30,8 +30,8 @@ def test_only_listed_routes_are_relayed():
 
 
 def test_runtime_registration_is_recorded_as_the_admin():
-    user = cast(Any, SimpleNamespace(employee_id="00123"))
+    user = cast(Any, SimpleNamespace(id="u-1"))
     body = _as_user(
         json.dumps({"name": "x", "actor": {"id": "spoof"}}).encode(), user
     )
-    assert json.loads(body)["actor"] == {"type": "USER", "id": "00123"}
+    assert json.loads(body)["actor"] == {"type": "USER", "id": "u-1"}

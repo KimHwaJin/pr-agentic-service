@@ -3,7 +3,8 @@
 The executor has no user authentication, so every route that reaches an
 execution or artifact through this service checks access here: by project
 membership (via the session or our code-source index), else by the
-execution's own context.
+execution's own context. User ids are our ``users.id`` (UUID) everywhere:
+executor ``context.user_id``, pr-batch owners and actors.
 """
 
 import time
@@ -14,7 +15,7 @@ from sqlalchemy import select
 
 from api_service.deps import project_for, session_for
 from api_service.errors import ApiError
-from core.executor.client import ExecutorError
+from core.executor.client import ExecutorError, trigger_type
 from core.models import CodeSource, User
 from core.services import Services
 
@@ -31,7 +32,7 @@ async def scope_execution_list(
         params["project_id"] = session.project_id
     elif project_id := params.get("project_id"):
         await project_for(services, user, project_id)
-    params["user_id"] = user.employee_id
+    params["user_id"] = user.id
 
 
 async def check_execution(
@@ -40,28 +41,27 @@ async def check_execution(
     project_id, owner = await execution_owner(services, execution_id)
     if project_id is not None:
         await project_for(services, user, project_id)  # 404 when not a member
-    elif owner != user.employee_id:
+    elif owner != user.id:
         raise HTTPException(404, "Execution not found.")
 
 
 async def execution_owner(
     services: Services, execution_id: str
 ) -> tuple[str | None, str]:
-    """(project id, employee id) of an execution, cached."""
+    """(project id, user id) of an execution, cached."""
     hit = _owners.get(execution_id)
     if hit and hit[0] > time.monotonic():
         return hit[1], hit[2]
     async with services.db.sessions() as db:
         row = (
             await db.execute(
-                select(CodeSource.project_id, User.employee_id)
-                .join(User, User.id == CodeSource.user_id)
+                select(CodeSource.project_id, CodeSource.user_id)
                 .where(CodeSource.execution_id == execution_id)
                 .limit(1)
             )
         ).first()
     if row is not None:
-        owner = (row.project_id, row.employee_id)
+        owner = (row.project_id, row.user_id)
     else:  # not sent by this service (e.g. pr-batch): ask the executor
         try:
             execution = await services.executor.get(execution_id)
@@ -99,6 +99,11 @@ async def execution_of_session(
 
 
 async def owned_artifact(services, user, artifact_id: str) -> dict:
+    """A session's artifact for its project members.
+
+    A batch execution's artifact (its notebook, its report) for the user
+    who owns the batch.
+    """
     try:
         artifact = await services.executor.artifact(artifact_id)
         execution = await services.executor.get(
@@ -106,7 +111,12 @@ async def owned_artifact(services, user, artifact_id: str) -> dict:
         )
     except ExecutorError:
         raise HTTPException(404, "Artifact not found.") from None
-    session_id = execution["context"].get("session_id")
+    context = execution.get("context") or {}
+    if trigger_type(execution) == "BATCH":
+        if context.get("user_id") != user.id:
+            raise HTTPException(404, "Artifact not found.")
+        return artifact
+    session_id = context.get("session_id")
     if not session_id:
         raise HTTPException(404, "Artifact not found.")
     await session_for(services, user, session_id)

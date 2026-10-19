@@ -10,6 +10,7 @@ from api_service.routers import (
     artifacts,
     auth,
     batch,
+    batch_reports,
     executor,
     images,
     models,
@@ -33,6 +34,7 @@ def mount_api(app: FastAPI, settings: Settings) -> None:
         images,
         workflows,
         executor,
+        batch_reports,
     ):
         api.include_router(module.router)
     app.include_router(api)

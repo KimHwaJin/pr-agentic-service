@@ -1,8 +1,9 @@
 """Report writer: turns executed code and its outputs into a Markdown report.
 
-Used by the analyst (interactive sessions) and by pr-batch report jobs. The
-model only sees bounded evidence (call lines, observations, text output,
-errors); numbers must come from that evidence.
+Used by the analyst (interactive sessions); the batch report agent
+(agent.batch) starts from the same evidence. The model only sees bounded
+evidence (call lines, observations, text output, errors); numbers must come
+from that evidence.
 """
 
 import json
@@ -50,7 +51,7 @@ async def collect_evidence(
             )
             source = ""
             if not lineage.get("tool_name") and view.get("available"):
-                source = _source_preview(services, step_result["result_ref"])
+                source = source_preview(services, step_result["result_ref"])
             status = step_result.get("status")
             error = step_result.get("error_message")
             images = view.get("images")
@@ -81,7 +82,7 @@ def _dumps(value: Any) -> str:
     return json.dumps(value, ensure_ascii=False, default=str)
 
 
-def _source_preview(services: Services, result_ref: dict[str, Any]) -> str:
+def source_preview(services: Services, result_ref: dict[str, Any]) -> str:
     manifest = json.loads(
         services.storage.resolve_result(result_ref["relative_path"]).read_text(
             "utf-8"
@@ -135,25 +136,3 @@ async def generate_report(
         f"# 근거\n{evidence}"
     )
     return await write_markdown(services, ctx.model, system, request)
-
-
-async def generate_batch_report(
-    services: Services, execution_id: str, options: dict[str, Any]
-) -> str:
-    """Report for a pr-batch script run.
-
-    No conversation, no plan, no project context.
-    """
-    evidence = await collect_evidence(services, execution_id, plan=None)
-    system = load_prompt(services.settings.prompts_root, "reporter").render(
-        project_prompt="없음", report_preferences="없음"
-    )
-    title = options.get("title") or "배치 실행 리포트"
-    request = (
-        f"# 제목\n{title}\n\n"
-        "# 사용자 요청\n배치 스크립트 실행 결과 정리\n\n"
-        f"# 근거\n{evidence}"
-    )
-    return await write_markdown(
-        services, services.settings.default_model.name, system, request
-    )

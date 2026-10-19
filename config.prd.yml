@@ -26,7 +26,6 @@ notebook_lab_base_url: https://executor-jupyter-lab.frodo.com
 
 batch_base_url: http://<pr-batch-host>:8100
 batch_jwt_secret: <batch-jwt-secret>
-batch_report_jwt_secret: <batch-report-jwt-secret>
 
 # Models served in this environment (fill in): name = served model name,
 # input: [text] or [text, image] as the deployed model supports.

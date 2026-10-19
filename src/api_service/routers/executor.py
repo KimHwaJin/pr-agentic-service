@@ -97,7 +97,7 @@ def _as_user(body: bytes, user: User) -> bytes:
     except ValueError:
         return body  # the executor answers with its validation error
     if isinstance(data, dict):
-        data["actor"] = {"type": "USER", "id": user.employee_id}
+        data["actor"] = {"type": "USER", "id": user.id}
     return json.dumps(data).encode()
 
 

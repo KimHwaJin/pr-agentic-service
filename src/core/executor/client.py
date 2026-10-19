@@ -9,6 +9,16 @@ log = logging.getLogger(__name__)
 AGENT_ACTOR = {"type": "AGENT", "id": "pr-agentic-service"}
 
 
+def trigger_type(execution: dict[str, Any]) -> str | None:
+    """INTERACTIVE | BATCH of an execution or an event's ``execution``.
+
+    ``trigger.type``; executions read before the executor exposed the
+    trigger object carry ``trigger_type``.
+    """
+    trigger = execution.get("trigger") or {}
+    return trigger.get("type") or execution.get("trigger_type")
+
+
 class ExecutorError(Exception):
     def __init__(self, status: int, body: Any):
         super().__init__(f"executor error {status}: {body}")

@@ -3,7 +3,9 @@
 ``executor.events`` is a Redis Stream with at-least-once delivery. Each event
 is stored once in ``executor_inbox`` (dedup on event_id) before XACK, so a run
 that starts waiting after its event already arrived still finds it (see
-``RunScheduler``). Redis 6.0 compatible: stale pending entries are reclaimed
+``RunScheduler``). ``execution.completed`` also goes to ``on_completed``,
+which starts the report of a successful batch run (worker.batch_reports).
+Redis 6.0 compatible: stale pending entries are reclaimed
 with XPENDING + XCLAIM.
 """
 
@@ -91,6 +93,7 @@ class ExecutorEventConsumer:
         consumer: str,
         on_wake,
         on_progress,
+        on_completed,
     ):
         self.db, self.redis, self.stream, self.group, self.consumer = (
             db,
@@ -101,6 +104,8 @@ class ExecutorEventConsumer:
         )
         self.on_wake = on_wake  # async (run_id) -> None
         self.on_progress = on_progress  # async (execution_id, event) -> None
+        # async (execution_id, payload) -> None
+        self.on_completed = on_completed
 
     async def run_forever(self) -> None:
         try:
@@ -165,6 +170,8 @@ class ExecutorEventConsumer:
             run_id = await deliver(self.db, event)
             if run_id:
                 await self.on_wake(run_id)
+            if event["event_type"] == "execution.completed":
+                await self.on_completed(event["execution_id"], payload)
         else:
             await self.on_progress(event["execution_id"], event)
         await self.redis.xack(self.stream, self.group, message_id)

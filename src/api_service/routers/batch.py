@@ -1,27 +1,24 @@
 """pr-batch integration.
 
-* Gateway: ``/api/v1/batch/{path}`` relays to pr-batch ``/api/v1/{path}``
-  with a short-lived JWT for the SSO user (HS256, aud=pr-batch,
-  scope=batch:manage, <= 300 s).
-* ``/internal/v1/execution-reports``: pr-batch asks for a report of a
-  finished batch execution, authenticated with its own service token
-  (iss=pr-batch, aud=prj_re-report).
+``/api/v1/batch/{path}`` relays to pr-batch ``/api/v1/{path}`` with a
+short-lived JWT for the SSO user (HS256, aud=pr-batch, sub=users.id,
+scope=batch:manage, <= 300 s).
+
+Reports of finished batch runs are not asked for by pr-batch: the worker
+starts one when the executor reports a successful BATCH execution (see
+``worker.batch_reports``); users read them under ``/api/v1/batch-reports``.
 """
 
 import hashlib
-import json
 import time
-import uuid
 
 import httpx
 import jwt
-from fastapi import APIRouter, Header, HTTPException, Request, Response
-from sqlalchemy import select
+from fastapi import APIRouter, HTTPException, Request, Response
 
 from api_service.deps import ServicesDep, UserDep
-from api_service.schemas.batch import BatchScriptFromNotebook, ReportJobCreate
+from api_service.schemas.batch import BatchScriptFromNotebook
 from api_service.services.access import owned_artifact
-from core.models import BatchReportJob
 
 router = APIRouter(tags=["batch"])
 FORWARD_HEADERS = ("content-type", "idempotency-key", "if-match", "accept")
@@ -41,7 +38,7 @@ def _batch_token(services, user) -> str:
         raise HTTPException(503, "pr-batch integration is not configured.")
     now = int(time.time())
     claims = {
-        "sub": user.employee_id,
+        "sub": user.id,
         "iss": settings.batch_jwt_issuer,
         "aud": "pr-batch",
         "iat": now,
@@ -117,119 +114,3 @@ async def batch_gateway(
         if k.lower() in {"etag", "location", "content-type"}
     }
     return Response(result.content, result.status_code, headers=passthrough)
-
-
-# --- called by pr-batch -----------------------------------------------------
-
-
-def _verify_service_token(services, authorization: str | None) -> dict:
-    secret = services.settings.batch_report_jwt_secret
-    if (
-        not secret
-        or not authorization
-        or not authorization.startswith("Bearer ")
-    ):
-        raise HTTPException(401, "Service token required.")
-    try:
-        return jwt.decode(
-            authorization[7:],
-            secret,
-            algorithms=["HS256"],
-            audience="prj_re-report",
-            issuer="pr-batch",
-            options={"require": ["exp", "iat", "iss", "aud"]},
-        )
-    except jwt.PyJWTError:
-        raise HTTPException(401, "Invalid service token.") from None
-
-
-def _job_view(job: BatchReportJob) -> dict:
-    return {
-        "report_job_id": job.id,
-        "state": job.state,
-        "failed_stage": job.failed_stage,
-        "execution_id": job.execution_id,
-        "batch_run_id": job.batch_run_id,
-        "artifact_id": job.artifact_id,
-        "notebook_appended": job.state == "SUCCEEDED",
-        "error": job.error,
-        "updated_at": job.updated_at,
-    }
-
-
-@router.post("/internal/v1/execution-reports", status_code=202)
-async def create_report_job(
-    body: ReportJobCreate,
-    services: ServicesDep,
-    authorization: str | None = Header(None),
-    idempotency_key: str = Header(..., alias="Idempotency-Key"),
-):
-    claims = _verify_service_token(services, authorization)
-    if claims.get("owner_id", body.owner_id) != body.owner_id:
-        raise HTTPException(403, "Token owner does not match the request.")
-    execution = await services.executor.get(body.execution_id)
-    if execution["context"]["user_id"] != body.owner_id:
-        raise HTTPException(403, "The execution belongs to another user.")
-    digest = hashlib.sha256(
-        json.dumps(body.model_dump(), sort_keys=True).encode()
-    ).hexdigest()
-    async with services.db.sessions() as db:
-        existing = await db.scalar(
-            select(BatchReportJob).where(
-                BatchReportJob.idempotency_key == idempotency_key
-            )
-        )
-        if existing:
-            if existing.request_hash != digest:
-                raise HTTPException(
-                    409, "Idempotency-Key reused with a different request."
-                )
-            return _job_view(existing)
-        job = BatchReportJob(
-            id=str(uuid.uuid4()),
-            idempotency_key=idempotency_key,
-            request_hash=digest,
-            owner_id=body.owner_id,
-            execution_id=body.execution_id,
-            batch_run_id=body.batch_run_id,
-            request=body.model_dump(),
-        )
-        db.add(job)
-        await db.commit()
-        return _job_view(job)
-
-
-@router.get("/internal/v1/execution-reports/{job_id}")
-async def get_report_job(
-    job_id: str,
-    services: ServicesDep,
-    authorization: str | None = Header(None),
-):
-    _verify_service_token(services, authorization)
-    async with services.db.sessions() as db:
-        job = await db.get(BatchReportJob, job_id)
-    if job is None:
-        raise HTTPException(404, "Report job not found.")
-    return _job_view(job)
-
-
-@router.post("/internal/v1/execution-reports/{job_id}/retry", status_code=202)
-async def retry_report_job(
-    job_id: str,
-    services: ServicesDep,
-    authorization: str | None = Header(None),
-):
-    _verify_service_token(services, authorization)
-    async with services.db.sessions() as db:
-        job = await db.get(BatchReportJob, job_id, with_for_update=True)
-        if job is None:
-            raise HTTPException(404, "Report job not found.")
-        if job.state != "FAILED":
-            raise HTTPException(409, "Only failed jobs can be retried.")
-        job.state, job.lease_owner, job.lease_expires_at = (
-            job.failed_stage or "QUEUED",
-            None,
-            None,
-        )
-        await db.commit()
-        return _job_view(job)

@@ -31,7 +31,6 @@ class SourceOwner:
     """Who and which turn a piece of code belongs to."""
 
     user_id: str
-    employee_id: str
     project_id: str
     session_id: str
     run_id: str
@@ -40,7 +39,7 @@ class SourceOwner:
         return "/".join(
             [
                 "users",
-                safe_part(self.employee_id),
+                safe_part(self.user_id),
                 "projects",
                 safe_part(self.project_id),
                 "sessions",

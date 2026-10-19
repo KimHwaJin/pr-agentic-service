@@ -26,6 +26,7 @@ class Worker:
             settings, AsyncPostgresSaver(pool), services.memory.store
         )
         self.scheduler = RunScheduler(services, graphs, self.owner)
+        self.reports = BatchReportWorker(services, self.owner)
         self.consumer = ExecutorEventConsumer(
             services.db,
             services.redis,
@@ -34,6 +35,7 @@ class Worker:
             self.owner,
             on_wake=self.scheduler.notify,
             on_progress=self.scheduler.progress,
+            on_completed=self.reports.enqueue,
         )
         self.recovery = MissedEventRecovery(
             services.db,
@@ -41,7 +43,6 @@ class Worker:
             on_wake=self.scheduler.notify,
             after_seconds=settings.executor_event_recovery_seconds,
         )
-        self.reports = BatchReportWorker(services, self.owner)
         self.retention = Retention(services)
         self.tasks: list[asyncio.Task] = []
 

@@ -19,7 +19,6 @@ class RunContext:
     session_id: str
     project_id: str
     user_id: str
-    employee_id: str
     model: str
     code_level: int
     project_prompt: str
@@ -61,3 +60,34 @@ class AnalysisState(AgentState):
     reports: NotRequired[list[dict[str, Any]]]
     nudges: NotRequired[int]
     notice: NotRequired[str | None]
+
+
+@dataclass
+class BatchReportContext:
+    """Runtime context of the batch report agent (agent.batch).
+
+    Its events go to the report job's stream instead of a session.
+    """
+
+    services: Services
+    job_id: str
+    execution_id: str
+    batch_id: str | None
+    model: str
+    cache: dict[str, Any] = field(default_factory=dict)
+
+    async def emit(
+        self, type: str, data: dict[str, Any], durable: bool = True
+    ) -> None:
+        await self.services.events.emit_report(
+            self.job_id, type, data, durable
+        )
+
+    def activity(self, kind: str, label: str | None = None, **detail: Any):
+        return activity(self.emit, kind, label, **detail)
+
+
+class BatchReportState(AgentState):
+    """report: what submit_report handed in ({title, markdown, summary})."""
+
+    report: NotRequired[dict[str, Any] | None]
