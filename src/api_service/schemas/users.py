@@ -17,6 +17,15 @@ class UserRead(Model):
     is_active: bool
 
 
+class UserBrief(Model):
+    """Who an id is, for pages that show user ids (executions)."""
+
+    id: str
+    employee_id: str
+    name: str
+    department: str | None
+
+
 class ModelList(Model):
     items: list[ModelSpec]
 

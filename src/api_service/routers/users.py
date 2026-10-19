@@ -2,7 +2,12 @@ from fastapi import APIRouter, HTTPException
 from sqlalchemy import select
 
 from api_service.deps import AdminDep, ServicesDep, UserDep
-from api_service.schemas.users import Me, UserAdminUpdate, UserRead
+from api_service.schemas.users import (
+    Me,
+    UserAdminUpdate,
+    UserBrief,
+    UserRead,
+)
 from core.models import Project, ProjectMember, User
 
 router = APIRouter(tags=["users"])
@@ -27,6 +32,34 @@ async def me(services: ServicesDep, user: UserDep):
         can_switch_role=settings.env == "local"
         and settings.sso_adapter == "dev",
     )
+
+
+@router.get("/users/lookup", response_model=dict[str, UserBrief])
+async def lookup_users(services: ServicesDep, user: UserDep, ids: str = ""):
+    """Names of user ids shown on a page (executor ``context.user_id``).
+
+    ``ids`` is comma separated, at most 200. A user resolves only their own
+    id; an administrator resolves anyone's. Unknown ids are left out.
+    """
+    wanted = list(
+        dict.fromkeys(i.strip() for i in ids.split(",") if i.strip())
+    )
+    if len(wanted) > 200:
+        raise HTTPException(422, "At most 200 ids.")
+    return await users_by_id(
+        services,
+        wanted
+        if user.role == "admin"
+        else [i for i in wanted if i == user.id],
+    )
+
+
+async def users_by_id(services, ids: list[str]) -> dict[str, User]:
+    if not ids:
+        return {}
+    async with services.db.sessions() as db:
+        rows = (await db.scalars(select(User).where(User.id.in_(ids)))).all()
+    return {u.id: u for u in rows}
 
 
 @router.get("/admin/users", response_model=list[UserRead])
