@@ -551,7 +551,7 @@
   </div>
 </div>
 
-<div class="modal-back" id="execModal" onclick="if (event.target === this) this.classList.remove('open')">
+<div class="modal-back" id="execModal" style="z-index:30" onclick="if (event.target === this) this.classList.remove('open')">
   <div class="modal" style="width:min(1000px,100%)">
     <div class="modal-head"><h2 id="execTitle">실행</h2><button class="ghost" onclick="$('execModal').classList.remove('open')">닫기</button></div>
     <div class="systabs" id="execTabs" style="padding:12px 22px 0;margin:0"></div>
@@ -1284,6 +1284,22 @@ async function renderBatches() {
         <button class="ghost" onclick="toggleBatch('${b.id}', ${b.enabled}, ${b.revision})">${b.enabled ? '끄기' : '켜기'}</button></td></tr>`).join('')}</tbody></table>`
     : '<div class="muted">배치가 없습니다. 먼저 스크립트를 등록하고 새 배치를 만드세요.</div>';
 }
+/* why a batch run did not complete, from pr-batch's run fields */
+const SKIP_TEXT = { OVERLAP: '앞 실행이 진행 중이라 건너뜀 (겹침 정책)', SKIPPED_CAPACITY: '대기열이 가득 차 건너뜀' };
+const CANCEL_TEXT = { USER: '사용자가 취소', POLICY: '정책에 따라 취소 (새 실행으로 교체)' };
+const FAILURE_TEXT = { TOOL_ERROR: '코드 실행 오류', INFRASTRUCTURE_ERROR: '인프라 오류', WORKER_SHUTDOWN: 'executor worker 종료', RUNTIME_UNAVAILABLE: '런타임을 쓸 수 없음',
+  LEASE_EXPIRED: '실행 lease 만료', INTERNAL_ERROR: 'executor 내부 오류', OPERATION_WAIT_TIMEOUT: '다음 작업 대기 시간 초과', OPERATION_TIMEOUT: '작업 시간 초과', STEP_TIMEOUT: 'Step 시간 초과',
+  EXECUTION_TIMEOUT: '실행 시간 초과', OUTPUT_LIMIT_EXCEEDED: '출력 크기 초과', RUNTIME_SESSION_LOST: '커널 세션 끊김', COMPLETION_FAILED: '결과 마무리 실패' };
+function runReason(r) {
+  const lines = [];
+  if (r.status === 'SKIPPED' && r.skip_reason) lines.push(SKIP_TEXT[r.skip_reason] || r.skip_reason);
+  if (r.status === 'CANCELLED' || r.cancel_requested) lines.push(`${CANCEL_TEXT[r.cancel_source] || '취소'}${r.cancel_reason ? `: ${r.cancel_reason}` : ''}`);
+  if (r.failure_type) lines.push(`실패: ${FAILURE_TEXT[r.failure_type] || r.failure_type} (${r.failure_type})`);
+  if (r.notebook_status === 'FAILED') lines.push('노트북 생성 실패');
+  if (r.last_error && r.status !== 'COMPLETED') lines.push(`마지막 연결 오류: ${r.last_error}`);
+  return lines.join('\n');
+}
+
 /* run history of one batch, in a popup */
 function openRuns(id) {
   const b = BT.batches.find(x => x.id === id); if (!b) return;
@@ -1301,10 +1317,12 @@ async function loadRuns(id) {
     const rep = r.execution_id && byExec[r.execution_id];
     const nb = r.result?.notebook_artifact_id;
     const start = r.started_at || r.submitted_at, end = r.finished_at || r.completed_at;
-    return `<tr><td>${withError(statusBadge(r.status), r.last_error)}</td><td>${short(r.id)}</td>
+    const why = runReason(r);
+    const badge = r.status === 'SKIPPED' && why ? `<span title="${esc(why)}" style="cursor:help;white-space:nowrap">${statusBadge(r.status)} <span class="muted">ⓘ</span></span>` : withError(statusBadge(r.status), why);
+    return `<tr${r.execution_id ? ` class="click" title="눌러서 executor 실행 상세 보기" onclick="openExecution('${r.execution_id}')"` : ''}><td onclick="event.stopPropagation()">${badge}</td><td>${short(r.id)}</td>
       <td>${esc(r.trigger)}</td><td>${fmtTime(start) || '<span class="muted">-</span>'}</td><td>${fmtTime(end) || '<span class="muted">-</span>'}</td><td>${dur(start, end)}</td>
-      <td>${nb ? `<a target="_blank" href="/view/artifacts/${nb}">보기</a>` : '<span class="muted">-</span>'}</td>
-      <td>${rep ? `<a href="#" onclick="event.preventDefault(); $('runsModal').classList.remove('open'); openReport('${rep.id}')">${reportBadge(rep.state)}</a>` : `<span class="muted">${r.status === 'SUCCEEDED' ? '대기 중' : '-'}</span>`}</td></tr>`;
+      <td onclick="event.stopPropagation()">${nb ? `<a target="_blank" href="/view/artifacts/${nb}">보기</a>` : '<span class="muted">-</span>'}</td>
+      <td onclick="event.stopPropagation()">${rep ? `<a href="#" onclick="event.preventDefault(); $('runsModal').classList.remove('open'); openReport('${rep.id}')">${reportBadge(rep.state)}</a>` : `<span class="muted">${r.status === 'SUCCEEDED' ? '대기 중' : '-'}</span>`}</td></tr>`;
   }).join('')}</tbody></table>` : '<div class="muted">아직 실행이 없습니다.</div>';
 }
 async function runBatch(id, button) {
