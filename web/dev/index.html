@@ -574,14 +574,14 @@
 </div>
 <div class="modal-back" id="batchModal" onclick="if (event.target === this) this.classList.remove('open')">
   <div class="modal" style="width:min(560px,100%)">
-    <div class="modal-head"><h2>새 배치</h2><button class="ghost" onclick="$('batchModal').classList.remove('open')">닫기</button></div>
+    <div class="modal-head"><h2 id="bmTitle">새 배치</h2><button class="ghost" onclick="$('batchModal').classList.remove('open')">닫기</button></div>
     <div class="modal-body">
       <div class="field"><label>이름</label><input id="bmName" maxlength="200" placeholder="예: 주간 수율 점검"></div>
-      <div class="field"><label>스크립트</label><select id="bmScript"></select></div>
+      <div class="field"><label>스크립트</label><select id="bmScript" onchange="$('bmVersion').value = ''"></select></div>
       <div class="field"><label>버전</label><input id="bmVersion" inputmode="numeric" placeholder="비우면 최신 버전"></div>
       <div class="field"><label>런타임</label><select id="bmRuntime"></select></div>
       <div class="field"><label>일정</label><select id="bmKind" onchange="syncScheduleInput()">
-        <option value="">수동 실행만</option><option value="INTERVAL">일정 간격 (분)</option><option value="DAILY">매일 정해진 시각</option><option value="CRON">Cron</option></select></div>
+        <option value="KEEP" id="bmKeep" hidden>기존 일정 유지</option><option value="">수동 실행만</option><option value="INTERVAL">일정 간격 (분)</option><option value="DAILY">매일 정해진 시각</option><option value="CRON">Cron</option></select></div>
       <div class="field" id="bmValueRow" style="display:none"><label id="bmValueLabel">값</label><input id="bmValue"></div>
       <div class="field bm-window" style="display:none"><label>시작 시각 (선택)</label><input id="bmStart" type="datetime-local"></div>
       <div class="field bm-window" style="display:none"><label>종료 시각 (선택)</label><input id="bmEnd" type="datetime-local"></div>
@@ -1289,7 +1289,7 @@ async function renderBatches() {
       <td>${b.enabled ? statusBadge('ACTIVE').replace('ACTIVE', '켜짐') : '<span class="badge">꺼짐</span>'}</td>
       <td style="white-space:nowrap" onclick="event.stopPropagation()"><button class="btn" onclick="runBatch('${b.id}', this)">지금 실행</button>
         ${b.schedule || b.enabled ? `<button class="ghost" onclick="toggleBatch('${b.id}', ${b.enabled}, ${b.revision})">${b.enabled ? '끄기' : '켜기'}</button>` : '<span class="muted" style="font-size:12.5px;padding:0 8px" title="일정이 있어야 켤 수 있습니다. 지금 실행은 언제든 됩니다.">일정 없음</span>'}
-        <button class="ghost" style="color:var(--bad)" onclick="deleteBatch('${b.id}')">삭제</button></td></tr>`).join('')}</tbody></table>`
+        <button class="ghost" onclick="openBatchModal('${b.id}')">수정</button><button class="ghost" style="color:var(--bad)" onclick="deleteBatch('${b.id}')">삭제</button></td></tr>`).join('')}</tbody></table>`
     : '<div class="muted">배치가 없습니다. 먼저 스크립트를 등록하고 새 배치를 만드세요.</div>';
 }
 /* why a batch run did not complete, from pr-batch's run fields */
@@ -1344,19 +1344,39 @@ async function toggleBatch(id, enabled, revision) {
   await api(`/batch/batches/${id}/${enabled ? 'disable' : 'enable'}`, { method: 'POST', headers: { ...idemKey(), 'If-Match': `"${revision}"` } });
   renderBatches();
 }
-async function openBatchModal() {
+// the same window creates a batch or, with an id, edits it (PATCH with If-Match)
+async function openBatchModal(editId = null) {
   await loadBatchLists();
   if (!BT.scripts.length) { alert('먼저 스크립트를 등록하세요.'); return openScriptModal(); }
   BT.runtimes = (await api('/batch/runtimes')).items;
-  $('bmName').value = ''; $('bmVersion').value = ''; $('bmKind').value = ''; $('bmValue').value = ''; $('bmStart').value = ''; $('bmEnd').value = '';
+  const b = editId ? BT.batches.find(x => x.id === editId) : null;
+  BT.editing = b;
+  $('bmTitle').textContent = b ? `배치 수정 · ${b.name}` : '새 배치'; $('bmSave').textContent = b ? '저장' : '만들기';
+  $('bmName').value = b?.name || ''; $('bmVersion').value = b ? b.script_version_number : '';
   $('bmScript').innerHTML = BT.scripts.map(x => `<option value="${x.id}">${esc(x.name)} (최신 v${x.latest_version.version_number})</option>`).join('');
-  $('bmRuntime').innerHTML = BT.runtimes.map(r => `<option value="${esc(r.profile)}" ${r.profile === 'default' ? 'selected' : ''}>${esc(r.type)} · ${esc(r.profile)}</option>`).join('');
+  if (b) $('bmScript').value = b.script_id;
+  $('bmRuntime').innerHTML = BT.runtimes.map(r => `<option value="${esc(r.profile)}">${esc(r.type)} · ${esc(r.profile)}</option>`).join('');
+  $('bmRuntime').value = b ? b.runtime.profile : (BT.runtimes.some(r => r.profile === 'default') ? 'default' : BT.runtimes[0]?.profile);
+  const form = scheduleForm(b?.schedule);
+  $('bmKeep').hidden = form.kind !== 'KEEP';
+  $('bmKind').value = form.kind; $('bmValue').value = form.value; $('bmStart').value = form.start; $('bmEnd').value = form.end;
+  BT.scheduleForm = form;
   syncScheduleInput(); $('batchModal').classList.add('open'); $('bmName').focus();
+}
+// a stored schedule as the window's inputs; kinds the window cannot edit stay as they are
+function scheduleForm(sch) {
+  const local = iso => iso ? fmtTime(iso).slice(0, 16).replace(' ', 'T') : '';
+  if (!sch) return { kind: '', value: '', start: '', end: '' };
+  const d = sch.definition || {}, start = local(sch.start_at), end = local(sch.end_at);
+  if (d.kind === 'INTERVAL') return { kind: 'INTERVAL', value: String(d.seconds / 60), start, end };
+  if (d.kind === 'CRON') return { kind: 'CRON', value: d.expression, start, end };
+  if (d.kind === 'CALENDAR' && d.frequency === 'DAILY') return { kind: 'DAILY', value: String(d.at).slice(0, 5), start, end };
+  return { kind: 'KEEP', value: '', start, end };
 }
 function syncScheduleInput() {
   const kind = $('bmKind').value;
-  $('bmValueRow').style.display = kind ? '' : 'none';
-  document.querySelectorAll('.bm-window').forEach(el => el.style.display = kind ? '' : 'none');
+  $('bmValueRow').style.display = kind && kind !== 'KEEP' ? '' : 'none';
+  document.querySelectorAll('.bm-window').forEach(el => el.style.display = kind && kind !== 'KEEP' ? '' : 'none');
   $('bmValueLabel').textContent = { INTERVAL: '간격 (분, 1 이상)', DAILY: '시각 (HH:MM)', CRON: 'Cron 식 (예: 0 9 * * MON-FRI)' }[kind] || '';
   $('bmValue').placeholder = { INTERVAL: '60', DAILY: '09:00', CRON: '0 9 * * *' }[kind] || '';
 }
@@ -1367,11 +1387,19 @@ async function saveBatch() {
   if (!name) return $('bmName').focus();
   if (kind && !value) return $('bmValue').focus();
   const definition = kind === 'INTERVAL' ? { kind, seconds: Math.round(+value * 60) } : kind === 'DAILY' ? { kind: 'CALENDAR', frequency: 'DAILY', at: `${value}:00`.slice(0, 8) } : kind === 'CRON' ? { kind, expression: value } : null;
+  const schedule = definition ? { definition, ...seoul('start_at', $('bmStart').value), ...seoul('end_at', $('bmEnd').value) } : null;
   const body = { name, script_id: $('bmScript').value, runtime: { type: 'JUPYTER', profile: $('bmRuntime').value },
-    ...(version ? { script_version_number: +version } : {}), ...(definition ? { schedule: { definition, ...seoul('start_at', $('bmStart').value), ...seoul('end_at', $('bmEnd').value) } } : {}) };
+    ...(version ? { script_version_number: +version } : {}), ...(schedule ? { schedule } : {}) };
+  const b = BT.editing, was = BT.scheduleForm || {};
+  // an unchanged schedule is not sent: saving it again would restart an interval from now
+  const scheduleChanged = kind !== 'KEEP' && (kind !== was.kind || value !== was.value || $('bmStart').value !== was.start || $('bmEnd').value !== was.end);
+  if (b) { delete body.schedule; if (scheduleChanged) body.schedule = schedule; }
   $('bmSave').disabled = true;
-  try { await api('/batch/batches', { method: 'POST', headers: idemKey(), body }); $('batchModal').classList.remove('open'); batchTab('batches'); }
-  catch { alert('만들지 못했습니다. 화면의 오류 메시지를 확인하세요.'); }
+  try {
+    if (b) await api(`/batch/batches/${b.id}`, { method: 'PATCH', headers: { ...idemKey(), 'If-Match': `"${b.revision}"` }, body });
+    else await api('/batch/batches', { method: 'POST', headers: idemKey(), body });
+    $('batchModal').classList.remove('open'); batchTab('batches');
+  } catch { alert(b ? '저장하지 못했습니다. 다른 곳에서 바뀌었다면 새로 고침 후 다시 시도하세요.' : '만들지 못했습니다. 화면의 오류 메시지를 확인하세요.'); }
   finally { $('bmSave').disabled = false; }
 }
 async function renderScripts() {
