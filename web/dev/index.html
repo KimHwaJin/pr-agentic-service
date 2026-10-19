@@ -429,6 +429,15 @@
   .wf-meta { font-size: 11.5px; color: var(--faint); margin-top: 10px; }
   .wf .param { grid-template-columns: 120px 1fr; }
 
+  .nb-cell { border: 1px solid var(--line); border-radius: 10px; margin-bottom: 10px; overflow: hidden; }
+  .nb-cell.skip { opacity: .65; }
+  .nb-head { display: flex; align-items: center; gap: 8px; padding: 6px 12px; font-size: 12px; color: var(--faint); background: var(--hover); }
+  .nb-head .badge { margin-left: auto; }
+  .nb-cell pre { margin: 0; padding: 10px 12px; font-size: 12.5px; overflow: auto; max-height: 420px; background: var(--code); }
+  .nb-cell .nb-md { padding: 4px 14px; font-size: 13.5px; }
+  .nb-cell .nb-out { border-top: 1px dashed var(--line); }
+  .nb-cell .nb-out pre { background: transparent; color: var(--muted); max-height: 240px; }
+  .nb-cell .nb-out img { max-width: 100%; display: block; padding: 8px 12px; }
   .lightbox { position: fixed; inset: 0; background: rgba(0,0,0,.7); display: none; place-items: center; z-index: 10; cursor: zoom-out; }
   .lightbox img { max-width: 92vw; max-height: 92vh; border-radius: 8px; background: #fff; }
 </style>
@@ -583,6 +592,12 @@
       <div class="field"><label>세션 노트북 artifact ID</label><input id="smArtifact" placeholder="채팅 결과의 노트북 '보기' 링크에 있는 ID"></div>
     </div>
     <div class="modal-foot"><button class="btn" onclick="$('scriptModal').classList.remove('open')">취소</button><button class="btn primary" id="smSave" onclick="saveScript()">등록</button></div>
+  </div>
+</div>
+<div class="modal-back" id="nbModal" onclick="if (event.target === this) this.classList.remove('open')">
+  <div class="modal" style="width:min(920px,100%)">
+    <div class="modal-head"><h2 id="nbTitle">스크립트</h2><select class="sort" id="nbVersion" style="margin-left:auto" onchange="showScriptVersion(this.value)"></select><button class="ghost" onclick="$('nbModal').classList.remove('open')">닫기</button></div>
+    <div class="modal-body" id="nbBody"></div>
   </div>
 </div>
 <div class="modal-back" id="projectModal" onclick="if (event.target === this) closeProjectModal()">
@@ -1315,7 +1330,7 @@ async function renderScripts() {
   await loadBatchLists();
   $('batchBody').innerHTML = BT.scripts.length ? `<table class="tbl"><thead><tr><th>이름</th><th>종류</th><th>최신 버전</th><th>파일</th><th>셀</th><th>수정</th></tr></thead><tbody>${BT.scripts.map(x => {
     const v = x.latest_version || {};
-    return `<tr><td><b>${esc(x.name)}</b></td><td>${esc(x.type)}</td><td>v${v.version_number ?? '-'}</td><td class="mono">${esc(v.filename || '')}</td><td>${esc(Object.entries(v.cells || {}).map(([k, n]) => `${k} ${n}`).join(' · '))}</td><td>${fmtTime(x.updated_at)}</td></tr>`;
+    return `<tr class="click" title="눌러서 노트북 보기" onclick="openScript('${x.id}')"><td><b>${esc(x.name)}</b></td><td>${esc(x.type)}</td><td>v${v.version_number ?? '-'}</td><td class="mono">${esc(v.filename || '')}</td><td>${esc(Object.entries(v.cells || {}).map(([k, n]) => `${k} ${n}`).join(' · '))}</td><td>${fmtTime(x.updated_at)}</td></tr>`;
   }).join('')}</tbody></table>` : '<div class="muted">등록된 스크립트가 없습니다.</div>';
 }
 function openScriptModal() { $('smName').value = ''; $('smFile').value = ''; $('smArtifact').value = ''; $('scriptModal').classList.add('open'); }
@@ -1382,6 +1397,45 @@ function drawReportHead(r) {
   if (r.state === 'FAILED' && r.error) head.title = r.error;
 }
 async function retryReport(id) { await api(`/batch-reports/${id}/retry`, { method: 'POST' }); openReport(id); }
+
+/* a script version's notebook (pr-batch .../versions/{id}/content) with run / skip marks */
+async function openScript(id) {
+  const script = BT.scripts.find(x => x.id === id) || await api(`/batch/scripts/${id}`);
+  BT.script = script;
+  $('nbTitle').textContent = script.name; $('nbBody').innerHTML = '<div class="muted">불러오는 중…</div>'; $('nbModal').classList.add('open');
+  const versions = (await api(`/batch/scripts/${id}/versions?limit=100`)).items;
+  $('nbVersion').innerHTML = versions.map(v => `<option value="${v.id}">v${v.version_number} · ${esc(v.filename)} · ${fmtTime(v.created_at)}</option>`).join('');
+  $('nbVersion').value = script.latest_version.id;
+  showScriptVersion(script.latest_version.id);
+}
+async function showScriptVersion(versionId) {
+  const base = `/batch/scripts/${BT.script.id}/versions/${versionId}`;
+  $('nbBody').innerHTML = '<div class="muted">불러오는 중…</div>';
+  try {
+    const [detail, res] = await Promise.all([api(base), fetch(`${API}${base}/content`, { credentials: 'include' })]);
+    if (!res.ok) throw new Error(res.status);
+    const nb = await res.json();
+    const marks = Object.fromEntries(detail.cell_list.map(c => [c.index, c]));
+    const text = v => Array.isArray(v) ? v.join('') : (v ?? '');
+    const output = o => {
+      if (o.output_type === 'stream') return `<pre>${esc(text(o.text))}</pre>`;
+      if (o.output_type === 'error') return `<pre style="color:var(--bad)">${esc(`${o.ename}: ${o.evalue}`)}</pre>`;
+      const data = o.data || {};
+      if (data['image/png']) return `<img src="data:image/png;base64,${text(data['image/png']).trim()}" onclick="zoom(this.src)">`;
+      return data['text/plain'] ? `<pre>${esc(text(data['text/plain']))}</pre>` : '';
+    };
+    const c = detail.cells;
+    $('nbBody').innerHTML = `<div class="muted" style="font-size:12.5px;margin-bottom:12px">셀 ${c.total}개 · 실행 ${c.executable} · 건너뜀 ${c.skipped} (마크다운·raw·빈 코드 셀은 원본에만 남고 실행하지 않습니다) · <span class="mono">sha256 ${esc(detail.sha256.slice(0, 12))}</span> · ${(detail.size_bytes / 1024).toFixed(1)}KB
+      · <a href="${API}${base}/content" target="_blank">원본 파일</a></div>` +
+      nb.cells.map((cell, i) => {
+        const m = marks[i] || {}, run = m.executed;
+        const badge = run ? `<span class="badge ok">Step ${m.sequence}</span>` : '<span class="badge">건너뜀</span>';
+        const body = cell.cell_type === 'markdown' ? `<div class="nb-md">${md(text(cell.source))}</div>` : `<pre>${esc(text(cell.source)) || '<span class="muted">(빈 셀)</span>'}</pre>`;
+        const outs = (cell.outputs || []).map(output).join('');
+        return `<div class="nb-cell ${run ? '' : 'skip'}"><div class="nb-head">#${i} · ${esc(cell.cell_type)}${badge}</div>${body}${outs ? `<div class="nb-out">${outs}</div>` : ''}</div>`;
+      }).join('');
+  } catch { $('nbBody').innerHTML = '<div class="muted">노트북을 불러오지 못했습니다.</div>'; }
+}
 
 boot();
 
