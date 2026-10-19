@@ -1244,8 +1244,12 @@ function workflowDetail(w) {
         <div class="tool-body">${call.condition ? `<div class="cond">실행 조건: ${esc(call.condition)}</div>` : ''}
           ${call.params.map(p => `<div class="param"><div class="pl"><code>${esc(p.name)}</code>${p.type ? ` <small>${esc(p.type)}</small>` : ''}</div><div>${value(p)}</div>${p.doc ? `<div class="help">${esc(p.doc)}</div>` : ''}</div>`).join('')}
         </div></details>`).join('')}</div></section>`).join('')}</div>
+    <div id="wfPreview"></div>
     <div class="wf-meta">r${w.revision} · ${ago(w.updated_at)} 수정${w.tags.length ? ' · ' + w.tags.map(esc).join(', ') : ''}</div>
-    <div class="actions">${w.mine && w.lifecycle === 'candidate' ? `<button class="btn" onclick="promote('${w.id}')">공개(승격)</button>` : ''}
+    <div class="actions">${w.mine ? `<button class="btn" onclick="editWorkflow('${w.id}')">수정</button>` : ''}
+      <button class="btn" onclick="cloneWorkflow('${w.id}')">복제</button>
+      <button class="btn" onclick="searchPreview('${w.id}')">추천 확인</button>
+      ${w.mine && w.lifecycle === 'candidate' ? `<button class="btn" onclick="promote('${w.id}')">공개(승격)</button>` : ''}
       ${w.mine || S.isAdmin ? `<button class="btn" style="color:var(--bad)" onclick="deleteWorkflow('${w.id}', '${esc(w.name).replace(/'/g, '&#39;')}')">삭제</button>` : ''}</div>`;
 }
 async function promote(id) { await api(`/workflows/${id}/promote`, { method: 'POST' }); await loadWorkflows(); openWorkflow(id); }
@@ -1596,6 +1600,94 @@ async function uploadVersion(input) {
   await openScript(BT.script.id);
   const pinned = BT.batches.filter(b => b.script_id === BT.script.id).map(b => b.name);
   alert(`v${data.version_number}을 올렸습니다.${pinned.length ? `\n이 스크립트를 쓰는 배치(${pinned.join(', ')})는 수정 창에서 버전을 바꾸기 전까지 기존 버전으로 돕니다.` : ''}`);
+}
+
+/* workflow edit (author), clone, recommendation preview -- the /workflows API */
+async function wfCall(path, method, body) {
+  const r = await fetch(`${API}${path}`, { method, credentials: 'include', headers: { 'Content-Type': 'application/json', ...(S.csrf ? { 'X-CSRF-Token': S.csrf } : {}) }, body: body === undefined ? undefined : JSON.stringify(body) });
+  const data = r.status === 204 ? null : await r.json().catch(() => ({}));
+  return { ok: r.ok, status: r.status, data };
+}
+function wfErrors(res) {
+  const d = res.data?.detail;
+  if (res.status === 403) return ['작성자만 고칠 수 있습니다. 복제해서 내 워크플로우로 만든 뒤 수정하세요.'];
+  if (res.status === 409) return ['다른 곳에서 먼저 저장했습니다. 닫고 다시 열어 최신 내용으로 수정하세요.'];
+  if (d && typeof d === 'object') return [d.message, ...(d.errors || [])].filter(Boolean);
+  return [typeof d === 'string' ? d : `오류 (${res.status})`];
+}
+const wfMsg = (lines, ok = false) => `<div style="margin:8px 0;padding:8px 12px;border-radius:8px;font-size:13px;background:${ok ? '#e3f1e7' : '#fdecea'};color:${ok ? 'var(--ok)' : 'var(--bad)'}">${lines.map(esc).join('<br>')}</div>`;
+async function editWorkflow(id) {
+  const w = await api(`/workflows/${id}`);
+  S.wfEdit = w; $('wfModal').classList.add('open');
+  $('wfTitle').textContent = `워크플로우 수정 · ${w.name}`;
+  $('wfBody').innerHTML = `
+    <div class="field"><label>이름</label><input id="weName" value="${esc(w.name)}"></div>
+    <div class="field"><label>목적 (사용자 요청)</label><input id="weRequest" value="${esc(w.user_request)}"></div>
+    <div class="field"><label>추천 질문 (한 줄에 하나, 이런 질문에 이 워크플로우를 추천)</label><textarea id="weQueries" rows="5">${esc(w.user_queries.join('\n'))}</textarea></div>
+    <div class="field"><label>태그 (쉼표로 구분)</label><input id="weTags" value="${esc(w.tags.join(', '))}"></div>
+    <details><summary class="muted" style="cursor:pointer">실행 흐름 (Workflow 1.0 문서 JSON)</summary>
+      <textarea id="weDoc" rows="18" class="mono" style="width:100%;font-size:12px;margin-top:8px">${esc(JSON.stringify(w.document, null, 2))}</textarea>
+      <div class="actions"><button class="btn" onclick="validateWorkflowDoc()">검증</button></div></details>
+    <div id="weResult"></div>
+    <div class="actions"><button class="btn" onclick="openWorkflow('${id}')">취소</button><button class="btn primary" id="weSave" onclick="saveWorkflowEdit()">저장</button></div>`;
+}
+// the document as edited, with the name and purpose fields written into it
+function editedDocument() {
+  let doc;
+  try { doc = JSON.parse($('weDoc').value); } catch (e) { throw new Error(`실행 흐름 JSON을 읽을 수 없습니다: ${e.message}`); }
+  if (!doc.workflow || typeof doc.workflow !== 'object') throw new Error('실행 흐름 JSON에 workflow 항목이 없습니다.');
+  doc.workflow.name = $('weName').value.trim();
+  doc.workflow.user_request = $('weRequest').value.trim();
+  return doc;
+}
+async function validateWorkflowDoc() {
+  let doc; try { doc = editedDocument(); } catch (e) { $('weResult').innerHTML = wfMsg([e.message]); return; }
+  const res = await wfCall('/workflows/validate', 'POST', doc);
+  $('weResult').innerHTML = res.ok && res.data.valid ? wfMsg(['검증 통과: 저장할 수 있습니다.'], true)
+    : wfMsg(['검증 실패', ...(res.data?.errors || wfErrors(res))]);
+}
+async function saveWorkflowEdit() {
+  const w = S.wfEdit;
+  let doc; try { doc = editedDocument(); } catch (e) { $('weResult').innerHTML = wfMsg([e.message]); return; }
+  if (!doc.workflow.name) return $('weName').focus();
+  const queries = $('weQueries').value.split('\n').map(q => q.trim()).filter(Boolean);
+  if (!queries.length) { $('weResult').innerHTML = wfMsg(['추천 질문을 하나 이상 적어 주세요.']); return; }
+  const body = { expected_revision: w.revision, user_queries: queries, tags: $('weTags').value.split(',').map(t => t.trim()).filter(Boolean) };
+  if (JSON.stringify(doc) !== JSON.stringify(w.document)) body.document = doc;
+  $('weSave').disabled = true;
+  const res = await wfCall(`/workflows/${w.id}`, 'PATCH', body);
+  $('weSave').disabled = false;
+  if (!res.ok) { $('weResult').innerHTML = wfMsg(['저장하지 못했습니다.', ...wfErrors(res)]); return; }
+  await loadWorkflows(); openWorkflow(w.id);
+}
+async function cloneWorkflow(id) {
+  const w = S.workflows.find(x => x.id === id);
+  const name = prompt('복제본 이름', `${w ? w.name : '워크플로우'} (복사본)`); if (name === null) return;
+  const res = await wfCall(`/workflows/${id}/clone`, 'POST', { name: name.trim() || null });
+  if (!res.ok) return alert(['복제하지 못했습니다.', ...wfErrors(res)].join('\n'));
+  await loadWorkflows(); editWorkflow(res.data.id);
+}
+// would a question find this workflow? (/search looks at public templates only)
+async function searchPreview(id) {
+  const w = await api(`/workflows/${id}`);
+  const box = $('wfPreview');
+  box.innerHTML = `<div class="wf-sec">추천 확인 <span class="muted" style="font-weight:400">· 채팅에서 이 질문을 하면 어떤 워크플로우가 추천되는지 봅니다 (공개된 것만 추천 대상)</span></div>
+    <div class="row" style="display:flex;gap:8px"><input id="wpQuery" style="flex:1" value="${esc(w.user_queries[0] || '')}" onkeydown="if (event.key === 'Enter' && !event.isComposing) runPreview('${id}')"><button class="btn" onclick="runPreview('${id}')">검색</button></div>
+    <div id="wpResult"></div>`;
+  box.scrollIntoView({ block: 'nearest' });
+  runPreview(id);
+}
+async function runPreview(id) {
+  const query = $('wpQuery').value.trim(); if (!query) return;
+  $('wpResult').innerHTML = '<div class="muted">찾는 중…</div>';
+  const res = await wfCall('/workflows/search', 'POST', { query });
+  if (!res.ok) { $('wpResult').innerHTML = wfMsg(wfErrors(res)); return; }
+  const items = res.data.items, rank = items.findIndex(h => h.workflow.id === id);
+  const self = S.workflows.find(x => x.id === id);
+  const note = rank >= 0 ? wfMsg([`이 워크플로우가 ${rank + 1}번째로 추천됩니다.`], true)
+    : wfMsg([self && self.lifecycle !== 'template' ? '이 워크플로우는 아직 후보라 추천 대상이 아닙니다. 공개(승격)하면 추천됩니다.' : '이 질문으로는 이 워크플로우가 추천되지 않습니다. 추천 질문을 보강해 보세요.']);
+  $('wpResult').innerHTML = note + (items.length ? `<table class="tbl"><thead><tr><th>#</th><th>워크플로우</th><th>유사도</th><th>맞은 추천 질문</th></tr></thead><tbody>${items.map((h, i) => `
+    <tr${h.workflow.id === id ? ' style="font-weight:600"' : ''}><td>${i + 1}</td><td>${esc(h.workflow.name)}</td><td>${(h.similarity * 100).toFixed(1)}%</td><td>${esc(h.matched_query)}</td></tr>`).join('')}</tbody></table>` : '<div class="muted">추천되는 워크플로우가 없습니다.</div>');
 }
 
 boot();
