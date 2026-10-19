@@ -597,7 +597,7 @@
 <div class="modal-back" id="runsModal" onclick="if (event.target === this) this.classList.remove('open')">
   <div class="modal" style="width:min(1000px,100%)">
     <div class="modal-head"><h2 id="runsTitle">실행 이력</h2><span style="flex:1"></span>
-      <button class="btn" id="runsRun">지금 실행</button><button class="ghost" title="새로 고침" id="runsRefresh">↻</button>
+      <button class="ghost" title="새로 고침" id="runsRefresh">↻</button>
       <button class="ghost" onclick="$('runsModal').classList.remove('open')">닫기</button></div>
     <div class="modal-body" id="runsBody"></div>
   </div>
@@ -1282,7 +1282,6 @@ function openRuns(id) {
   const b = BT.batches.find(x => x.id === id); if (!b) return;
   const script = BT.scripts.find(x => x.id === b.script_id);
   $('runsTitle').innerHTML = `${esc(b.name)} <span class="muted" style="font-size:13px;font-weight:400">${esc(script ? script.name : '')} v${b.script_version_number} · ${esc(scheduleText(b.schedule))}${b.next_run_at ? ` · 다음 실행 ${fmtTime(b.next_run_at)}` : ''}</span>`;
-  $('runsRun').onclick = () => runBatch(id);
   $('runsRefresh').onclick = () => loadRuns(id);
   $('runsModal').classList.add('open');
   loadRuns(id);
