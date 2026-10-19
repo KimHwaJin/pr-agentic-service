@@ -594,6 +594,14 @@
     <div class="modal-foot"><button class="btn" onclick="$('scriptModal').classList.remove('open')">취소</button><button class="btn primary" id="smSave" onclick="saveScript()">등록</button></div>
   </div>
 </div>
+<div class="modal-back" id="runsModal" onclick="if (event.target === this) this.classList.remove('open')">
+  <div class="modal" style="width:min(1000px,100%)">
+    <div class="modal-head"><h2 id="runsTitle">실행 이력</h2><span style="flex:1"></span>
+      <button class="btn" id="runsRun">지금 실행</button><button class="ghost" title="새로 고침" id="runsRefresh">↻</button>
+      <button class="ghost" onclick="$('runsModal').classList.remove('open')">닫기</button></div>
+    <div class="modal-body" id="runsBody"></div>
+  </div>
+</div>
 <div class="modal-back" id="nbModal" onclick="if (event.target === this) this.classList.remove('open')">
   <div class="modal" style="width:min(920px,100%)">
     <div class="modal-head"><h2 id="nbTitle">스크립트</h2><select class="sort" id="nbVersion" style="margin-left:auto" onchange="showScriptVersion(this.value)"></select><button class="ghost" onclick="$('nbModal').classList.remove('open')">닫기</button></div>
@@ -1234,7 +1242,7 @@ async function deleteWorkflow(id, name) {
 }
 
 /* batches (pr-batch via /batch/*) and their reports (/batch-reports) ------------- */
-const BT = { tab: 'batches', batches: [], scripts: [], runtimes: [], open: {} };
+const BT = { tab: 'batches', batches: [], scripts: [], runtimes: [] };
 const idemKey = () => ({ 'Idempotency-Key': crypto.randomUUID() });
 const REPORT_STATE = { QUEUED: '대기', COLLECTING: '노트북 준비 대기', GENERATING: 'Agent 작성 중', MATERIALIZING: '저장 중', SUCCEEDED: '완료', FAILED: '실패' };
 const reportBadge = st => `<span class="badge ${st === 'SUCCEEDED' ? 'ok' : st === 'FAILED' ? 'bad' : ''}">${esc(REPORT_STATE[st] || st)}</span>`;
@@ -1262,38 +1270,41 @@ async function renderBatches() {
   await loadBatchLists();
   const scriptName = id => (BT.scripts.find(x => x.id === id) || {}).name || id.slice(0, 8);
   $('batchBody').innerHTML = BT.batches.length ? `<table class="tbl"><thead><tr><th>이름</th><th>스크립트</th><th>일정</th><th>다음 실행</th><th>상태</th><th></th></tr></thead><tbody>${BT.batches.map(b => `
-    <tr class="click" onclick="toggleRuns('${b.id}')"><td><b>${esc(b.name)}</b></td><td>${esc(scriptName(b.script_id))} <span class="muted">v${b.script_version_number}</span></td>
+    <tr class="click" title="눌러서 실행 이력 보기" onclick="openRuns('${b.id}')"><td><b>${esc(b.name)}</b></td><td>${esc(scriptName(b.script_id))} <span class="muted">v${b.script_version_number}</span></td>
       <td>${esc(scheduleText(b.schedule))}</td><td>${b.next_run_at ? fmtTime(b.next_run_at) : '<span class="muted">-</span>'}</td>
       <td>${b.enabled ? statusBadge('ACTIVE').replace('ACTIVE', '켜짐') : '<span class="badge">꺼짐</span>'}</td>
       <td style="white-space:nowrap" onclick="event.stopPropagation()"><button class="btn" onclick="runBatch('${b.id}')">지금 실행</button>
-        <button class="ghost" onclick="toggleBatch('${b.id}', ${b.enabled}, ${b.revision})">${b.enabled ? '끄기' : '켜기'}</button></td></tr>
-    <tr id="runs-${b.id}" style="display:none"><td colspan="6" style="background:var(--hover)"></td></tr>`).join('')}</tbody></table>`
+        <button class="ghost" onclick="toggleBatch('${b.id}', ${b.enabled}, ${b.revision})">${b.enabled ? '끄기' : '켜기'}</button></td></tr>`).join('')}</tbody></table>`
     : '<div class="muted">배치가 없습니다. 먼저 스크립트를 등록하고 새 배치를 만드세요.</div>';
-  for (const id of Object.keys(BT.open)) if (BT.open[id]) loadRuns(id);
 }
-async function toggleRuns(id) {
-  const row = $(`runs-${id}`); if (!row) return;
-  BT.open[id] = row.style.display === 'none';
-  row.style.display = BT.open[id] ? '' : 'none';
-  if (BT.open[id]) loadRuns(id);
+/* run history of one batch, in a popup */
+function openRuns(id) {
+  const b = BT.batches.find(x => x.id === id); if (!b) return;
+  const script = BT.scripts.find(x => x.id === b.script_id);
+  $('runsTitle').innerHTML = `${esc(b.name)} <span class="muted" style="font-size:13px;font-weight:400">${esc(script ? script.name : '')} v${b.script_version_number} · ${esc(scheduleText(b.schedule))}${b.next_run_at ? ` · 다음 실행 ${fmtTime(b.next_run_at)}` : ''}</span>`;
+  $('runsRun').onclick = () => runBatch(id);
+  $('runsRefresh').onclick = () => loadRuns(id);
+  $('runsModal').classList.add('open');
+  loadRuns(id);
 }
 async function loadRuns(id) {
-  const row = $(`runs-${id}`); if (!row) return;
-  row.style.display = ''; row.firstElementChild.innerHTML = '<div class="muted">불러오는 중…</div>';
-  const [runs, reports] = await Promise.all([api(`/batch/batches/${id}/runs?limit=20`), api(`/batch-reports?batch_id=${id}&limit=100`)]);
+  const body = $('runsBody'); body.innerHTML = '<div class="muted">불러오는 중…</div>';
+  const [runs, reports] = await Promise.all([api(`/batch/batches/${id}/runs?limit=50`), api(`/batch-reports?batch_id=${id}&limit=100`)]);
   const byExec = Object.fromEntries(reports.items.map(r => [r.execution_id, r]));
-  row.firstElementChild.innerHTML = runs.items.length ? `<table class="tbl"><thead><tr><th>실행</th><th>상태</th><th>방식</th><th>시작</th><th>종료</th><th>노트북</th><th>리포트</th></tr></thead><tbody>${runs.items.map(r => {
+  body.innerHTML = runs.items.length ? `<table class="tbl"><thead><tr><th>실행</th><th>상태</th><th>방식</th><th>시작</th><th>종료</th><th>소요</th><th>노트북</th><th>리포트</th></tr></thead><tbody>${runs.items.map(r => {
     const rep = r.execution_id && byExec[r.execution_id];
     const nb = r.result?.notebook_artifact_id;
+    const start = r.started_at || r.submitted_at, end = r.finished_at || r.completed_at;
     return `<tr><td>${short(r.id)}</td><td>${statusBadge(r.status)}${r.last_error ? `<div style="color:var(--bad);font-size:12px">${esc(r.last_error).slice(0, 200)}</div>` : ''}</td>
-      <td>${esc(r.trigger)}</td><td>${fmtTime(r.started_at || r.submitted_at)}</td><td>${fmtTime(r.finished_at || r.completed_at)}</td>
+      <td>${esc(r.trigger)}</td><td>${fmtTime(start) || '<span class="muted">-</span>'}</td><td>${fmtTime(end) || '<span class="muted">-</span>'}</td><td>${dur(start, end)}</td>
       <td>${nb ? `<a target="_blank" href="/view/artifacts/${nb}">보기</a>` : '<span class="muted">-</span>'}</td>
-      <td>${rep ? `<a href="#" onclick="event.preventDefault(); openReport('${rep.id}')">${reportBadge(rep.state)}</a>` : `<span class="muted">${r.status === 'SUCCEEDED' ? '대기 중' : '-'}</span>`}</td></tr>`;
+      <td>${rep ? `<a href="#" onclick="event.preventDefault(); $('runsModal').classList.remove('open'); openReport('${rep.id}')">${reportBadge(rep.state)}</a>` : `<span class="muted">${r.status === 'SUCCEEDED' ? '대기 중' : '-'}</span>`}</td></tr>`;
   }).join('')}</tbody></table>` : '<div class="muted">아직 실행이 없습니다.</div>';
 }
 async function runBatch(id) {
   await api(`/batch/batches/${id}/runs`, { method: 'POST', headers: idemKey() });
-  BT.open[id] = true; renderBatches();
+  if (!$('runsModal').classList.contains('open')) await renderBatches();
+  openRuns(id);
 }
 async function toggleBatch(id, enabled, revision) {
   await api(`/batch/batches/${id}/${enabled ? 'disable' : 'enable'}`, { method: 'POST', headers: { ...idemKey(), 'If-Match': `"${revision}"` } });
