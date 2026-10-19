@@ -1488,7 +1488,7 @@ const fmtTime = iso => iso ? new Date(iso).toLocaleString('ko-KR', { month: '2-d
 function dur(a, b) { if (!a || !b) return ''; const s = (new Date(b) - new Date(a)) / 1000; return s < 60 ? `${s.toFixed(1)}초` : `${Math.floor(s / 60)}분 ${Math.round(s % 60)}초`; }
 const short = id => id ? `<span class="mono" title="${esc(id)} (클릭하면 복사)" style="cursor:copy" onclick="event.stopPropagation();navigator.clipboard.writeText('${esc(id)}')">${esc(String(id).slice(0, 8))}</span>` : '<span class="muted">-</span>';
 function statusBadge(st) {
-  const cls = ['SUCCEEDED', 'ACTIVE', 'AVAILABLE'].includes(st) ? 'ok' : ['FAILED', 'CANCELLED', 'OFFLINE', 'DISABLED'].includes(st) ? 'bad' : '';
+  const cls = ['SUCCEEDED', 'COMPLETED', 'ACTIVE', 'AVAILABLE'].includes(st) ? 'ok' : ['FAILED', 'CANCELLED', 'OFFLINE', 'DISABLED'].includes(st) ? 'bad' : '';
   return `<span class="badge ${cls}">${esc(st || '-')}</span>`;
 }
 const pre = v => `<pre class="sys-pre">${esc(JSON.stringify(v, null, 2))}</pre>`;
