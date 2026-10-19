@@ -148,6 +148,8 @@
   .activity > summary::-webkit-details-marker { display: none; }
   .activity > summary .chev { margin-left: auto; transition: transform .15s; }
   .activity[open] > summary .chev { transform: rotate(90deg); }
+  .notes .note { padding: 6px 14px 10px; font-size: 13px; line-height: 1.6; color: var(--muted); border-top: 1px solid var(--line); }
+  .notes .note > :first-child { margin-top: 0; } .notes .note > :last-child { margin-bottom: 0; }
   .steps { border-top: 1px solid var(--line); padding: 8px 14px 12px; font-size: 13px; color: var(--muted); }
   .step { display: flex; gap: 8px; padding: 4px 0; align-items: baseline; }
   .step .ico { width: 16px; flex: none; text-align: center; }
@@ -648,7 +650,7 @@
 
 <script>
 const API = '/api/v1';
-const S = { projects: [], models: [], images: [], waiting: false, csrf: null, project: null, session: null, run: null, es: null, answerEl: null, activity: null, busy: false };
+const S = { projects: [], models: [], images: [], waiting: false, csrf: null, project: null, session: null, run: null, es: null, answerEl: null, activity: null, notes: null, busy: false };
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const md = s => marked.parse(esc(s));
@@ -818,7 +820,7 @@ function useIdea(b) { $('input').value = b.textContent; autosize(); $('input').f
 function newSession() { showChat(); closeHitl(); S.session = null; S.run = null; closeStream(); setBusy(false); $('title').textContent = '새 대화'; $('level').value = ''; emptyState(); loadSessions(); }
 
 async function openSession(id) {
-  showChat(); closeHitl(); S.session = id; closeStream(); $('log').innerHTML = ''; S.answerEl = S.activity = null;
+  showChat(); closeHitl(); S.session = id; closeStream(); $('log').innerHTML = ''; S.answerEl = S.activity = S.notes = null;
   const session = await api(`/sessions/${id}`);
   $('title').textContent = session.title; $('level').value = session.code_level ?? '';
   await renderMessages(id);
@@ -963,7 +965,8 @@ function openStream() {
   });
   on('token', e => { if (!S.answerEl) S.answerEl = addAnswer(''); S.answerEl.dataset.raw += e.data.text; S.answerEl.innerHTML = md(S.answerEl.dataset.raw); scrollDown(); });
   on('message_final', e => { if (S.answerEl) S.answerEl.remove(); S.answerEl = null; finishActivity(false); addAnswer(e.data.content); });
-  on('tool_call', e => { if (S.answerEl && !S.answerEl.dataset.raw.trim()) { S.answerEl.remove(); } S.answerEl = null; step('tool', (TOOL_TEXT[e.data.name] || (() => e.data.name))(e.data.args || {})); });
+  // Text the model writes before a tool call is not the answer: move it out of the chat.
+  on('tool_call', e => { if (S.answerEl) { const raw = S.answerEl.dataset.raw.trim(); S.answerEl.remove(); if (raw) note(raw); } S.answerEl = null; step('tool', (TOOL_TEXT[e.data.name] || (() => e.data.name))(e.data.args || {})); });
   on('agent_switched', e => step('switch', e.data.agent === 'analyst' ? '분석 담당이 이어서 진행' : '대화 담당으로 복귀'));
   on('plan_approved', e => step('ok', `계획 승인 · ${e.data.title}`));
   on('plan_auto_approved', e => step('ok', `등록된 워크플로우로 바로 실행 · ${e.data.title}`));
@@ -1015,8 +1018,20 @@ function startActivity() {
   d.innerHTML = `<summary><span class="spinner"></span><span class="t">생각하는 중</span><span class="chev">›</span></summary><div class="steps"></div>`;
   logEl().appendChild(d); S.activity = d; S.resultAnchor = d; S.resultCount = 0; scrollDown();
 }
+// Intermediate model text of the current turn, collapsed below the steps.
+function note(text) {
+  if (!S.notes || !S.notes.isConnected) {
+    const d = document.createElement('details'); d.className = 'activity notes';
+    d.innerHTML = `<summary><span class="t"></span><span class="chev">›</span></summary><div class="list"></div>`;
+    logEl().appendChild(d); S.notes = d;
+  }
+  const n = document.createElement('div'); n.className = 'note'; n.innerHTML = md(text);
+  const list = S.notes.querySelector('.list'); list.appendChild(n);
+  S.notes.querySelector('.t').textContent = `중간 과정 ${list.children.length}개`; scrollDown();
+}
 function setActivityTitle(text) { if (S.activity && !S.activity.dataset.done) S.activity.querySelector('.t').textContent = text; }
 function finishActivity(failed) {
+  S.notes = null;
   if (!S.activity || S.activity.dataset.done) return;
   const n = S.activity.querySelectorAll('.step').length;
   if (!n) { S.activity.remove(); S.activity = null; return; }

@@ -42,3 +42,8 @@ models:
     default: true
     input: [text, image]
     max_images: 8
+    # Optional request body fields for this model only; they win over
+    # llm_enable_thinking (chat_template_kwargs merges key by key). e.g.
+    # params:
+    #   reasoning_effort: low                       # gpt-oss
+    #   chat_template_kwargs: {enable_thinking: false}  # Qwen3 / GLM
