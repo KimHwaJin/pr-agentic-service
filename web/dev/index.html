@@ -1273,7 +1273,7 @@ async function renderBatches() {
     <tr class="click" title="눌러서 실행 이력 보기" onclick="openRuns('${b.id}')"><td><b>${esc(b.name)}</b></td><td>${esc(scriptName(b.script_id))} <span class="muted">v${b.script_version_number}</span></td>
       <td>${esc(scheduleText(b.schedule))}</td><td>${b.next_run_at ? fmtTime(b.next_run_at) : '<span class="muted">-</span>'}</td>
       <td>${b.enabled ? statusBadge('ACTIVE').replace('ACTIVE', '켜짐') : '<span class="badge">꺼짐</span>'}</td>
-      <td style="white-space:nowrap" onclick="event.stopPropagation()"><button class="btn" onclick="runBatch('${b.id}')">지금 실행</button>
+      <td style="white-space:nowrap" onclick="event.stopPropagation()"><button class="btn" onclick="runBatch('${b.id}', this)">지금 실행</button>
         <button class="ghost" onclick="toggleBatch('${b.id}', ${b.enabled}, ${b.revision})">${b.enabled ? '끄기' : '켜기'}</button></td></tr>`).join('')}</tbody></table>`
     : '<div class="muted">배치가 없습니다. 먼저 스크립트를 등록하고 새 배치를 만드세요.</div>';
 }
@@ -1300,10 +1300,12 @@ async function loadRuns(id) {
       <td>${rep ? `<a href="#" onclick="event.preventDefault(); $('runsModal').classList.remove('open'); openReport('${rep.id}')">${reportBadge(rep.state)}</a>` : `<span class="muted">${r.status === 'SUCCEEDED' ? '대기 중' : '-'}</span>`}</td></tr>`;
   }).join('')}</tbody></table>` : '<div class="muted">아직 실행이 없습니다.</div>';
 }
-async function runBatch(id) {
-  await api(`/batch/batches/${id}/runs`, { method: 'POST', headers: idemKey() });
-  if (!$('runsModal').classList.contains('open')) await renderBatches();
-  openRuns(id);
+async function runBatch(id, button) {
+  if (button) button.disabled = true;
+  try {
+    await api(`/batch/batches/${id}/runs`, { method: 'POST', headers: idemKey() });
+    if (button) { button.textContent = '실행 요청됨'; setTimeout(() => { button.textContent = '지금 실행'; button.disabled = false; }, 2000); }
+  } catch { if (button) button.disabled = false; }
 }
 async function toggleBatch(id, enabled, revision) {
   await api(`/batch/batches/${id}/${enabled ? 'disable' : 'enable'}`, { method: 'POST', headers: { ...idemKey(), 'If-Match': `"${revision}"` } });
