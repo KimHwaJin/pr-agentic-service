@@ -607,12 +607,15 @@
     <div class="modal-head"><h2 id="runsTitle">실행 이력</h2><span style="flex:1"></span>
       <button class="ghost" title="새로 고침" id="runsRefresh">↻</button>
       <button class="ghost" onclick="$('runsModal').classList.remove('open')">닫기</button></div>
+    <div class="systabs" style="padding:12px 22px 0;margin:0">
+      <button class="systab on" data-rt="runs" onclick="runsTab('runs')">실행</button>
+      <button class="systab" data-rt="skipped" onclick="runsTab('skipped')">건너뛴 일정</button></div>
     <div class="modal-body" id="runsBody"></div>
   </div>
 </div>
 <div class="modal-back" id="nbModal" onclick="if (event.target === this) this.classList.remove('open')">
   <div class="modal" style="width:min(920px,100%)">
-    <div class="modal-head"><h2 id="nbTitle">스크립트</h2><select class="sort" id="nbVersion" style="margin-left:auto" onchange="showScriptVersion(this.value)"></select><button class="ghost" style="color:var(--bad)" onclick="deleteScript(BT.script.id)">삭제</button><button class="ghost" onclick="$('nbModal').classList.remove('open')">닫기</button></div>
+    <div class="modal-head"><h2 id="nbTitle">스크립트</h2><select class="sort" id="nbVersion" style="margin-left:auto" onchange="showScriptVersion(this.value)"></select><button class="ghost" onclick="$('nbUpload').click()">새 버전 올리기</button><input type="file" id="nbUpload" accept=".ipynb" hidden onchange="uploadVersion(this)"><button class="ghost" style="color:var(--bad)" onclick="deleteScript(BT.script.id)">삭제</button><button class="ghost" onclick="$('nbModal').classList.remove('open')">닫기</button></div>
     <div class="modal-body" id="nbBody"></div>
   </div>
 </div>
@@ -1313,15 +1316,30 @@ function openRuns(id) {
   const b = BT.batches.find(x => x.id === id); if (!b) return;
   const script = BT.scripts.find(x => x.id === b.script_id);
   $('runsTitle').innerHTML = `${esc(b.name)} <span class="muted" style="font-size:13px;font-weight:400">${esc(script ? script.name : '')} v${b.script_version_number} · ${esc(scheduleText(b.schedule))}${b.next_run_at ? ` · 다음 실행 ${fmtTime(b.next_run_at)}` : ''}</span>`;
-  $('runsRefresh').onclick = () => loadRuns(id);
+  BT.runsBatch = id;
+  $('runsRefresh').onclick = () => runsTab(BT.runsTab);
   $('runsModal').classList.add('open');
-  loadRuns(id);
+  runsTab('runs');
+}
+function runsTab(tab) {
+  BT.runsTab = tab;
+  document.querySelectorAll('.systab[data-rt]').forEach(t => t.classList.toggle('on', t.dataset.rt === tab));
+  (tab === 'skipped' ? loadSkipped : loadRuns)(BT.runsBatch);
+}
+/* schedule times that did not become runs (pr-batch skipped-windows) */
+const WINDOW_TEXT = { DISABLED: '배치가 꺼져 있던 동안', DELETED: '배치를 삭제해서', SCHEDULE_REPLACED: '일정을 바꿔서', MISFIRE_SKIP: '제때 돌지 못해 건너뜀 (미실행 정책)', MISFIRE_LATEST: '제때 돌지 못해 마지막 한 번만 실행', MISFIRE_CATCH_UP: '제때 돌지 못해 따라잡기 한도 초과' };
+async function loadSkipped(id) {
+  const body = $('runsBody'); body.innerHTML = '<div class="muted">불러오는 중…</div>';
+  const page = await api(`/batch/batches/${id}/skipped-windows?limit=100`);
+  body.innerHTML = page.items.length ? `<table class="tbl"><thead><tr><th>사유</th><th>건너뛴 구간</th><th>예약 수</th><th>기록</th></tr></thead><tbody>${page.items.map(w => `
+    <tr><td title="${esc(w.reason)}">${esc(WINDOW_TEXT[w.reason] || w.reason)}</td><td>${fmtTime(w.from_at)} ~ ${fmtTime(w.until_at)}</td><td>${w.occurrences}회</td><td>${fmtTime(w.created_at)}</td></tr>`).join('')}</tbody></table>`
+    : '<div class="muted">건너뛴 예약 시각이 없습니다. (꺼 두거나, 일정을 바꾸거나, 제때 돌지 못한 예약이 여기에 기록됩니다)</div>';
 }
 async function loadRuns(id) {
   const body = $('runsBody'); body.innerHTML = '<div class="muted">불러오는 중…</div>';
   const [runs, reports] = await Promise.all([api(`/batch/batches/${id}/runs?limit=50`), api(`/batch-reports?batch_id=${id}&limit=100`)]);
   const byExec = Object.fromEntries(reports.items.map(r => [r.execution_id, r]));
-  body.innerHTML = runs.items.length ? `<table class="tbl"><thead><tr><th>상태</th><th>실행</th><th>방식</th><th>시작</th><th>종료</th><th>소요</th><th>노트북</th><th>리포트</th></tr></thead><tbody>${runs.items.map(r => {
+  body.innerHTML = runs.items.length ? `<table class="tbl"><thead><tr><th>상태</th><th>실행</th><th>방식</th><th>시작</th><th>종료</th><th>소요</th><th>노트북</th><th>리포트</th><th></th></tr></thead><tbody>${runs.items.map(r => {
     const rep = r.execution_id && byExec[r.execution_id];
     const nb = r.result?.notebook_artifact_id;
     const start = r.started_at || r.submitted_at, end = r.finished_at || r.completed_at;
@@ -1330,8 +1348,16 @@ async function loadRuns(id) {
     return `<tr${r.execution_id ? ` class="click" title="눌러서 executor 실행 상세 보기" onclick="openExecution('${r.execution_id}')"` : ''}><td onclick="event.stopPropagation()">${badge}</td><td>${short(r.id)}</td>
       <td>${esc(r.trigger)}</td><td>${fmtTime(start) || '<span class="muted">-</span>'}</td><td>${fmtTime(end) || '<span class="muted">-</span>'}</td><td>${dur(start, end)}</td>
       <td onclick="event.stopPropagation()">${nb ? `<a target="_blank" href="/view/artifacts/${nb}">보기</a>` : '<span class="muted">-</span>'}</td>
-      <td onclick="event.stopPropagation()">${rep ? `<a href="#" onclick="event.preventDefault(); $('runsModal').classList.remove('open'); openReport('${rep.id}')">${reportBadge(rep.state)}</a>` : `<span class="muted">${r.status === 'SUCCEEDED' ? '대기 중' : '-'}</span>`}</td></tr>`;
+      <td onclick="event.stopPropagation()">${rep ? `<a href="#" onclick="event.preventDefault(); $('runsModal').classList.remove('open'); openReport('${rep.id}')">${reportBadge(rep.state)}</a>` : `<span class="muted">${r.status === 'COMPLETED' ? '대기 중' : '-'}</span>`}</td>
+      <td onclick="event.stopPropagation()">${CANCELLABLE.includes(r.status) && !r.cancel_requested ? `<button class="ghost" style="color:var(--bad)" onclick="cancelRun('${id}', '${r.id}')">취소</button>` : (r.cancel_requested && !['CANCELLED', 'COMPLETED', 'FAILED'].includes(r.status) ? '<span class="muted">취소 중</span>' : '')}</td></tr>`;
   }).join('')}</tbody></table>` : '<div class="muted">아직 실행이 없습니다.</div>';
+}
+// pr-batch cancels waiting, queued and running runs (the executor run too)
+const CANCELLABLE = ['WAITING', 'QUEUED', 'RUNNING'];
+async function cancelRun(batchId, runId) {
+  if (!confirm('이 실행을 취소할까요? executor에서 돌고 있으면 함께 멈춥니다.')) return;
+  await api(`/batch/batches/${batchId}/runs/${runId}/cancel`, { method: 'POST', headers: idemKey() });
+  loadRuns(batchId);
 }
 async function runBatch(id, button) {
   if (button) button.disabled = true;
@@ -1543,6 +1569,19 @@ async function deleteScript(id) {
   }
   if (code) return alert(DELETE_ERRORS[code] || (code === 'HTTP_412' || code.includes('REVISION') ? '다른 곳에서 스크립트가 바뀌었습니다. 새로 고침 후 다시 시도하세요.' : `삭제하지 못했습니다 (${code}).`));
   $('nbModal').classList.remove('open'); batchTab('scripts');
+}
+
+/* a new version of a script (same type; batches keep the version they pin until edited) */
+async function uploadVersion(input) {
+  const file = input.files[0]; input.value = ''; if (!file) return;
+  const form = new FormData(); form.append('file', file);
+  const r = await fetch(`${API}/batch/scripts/${BT.script.id}/versions`, { method: 'POST', credentials: 'include', headers: { ...idemKey(), ...(S.csrf ? { 'X-CSRF-Token': S.csrf } : {}) }, body: form });
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) return alert(`새 버전을 올리지 못했습니다: ${data.message || data.code || r.status}`);
+  await loadBatchLists();
+  await openScript(BT.script.id);
+  const pinned = BT.batches.filter(b => b.script_id === BT.script.id).map(b => b.name);
+  alert(`v${data.version_number}을 올렸습니다.${pinned.length ? `\n이 스크립트를 쓰는 배치(${pinned.join(', ')})는 수정 창에서 버전을 바꾸기 전까지 기존 버전으로 돕니다.` : ''}`);
 }
 
 boot();
