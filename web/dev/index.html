@@ -488,7 +488,7 @@
   </div>
   <div id="executionsView" style="display:none;flex:1;overflow:auto">
     <div class="page">
-      <div class="page-head"><h1>실행</h1><span class="muted" style="font-size:13px" id="execScope">executor에서 돌아간 분석·배치 실행</span></div>
+      <div class="page-head"><h1>실행</h1><span class="muted" style="font-size:13px" id="execScope">채팅 분석 실행</span></div>
       <div id="execListBody"></div>
     </div>
   </div>
@@ -1542,7 +1542,7 @@ async function userFilter(text) {
 }
 function renderExecutions() {
   const statuses = ['', 'QUEUED', 'DISPATCHED', 'RUNNING', 'WAITING_FOR_OPERATION', 'FINALIZING', 'CANCEL_REQUESTED', 'CANCELLED', 'SUCCEEDED', 'FAILED'];
-  $('execScope').textContent = S.isAdmin ? 'executor에서 돌아간 분석·배치 실행 · 관리자: 전체 사용자' : 'executor에서 돌아간 내 분석·배치 실행';
+  $('execScope').textContent = S.isAdmin ? '채팅 분석 실행 (배치 실행은 배치 메뉴) · 관리자: 전체 사용자' : '내 채팅 분석 실행 (배치 실행은 배치 메뉴)';
   $('execListBody').innerHTML = `<div class="toolbar">
       ${S.isAdmin ? '<input id="fxUser" placeholder="사용자 (이름·사번·ID)" style="width:170px">' : ''}
       <select id="fxProject"><option value="">모든 프로젝트</option>${S.projects.map(p => `<option value="${esc(p.id)}">${esc(p.name)}</option>`).join('')}</select>
@@ -1555,7 +1555,8 @@ function renderExecutions() {
   loadExecutions();
 }
 async function loadExecutions(more = false) {
-  const q = qs({ user_id: await userFilter($('fxUser')?.value || ''), project_id: $('fxProject').value, session_id: $('fxSession').value.trim(), status: $('fxStatus').value, limit: 30, cursor: more ? SYS.cursor : '' });
+  // batch runs live under 배치
+  const q = qs({ trigger_type: 'INTERACTIVE', user_id: await userFilter($('fxUser')?.value || ''), project_id: $('fxProject').value, session_id: $('fxSession').value.trim(), status: $('fxStatus').value, limit: 30, cursor: more ? SYS.cursor : '' });
   const page = await api(`/executor/executions?${q}`);
   SYS.cursor = page.next_cursor;
   await ensureUsers(page.items.map(e => e.context?.user_id));
