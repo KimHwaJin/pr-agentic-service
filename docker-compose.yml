@@ -2,21 +2,47 @@
 #   - shared-infra compose: postgres, redis (network "shared-infra")
 #   - executor compose: executor API + Jupyter runtimes (also on "shared-infra" as host "executor")
 #   - pr-batch compose (optional, for the 배치 page): API on the host port 8100
-#     (config.yml batch_base_url / batch_jwt_private_key_file: a copy of
-#     ../pr-batch/.local-keys/auth_private.pem in keys/)
+#     (BATCH_BASE_URL below; keys/auth_private.pem is a copy of
+#     ../pr-batch/.local-keys/auth_private.pem)
 #
 #   docker compose up -d --build            # service at http://localhost:8080 (console: /dev/)
 #   docker compose --profile mock up -d     # + scripted mock LLM instead of the gateway
 #
-# Settings live in config.yml (APP_ENV empty = local); a .env next to this compose fills the ${...} values below.
+# APP_ENV stays empty: config.yml (shared values) + the local values below; a .env next to this compose fills the ${...} values below.
 name: pr-agentic-service
 
 x-app-env: &app-env
-  # Everything else comes from config.yml (mounted below, edits apply on restart).
+  # Local values on top of config.yml (shared, mounted below); they win over
+  # it. Edits here apply on `docker compose up -d`.
   RUN_MODE: all
   LOG_LEVEL: INFO
   DATABASE_URL: postgresql+psycopg://${PG_USER:-executor}:${PG_PASSWORD:-executor}@postgres:5432/${PG_DB:-agentic}
+  REDIS_URL: redis://redis:6379/0
+  SSO_ADAPTER: dev
+  PUBLIC_API_ORIGIN: http://localhost:${APP_PORT:-8080}
+  FRONTEND_ORIGIN: http://localhost:${APP_PORT:-8080}
+  SSO_ALLOWED_RETURN_ROOTS: '["/", "/dev"]'
+  COOKIE_SECURE: "false"
   LLM_API_KEY: ${LLM_API_KEY:-EMPTY}
+  EMBEDDING_PROVIDER: mock
+  EMBEDDING_DIMS: "1024"
+  EXECUTOR_BASE_URL: http://executor:8000
+  # executor INPUT_STORAGE_ROOT = SHARED_STORAGE_ROOT = ../executor/shared_dir
+  STORAGE_ROOT: /mnt/executor-shared/agentic
+  STORAGE_EXECUTOR_PATH: agentic
+  EXECUTOR_RESULT_ROOT: /mnt/executor-shared
+  NOTEBOOK_LAB_BASE_URL: http://localhost:8888
+  # pr-batch compose (../pr-batch) on the host port 8100; it verifies with the
+  # pair from its `make auth-keys`, keys/auth_private.pem is a copy of the
+  # private half (config.yml batch_jwt_private_key_file).
+  BATCH_BASE_URL: http://host.docker.internal:8100
+  # Test catalog on top of assets/ (catalogs/analysis_test/README.md); set
+  # '[]' to go back to the base catalog.
+  CATALOG_EXTENSIONS: '["catalogs/analysis_test"]'
+  # Chat models (exactly one default). Only qwen38-27b-nvfp4 is served on the
+  # local gateway. Per-model request fields go in "params", e.g.
+  # {"chat_template_kwargs": {"enable_thinking": false}}.
+  MODELS: '[{"name": "qwen38-27b-nvfp4", "label": "Qwen 3.8 27B", "default": true, "input": ["text", "image"], "max_images": 8}]'
   # Phoenix tracing (optional, docs/phoenix-tracing.md): set these in .env
   PHOENIX_COLLECTOR_ENDPOINT: ${PHOENIX_COLLECTOR_ENDPOINT:-}
   PHOENIX_API_KEY: ${PHOENIX_API_KEY:-}

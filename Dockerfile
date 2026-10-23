@@ -14,10 +14,10 @@ COPY pyproject.toml uv.lock ./
 RUN uv sync --locked --no-dev --group phoenix --no-install-project
 
 # Settings per environment; APP_ENV (Deployment env, or --build-arg APP_ENV=...)
-# picks config.{APP_ENV}.yml. config.yml (local values) stays out of the image.
+# picks config.{APP_ENV}.yml on top of config.yml (shared by every environment).
 ARG APP_ENV=
 ENV APP_ENV=${APP_ENV}
-COPY config.*.yml alembic.ini ./
+COPY config*.yml alembic.ini ./
 # pr-batch signing key placed at build time (keys/README.md).
 COPY keys ./keys
 COPY migrations ./migrations
