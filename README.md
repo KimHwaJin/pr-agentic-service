@@ -82,5 +82,5 @@ uv run uvicorn main:app --app-dir src --port 8080
 - **executor**: `EXECUTOR_BASE_URL`, 결과 PVC 마운트 경로 `EXECUTOR_RESULT_ROOT`(executor의 SHARED_STORAGE_ROOT).
 - **설정 파일**: 레포 루트의 `config.<ENV>.yml`(local, dev, stg, prd)을 이미지에 넣고, `ENV`로 어느 파일을 읽을지 고릅니다. 우선순위는 파일 < `.env` < 환경변수입니다. 모델 목록(`models`), executor 경로(`storage_root`, `storage_executor_path`, `executor_result_root`), 비밀값이 모두 이 파일에 있습니다. 자세한 규칙은 [docs/design/03-config.md](docs/design/03-config.md).
 - **JupyterLab 링크**: `NOTEBOOK_LAB_BASE_URL`(Lab 서버 주소), Lab 루트가 Jupyter 공유 저장소 루트와 다르면 `NOTEBOOK_LAB_PATH_PREFIX`.
-- **pr-batch**: `BATCH_BASE_URL`, `BATCH_JWT_PRIVATE_KEY_FILE`(배치팀이 주는 RS256 개인키 `auth_private.pem` 경로), `BATCH_JWT_ISSUER`/`BATCH_JWT_AUDIENCE`(pr-batch의 AUTH_ISSUER/AUTH_AUDIENCE, 기본 `batch-client`/`batch-service`). 배치 리포트는 `BATCH_REPORT_MODEL`(비우면 기본 모델), `BATCH_REPORT_COLLECT_TIMEOUT_SECONDS`, `BATCH_REPORT_MEMORY_RUNS`.
+- **pr-batch**: `BATCH_BASE_URL`, `BATCH_JWT_PRIVATE_KEY_FILE`(RS256 개인키 경로, 기본 배포는 `keys/auth_private.pem`, [keys/README.md](keys/README.md)), `BATCH_JWT_ISSUER`/`BATCH_JWT_AUDIENCE`(pr-batch의 AUTH_ISSUER/AUTH_AUDIENCE, 기본 `batch-client`/`batch-service`). 배치 리포트는 `BATCH_REPORT_MODEL`(비우면 기본 모델), `BATCH_REPORT_COLLECT_TIMEOUT_SECONDS`, `BATCH_REPORT_MEMORY_RUNS`.
 - 배포 예시: [deploy/kubernetes/deployment.yml](deploy/kubernetes/deployment.yml)

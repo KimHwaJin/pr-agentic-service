@@ -2,6 +2,7 @@
 __pycache__/
 *.pyc
 .env
+keys/*.pem
 .local/
 .pytest_cache/
 .ruff_cache/
