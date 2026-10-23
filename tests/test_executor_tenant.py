@@ -14,14 +14,9 @@ from core.executor.client import ExecutorClient, ExecutorError
 from worker import executor_events
 
 
-def test_streams_are_the_tenant_stream_then_the_shared_one():
+def test_events_come_from_the_tenant_stream():
     settings = Settings(executor_tenant_id="pr-agentic")
-    assert settings.executor_event_streams() == [
-        "executor.events.pr-agentic",
-        "executor.events",
-    ]
-    settings = Settings(executor_read_shared_stream=False)
-    assert settings.executor_event_streams() == ["executor.events.pr-agentic"]
+    assert settings.executor_tenant_stream == "executor.events.pr-agentic"
 
 
 @pytest.mark.parametrize("tenant", ["dlq", "work", "Pr", "a", "ab-", "1ab"])
@@ -106,7 +101,7 @@ def _consumer(redis, progress):
     return executor_events.ExecutorEventConsumer(
         cast(Any, None),
         cast(Any, redis),
-        ["executor.events.pr-agentic", "executor.events"],
+        "executor.events.pr-agentic",
         "g",
         "c",
         on_wake=None,
@@ -115,16 +110,13 @@ def _consumer(redis, progress):
     )
 
 
-def test_groups_start_at_the_oldest_entry_of_every_stream():
+def test_group_starts_at_the_oldest_entry():
     redis = FakeRedis()
-    asyncio.run(_consumer(redis, [])._create_groups())
-    assert redis.groups == [
-        ("executor.events.pr-agentic", "0"),
-        ("executor.events", "0"),
-    ]
+    asyncio.run(_consumer(redis, [])._create_group())
+    assert redis.groups == [("executor.events.pr-agentic", "0")]
 
 
-def test_events_are_acked_on_the_stream_they_came_from():
+def test_handover_events_are_progress():
     redis, progress = FakeRedis(), []
     fields = {
         "event_id": "e1",
@@ -135,7 +127,7 @@ def test_events_are_acked_on_the_stream_they_came_from():
         "tenant_id": "pr-agentic",
     }
     consumer = _consumer(redis, progress)
-    asyncio.run(consumer._handle("executor.events.pr-agentic", "m1", fields))
+    asyncio.run(consumer._handle("m1", fields))
     assert progress == ["execution.step_handover_started"]
     assert redis.acked == [("executor.events.pr-agentic", "m1")]
 
