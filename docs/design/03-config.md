@@ -14,7 +14,7 @@
 레포 루트에 환경별 설정 파일을 둡니다. 모두 이미지에 복사합니다. 확장자는 사내 규칙대로 `.yml`입니다(레포의 다른 YAML도 `.yml`로 통일).
 
 ```
-config.yml         # 로컬 개발 (APP_ENV 비움, compose가 마운트, 이미지에는 넣지 않음)
+config.yml         # 모든 환경 공통값 (이미지에 포함, 로컬도 이 위에 compose 환경변수로 덮음)
 config.dev.yml
 config.stg.yml
 config.prd.yml
@@ -56,9 +56,9 @@ models:
 
 ### 2.2 어느 파일을 읽을지
 
-**`APP_ENV`(dev | stg | prd)로 고릅니다.** 배포는 `config.{APP_ENV}.yml`을 읽고, 로컬은 `APP_ENV`를 비워 두며 `config.yml`과 `.env`, 환경변수만 읽습니다. `APP_ENV`는 환경변수나 `.env`에서 읽고, 비어 있으면 `Settings.env`가 `local`이 됩니다(`env`는 설정 키가 아니라 `APP_ENV`에서 나옵니다).
+**`APP_ENV`(dev | stg | prd)로 고릅니다.** 배포는 공통 `config.yml` 위에 `config.{APP_ENV}.yml`을 덮어 읽고, 로컬은 `APP_ENV`를 비워 두며 `config.yml` 위에 `.env`·환경변수(compose `environment:`)로 로컬 값을 덮습니다. `APP_ENV`는 환경변수나 `.env`에서 읽고, 비어 있으면 `Settings.env`가 `local`이 됩니다(`env`는 설정 키가 아니라 `APP_ENV`에서 나옵니다).
 
-이미지에는 `config.dev/stg/prd.yml`만 들어가고(`config.yml`은 `.dockerignore`), Deployment `env:`의 `APP_ENV=prd`로 고릅니다. Dockerfile의 `ARG APP_ENV`로 빌드 때 고정할 수도 있고, Deployment `env:`가 있으면 그 값이 이깁니다. pr-batch와 같은 체계입니다.
+이미지에는 `config.yml`과 `config.dev/stg/prd.yml`이 모두 들어가고(`COPY config*.yml`), Deployment `env:`의 `APP_ENV=prd`로 고릅니다. Dockerfile의 `ARG APP_ENV`로 빌드 때 고정할 수도 있고, Deployment `env:`가 있으면 그 값이 이깁니다. pr-batch와 같은 체계입니다.
 
 ### 2.3 우선순위
 
@@ -85,7 +85,7 @@ models:
 
 - `core/config.py`: YAML 소스 추가, `models` 필드(목록) 추가, `LLM_MODELS`·`LLM_DEFAULT_ALIAS` 제거
 - `Dockerfile`: `COPY config.*.yml ./`, `ARG APP_ENV` + `ENV APP_ENV=${APP_ENV}`(기본 비움)
-- `docker-compose.yml`: `config.yml`을 마운트(재시작으로 반영), 지금 compose의 `environment:` 값들은 이 파일로 옮김
+- `docker-compose.yml`: `config.yml`을 마운트하고, 로컬 값은 `environment:`에 둠
 - `deploy/kubernetes/deployment.yml`: `envFrom`(ConfigMap·Secret) 제거, `env:`에는 `APP_ENV`와 덮어쓸 값만
 - `.env.example`: 로컬에서 덮어쓸 값만 남김
 - README 운영 연결 지점 갱신
@@ -97,5 +97,5 @@ models:
 
 ## 4. 결정 사항
 
-- 파일 선택: `APP_ENV`(Deployment `env:`)로 `config.{APP_ENV}.yml`을 고릅니다. 로컬은 `APP_ENV`를 비우고 `config.yml`만 씁니다. k8s에서 `APP_ENV`가 없으면 기동하지 않습니다.
-- `config.yml`은 레포에 두고 로컬 compose가 마운트하며, 이미지에는 넣지 않아 로컬 값이 배포에 섞이지 않습니다. `config.dev/stg/prd.yml`은 `<...>` 자리를 운영자가 채웁니다.
+- 파일 선택: `APP_ENV`(Deployment `env:`)로 `config.{APP_ENV}.yml`을 고릅니다. 로컬은 `APP_ENV`를 비우고 `config.yml` 위에 compose 환경변수·`.env`를 씁니다. k8s에서 `APP_ENV`가 없으면 기동하지 않습니다.
+- `config.yml`에는 모든 환경이 같은 값만 둡니다(로컬 전용 값을 넣으면 배포에도 깔리므로 금지). 환경마다 다른 값은 `config.dev/stg/prd.yml`에 두고 `<...>` 자리를 운영자가 채웁니다.

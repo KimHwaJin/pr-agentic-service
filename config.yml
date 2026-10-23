@@ -1,53 +1,26 @@
-# Local settings (APP_ENV empty): docker compose mounts this file. Running
-# uvicorn on the host instead? Override hosts and paths in .env (.env and
-# environment variables win over this file). Not copied into the image, so
-# deployments read only config.{APP_ENV}.yml.
-database_url: postgresql+psycopg://executor:executor@postgres:5432/agentic
-redis_url: redis://redis:6379/0
+# Values shared by every environment (copied into the image). On top of it:
+# config.{APP_ENV}.yml for dev/stg/prd, and locally (APP_ENV empty) the
+# docker-compose.yml environment or .env. Precedence: environment > .env >
+# config.{APP_ENV}.yml > this file. Keep environment-specific values out.
 redis_namespace: agentic
 
-sso_adapter: dev
-public_api_origin: http://localhost:8080
-frontend_origin: http://localhost:8080
-sso_allowed_return_roots: ["/", "/dev"]
-cookie_secure: false
+sso_adapter: company
+sso_adapter_factory: "company_sso:create_sdk"
+sso_allowed_return_roots: ["/"]
+cookie_secure: true
 
 llm_base_url: http://model.frodo.com/v1
-llm_api_key: EMPTY
 llm_enable_thinking: false
-embedding_provider: mock
-embedding_dims: 1024
+embedding_provider: none
 
-executor_base_url: http://executor:8000
-# executor INPUT_STORAGE_ROOT = SHARED_STORAGE_ROOT = ../executor/shared_dir
-storage_root: /mnt/executor-shared/agentic
-storage_executor_path: agentic
-executor_result_root: /mnt/executor-shared
+storage_root: /mnt/data/agent/pr-agentic-service
+storage_executor_path: pr-agentic-service
+executor_result_root: /mnt/data/executor
 executor_runtime_profile: default
-notebook_lab_base_url: http://localhost:8888
+notebook_lab_base_url: https://executor-jupyter-lab.frodo.com
 
-# pr-batch compose (../pr-batch) on the host port 8100. It verifies RS256
-# tokens with the local pair from its `make auth-keys`; keys/auth_private.pem
-# is a copy of ../pr-batch/.local-keys/auth_private.pem (not in git).
-batch_base_url: http://host.docker.internal:8100
+# RS256 signing key for pr-batch, copied into keys/ before the image build
+# (keys/README.md); never committed. iss/aud match pr-batch.
 batch_jwt_private_key_file: keys/auth_private.pem
 batch_jwt_issuer: batch-client
 batch_jwt_audience: batch-service
-
-# Test catalog on top of assets/ (catalogs/analysis_test/README.md).
-# Remove this line to go back to the base catalog.
-catalog_extensions: [catalogs/analysis_test]
-
-# Chat models offered to users. Only these are used; exactly one default.
-# Only qwen38-27b-nvfp4 is served on the local gateway.
-models:
-  - name: qwen38-27b-nvfp4
-    label: Qwen 3.8 27B
-    default: true
-    input: [text, image]
-    max_images: 8
-    # Optional request body fields for this model only; they win over
-    # llm_enable_thinking (chat_template_kwargs merges key by key). e.g.
-    # params:
-    #   reasoning_effort: low                       # gpt-oss
-    #   chat_template_kwargs: {enable_thinking: false}  # Qwen3 / GLM

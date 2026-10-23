@@ -1,34 +1,17 @@
-# APP_ENV=prd. Fill the <...> values; environment variables (Deployment env:) win over this file.
+# APP_ENV=prd: values for this environment on top of config.yml (shared).
+# Fill the <...> values; environment variables (Deployment env:) win.
 database_url: postgresql+psycopg://<user>:<password>@<pg-host>:5432/agentic
 redis_url: redis://<redis-host>:6379/0
-redis_namespace: agentic
 
-sso_adapter: company
-sso_adapter_factory: "company_sso:create_sdk"
 public_api_origin: https://<api-host>
 frontend_origin: https://<front-host>
-sso_allowed_return_roots: ["/"]
 cors_origins: ["https://<front-host>"]
-cookie_secure: true
 
-llm_base_url: http://model.frodo.com/v1
 llm_api_key: <llm-api-key>
-llm_enable_thinking: false
-embedding_provider: none
 
 executor_base_url: http://<executor-host>:8000
-storage_root: /mnt/data/agent/pr-agentic-service
-storage_executor_path: pr-agentic-service
-executor_result_root: /mnt/data/executor
-executor_runtime_profile: default
-notebook_lab_base_url: https://executor-jupyter-lab.frodo.com
 
 batch_base_url: http://<pr-batch-host>:8100
-# RS256 signing key for this environment, copied into keys/ before the
-# image build (keys/README.md); never committed. iss/aud match pr-batch.
-batch_jwt_private_key_file: keys/auth_private.pem
-batch_jwt_issuer: batch-client
-batch_jwt_audience: batch-service
 
 # Models served in this environment (fill in): name = served model name,
 # input: [text] or [text, image] as the deployed model supports.
