@@ -2,18 +2,17 @@
 #   - shared-infra compose: postgres, redis (network "shared-infra")
 #   - executor compose: executor API + Jupyter runtimes (also on "shared-infra" as host "executor")
 #   - pr-batch compose (optional, for the 배치 page): API on the host port 8100
-#     (config.local.yml batch_base_url / batch_jwt_private_key_file: a copy of
+#     (config.yml batch_base_url / batch_jwt_private_key_file: a copy of
 #     ../pr-batch/.local-keys/auth_private.pem in keys/)
 #
 #   docker compose up -d --build            # service at http://localhost:8080 (console: /dev/)
 #   docker compose --profile mock up -d     # + scripted mock LLM instead of the gateway
 #
-# Settings live in config.local.yml; a .env next to this compose fills the ${...} values below.
+# Settings live in config.yml (APP_ENV empty = local); a .env next to this compose fills the ${...} values below.
 name: pr-agentic-service
 
 x-app-env: &app-env
-  # Everything else comes from config.local.yml (mounted below, edits apply on restart).
-  ENV: local
+  # Everything else comes from config.yml (mounted below, edits apply on restart).
   RUN_MODE: all
   LOG_LEVEL: INFO
   DATABASE_URL: postgresql+psycopg://${PG_USER:-executor}:${PG_PASSWORD:-executor}@postgres:5432/${PG_DB:-agentic}
@@ -52,7 +51,7 @@ services:
       - ./catalogs:/app/catalogs:ro
       - ./src/agent/prompts:/app/src/agent/prompts:ro
       - ./web:/app/web:ro
-      - ./config.local.yml:/app/config.local.yml:ro
+      - ./config.yml:/app/config.yml:ro
       # pr-batch signing key (keys/README.md), read without a rebuild.
       - ./keys:/app/keys:ro
     extra_hosts:

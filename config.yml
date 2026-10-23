@@ -1,6 +1,7 @@
-# Local stack (docker compose). Running uvicorn on the host instead? Override
-# hosts and paths in .env (environment variables win over this file).
-env: local
+# Local settings (APP_ENV empty): docker compose mounts this file. Running
+# uvicorn on the host instead? Override hosts and paths in .env (.env and
+# environment variables win over this file). Not copied into the image, so
+# deployments read only config.{APP_ENV}.yml.
 database_url: postgresql+psycopg://executor:executor@postgres:5432/agentic
 redis_url: redis://redis:6379/0
 redis_namespace: agentic

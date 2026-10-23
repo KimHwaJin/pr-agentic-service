@@ -5,7 +5,7 @@ pr-batch 호출 토큰(RS256)을 서명하는 개인키(`auth_private.pem`)를 �
 가리킨다. 상대경로는 repo 루트(이미지에서는 `/app`) 기준이다.
 
 ```yaml
-# config.<ENV>.yml
+# config.{APP_ENV}.yml
 batch_jwt_private_key_file: keys/auth_private.pem
 batch_jwt_issuer: batch-client      # pr-batch AUTH_ISSUER
 batch_jwt_audience: batch-service   # pr-batch AUTH_AUDIENCE
@@ -15,5 +15,5 @@ batch_jwt_audience: batch-service   # pr-batch AUTH_AUDIENCE
   개인키는 여기에, 공개키는 pr-batch `keys/`에 두고 각각 빌드·배포한다.
 - `*.pem`은 `.gitignore`로 막혀 있다. 개인키는 git에 올리지 않는다.
 - 로컬은 pr-batch `make auth-keys`가 만든 `../pr-batch/.local-keys/auth_private.pem`을 여기로
-  복사해 쓴다(`cp ../pr-batch/.local-keys/auth_private.pem keys/`). compose가 이 폴더를 마운트하므로
+  복사해 쓴다(`cp ../pr-batch/.local-keys/auth_private.pem keys/`). `config.yml`이 이 파일을 가리키고 compose가 이 폴더를 마운트하므로
   키를 바꿔도 다시 빌드할 필요 없이 재시작만 하면 된다.

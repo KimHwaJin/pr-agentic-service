@@ -45,7 +45,7 @@ docker compose up -d --build
 - executor 공유 볼륨은 `../executor/shared_dir`(`EXECUTOR_SHARED_DIR`로 변경), LLM은 `model.frodo.com` 게이트웨이를 씁니다.
 - `assets/`와 `src/agent/prompts/`는 마운트되어 있어 수정하면 재빌드 없이 다음 요청부터 반영됩니다.
 - 게이트웨이 대신 mock LLM: `.env`에 `LLM_BASE_URL=http://mock-llm:8001/v1`을 넣고 `docker compose --profile mock up -d`
-- 설정은 `config.local.yml`에서 바꿉니다(마운트되어 있어 컨테이너 재시작으로 반영). compose 옆 `.env`는 `APP_PORT`, `PG_PASSWORD`, `LLM_API_KEY` 같은 값만 채웁니다.
+- 설정은 `config.yml`에서 바꿉니다(`APP_ENV`를 비운 로컬 설정, 마운트되어 있어 컨테이너 재시작으로 반영). compose 옆 `.env`는 `APP_PORT`, `PG_PASSWORD`, `LLM_API_KEY` 같은 값만 채웁니다.
 
 ## 로컬 실행
 
@@ -80,7 +80,7 @@ uv run uvicorn main:app --app-dir src --port 8080
 - **임베딩**: `EMBEDDING_BASE_URL`, `EMBEDDING_MODEL`, `EMBEDDING_DIMS`(HNSW 인덱스는 2,000차원 이하).
 - **skill/tool**: `SKILLS_ROOT`, `TOOLS_ROOT`, `KNOWLEDGE_ROOT`(기본은 레포의 `assets/`). 파일이 바뀌면 다음 run부터 반영됩니다.
 - **executor**: `EXECUTOR_BASE_URL`, 결과 PVC 마운트 경로 `EXECUTOR_RESULT_ROOT`(executor의 SHARED_STORAGE_ROOT).
-- **설정 파일**: 레포 루트의 `config.<ENV>.yml`(local, dev, stg, prd)을 이미지에 넣고, `ENV`로 어느 파일을 읽을지 고릅니다. 우선순위는 파일 < `.env` < 환경변수입니다. 모델 목록(`models`), executor 경로(`storage_root`, `storage_executor_path`, `executor_result_root`), 비밀값이 모두 이 파일에 있습니다. 자세한 규칙은 [docs/design/03-config.md](docs/design/03-config.md).
+- **설정 파일**: 배포는 `APP_ENV`(dev, stg, prd)로 `config.{APP_ENV}.yml`을 고릅니다(이미지에 포함). 로컬은 `APP_ENV`를 비워 두고 `config.yml`과 `.env`, 환경변수만 읽습니다(`config.yml`은 이미지에 넣지 않음). 우선순위는 환경변수 > `.env` > `config.{APP_ENV}.yml` > `config.yml`입니다. 모델 목록(`models`), executor 경로(`storage_root`, `storage_executor_path`, `executor_result_root`), 비밀값이 모두 이 파일에 있습니다. 자세한 규칙은 [docs/design/03-config.md](docs/design/03-config.md).
 - **JupyterLab 링크**: `NOTEBOOK_LAB_BASE_URL`(Lab 서버 주소), Lab 루트가 Jupyter 공유 저장소 루트와 다르면 `NOTEBOOK_LAB_PATH_PREFIX`.
 - **pr-batch**: `BATCH_BASE_URL`, `BATCH_JWT_PRIVATE_KEY_FILE`(RS256 개인키 경로, 기본 배포는 `keys/auth_private.pem`, [keys/README.md](keys/README.md)), `BATCH_JWT_ISSUER`/`BATCH_JWT_AUDIENCE`(pr-batch의 AUTH_ISSUER/AUTH_AUDIENCE, 기본 `batch-client`/`batch-service`). 배치 리포트는 `BATCH_REPORT_MODEL`(비우면 기본 모델), `BATCH_REPORT_COLLECT_TIMEOUT_SECONDS`, `BATCH_REPORT_MEMORY_RUNS`.
 - 배포 예시: [deploy/kubernetes/deployment.yml](deploy/kubernetes/deployment.yml)

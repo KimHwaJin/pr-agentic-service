@@ -20,10 +20,10 @@ spec:
         - name: app
           image: REGISTRY/pr-agentic-service:TAG
           ports: [{containerPort: 8080}]
-          # Settings come from config.<ENV>.yml baked into the image; env: only
-          # picks the environment and overrides single values when needed.
+          # Settings come from config.{APP_ENV}.yml baked into the image; env:
+          # only picks the environment and overrides single values when needed.
           env:
-            - {name: ENV, value: prd}
+            - {name: APP_ENV, value: prd}
             - {name: RUN_MODE, value: all}
           readinessProbe:
             httpGet: {path: /readyz, port: 8080}
