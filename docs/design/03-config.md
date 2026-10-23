@@ -20,35 +20,35 @@ config.stg.yml
 config.prd.yml
 ```
 
-각 파일은 지금 환경변수로 받는 설정(`core/config.py`의 `Settings`)과 모델 목록을 함께 담습니다. 키 이름은 `Settings` 필드 이름 그대로(소문자)입니다.
+각 파일은 지금 환경변수로 받는 설정(`core/config.py`의 `Settings`)과 모델 목록을 함께 담습니다. 키 이름은 `Settings` 필드 이름을 대문자로 씁니다(대소문자를 가리지 않아 소문자도 됨). `MODELS` 항목의 키(`NAME`, `DEFAULT` 등)도 마찬가지이고, `PARAMS` 안의 값은 모델에 그대로 보내므로 적힌 그대로 씁니다.
 
 ```yaml
 # config.prd.yml
-database_url: postgresql+psycopg://agentic:…@pg.prd.internal:5432/agentic
-redis_url: redis://redis.prd.internal:6379/0
-llm_base_url: http://model.frodo.com/v1
-llm_api_key: sk-…
-executor_base_url: http://executor.prd.internal:8000
-storage_root: /mnt/data/agent/pr-agentic-service
-storage_executor_path: pr-agentic-service
-executor_result_root: /mnt/data/executor
-notebook_lab_base_url: https://executor-jupyter-lab.frodo.com
-batch_base_url: http://pr-batch.prd.internal:8100
-batch_jwt_private_key_file: /path/to/auth_private.pem
-cors_origins: ["https://front.frodo.com"]
-cookie_secure: true
+DATABASE_URL: postgresql+psycopg://agentic:…@pg.prd.internal:5432/agentic
+REDIS_URL: redis://redis.prd.internal:6379/0
+LLM_BASE_URL: http://model.frodo.com/v1
+LLM_API_KEY: sk-…
+EXECUTOR_BASE_URL: http://executor.prd.internal:8000
+STORAGE_ROOT: /mnt/data/agent/pr-agentic-service
+STORAGE_EXECUTOR_PATH: pr-agentic-service
+EXECUTOR_RESULT_ROOT: /mnt/data/executor
+NOTEBOOK_LAB_BASE_URL: https://executor-jupyter-lab.frodo.com
+BATCH_BASE_URL: http://pr-batch.prd.internal:8100
+BATCH_JWT_PRIVATE_KEY_FILE: /path/to/auth_private.pem
+CORS_ORIGINS: ["https://front.frodo.com"]
+COOKIE_SECURE: true
 
-models:
-  - name: qwen38-27b-nvfp4
-    label: Qwen 3.8 27B
-    default: true
-    input: [text]
-  - name: example-vl-model
-    label: 예시 비전 모델
-    input: [text, image]
-    max_images: 8
-  - name: gpt-oss-120b
-    params:               # 이 모델 요청 본문에만 붙는 값
+MODELS:
+  - NAME: qwen38-27b-nvfp4
+    LABEL: Qwen 3.8 27B
+    DEFAULT: true
+    INPUT: [text]
+  - NAME: example-vl-model
+    LABEL: 예시 비전 모델
+    INPUT: [text, image]
+    MAX_IMAGES: 8
+  - NAME: gpt-oss-120b
+    PARAMS:               # 이 모델 요청 본문에만 붙는 값
       reasoning_effort: low
 ```
 

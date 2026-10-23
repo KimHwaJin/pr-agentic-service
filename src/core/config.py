@@ -1,10 +1,12 @@
 """Service settings.
 
 Sources, highest first: environment variables, ``.env``,
-``config.{APP_ENV}.yml`` (one deployment environment, baked into the image),
-``config.yml`` (local values; not in the image), field defaults. ``APP_ENV``
-(dev | stg | prd) comes from the environment or ``.env``; left empty, the
-service runs as ``local`` on config.yml alone.
+``config.{APP_ENV}.yml`` (one deployment environment), ``config.yml``
+(values shared by every environment), field defaults; both files are at the
+repo root and baked into the image. ``APP_ENV`` (dev | stg | prd) comes from
+the environment or ``.env``; left empty, the service runs as ``local`` on
+config.yml plus environment/.env values. Keys are case-insensitive in every
+source (``REDIS_URL`` or ``redis_url``; the config files use upper case).
 """
 
 import os
@@ -56,6 +58,17 @@ class ModelSpec(BaseModel):
     # Extra request body fields for this model only (e.g. reasoning_effort,
     # chat_template_kwargs). Server-side; never sent to clients.
     params: dict[str, Any] = Field(default_factory=dict, exclude=True)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _any_case_keys(cls, data: Any) -> Any:
+        # Config keys are case-insensitive (NAME or name); params stay as is.
+        if isinstance(data, dict):
+            return {
+                k.lower() if isinstance(k, str) else k: v
+                for k, v in data.items()
+            }
+        return data
 
     @property
     def vision(self) -> bool:
