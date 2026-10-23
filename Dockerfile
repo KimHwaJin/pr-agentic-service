@@ -17,6 +17,8 @@ RUN uv sync --locked --no-dev --group phoenix --no-install-project
 ARG ENV=local
 ENV ENV=${ENV}
 COPY config.*.yml alembic.ini ./
+# pr-batch signing key placed at build time (keys/README.md).
+COPY keys ./keys
 COPY migrations ./migrations
 COPY assets ./assets
 COPY catalogs ./catalogs
