@@ -1,23 +1,23 @@
 # APP_ENV=dev: values for this environment on top of config.yml (shared).
 # Fill the <...> values; environment variables (Deployment env:) win.
-database_url: postgresql+psycopg://<user>:<password>@<pg-host>:5432/agentic
-redis_url: redis://<redis-host>:6379/0
+DATABASE_URL: postgresql+psycopg://<user>:<password>@<pg-host>:5432/agentic
+REDIS_URL: redis://<redis-host>:6379/0
 
-public_api_origin: https://<api-host>
-frontend_origin: https://<front-host>
-cors_origins: ["https://<front-host>"]
-cookie_secure: false
+PUBLIC_API_ORIGIN: https://<api-host>
+FRONTEND_ORIGIN: https://<front-host>
+CORS_ORIGINS: ["https://<front-host>"]
+COOKIE_SECURE: false
 
-llm_api_key: <llm-api-key>
+LLM_API_KEY: <llm-api-key>
 
-executor_base_url: http://<executor-host>:8000
+EXECUTOR_BASE_URL: http://<executor-host>:8000
 
-batch_base_url: http://<pr-batch-host>:8100
+BATCH_BASE_URL: http://<pr-batch-host>:8100
 
 # Models served in this environment (fill in): name = served model name,
 # input: [text] or [text, image] as the deployed model supports.
-models:
-  - name: <model-name>
-    label: <display name>
-    default: true
-    input: [text]
+MODELS:
+  - NAME: <model-name>
+    LABEL: <display name>
+    DEFAULT: true
+    INPUT: [text]

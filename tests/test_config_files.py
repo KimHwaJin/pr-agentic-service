@@ -55,3 +55,16 @@ def test_a_pod_without_app_env_does_not_start(root, monkeypatch):
     monkeypatch.setenv("KUBERNETES_SERVICE_HOST", "10.0.0.1")
     with pytest.raises(ValueError, match="APP_ENV is not set"):
         Settings()
+
+
+def test_keys_are_case_insensitive(root):
+    (root / "config.yml").write_text(
+        "REDIS_NAMESPACE: upper\nmodels:\n"
+        "  - NAME: m-upper\n    DEFAULT: true\n"
+        "    PARAMS: {reasoning_effort: low}\n"
+        "  - name: m-lower\n"
+    )
+    settings = Settings()
+    assert settings.redis_namespace == "upper"
+    assert [m.name for m in settings.models] == ["m-upper", "m-lower"]
+    assert settings.default_model.params == {"reasoning_effort": "low"}

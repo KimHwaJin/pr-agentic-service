@@ -6,9 +6,9 @@ pr-batch 호출 토큰(RS256)을 서명하는 개인키(`auth_private.pem`)를 �
 
 ```yaml
 # config.yml (공통)
-batch_jwt_private_key_file: keys/auth_private.pem
-batch_jwt_issuer: batch-client      # pr-batch AUTH_ISSUER
-batch_jwt_audience: batch-service   # pr-batch AUTH_AUDIENCE
+BATCH_JWT_PRIVATE_KEY_FILE: keys/auth_private.pem
+BATCH_JWT_ISSUER: batch-client      # pr-batch AUTH_ISSUER
+BATCH_JWT_AUDIENCE: batch-service   # pr-batch AUTH_AUDIENCE
 ```
 
 - 키 쌍은 환경(dev/stg/prd)마다 현장에서 pr-batch의 `scripts/auth_keys.py`로 만든다.
