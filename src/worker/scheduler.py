@@ -37,6 +37,8 @@ from worker.executor_events import matches
 log = logging.getLogger(__name__)
 _PAUSE: TypeAdapter = TypeAdapter(PauseRequest)
 TERMINAL = {"succeeded", "failed", "cancelled"}
+# payload fields of execution.step_handover_* relayed to the session
+HANDOVER_FIELDS = ("reason", "paused_seconds", "finished_during_handover")
 
 
 class LeaseLost(Exception):
@@ -483,6 +485,13 @@ class RunScheduler:
                     "status": payload.get("status"),
                     "step": payload.get("step"),
                     "error": payload.get("error"),
+                    # step_handover_started / _completed: another executor
+                    # worker takes over the step; the kernel keeps running
+                    **{
+                        k: payload[k]
+                        for k in HANDOVER_FIELDS
+                        if payload.get(k) is not None
+                    },
                 },
                 # high volume; execution_completed is the durable summary
                 durable=False,

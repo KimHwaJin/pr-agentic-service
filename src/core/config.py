@@ -27,6 +27,8 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 APP_ENVS = ("dev", "stg", "prd")
+# executor stream names a tenant_id may not take
+RESERVED_TENANT_IDS = frozenset({"dlq", "work"})
 
 
 def app_env() -> str | None:
@@ -140,6 +142,14 @@ class Settings(BaseSettings):
 
     # Executor.
     executor_base_url: str = "http://localhost:8000"
+    # The system that receives this service's executor events: sent as
+    # tenant_id with every submission and with batches registered through
+    # pr-batch, so their events come to <executor_event_stream>.<tenant>.
+    # The same in every environment (config.yml); a local run against a
+    # shared executor can change it to keep its events apart.
+    executor_tenant_id: str = Field(
+        "pr-agentic", pattern=r"^[a-z][a-z0-9-]{1,62}[a-z0-9]$"
+    )
     # This service's folder on the executor input PV (INPUT_STORAGE_ROOT):
     # the local mount, and the same folder relative to INPUT_STORAGE_ROOT.
     # Code sent to the executor lives under <root>/sources/.
@@ -147,7 +157,12 @@ class Settings(BaseSettings):
     storage_executor_path: str = "agentic"
     # local mount of the executor's SHARED_STORAGE_ROOT (results)
     executor_result_root: Path = ROOT / ".local/shared"
+    # the executor's REDIS_EVENT_STREAM: shared stream and tenant prefix
     executor_event_stream: str = "executor.events"
+    # Also read the shared stream, for executions submitted without a
+    # tenant (before this service and pr-batch sent one). Turn off once
+    # those have finished.
+    executor_read_shared_stream: bool = True
     # a run still waiting this long asks the executor for its event
     executor_event_recovery_seconds: float = 120
     executor_runtime_profile: str = "default"
@@ -172,6 +187,13 @@ class Settings(BaseSettings):
     # replaces a skill, tool or knowledge entry of the same name. Removing
     # an entry here restores the base catalog.
     catalog_extensions: list[Path] = []
+
+    def executor_event_streams(self) -> list[str]:
+        """Streams the executor event consumer reads, tenant first."""
+        streams = [f"{self.executor_event_stream}.{self.executor_tenant_id}"]
+        if self.executor_read_shared_stream:
+            streams.append(self.executor_event_stream)
+        return streams
 
     def catalog_roots(self, kind: str) -> list[Path]:
         """Base root and extension roots for skills | tools | knowledge."""
@@ -238,6 +260,10 @@ class Settings(BaseSettings):
     batch_jwt_private_key_file: str = ""
     batch_jwt_issuer: str = "batch-client"
     batch_jwt_audience: str = "batch-service"
+    # Add executor_tenant_id to batches registered through the gateway, so
+    # their executions report to this service. Turn on once pr-batch
+    # accepts tenant_id (it rejects unknown fields).
+    batch_send_tenant_id: bool = False
     # Reports of successful BATCH executions (worker.batch_reports).
     # empty = the default model
     batch_report_model: str = ""
@@ -267,6 +293,10 @@ class Settings(BaseSettings):
             raise ValueError(
                 "EMBEDDING_PROVIDER=openai needs EMBEDDING_BASE_URL and "
                 "EMBEDDING_MODEL"
+            )
+        if self.executor_tenant_id in RESERVED_TENANT_IDS:
+            raise ValueError(
+                f"EXECUTOR_TENANT_ID {self.executor_tenant_id!r} is reserved"
             )
         names = [m.name for m in self.models]
         if len(set(names)) != len(names):

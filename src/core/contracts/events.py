@@ -78,6 +78,12 @@ class ExecutionProgressData(View):
     status: str | None = None
     step: dict[str, Any] | None = None
     error: Any = None
+    # execution.step_handover_started:
+    # EXECUTOR_SHUTDOWN | EXECUTOR_UNRESPONSIVE
+    reason: str | None = None
+    # execution.step_handover_completed
+    paused_seconds: float | None = None
+    finished_during_handover: bool | None = None
 
 
 class StepResult(View):

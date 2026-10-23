@@ -8,9 +8,12 @@ pr-batch team, iss/aud from settings, sub=users.id, scope=batch:manage,
 Reports of finished batch runs are not asked for by pr-batch: the worker
 starts one when the executor reports a successful BATCH execution (see
 ``worker.batch_reports``); users read them under ``/api/v1/batch-reports``.
+A new batch carries our executor tenant_id (``batch_send_tenant_id``), so
+pr-batch submits its runs with it and their events come to our stream.
 """
 
 import hashlib
+import json
 import time
 from functools import lru_cache
 from pathlib import Path
@@ -154,6 +157,21 @@ async def batch_script_view(
     )
 
 
+def with_tenant(body: bytes, tenant_id: str) -> bytes:
+    """A batch registration body that names our tenant.
+
+    Set by us, not the caller: the tenant decides who gets the events.
+    A body that is not a JSON object goes on as is for pr-batch to reject.
+    """
+    try:
+        batch = json.loads(body)
+    except ValueError:
+        return body
+    if not isinstance(batch, dict):
+        return body
+    return json.dumps({**batch, "tenant_id": tenant_id}).encode()
+
+
 @router.api_route(
     "/api/v1/batch/{path:path}",
     methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
@@ -167,12 +185,20 @@ async def batch_gateway(
         if k.lower() in FORWARD_HEADERS
     }
     headers["Authorization"] = f"Bearer {_batch_token(services, user)}"
+    body = await request.body()
+    settings = services.settings
+    if (
+        settings.batch_send_tenant_id
+        and request.method == "POST"
+        and path.strip("/") == "batches"
+    ):
+        body = with_tenant(body, settings.executor_tenant_id)
     result = await _client(services).request(
         request.method,
         f"/api/v1/{path}",
         params=request.query_params,
         headers=headers,
-        content=await request.body(),
+        content=body,
     )
     passthrough = {
         k: v

@@ -24,6 +24,12 @@ class ExecutorError(Exception):
         super().__init__(f"executor error {status}: {body}")
         self.status, self.body = status, body
 
+    @property
+    def code(self) -> str | None:
+        """The executor's error code (``{"error": {"code": ...}}``)."""
+        error = self.body.get("error") if isinstance(self.body, dict) else None
+        return error.get("code") if isinstance(error, dict) else None
+
 
 class ExecutorClient:
     """Executor REST v1.
@@ -32,10 +38,14 @@ class ExecutorClient:
     call (pod crash, graph replay) returns the original receipt.
     """
 
-    def __init__(self, base_url: str, timeout: float):
+    def __init__(
+        self, base_url: str, timeout: float, tenant_id: str | None = None
+    ):
         self.http = httpx.AsyncClient(
             base_url=base_url.rstrip("/") + "/api/v1", timeout=timeout
         )
+        # decides the event stream of every execution submitted here
+        self.tenant_id = tenant_id
 
     async def close(self) -> None:
         await self.http.aclose()
@@ -75,6 +85,7 @@ class ExecutorClient:
             lifecycle["operation_wait_timeout_seconds"] = wait_seconds
         body = {
             "idempotency_key": idempotency_key,
+            **({"tenant_id": self.tenant_id} if self.tenant_id else {}),
             "lifecycle": lifecycle,
             "trigger": {"type": trigger, "actor": AGENT_ACTOR},
             "runtime": {"type": "JUPYTER", "profile": profile},

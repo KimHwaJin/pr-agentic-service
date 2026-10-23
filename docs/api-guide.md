@@ -90,7 +90,7 @@
 | `tool_call` | `{name, args}` | 백그라운드 메시지 (Agent가 하는 일) |
 | `agent_switched` | `{agent: main\|analyst, task?}` | 담당 전환 표시 |
 | `plan_approved`, `plan_auto_approved`, `plan_revised` | 계획 정보 | 백그라운드 메시지 |
-| `execution_progress` | `{event_type, status, step, error}` | executor 단계별 진행 |
+| `execution_progress` | `{event_type, status, step, error, reason?, paused_seconds?, finished_during_handover?}` | executor 단계별 진행. `event_type`이 `execution.step_handover_started`면 실행 중인 단계를 다른 executor 워커가 넘겨받는 중(`reason`: `EXECUTOR_SHUTDOWN`\|`EXECUTOR_UNRESPONSIVE`, 커널은 계속 실행되고 코드가 다시 돌지 않음), `execution.step_handover_completed`면 넘겨받기 완료(`paused_seconds`: 멈춰 있던 초). 둘 다 정보 표시용이며 이어서 같은 단계의 `execution.step_completed`가 옵니다 |
 | `execution_completed` | `{execution_id, results: [{call, tool, status, observations, stdout, images[], error}], error}` | 실행 순서대로 담긴 단계 결과. `call`은 계획의 tool 번호(사용자 코드는 null, 대신 `id`). 이미지는 5장 참고 |
 | `hitl_request` | `{interrupt_id, type, ...}` | 사용자 입력 카드 (4장) |
 | `hitl_resolved` | `{interrupt_id}` | 카드 닫기 |
