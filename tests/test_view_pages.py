@@ -1,11 +1,17 @@
 import asyncio
 import json
+import tempfile
+from functools import cache
+from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, cast
 from uuid import UUID
 
 import httpx
+import jwt
 import pytest
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric import rsa
 from fastapi import HTTPException
 
 from api_service.routers import batch
@@ -69,10 +75,58 @@ class _PrBatch:
         return httpx.Response(self.status, json=body)
 
 
+@cache
+def _key_pair() -> tuple[Path, rsa.RSAPublicKey]:
+    """A throwaway RS256 pair like pr-batch's `make auth-keys`."""
+    key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    path = Path(tempfile.mkdtemp()) / "auth_private.pem"
+    path.write_bytes(
+        key.private_bytes(
+            serialization.Encoding.PEM,
+            serialization.PrivateFormat.PKCS8,
+            serialization.NoEncryption(),
+        )
+    )
+    return path, key.public_key()
+
+
+def _key_file() -> Path:
+    return _key_pair()[0]
+
+
+def test_batch_token_is_what_pr_batch_verifies():
+    services = SimpleNamespace(
+        settings=Settings(batch_jwt_private_key_file=str(_key_file()))
+    )
+    user = SimpleNamespace(id="0c8a2f86-5d0e-4e55-9a3c-6f2f0f6a1b11")
+    token = batch._batch_token(services, user)
+    assert jwt.get_unverified_header(token)["alg"] == "RS256"
+    claims = jwt.decode(
+        token,
+        _key_pair()[1],
+        algorithms=["RS256"],
+        audience="batch-service",
+        issuer="batch-client",
+        options={"require": ["exp", "iat", "sub", "iss", "aud"]},
+    )
+    assert claims["sub"] == user.id
+    assert claims["scope"] == "batch:manage"
+    assert 0 < claims["exp"] - claims["iat"] <= 300
+
+
+def test_batch_token_without_a_key_is_not_configured():
+    services = SimpleNamespace(
+        settings=Settings(batch_jwt_private_key_file="")
+    )
+    with pytest.raises(HTTPException) as err:
+        batch._batch_token(services, SimpleNamespace(id="u"))
+    assert err.value.status_code == 503
+
+
 def _view(monkeypatch, client):
     monkeypatch.setattr(batch, "_client", lambda services: client)
     services = SimpleNamespace(
-        settings=Settings(batch_jwt_secret="x" * 32, batch_jwt_issuer="prj_re")
+        settings=Settings(batch_jwt_private_key_file=str(_key_file()))
     )
     user = SimpleNamespace(id="0c8a2f86-5d0e-4e55-9a3c-6f2f0f6a1b11")
     return asyncio.run(

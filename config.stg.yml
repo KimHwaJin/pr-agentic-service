@@ -25,7 +25,11 @@ executor_runtime_profile: default
 notebook_lab_base_url: https://executor-jupyter-lab.frodo.com
 
 batch_base_url: http://<pr-batch-host>:8100
-batch_jwt_secret: <batch-jwt-secret>
+# RS256 signing key from the pr-batch team (auth_private.pem for this
+# environment); keep it out of git. iss/aud as the team gives them.
+batch_jwt_private_key_file: <path-to-auth_private.pem>
+batch_jwt_issuer: batch-client
+batch_jwt_audience: batch-service
 
 # Models served in this environment (fill in): name = served model name,
 # input: [text] or [text, image] as the deployed model supports.
