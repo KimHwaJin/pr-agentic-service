@@ -30,6 +30,8 @@ x-app-env: &app-env
   STORAGE_ROOT: /mnt/executor-shared/agentic
   STORAGE_EXECUTOR_PATH: agentic
   EXECUTOR_RESULT_ROOT: /mnt/executor-shared
+  # Worker reads only the Redis stream executor.events.<EXECUTOR_TENANT_ID>.
+  EXECUTOR_TENANT_ID: pr-agentic
   NOTEBOOK_LAB_BASE_URL: http://localhost:8888
   # pr-batch compose (../pr-batch) on the host port 8100; it verifies with the
   # pair from its `make auth-keys`, keys/auth_private.pem is a copy of the
