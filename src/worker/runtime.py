@@ -30,7 +30,7 @@ class Worker:
         self.consumer = ExecutorEventConsumer(
             services.db,
             services.redis,
-            settings.executor_event_streams(),
+            settings.executor_tenant_stream,
             f"{settings.redis_namespace}:executor-events",
             self.owner,
             on_wake=self.scheduler.notify,

@@ -1,9 +1,8 @@
 """Consumes executor events and resumes runs waiting on them.
 
-The executor publishes the events of an execution submitted with our
-tenant_id to ``executor.events.<tenant>``, and those of executions without a
-tenant to the shared ``executor.events`` (read too while such executions may
-still report; ``Settings.executor_event_streams``). Each stream is a Redis
+The executor publishes the events of every execution submitted with our
+tenant_id (agent runs and the batches registered through us) to
+``executor.events.<tenant>`` (``Settings.executor_tenant_stream``), a Redis
 Stream with at-least-once delivery. Each event is stored once in
 ``executor_inbox`` (dedup on event_id) before XACK, so a run that starts
 waiting after its event already arrived still finds it (see
@@ -92,17 +91,17 @@ class ExecutorEventConsumer:
         self,
         db: Database,
         redis: Redis,
-        streams: list[str],
+        stream: str,
         group: str,
         consumer: str,
         on_wake,
         on_progress,
         on_completed,
     ):
-        self.db, self.redis, self.streams, self.group, self.consumer = (
+        self.db, self.redis, self.stream, self.group, self.consumer = (
             db,
             redis,
-            streams,
+            stream,
             group,
             consumer,
         )
@@ -111,25 +110,24 @@ class ExecutorEventConsumer:
         # async (execution_id, payload) -> None
         self.on_completed = on_completed
 
-    async def _create_groups(self) -> None:
+    async def _create_group(self) -> None:
         """A new group starts at the stream's oldest entry.
 
-        Events published before the group existed (a tenant stream that a
+        Events published before the group existed (a stream that a
         submission created first, a group lost with Redis) are still
         delivered; replaying them is harmless (inbox and report jobs are
         idempotent).
         """
-        for stream in self.streams:
-            try:
-                await self.redis.xgroup_create(
-                    stream, self.group, id="0", mkstream=True
-                )
-            except ResponseError as exc:
-                if "BUSYGROUP" not in str(exc):
-                    raise
+        try:
+            await self.redis.xgroup_create(
+                self.stream, self.group, id="0", mkstream=True
+            )
+        except ResponseError as exc:
+            if "BUSYGROUP" not in str(exc):
+                raise
 
     async def run_forever(self) -> None:
-        await self._create_groups()
+        await self._create_group()
         reclaim_every, ticks = 12, 0
         while True:
             try:
@@ -139,13 +137,13 @@ class ExecutorEventConsumer:
                 batches = await self.redis.xreadgroup(
                     self.group,
                     self.consumer,
-                    {stream: ">" for stream in self.streams},
+                    {self.stream: ">"},
                     count=50,
                     block=5000,
                 )
-                for stream, messages in batches or []:
+                for _, messages in batches or []:
                     for message_id, fields in messages:
-                        await self._handle(stream, message_id, fields)
+                        await self._handle(message_id, fields)
             except asyncio.CancelledError:
                 raise
             except Exception:  # noqa: BLE001 - keep consuming; failed entries stay pending
@@ -153,24 +151,21 @@ class ExecutorEventConsumer:
                 await asyncio.sleep(2)
 
     async def _reclaim(self) -> None:
-        for stream in self.streams:
-            pending = await self.redis.xpending_range(
-                stream, self.group, min="-", max="+", count=50
-            )
-            stale = [
-                p["message_id"]
-                for p in pending
-                if p["time_since_delivered"] > 60000
-            ]
-            if stale:
-                for message_id, fields in await self.redis.xclaim(
-                    stream, self.group, self.consumer, 60000, stale
-                ):
-                    await self._handle(stream, message_id, fields)
+        pending = await self.redis.xpending_range(
+            self.stream, self.group, min="-", max="+", count=50
+        )
+        stale = [
+            p["message_id"]
+            for p in pending
+            if p["time_since_delivered"] > 60000
+        ]
+        if stale:
+            for message_id, fields in await self.redis.xclaim(
+                self.stream, self.group, self.consumer, 60000, stale
+            ):
+                await self._handle(message_id, fields)
 
-    async def _handle(
-        self, stream: str, message_id: str, fields: dict[str, str]
-    ) -> None:
+    async def _handle(self, message_id: str, fields: dict[str, str]) -> None:
         try:
             payload = json.loads(fields["payload"])
             event = {
@@ -181,12 +176,8 @@ class ExecutorEventConsumer:
                 "payload": payload,
             }
         except (KeyError, ValueError):
-            log.warning(
-                "executor_event_malformed stream=%s message_id=%s",
-                stream,
-                message_id,
-            )
-            await self.redis.xack(stream, self.group, message_id)
+            log.warning("executor_event_malformed message_id=%s", message_id)
+            await self.redis.xack(self.stream, self.group, message_id)
             return
         if event["event_type"] in WAKE_TYPES:
             run_id = await deliver(self.db, event)
@@ -196,7 +187,7 @@ class ExecutorEventConsumer:
                 await self.on_completed(event["execution_id"], payload)
         else:
             await self.on_progress(event["execution_id"], event)
-        await self.redis.xack(stream, self.group, message_id)
+        await self.redis.xack(self.stream, self.group, message_id)
 
 
 class MissedEventRecovery:

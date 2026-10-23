@@ -8,8 +8,8 @@ pr-batch team, iss/aud from settings, sub=users.id, scope=batch:manage,
 Reports of finished batch runs are not asked for by pr-batch: the worker
 starts one when the executor reports a successful BATCH execution (see
 ``worker.batch_reports``); users read them under ``/api/v1/batch-reports``.
-A new batch carries our executor tenant_id (``batch_send_tenant_id``), so
-pr-batch submits its runs with it and their events come to our stream.
+A new batch carries our executor tenant_id, so pr-batch submits its runs
+with it and their events come to our stream.
 """
 
 import hashlib
@@ -186,13 +186,8 @@ async def batch_gateway(
     }
     headers["Authorization"] = f"Bearer {_batch_token(services, user)}"
     body = await request.body()
-    settings = services.settings
-    if (
-        settings.batch_send_tenant_id
-        and request.method == "POST"
-        and path.strip("/") == "batches"
-    ):
-        body = with_tenant(body, settings.executor_tenant_id)
+    if request.method == "POST" and path.strip("/") == "batches":
+        body = with_tenant(body, services.settings.executor_tenant_id)
     result = await _client(services).request(
         request.method,
         f"/api/v1/{path}",

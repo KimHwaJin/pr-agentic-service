@@ -157,12 +157,8 @@ class Settings(BaseSettings):
     storage_executor_path: str = "agentic"
     # local mount of the executor's SHARED_STORAGE_ROOT (results)
     executor_result_root: Path = ROOT / ".local/shared"
-    # the executor's REDIS_EVENT_STREAM: shared stream and tenant prefix
+    # the executor's REDIS_EVENT_STREAM (prefix of the tenant streams)
     executor_event_stream: str = "executor.events"
-    # Also read the shared stream, for executions submitted without a
-    # tenant (before this service and pr-batch sent one). Turn off once
-    # those have finished.
-    executor_read_shared_stream: bool = True
     # a run still waiting this long asks the executor for its event
     executor_event_recovery_seconds: float = 120
     executor_runtime_profile: str = "default"
@@ -188,12 +184,10 @@ class Settings(BaseSettings):
     # an entry here restores the base catalog.
     catalog_extensions: list[Path] = []
 
-    def executor_event_streams(self) -> list[str]:
-        """Streams the executor event consumer reads, tenant first."""
-        streams = [f"{self.executor_event_stream}.{self.executor_tenant_id}"]
-        if self.executor_read_shared_stream:
-            streams.append(self.executor_event_stream)
-        return streams
+    @property
+    def executor_tenant_stream(self) -> str:
+        """The stream the executor publishes our executions' events to."""
+        return f"{self.executor_event_stream}.{self.executor_tenant_id}"
 
     def catalog_roots(self, kind: str) -> list[Path]:
         """Base root and extension roots for skills | tools | knowledge."""
@@ -260,10 +254,6 @@ class Settings(BaseSettings):
     batch_jwt_private_key_file: str = ""
     batch_jwt_issuer: str = "batch-client"
     batch_jwt_audience: str = "batch-service"
-    # Add executor_tenant_id to batches registered through the gateway, so
-    # their executions report to this service. Turn on once pr-batch
-    # accepts tenant_id (it rejects unknown fields).
-    batch_send_tenant_id: bool = False
     # Reports of successful BATCH executions (worker.batch_reports).
     # empty = the default model
     batch_report_model: str = ""
