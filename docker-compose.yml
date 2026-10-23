@@ -2,8 +2,8 @@
 #   - shared-infra compose: postgres, redis (network "shared-infra")
 #   - executor compose: executor API + Jupyter runtimes (also on "shared-infra" as host "executor")
 #   - pr-batch compose (optional, for the 배치 page): API on the host port 8100
-#     (config.local.yml batch_base_url / batch_jwt_private_key_file; run
-#     `make auth-keys` in ../pr-batch first for the key pair)
+#     (config.local.yml batch_base_url / batch_jwt_private_key_file: a copy of
+#     ../pr-batch/.local-keys/auth_private.pem in keys/)
 #
 #   docker compose up -d --build            # service at http://localhost:8080 (console: /dev/)
 #   docker compose --profile mock up -d     # + scripted mock LLM instead of the gateway
@@ -53,8 +53,8 @@ services:
       - ./src/agent/prompts:/app/src/agent/prompts:ro
       - ./web:/app/web:ro
       - ./config.local.yml:/app/config.local.yml:ro
-      # pr-batch's local RS256 pair; we sign with auth_private.pem.
-      - ${PR_BATCH_KEYS_DIR:-../pr-batch/.local-keys}:/run/pr-batch-keys:ro
+      # pr-batch signing key (keys/README.md), read without a rebuild.
+      - ./keys:/app/keys:ro
     extra_hosts:
       - "host.docker.internal:host-gateway"  # pr-batch on the host port
       - "model.frodo.com:10.250.110.99"

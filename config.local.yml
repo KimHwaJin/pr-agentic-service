@@ -26,10 +26,10 @@ executor_runtime_profile: default
 notebook_lab_base_url: http://localhost:8888
 
 # pr-batch compose (../pr-batch) on the host port 8100. It verifies RS256
-# tokens with the local pair from its `make auth-keys` (../pr-batch/
-# .local-keys, mounted by docker-compose.yml); we sign with the private half.
+# tokens with the local pair from its `make auth-keys`; keys/auth_private.pem
+# is a copy of ../pr-batch/.local-keys/auth_private.pem (not in git).
 batch_base_url: http://host.docker.internal:8100
-batch_jwt_private_key_file: /run/pr-batch-keys/auth_private.pem
+batch_jwt_private_key_file: keys/auth_private.pem
 batch_jwt_issuer: batch-client
 batch_jwt_audience: batch-service
 
