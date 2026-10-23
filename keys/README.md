@@ -14,4 +14,6 @@ batch_jwt_audience: batch-service   # pr-batch AUTH_AUDIENCE
 - 키 쌍은 환경(dev/stg/prd)마다 현장에서 pr-batch의 `scripts/auth_keys.py`로 만든다.
   개인키는 여기에, 공개키는 pr-batch `keys/`에 두고 각각 빌드·배포한다.
 - `*.pem`은 `.gitignore`로 막혀 있다. 개인키는 git에 올리지 않는다.
-- 로컬 compose는 이 폴더 대신 `../pr-batch/.local-keys`를 마운트한다(`config.local.yml`).
+- 로컬은 pr-batch `make auth-keys`가 만든 `../pr-batch/.local-keys/auth_private.pem`을 여기로
+  복사해 쓴다(`cp ../pr-batch/.local-keys/auth_private.pem keys/`). compose가 이 폴더를 마운트하므로
+  키를 바꿔도 다시 빌드할 필요 없이 재시작만 하면 된다.
