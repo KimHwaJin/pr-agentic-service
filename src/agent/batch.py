@@ -148,13 +148,12 @@ def _request(
     execution: dict[str, Any], history: list[dict[str, Any]], evidence: str
 ) -> str:
     metadata = execution.get("metadata") or {}
-    context = execution.get("context") or {}
     lifecycle = execution.get("lifecycle") or {}
     lines = [
         "# 배치 실행",
         f"- execution_id: {execution.get('execution_id')}",
         f"- batch_id: {metadata.get('batch_id') or '알 수 없음'}",
-        f"- 배치 실행 번호(task_id): {context.get('task_id') or '없음'}",
+        f"- 배치 실행 번호(run_id): {metadata.get('run_id') or '없음'}",
         f"- 시작: {lifecycle.get('started_at') or '알 수 없음'}",
         f"- 종료: {lifecycle.get('finished_at') or '알 수 없음'}",
         "",

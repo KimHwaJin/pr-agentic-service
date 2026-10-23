@@ -703,14 +703,13 @@ async def _submit_now(
             idempotency_key=_key(runtime, "submit"),
             context={
                 "user_id": ctx.user_id,
-                "task_id": ctx.run_id,
                 "project_id": ctx.project_id,
                 "session_id": ctx.session_id,
             },
             steps=steps,
             profile=settings.executor_runtime_profile,
             wait_seconds=settings.executor_operation_wait_seconds,
-            metadata={"service": "pr-agentic-service"},
+            metadata={"service": "pr-agentic-service", "run_id": ctx.run_id},
         )
         execution = {
             "id": receipt["execution_id"],

@@ -33,7 +33,7 @@ def _owned(execution, user_id):
 def test_batch_artifacts_belong_to_the_batch_owner():
     execution = {
         "trigger": {"type": "BATCH"},
-        "context": {"user_id": OWNER, "task_id": "run-7"},
+        "context": {"user_id": OWNER},
     }
     assert _owned(execution, OWNER)["artifact_id"] == "a-1"
     older = {"trigger_type": "BATCH", "context": {"user_id": OWNER}}

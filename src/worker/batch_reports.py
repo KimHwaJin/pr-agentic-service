@@ -83,7 +83,7 @@ async def enqueue(
                 owner_id=context["user_id"],
                 execution_id=execution_id,
                 batch_id=metadata.get("batch_id"),
-                batch_run_id=context.get("task_id"),
+                batch_run_id=metadata.get("run_id"),
                 execution={
                     "trigger": execution.get("trigger") or {"type": "BATCH"},
                     "context": context,

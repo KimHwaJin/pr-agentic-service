@@ -127,7 +127,8 @@ def test_event_trigger_decides_without_asking_the_executor():
         "status": "SUCCEEDED",
         "execution": {
             "trigger": {"type": "BATCH", "actor": {"type": "USER"}},
-            "context": {"user_id": OWNER, "task_id": "run-7"},
+            "context": {"user_id": OWNER},
+            "metadata": {"batch_id": "batch-3", "run_id": "run-7"},
         },
     }
     assert asyncio.run(enqueue(services, EXECUTION, payload)) == "job-1"
@@ -135,7 +136,7 @@ def test_event_trigger_decides_without_asking_the_executor():
     params = _inserted(db)
     assert params["idempotency_key"] == f"batch-report:{EXECUTION}"
     assert params["owner_id"] == OWNER and params["batch_run_id"] == "run-7"
-    assert params["batch_id"] is None  # filled in while collecting
+    assert params["batch_id"] == "batch-3"
     assert services.events.sent == [
         ("job-1", "run_status", {"status": "queued"})
     ]
@@ -161,8 +162,8 @@ def test_older_events_fall_back_to_the_execution():
     executor = _Executor(
         {
             "trigger_type": "BATCH",
-            "context": {"user_id": OWNER, "task_id": "run-7"},
-            "metadata": {"batch_id": "batch-3"},
+            "context": {"user_id": OWNER},
+            "metadata": {"batch_id": "batch-3", "run_id": "run-7"},
         }
     )
     services = _services(db, executor)
@@ -171,7 +172,9 @@ def test_older_events_fall_back_to_the_execution():
         == "job-1"
     )
     assert executor.gets == 1
-    assert _inserted(db)["batch_id"] == "batch-3"
+    params = _inserted(db)
+    assert params["batch_id"] == "batch-3"
+    assert params["batch_run_id"] == "run-7"
 
 
 def test_a_job_that_exists_is_not_announced_again():
