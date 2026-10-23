@@ -15,9 +15,9 @@
 
 `GET /api/v1/users/lookup?ids=a,b` → `{id: {id, employee_id, name, department}}`. executor 실행의 `context.user_id`처럼 화면에 나오는 사용자 ID를 이름·사번으로 바꿀 때 씁니다(한 번에 200개까지, 일반 사용자는 본인 ID만, 관리자는 전체).
 
-`POST /api/v1/auth/dev/role` `{role: "user" | "admin"}`: 로컬 개발 로그인(`ENV=local`, `SSO_ADAPTER=dev`)에서만 있는 API로, 현재 사용자를 관리자와 일반 사용자 사이에서 바꿉니다(`can_switch_role`이 true일 때만). 다른 환경에서는 404입니다.
+`POST /api/v1/auth/dev/role` `{role: "user" | "admin"}`: 로컬 개발 로그인(`APP_ENV` 비움, `SSO_ADAPTER=dev`)에서만 있는 API로, 현재 사용자를 관리자와 일반 사용자 사이에서 바꿉니다(`can_switch_role`이 true일 때만). 다른 환경에서는 404입니다.
 
-`GET /api/v1/models` → `{items: [{name, label, default, input: ["text"] | ["text","image"], max_images}]}`: 고를 수 있는 모델(설정 파일 `config.<ENV>.yml`의 `models`). 요청의 `model`에는 `name`을 보내고, 화면에는 `label`(없으면 `name`)을 보여 줍니다. `input`에 `image`가 있는 모델만 이미지를 받습니다.
+`GET /api/v1/models` → `{items: [{name, label, default, input: ["text"] | ["text","image"], max_images}]}`: 고를 수 있는 모델(설정 파일 `config.yml` 또는 `config.{APP_ENV}.yml`의 `models`). 요청의 `model`에는 `name`을 보내고, 화면에는 `label`(없으면 `name`)을 보여 줍니다. `input`에 `image`가 있는 모델만 이미지를 받습니다.
 
 **오류 응답:** 모든 오류는 `{"detail": "설명", "code": "기계가 읽는 코드", ...}`입니다. 요청 형식 오류는 `code: invalid_body`와 `errors: [{field, message}]`가 붙습니다.
 

@@ -13,9 +13,10 @@ COPY pyproject.toml uv.lock ./
 # --group phoenix: optional tracing (docs/phoenix-tracing.md); drop it to remove
 RUN uv sync --locked --no-dev --group phoenix --no-install-project
 
-# Settings per environment; ENV (Deployment env, or --build-arg ENV=...) picks config.<ENV>.yml.
-ARG ENV=local
-ENV ENV=${ENV}
+# Settings per environment; APP_ENV (Deployment env, or --build-arg APP_ENV=...)
+# picks config.{APP_ENV}.yml. config.yml (local values) stays out of the image.
+ARG APP_ENV=
+ENV APP_ENV=${APP_ENV}
 COPY config.*.yml alembic.ini ./
 # pr-batch signing key placed at build time (keys/README.md).
 COPY keys ./keys

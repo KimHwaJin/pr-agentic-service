@@ -1,9 +1,10 @@
 """Service settings.
 
-Sources, lowest to highest priority: field defaults, ``config.<ENV>.yml`` at
-the repo root (baked into the image; ``CONFIG_FILE`` overrides the path),
-``.env``, environment variables. ``ENV`` itself comes from the environment
-(or ``.env``) and picks the file.
+Sources, highest first: environment variables, ``.env``,
+``config.{APP_ENV}.yml`` (one deployment environment, baked into the image),
+``config.yml`` (local values; not in the image), field defaults. ``APP_ENV``
+(dev | stg | prd) comes from the environment or ``.env``; left empty, the
+service runs as ``local`` on config.yml alone.
 """
 
 import os
@@ -12,7 +13,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 from dotenv import dotenv_values
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, PrivateAttr, model_validator
 from pydantic_settings import (
     BaseSettings,
     PydanticBaseSettingsSource,
@@ -23,11 +24,25 @@ from pydantic_settings import (
 ROOT = Path(__file__).resolve().parents[2]
 
 
-def config_file() -> Path:
-    if path := os.environ.get("CONFIG_FILE"):
-        return Path(path)
-    env = os.environ.get("ENV") or dotenv_values(".env").get("ENV") or "local"
-    return ROOT / f"config.{env}.yml"
+APP_ENVS = ("dev", "stg", "prd")
+
+
+def app_env() -> str | None:
+    """The deployment environment, or None for a local run."""
+    env = os.environ.get("APP_ENV") or dotenv_values(".env").get("APP_ENV")
+    if env and env not in APP_ENVS:
+        raise ValueError(f"APP_ENV must be one of {', '.join(APP_ENVS)}.")
+    return env or None
+
+
+def config_files() -> list[Path]:
+    """YAML settings files, highest precedence first."""
+    env = app_env()
+    files = [ROOT / f"config.{env}.yml"] if env else []
+    common = ROOT / "config.yml"
+    if common.is_file():
+        files.append(common)
+    return files
 
 
 class ModelSpec(BaseModel):
@@ -59,10 +74,14 @@ class Settings(BaseSettings):
         dotenv_settings: PydanticBaseSettingsSource,
         file_secret_settings: PydanticBaseSettingsSource,
     ) -> tuple[PydanticBaseSettingsSource, ...]:
-        yaml = YamlConfigSettingsSource(settings_cls, yaml_file=config_file())
-        return init_settings, env_settings, dotenv_settings, yaml
+        files = [
+            YamlConfigSettingsSource(settings_cls, yaml_file=path)
+            for path in config_files()
+        ]
+        return init_settings, env_settings, dotenv_settings, *files
 
-    env: Literal["local", "dev", "stg", "prd"] = "local"
+    # APP_ENV, or local when it is empty (not a settings key).
+    _env: Literal["local", "dev", "stg", "prd"] = PrivateAttr("local")
     api_prefix: str = "/api/v1"
     cors_origins: list[str] = []
 
@@ -218,8 +237,15 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def _guard(self) -> "Settings":
+        self._env = app_env() or "local"
+        if self.env != "local":
+            path = ROOT / f"config.{self.env}.yml"
+            if not path.is_file():
+                raise ValueError(f"APP_ENV={self.env} needs {path}")
         if self.sso_adapter == "dev" and self.env != "local":
-            raise ValueError("SSO_ADAPTER=dev is only allowed with ENV=local")
+            raise ValueError(
+                "SSO_ADAPTER=dev is only allowed locally (no APP_ENV)"
+            )
         if self.env in {"stg", "prd"} and not self.cookie_secure:
             raise ValueError("COOKIE_SECURE must be true outside local/dev")
         if self.embedding_provider == "openai" and not (
@@ -235,10 +261,12 @@ class Settings(BaseSettings):
         if sum(m.default for m in self.models) != 1:
             raise ValueError("models: exactly one model needs default: true")
         if self.env == "local" and os.environ.get("KUBERNETES_SERVICE_HOST"):
-            raise ValueError("ENV is not set for this pod (got local)")
-        if self.env != "local" and not config_file().is_file():
-            raise ValueError(f"{config_file()} not found (ENV={self.env})")
+            raise ValueError("APP_ENV is not set for this pod")
         return self
+
+    @property
+    def env(self) -> Literal["local", "dev", "stg", "prd"]:
+        return self._env
 
     @property
     def default_model(self) -> ModelSpec:

@@ -4,7 +4,7 @@
 
 ## 켜고 끄기
 
-- 켜기: `config.<ENV>.yml`에 `catalog_extensions: [catalogs/analysis_test]` (지금은 `config.local.yml`만 켜져 있음)
+- 켜기: `config.yml`(로컬) 또는 `config.{APP_ENV}.yml`에 `catalog_extensions: [catalogs/analysis_test]` (지금은 로컬 `config.yml`만 켜져 있음)
 - 끄기(원복): 그 줄을 지우면 `assets/`만 읽습니다. `assets/`의 파일은 하나도 바꾸지 않았습니다.
 - 이름이 같으면 확장이 이깁니다. 이 카탈로그는 `data_load`, `dataset_preparation` skill을 덮어씁니다(합성 데이터 `load_synthetic`, 행 선택·집계·구역 tool 추가). 기본 tool(`extract_data` 등)은 그대로 읽힙니다.
 

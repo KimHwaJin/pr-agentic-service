@@ -45,7 +45,7 @@ class DevRole(Model):
 async def switch_dev_role(body: DevRole, services: ServicesDep, user: UserDep):
     """Local development only: switch the dev login between user and admin.
 
-    Exists only with ENV=local and SSO_ADAPTER=dev (404 otherwise).
+    Exists only locally (APP_ENV empty) with SSO_ADAPTER=dev (404 otherwise).
     """
     settings = services.settings
     if settings.env != "local" or settings.sso_adapter != "dev":
