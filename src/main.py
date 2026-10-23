@@ -5,7 +5,6 @@ everything in one process; the split lets the worker move to its own
 Deployment later without code changes.
 """
 
-import logging
 import os
 from contextlib import asynccontextmanager
 
@@ -16,16 +15,10 @@ import tracing_phoenix  # optional; removable (docs/phoenix-tracing.md)
 from api_service.app import mount_api, start_api
 from core.bootstrap import build_services
 from core.config import get_settings
+from core.logging_setup import configure_logging
 from worker.runtime import Worker
 
-logging.basicConfig(
-    level=os.environ.get("LOG_LEVEL", "INFO"),
-    format="%(asctime)s %(levelname)s %(name)s %(message)s",
-)
-for noisy in ("httpx", "httpx2", "openai"):
-    logging.getLogger(noisy).setLevel(
-        logging.WARNING
-    )  # one INFO line per LLM/executor call is load
+configure_logging()  # logger.yml (or HCP's own inside the company network)
 settings = get_settings()
 tracing_phoenix.setup()
 mode = os.environ.get("RUN_MODE", "all")
