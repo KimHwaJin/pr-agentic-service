@@ -34,7 +34,7 @@ storage_executor_path: pr-agentic-service
 executor_result_root: /mnt/data/executor
 notebook_lab_base_url: https://executor-jupyter-lab.frodo.com
 batch_base_url: http://pr-batch.prd.internal:8100
-batch_jwt_secret: …
+batch_jwt_private_key_file: /path/to/auth_private.pem
 cors_origins: ["https://front.frodo.com"]
 cookie_secure: true
 

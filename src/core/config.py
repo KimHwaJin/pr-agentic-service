@@ -200,8 +200,12 @@ class Settings(BaseSettings):
 
     # pr-batch.
     batch_base_url: str = "http://localhost:8100"
-    batch_jwt_secret: str = ""  # we sign: iss=agentic, aud=pr-batch
-    batch_jwt_issuer: str = "prj_re"
+    # PEM RSA private key the pr-batch team hands out (RS256; pr-batch
+    # verifies with the public half). Relative paths are under the repo
+    # root. Empty = the integration is off.
+    batch_jwt_private_key_file: str = ""
+    batch_jwt_issuer: str = "batch-client"
+    batch_jwt_audience: str = "batch-service"
     # Reports of successful BATCH executions (worker.batch_reports).
     # empty = the default model
     batch_report_model: str = ""

@@ -1,8 +1,9 @@
 """pr-batch integration.
 
 ``/api/v1/batch/{path}`` relays to pr-batch ``/api/v1/{path}`` with a
-short-lived JWT for the SSO user (HS256, aud=pr-batch, sub=users.id,
-scope=batch:manage, <= 300 s).
+short-lived JWT for the SSO user (RS256 with the private key from the
+pr-batch team, iss/aud from settings, sub=users.id, scope=batch:manage,
+<= 300 s).
 
 Reports of finished batch runs are not asked for by pr-batch: the worker
 starts one when the executor reports a successful BATCH execution (see
@@ -11,6 +12,8 @@ starts one when the executor reports a successful BATCH execution (see
 
 import hashlib
 import time
+from functools import lru_cache
+from pathlib import Path
 from uuid import UUID
 
 import httpx
@@ -22,6 +25,7 @@ from api_service.deps import ServicesDep, UserDep
 from api_service.routers.artifacts import render_view
 from api_service.schemas.batch import BatchScriptFromNotebook
 from api_service.services.access import owned_artifact
+from core.config import ROOT
 
 router = APIRouter(tags=["batch"])
 FORWARD_HEADERS = ("content-type", "idempotency-key", "if-match", "accept")
@@ -35,20 +39,35 @@ def _client(services) -> httpx.AsyncClient:
     return _clients[base]
 
 
+@lru_cache
+def _private_key(path: str) -> bytes:
+    resolved = Path(path) if Path(path).is_absolute() else ROOT / path
+    return resolved.read_bytes()
+
+
 def _batch_token(services, user) -> str:
     settings = services.settings
-    if not settings.batch_jwt_secret:
+    if not settings.batch_jwt_private_key_file:
         raise HTTPException(503, "pr-batch integration is not configured.")
-    now = int(time.time())
+    try:
+        key = _private_key(settings.batch_jwt_private_key_file)
+    except OSError as exc:
+        raise HTTPException(
+            503,
+            "pr-batch signing key is unreadable (batch_jwt_private_key_file).",
+        ) from exc
+    # pr-batch allows no clock skew: issue a few seconds early so a slightly
+    # fast clock here does not put iat in its future.
+    issued = int(time.time()) - 5
     claims = {
         "sub": user.id,
         "iss": settings.batch_jwt_issuer,
-        "aud": "pr-batch",
-        "iat": now,
-        "exp": now + 300,
+        "aud": settings.batch_jwt_audience,
+        "iat": issued,
+        "exp": issued + 300,
         "scope": "batch:manage",
     }
-    return jwt.encode(claims, settings.batch_jwt_secret, algorithm="HS256")
+    return jwt.encode(claims, key, algorithm="RS256")
 
 
 @router.post("/api/v1/batch/scripts/from-notebook", status_code=201)
