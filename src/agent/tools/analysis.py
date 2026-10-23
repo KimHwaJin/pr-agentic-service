@@ -622,6 +622,43 @@ async def _submit(
     )
 
 
+async def _append(
+    runtime: Runtime, execution: dict[str, Any], steps: list[dict[str, Any]]
+) -> dict[str, Any] | None:
+    """Add an operation to the live execution.
+
+    None when it takes no more operations (the wait expired, the kernel is
+    gone, it was cancelled). A stale version is read again: the kernel and
+    its variables are still there.
+    """
+    executor = runtime.context.services.executor
+    key, version = _key(runtime, "op"), execution["version"]
+    for _ in range(3):
+        try:
+            return await executor.append_operation(
+                execution["id"],
+                idempotency_key=key,
+                expected_version=version,
+                steps=steps,
+            )
+        except ExecutorError as exc:
+            if exc.code == "PERSISTENCE_CONFLICT":
+                continue  # a concurrent write; the same request goes through
+            if exc.code == "EXECUTION_VERSION_CONFLICT":
+                state = (await executor.get(execution["id"]))["state"]
+                if state["status"] != "WAITING_FOR_OPERATION":
+                    return None
+                # a new version is a new request: it needs its own key
+                version = state["version"]
+                key = _key(runtime, f"op-v{version}")
+                continue
+            # IDEMPOTENCY_CONFLICT is a key bug here: let it surface
+            if exc.status in (404, 409) and exc.code != "IDEMPOTENCY_CONFLICT":
+                return None
+            raise
+    return None
+
+
 async def _submit_now(
     runtime: Runtime,
     steps: list[dict[str, Any]],
@@ -639,16 +676,8 @@ async def _submit_now(
     if execution and execution.get("alive"):
         for i, step in enumerate(steps):
             step["sequence"] = execution["next_sequence"] + i
-        try:
-            receipt = await executor.append_operation(
-                execution["id"],
-                idempotency_key=_key(runtime, "op"),
-                expected_version=execution["version"],
-                steps=steps,
-            )
-        except ExecutorError as exc:
-            if exc.status not in (404, 409):
-                raise
+        receipt = await _append(runtime, execution, steps)
+        if receipt is None:
             # wait expired / kernel gone: start over in a new execution
             execution = None
         else:
@@ -1013,24 +1042,41 @@ async def write_report(title: str, focus: str, runtime: Runtime) -> Command:
     if not execution:
         return _reply(runtime, "실행된 분석이 없습니다.")
     if execution.get("alive"):
-        await _once(
-            runtime,
-            "finalize",
-            lambda: executor.finalize(
-                execution["id"],
-                idempotency_key=_key(runtime, "finalize"),
-                expected_version=execution["version"],
-            ),
-        )
-        event = interrupt(
-            {
-                "type": "executor_wait",
-                "execution_id": execution["id"],
-                "operation_id": None,
-                "steps": ["finalize"],
-            }
-        )
-        status = event.get("payload", {}).get("status")
+        try:
+            await _once(
+                runtime,
+                "finalize",
+                lambda: executor.finalize(
+                    execution["id"],
+                    idempotency_key=_key(runtime, "finalize"),
+                    expected_version=execution["version"],
+                ),
+            )
+        except ExecutorError as exc:
+            if exc.status != 409:
+                raise
+            # the last operation failed, or the execution moved on
+            state = (await executor.get(execution["id"]))["state"]
+            if state["status"] == "WAITING_FOR_OPERATION":
+                return _reply(
+                    runtime,
+                    "노트북을 확정하지 못했습니다. 마지막 실행이 "
+                    "실패했거나 실행 상태가 바뀌었습니다. 실패한 호출이 "
+                    "있으면 고쳐 다시 실행한 뒤 write_report를 다시 "
+                    "호출하고, 아니면 결과를 채팅으로 정리해 전달하세요.",
+                    execution={**execution, "version": state["version"]},
+                )
+            status = state["status"]
+        else:
+            event = interrupt(
+                {
+                    "type": "executor_wait",
+                    "execution_id": execution["id"],
+                    "operation_id": None,
+                    "steps": ["finalize"],
+                }
+            )
+            status = event.get("payload", {}).get("status")
     else:
         status = (await executor.get(execution["id"]))["state"]["status"]
     closed = {**execution, "alive": False}

@@ -17,6 +17,7 @@ STORAGE_ROOT: /mnt/data/agent/pr-agentic-service
 STORAGE_EXECUTOR_PATH: pr-agentic-service
 EXECUTOR_RESULT_ROOT: /mnt/data/executor
 EXECUTOR_RUNTIME_PROFILE: default
+EXECUTOR_TENANT_ID: pr-agentic
 NOTEBOOK_LAB_BASE_URL: https://executor-jupyter-lab.frodo.com
 
 # RS256 signing key for pr-batch, copied into keys/ before the image build

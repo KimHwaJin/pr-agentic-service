@@ -366,7 +366,7 @@ def test_consumer_hands_completions_to_the_reports(monkeypatch):
     consumer = executor_events.ExecutorEventConsumer(
         cast(Any, None),
         cast(Any, Redis()),
-        "s",
+        ["s"],
         "g",
         "c",
         on_wake=None,
@@ -380,7 +380,7 @@ def test_consumer_hands_completions_to_the_reports(monkeypatch):
         "event_sequence": "9",
         "payload": '{"status": "SUCCEEDED"}',
     }
-    asyncio.run(consumer._handle("m1", fields))
+    asyncio.run(consumer._handle("s", "m1", fields))
     assert completed == [(EXECUTION, "SUCCEEDED")] and acked == ["m1"]
 
 

@@ -75,7 +75,9 @@ async def build_services(
     )
     store = AsyncPostgresStore(pool, index=index)
     executor = ExecutorClient(
-        settings.executor_base_url, settings.executor_timeout_seconds
+        settings.executor_base_url,
+        settings.executor_timeout_seconds,
+        settings.executor_tenant_id,
     )
     workflows = WorkflowService(
         db,
