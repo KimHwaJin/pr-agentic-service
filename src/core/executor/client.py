@@ -10,13 +10,8 @@ AGENT_ACTOR = {"type": "AGENT", "id": "pr-agentic-service"}
 
 
 def trigger_type(execution: dict[str, Any]) -> str | None:
-    """INTERACTIVE | BATCH of an execution or an event's ``execution``.
-
-    ``trigger.type``; executions read before the executor exposed the
-    trigger object carry ``trigger_type``.
-    """
-    trigger = execution.get("trigger") or {}
-    return trigger.get("type") or execution.get("trigger_type")
+    """INTERACTIVE | BATCH of an execution or an event's ``execution``."""
+    return (execution.get("trigger") or {}).get("type")
 
 
 class ExecutorError(Exception):

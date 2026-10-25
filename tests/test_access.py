@@ -36,8 +36,6 @@ def test_batch_artifacts_belong_to_the_batch_owner():
         "context": {"user_id": OWNER},
     }
     assert _owned(execution, OWNER)["artifact_id"] == "a-1"
-    older = {"trigger_type": "BATCH", "context": {"user_id": OWNER}}
-    assert _owned(older, OWNER)["artifact_id"] == "a-1"
     with pytest.raises(HTTPException) as denied:
         _owned(execution, "someone-else")
     assert denied.value.status_code == 404

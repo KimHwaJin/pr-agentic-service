@@ -89,13 +89,7 @@ async def execution_of_session(
             .where(CodeSource.execution_id == execution_id)
             .limit(1)
         )
-    if owner is not None:
-        return owner == session_id
-    try:  # executions sent before the code index existed
-        execution = await services.executor.get(execution_id)
-    except ExecutorError:
-        return False
-    return execution["context"].get("session_id") == session_id
+    return owner == session_id
 
 
 async def owned_artifact(services, user, artifact_id: str) -> dict:
