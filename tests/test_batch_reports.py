@@ -81,14 +81,12 @@ class _Executor:
         self.reports.append(kw)
         return {"artifact_id": "report-1"}
 
-    async def artifacts(self, execution_id):
-        return [
-            {
-                "artifact_id": "nb-1",
-                "type": "NOTEBOOK",
-                "storage": {"relative_path": "x/run.ipynb"},
-            }
-        ]
+    async def notebook(self, execution_id):
+        return {
+            "artifact_id": "nb-1",
+            "type": "NOTEBOOK",
+            "storage": {"relative_path": "x/run.ipynb"},
+        }
 
 
 def _services(db=None, executor=None, store=None):
