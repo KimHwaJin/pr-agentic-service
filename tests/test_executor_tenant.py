@@ -113,6 +113,13 @@ def test_batch_registration_names_our_tenant():
     assert with_tenant(b"[1]", "pr-agentic") == b"[1]"
 
 
+def test_batch_edit_names_our_tenant_only_when_it_sends_one():
+    body = with_tenant(b'{"tenant_id": "other"}', "pr-agentic", edit=True)
+    assert json.loads(body) == {"tenant_id": "pr-agentic"}
+    name_only = b'{"name": "daily"}'
+    assert with_tenant(name_only, "pr-agentic", edit=True) == name_only
+
+
 @pytest.mark.parametrize(
     ("method", "path", "expected"),
     [

@@ -8,9 +8,9 @@ pr-batch team, iss/aud from settings, sub=users.id, scope=batch:manage,
 Reports of finished batch runs are not asked for by pr-batch: the worker
 starts one when the executor reports a successful BATCH execution (see
 ``worker.batch_reports``); users read them under ``/api/v1/batch-reports``.
-Every batch registered or edited through us carries our executor
-tenant_id, so pr-batch submits its runs with it and their events come to
-our stream. An edit also backfills a batch that has none yet.
+A batch registered through us carries our executor tenant_id, so pr-batch
+submits its runs with it and their events come to our stream. An edit that
+sends a tenant_id gets ours instead.
 """
 
 import hashlib
@@ -166,17 +166,19 @@ def sets_tenant(method: str, path: str) -> bool:
     )
 
 
-def with_tenant(body: bytes, tenant_id: str) -> bytes:
+def with_tenant(body: bytes, tenant_id: str, edit: bool = False) -> bytes:
     """A batch registration or edit body that names our tenant.
 
     Set by us, not the caller: the tenant decides who gets the events.
-    A body that is not a JSON object goes on as is for pr-batch to reject.
+    An edit without tenant_id stays without it (pr-batch counts a sent
+    tenant_id as a new run configuration). A body that is not a JSON object
+    goes on as is for pr-batch to reject.
     """
     try:
         batch = json.loads(body)
     except ValueError:
         return body
-    if not isinstance(batch, dict):
+    if not isinstance(batch, dict) or (edit and "tenant_id" not in batch):
         return body
     return json.dumps({**batch, "tenant_id": tenant_id}).encode()
 
@@ -196,7 +198,11 @@ async def batch_gateway(
     headers["Authorization"] = f"Bearer {_batch_token(services, user)}"
     body = await request.body()
     if sets_tenant(request.method, path):
-        body = with_tenant(body, services.settings.executor_tenant_id)
+        body = with_tenant(
+            body,
+            services.settings.executor_tenant_id,
+            edit=request.method == "PATCH",
+        )
     result = await _client(services).request(
         request.method,
         f"/api/v1/{path}",
