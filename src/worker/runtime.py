@@ -7,7 +7,7 @@ from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 from agent.graph import AgentGraphs
 from core.bootstrap import PgPool
 from core.services import Services
-from worker.batch_reports import BatchReportWorker
+from worker.batch_reports import BatchReportRecovery, BatchReportWorker
 from worker.executor_events import ExecutorEventConsumer, MissedEventRecovery
 from worker.maintenance import Retention
 from worker.scheduler import RunScheduler
@@ -27,6 +27,7 @@ class Worker:
         )
         self.scheduler = RunScheduler(services, graphs, self.owner)
         self.reports = BatchReportWorker(services, self.owner)
+        self.report_recovery = BatchReportRecovery(services)
         self.consumer = ExecutorEventConsumer(
             services.db,
             services.redis,
@@ -59,6 +60,10 @@ class Worker:
             ),
             asyncio.create_task(
                 self.reports.run_forever(), name="batch-reports"
+            ),
+            asyncio.create_task(
+                self.report_recovery.run_forever(),
+                name="batch-report-recovery",
             ),
             asyncio.create_task(
                 self.retention.run_forever(), name="retention"

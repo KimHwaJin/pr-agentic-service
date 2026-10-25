@@ -3,6 +3,8 @@
 The executor event consumer hands every ``execution.completed`` to
 ``enqueue``; a SUCCEEDED execution started by pr-batch (trigger BATCH) gets
 one job, keyed ``batch-report:{execution_id}``. Failed runs get none.
+An execution whose event never reached us (worker down past the stream's
+retention, Redis lost it) is found by ``BatchReportRecovery`` instead.
 
 QUEUED -> COLLECTING -> GENERATING -> MATERIALIZING -> SUCCEEDED | FAILED.
 
@@ -25,7 +27,7 @@ import logging
 from datetime import datetime, timedelta
 from typing import Any
 
-from sqlalchemy import or_, select, update
+from sqlalchemy import or_, select, text, update
 from sqlalchemy.dialects.postgresql import insert
 
 from agent.batch import BatchReportAgent, previous_runs, remember_run
@@ -38,6 +40,7 @@ from core.services import Services
 
 log = logging.getLogger(__name__)
 ACTIVE = ("QUEUED", "COLLECTING", "GENERATING", "MATERIALIZING")
+RECOVERY_LOCK = 7_202_510  # pg advisory lock: one pod sweeps at a time
 
 
 class NotReady(Exception):
@@ -90,6 +93,89 @@ async def enqueue(
             job_id, "run_status", {"status": "queued"}
         )
     return job_id
+
+
+class BatchReportRecovery:
+    """Jobs for successful BATCH executions the event stream never brought.
+
+    Every ``interval`` it lists our tenant's SUCCEEDED BATCH executions of
+    the lookback that finished at least one interval ago (the stream had
+    its chance) and queues those without a job. ``enqueue`` is idempotent,
+    so a late event or a second pod changes nothing.
+    """
+
+    def __init__(self, services: Services):
+        settings = services.settings
+        self.services = services
+        self.interval = settings.batch_report_recovery_interval_seconds
+        self.lookback = timedelta(
+            days=settings.batch_report_recovery_lookback_days
+        )
+
+    async def run_forever(self) -> None:
+        while True:
+            try:
+                await self.sweep()
+            except asyncio.CancelledError:
+                raise
+            except Exception:  # noqa: BLE001 - try again next round
+                log.exception("batch_report_recovery_error")
+            await asyncio.sleep(self.interval)
+
+    async def sweep(self) -> list[str]:
+        async with self.services.db.sessions() as lock:
+            if not await lock.scalar(
+                text("SELECT pg_try_advisory_xact_lock(:k)"),
+                {"k": RECOVERY_LOCK},
+            ):
+                return []  # another pod is sweeping
+            return await self._recover()
+
+    async def _recover(self) -> list[str]:
+        now = utcnow()
+        executions = await self.services.executor.executions(
+            now - self.lookback,
+            tenant_id=self.services.settings.executor_tenant_id,
+            trigger_type="BATCH",
+            status="SUCCEEDED",
+        )
+        settled = now - timedelta(seconds=self.interval)
+        due = [
+            e
+            for e in executions
+            if (finished := (e.get("lifecycle") or {}).get("finished_at"))
+            and datetime.fromisoformat(finished) < settled
+        ]
+        if not due:
+            return []
+        async with self.services.db.sessions() as db:
+            known = set(
+                await db.scalars(
+                    select(BatchReportJob.execution_id).where(
+                        BatchReportJob.execution_id.in_(
+                            [e["execution_id"] for e in due]
+                        )
+                    )
+                )
+            )
+        recovered = []
+        for execution in due:
+            execution_id = execution["execution_id"]
+            if execution_id in known:
+                continue
+            job_id = await enqueue(
+                self.services,
+                execution_id,
+                {"status": "SUCCEEDED", "execution": execution},
+            )
+            if job_id:
+                log.warning(
+                    "batch_report_recovered execution=%s job=%s",
+                    execution_id,
+                    job_id,
+                )
+                recovered.append(job_id)
+        return recovered
 
 
 class BatchReportWorker:

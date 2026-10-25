@@ -467,3 +467,125 @@ def test_detail_names_the_owner():
     detail = _detail(cast(Any, job), cast(Any, user))
     assert isinstance(detail, BatchReportDetail)
     assert detail.owner.employee_id == "00123"
+
+
+# --- recovery ------------------------------------------------------------
+
+
+class _RecoveryDb:
+    """The advisory lock answers ``locked``; ``scalars`` the known jobs."""
+
+    def __init__(self, locked=True, known=()):
+        self.locked, self.known = locked, list(known)
+
+    def sessions(self):
+        db = self
+
+        class Session:
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *exc):
+                return False
+
+            async def scalar(self, statement, params=None):
+                return db.locked
+
+            async def scalars(self, statement):
+                return db.known
+
+        return Session()
+
+
+class _Listing:
+    def __init__(self, items, error=None):
+        self.items, self.error, self.asked = items, error, []
+
+    async def executions(self, created_after, **filters):
+        self.asked.append((created_after, filters))
+        if self.error:
+            raise self.error
+        return self.items
+
+
+def _finished(execution_id, minutes_ago):
+    finished = utcnow() - timedelta(minutes=minutes_ago)
+    return {
+        "execution_id": execution_id,
+        "trigger": {"type": "BATCH"},
+        "context": {"user_id": OWNER},
+        "metadata": {"batch_id": "batch-3", "run_id": f"run-{execution_id}"},
+        "lifecycle": {"finished_at": finished.isoformat()},
+    }
+
+
+def _recovery(monkeypatch, executor, db=None):
+    queued = []
+
+    async def fake_enqueue(services, execution_id, payload):
+        queued.append((execution_id, payload))
+        return f"job-{execution_id}"
+
+    monkeypatch.setattr(batch_reports, "enqueue", fake_enqueue)
+    services = cast(
+        Any,
+        SimpleNamespace(
+            settings=Settings(executor_tenant_id="pr-agentic"),
+            db=db or _RecoveryDb(),
+            executor=executor,
+        ),
+    )
+    return batch_reports.BatchReportRecovery(services), queued
+
+
+def test_recovery_queues_missed_executions_only(monkeypatch):
+    executor = _Listing(
+        [
+            _finished("missed", 30),
+            _finished("reported", 30),
+            _finished("just-done", 1),  # its event may still be on the way
+        ]
+    )
+    recovery, queued = _recovery(
+        monkeypatch, executor, _RecoveryDb(known=["reported"])
+    )
+    assert asyncio.run(recovery.sweep()) == ["job-missed"]
+    assert [(e, p["status"]) for e, p in queued] == [("missed", "SUCCEEDED")]
+    assert queued[0][1]["execution"]["metadata"]["run_id"] == "run-missed"
+    created_after, filters = executor.asked[0]
+    assert filters == {
+        "tenant_id": "pr-agentic",
+        "trigger_type": "BATCH",
+        "status": "SUCCEEDED",
+    }
+    lookback = utcnow() - created_after
+    assert timedelta(days=13) < lookback <= timedelta(days=14, seconds=5)
+
+
+def test_recovery_leaves_the_sweep_to_the_pod_holding_the_lock(monkeypatch):
+    executor = _Listing([_finished("missed", 30)])
+    recovery, queued = _recovery(
+        monkeypatch, executor, _RecoveryDb(locked=False)
+    )
+    assert asyncio.run(recovery.sweep()) == []
+    assert executor.asked == [] and queued == []
+
+
+def test_recovery_keeps_going_after_an_executor_error(monkeypatch):
+    executor = _Listing([], error=RuntimeError("executor down"))
+    recovery, _ = _recovery(monkeypatch, executor)
+    recovery.interval = 0
+    rounds = 0
+    real_sleep = asyncio.sleep
+
+    async def sleep(seconds):
+        nonlocal rounds
+        rounds += 1
+        if rounds == 2:
+            raise asyncio.CancelledError
+        await real_sleep(0)
+
+    monkeypatch.setattr(batch_reports.asyncio, "sleep", sleep)
+    with pytest.raises(asyncio.CancelledError):
+        asyncio.run(recovery.run_forever())
+    assert len(executor.asked) == 2

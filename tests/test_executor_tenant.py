@@ -1,5 +1,6 @@
 import asyncio
 import json
+from datetime import UTC, datetime
 from types import SimpleNamespace
 from typing import Any, cast
 
@@ -102,6 +103,42 @@ def test_notebook_is_read_in_full_for_its_path():
         "/api/v1/executions/x-1/artifacts",
         "/api/v1/artifacts/nb-1",
     ]
+
+
+def test_executions_are_read_until_they_pass_the_cutoff():
+    pages = {
+        None: {
+            "items": [
+                {"execution_id": "a", "created_at": "2026-10-25T10:00:00Z"},
+                {"execution_id": "b", "created_at": "2026-10-24T10:00:00Z"},
+            ],
+            "next_cursor": "c-2",
+        },
+        "c-2": {
+            "items": [
+                {"execution_id": "c", "created_at": "2026-10-23T10:00:00Z"},
+                {"execution_id": "d", "created_at": "2026-10-10T10:00:00Z"},
+            ],
+            "next_cursor": "c-3",
+        },
+    }
+    asked: list[dict[str, str]] = []
+
+    def handle(request: httpx.Request) -> httpx.Response:
+        params = dict(request.url.params)
+        asked.append(params)
+        return httpx.Response(200, json=pages[params.get("cursor")])
+
+    client = ExecutorClient("http://executor", 5, None)
+    client.http = httpx.AsyncClient(
+        base_url="http://executor/api/v1",
+        transport=httpx.MockTransport(handle),
+    )
+    cutoff = datetime(2026, 10, 20, tzinfo=UTC)
+    found = asyncio.run(client.executions(cutoff, trigger_type="BATCH"))
+    assert [e["execution_id"] for e in found] == ["a", "b", "c"]
+    assert len(asked) == 2  # c-3 is never asked for
+    assert asked[0] == {"trigger_type": "BATCH", "limit": "200"}
 
 
 def test_batch_registration_names_our_tenant():
