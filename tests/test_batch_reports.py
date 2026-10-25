@@ -168,9 +168,9 @@ def test_a_job_that_exists_is_not_announced_again():
     assert services.events.sent == []
 
 
-def test_trigger_type_reads_both_shapes():
+def test_trigger_type_reads_the_trigger():
     assert trigger_type({"trigger": {"type": "BATCH"}}) == "BATCH"
-    assert trigger_type({"trigger_type": "INTERACTIVE"}) == "INTERACTIVE"
+    assert trigger_type({"trigger_type": "INTERACTIVE"}) is None
     assert trigger_type({}) is None
 
 
@@ -225,15 +225,6 @@ def test_collect_waits_for_the_notebook():
     failed = _worker(_services(executor=_Executor(_execution("FAILED"))), job)
     with pytest.raises(RuntimeError, match="projection failed"):
         asyncio.run(failed._collect(cast(Any, job), utcnow()))
-
-
-def test_collect_fills_the_batch_from_execution_metadata():
-    job = _job(batch_id=None, execution={})
-    executor = _Executor(_execution(metadata={"batch_id": "batch-9"}))
-    worker = _worker(_services(executor=executor), job)
-    execution = asyncio.run(worker._collect(cast(Any, job), utcnow()))
-    assert job.batch_id == "batch-9"
-    assert execution["metadata"] == {"batch_id": "batch-9"}
 
 
 def test_a_waiting_job_goes_back_to_the_table():

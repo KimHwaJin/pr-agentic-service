@@ -73,7 +73,7 @@ async def enqueue(
                 batch_id=metadata.get("batch_id"),
                 batch_run_id=metadata.get("run_id"),
                 execution={
-                    "trigger": execution.get("trigger") or {"type": "BATCH"},
+                    "trigger": execution["trigger"],
                     "context": context,
                     "metadata": metadata,
                 },
@@ -266,12 +266,7 @@ class BatchReportWorker:
                     f"(status {projection.get('status')})"
                 )
             raise NotReady
-        known = (job.execution or {}).get("metadata") or {}
-        metadata = execution.get("metadata") or known
-        if job.batch_id is None and metadata.get("batch_id"):
-            job.batch_id = metadata["batch_id"]
-            await self._set(job.id, batch_id=job.batch_id)
-        return {**execution, "metadata": metadata}
+        return execution
 
     async def _generate(
         self, job: BatchReportJob, execution: dict[str, Any]
