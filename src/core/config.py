@@ -263,6 +263,12 @@ class Settings(BaseSettings):
     # previous runs' summaries the agent reads (memory per batch)
     batch_report_memory_runs: int = Field(5, ge=0, le=50)
     batch_report_model_call_limit: int = 20
+    # Recovery of reports whose execution.completed never reached us: every
+    # interval, our successful BATCH executions of the lookback without a
+    # job get one. A retention of report jobs must keep them longer than
+    # the lookback, or recovery writes deleted reports again.
+    batch_report_recovery_interval_seconds: float = Field(600, ge=60)
+    batch_report_recovery_lookback_days: int = Field(14, ge=1, le=90)
 
     @model_validator(mode="after")
     def _guard(self) -> "Settings":

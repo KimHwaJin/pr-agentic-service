@@ -1,5 +1,6 @@
 import logging
 from collections.abc import AsyncIterator
+from datetime import datetime
 from typing import Any
 
 import httpx
@@ -149,6 +150,35 @@ class ExecutorClient:
                 },
             )
             items += page["items"]
+            cursor = page.get("next_cursor")
+            if not cursor:
+                return items
+
+    async def executions(
+        self, created_after: datetime, **filters: str
+    ) -> list[dict[str, Any]]:
+        """Executions created after ``created_after``, newest first.
+
+        ``filters`` are the list's query parameters (``tenant_id``,
+        ``trigger_type``, ``status``, ...). The list has no time filter, so
+        pages are read until they pass ``created_after``.
+        """
+        items: list[dict[str, Any]] = []
+        cursor = None
+        while True:
+            page = await self._call(
+                "GET",
+                "/executions",
+                params={
+                    **filters,
+                    "limit": 200,
+                    **({"cursor": cursor} if cursor else {}),
+                },
+            )
+            for item in page["items"]:
+                if datetime.fromisoformat(item["created_at"]) < created_after:
+                    return items
+                items.append(item)
             cursor = page.get("next_cursor")
             if not cursor:
                 return items
