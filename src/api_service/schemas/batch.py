@@ -33,7 +33,9 @@ class BatchReportRead(Model):
     id: str
     execution_id: str
     batch_id: str | None
-    batch_run_id: str | None = Field(description="pr-batch run (task_id)")
+    batch_run_id: str | None = Field(
+        description="pr-batch run (metadata.run_id)"
+    )
     state: BatchReportState
     failed_stage: str | None = Field(description="FAILED일 때 멈춘 단계")
     title: str | None

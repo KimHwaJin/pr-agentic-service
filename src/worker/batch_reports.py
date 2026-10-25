@@ -32,7 +32,7 @@ from agent.batch import BatchReportAgent, previous_runs, remember_run
 from agent.context import BatchReportContext
 from core.db import new_id, utcnow
 from core.executor.client import trigger_type
-from core.models import BatchReportJob, CodeSource
+from core.models import BatchReportJob
 from core.notebook_links import lab_url
 from core.services import Services
 
@@ -49,23 +49,11 @@ async def enqueue(
 ) -> str | None:
     """Queue the report of a finished execution if it gets one.
 
-    The event's ``execution`` (trigger, context) decides. Events without it
-    (executors before that field) are looked up, except executions this
-    service sent itself (its code-source index knows them).
+    The event's ``execution`` (trigger, context, metadata) decides.
     """
     if payload.get("status") != "SUCCEEDED":
         return None
     execution = payload.get("execution") or {}
-    if not trigger_type(execution):
-        async with services.db.sessions() as db:
-            ours = await db.scalar(
-                select(CodeSource.id)
-                .where(CodeSource.execution_id == execution_id)
-                .limit(1)
-            )
-        if ours:
-            return None
-        execution = await services.executor.get(execution_id)
     if trigger_type(execution) != "BATCH":
         return None
     context = execution.get("context") or {}

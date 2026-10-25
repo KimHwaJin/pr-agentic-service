@@ -148,33 +148,13 @@ def test_event_trigger_decides_without_asking_the_executor():
     assert asyncio.run(enqueue(services, EXECUTION, interactive)) is None
 
 
-def test_chat_executions_are_known_without_a_lookup():
-    services = _services(_Db(["code-source-1"]))
+def test_events_without_an_execution_get_no_report():
+    services = _services()
     assert (
         asyncio.run(enqueue(services, EXECUTION, {"status": "SUCCEEDED"}))
         is None
     )
     assert services.executor.gets == 0
-
-
-def test_older_events_fall_back_to_the_execution():
-    db = _Db([None, "job-1"])  # not ours, then the INSERT
-    executor = _Executor(
-        {
-            "trigger_type": "BATCH",
-            "context": {"user_id": OWNER},
-            "metadata": {"batch_id": "batch-3", "run_id": "run-7"},
-        }
-    )
-    services = _services(db, executor)
-    assert (
-        asyncio.run(enqueue(services, EXECUTION, {"status": "SUCCEEDED"}))
-        == "job-1"
-    )
-    assert executor.gets == 1
-    params = _inserted(db)
-    assert params["batch_id"] == "batch-3"
-    assert params["batch_run_id"] == "run-7"
 
 
 def test_a_job_that_exists_is_not_announced_again():
