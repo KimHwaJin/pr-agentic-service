@@ -345,14 +345,7 @@ class BatchReportWorker:
                 "title": title,
             },
         )
-        notebook = next(
-            (
-                a
-                for a in await executor.artifacts(job.execution_id)
-                if a["type"] == "NOTEBOOK"
-            ),
-            None,
-        )
+        notebook = await executor.notebook(job.execution_id)
         if notebook:
             await self._emit(
                 job.id,

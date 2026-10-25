@@ -1103,14 +1103,7 @@ async def write_report(title: str, focus: str, runtime: Runtime) -> Command:
             "run_id": ctx.run_id,
         },
     )
-    notebook = next(
-        (
-            a
-            for a in await executor.artifacts(execution["id"])
-            if a["type"] == "NOTEBOOK"
-        ),
-        None,
-    )
+    notebook = await executor.notebook(execution["id"])
     links = {
         "report": artifact["artifact_id"],
         "notebook": notebook["artifact_id"] if notebook else None,

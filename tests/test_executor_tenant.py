@@ -8,7 +8,7 @@ import pytest
 from pydantic import ValidationError
 
 from agent.tools import analysis
-from api_service.routers.batch import with_tenant
+from api_service.routers.batch import sets_tenant, with_tenant
 from core.config import Settings
 from core.executor.client import ExecutorClient, ExecutorError
 from worker import executor_events
@@ -69,6 +69,41 @@ def test_executor_error_code():
     assert ExecutorError(502, "bad gateway").code is None
 
 
+def test_notebook_is_read_in_full_for_its_path():
+    asked: list[str] = []
+
+    def handle(request: httpx.Request) -> httpx.Response:
+        asked.append(request.url.path)
+        if request.url.path.endswith("/artifacts"):
+            items = [
+                {"artifact_id": "r-1", "type": "REPORT", "storage": {}},
+                {"artifact_id": "nb-1", "type": "NOTEBOOK", "storage": {}},
+            ]
+            return httpx.Response(200, json={"items": items})
+        return httpx.Response(
+            200,
+            json={
+                "artifact_id": "nb-1",
+                "type": "NOTEBOOK",
+                "storage": {"relative_path": "users/u/run.ipynb"},
+            },
+        )
+
+    client = ExecutorClient("http://executor", 5, None)
+    client.http = httpx.AsyncClient(
+        base_url="http://executor/api/v1",
+        transport=httpx.MockTransport(handle),
+    )
+    notebook = asyncio.run(client.notebook("x-1"))
+    assert notebook and notebook["storage"]["relative_path"] == (
+        "users/u/run.ipynb"
+    )
+    assert asked == [
+        "/api/v1/executions/x-1/artifacts",
+        "/api/v1/artifacts/nb-1",
+    ]
+
+
 def test_batch_registration_names_our_tenant():
     body = with_tenant(
         b'{"name": "daily", "tenant_id": "other"}', "pr-agentic"
@@ -76,6 +111,23 @@ def test_batch_registration_names_our_tenant():
     assert json.loads(body) == {"name": "daily", "tenant_id": "pr-agentic"}
     assert with_tenant(b"not json", "pr-agentic") == b"not json"
     assert with_tenant(b"[1]", "pr-agentic") == b"[1]"
+
+
+@pytest.mark.parametrize(
+    ("method", "path", "expected"),
+    [
+        ("POST", "batches", True),
+        ("POST", "/batches/", True),
+        ("PATCH", "batches/b-1", True),
+        ("PATCH", "batches", False),
+        ("POST", "batches/b-1/runs", False),
+        ("POST", "batches/b-1/enable", False),
+        ("PATCH", "scripts/s-1", False),
+        ("GET", "batches/b-1", False),
+    ],
+)
+def test_registration_and_edit_name_our_tenant(method, path, expected):
+    assert sets_tenant(method, path) is expected
 
 
 # --- consumer --------------------------------------------------------------

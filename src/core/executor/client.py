@@ -161,13 +161,21 @@ class ExecutorClient:
     async def result(self, execution_id: str) -> dict[str, Any]:
         return await self._call("GET", f"/executions/{execution_id}/result")
 
-    async def artifacts(self, execution_id: str) -> list[dict[str, Any]]:
+    async def notebook(self, execution_id: str) -> dict[str, Any] | None:
+        """The execution's notebook artifact in full.
+
+        The execution's artifact list leaves out ``storage.relative_path``
+        (the JupyterLab link needs it), so the notebook is read on its own.
+        """
         page = await self._call(
             "GET",
             f"/executions/{execution_id}/artifacts",
             params={"limit": 200},
         )
-        return page["items"]
+        found = next(
+            (a for a in page["items"] if a["type"] == "NOTEBOOK"), None
+        )
+        return await self.artifact(found["artifact_id"]) if found else None
 
     async def artifact(self, artifact_id: str) -> dict[str, Any]:
         return await self._call("GET", f"/artifacts/{artifact_id}")
