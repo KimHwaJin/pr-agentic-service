@@ -3,14 +3,18 @@
 Body: ``{"detail": "<human readable>", "code": "<machine code>", ...extra}``.
 """
 
+import logging
 from typing import Any
 
+import httpx
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException
 
 from core.db import NotFound
+
+log = logging.getLogger(__name__)
 
 # code for plain HTTPExceptions raised without one
 STATUS_CODES = {
@@ -21,6 +25,7 @@ STATUS_CODES = {
     409: "conflict",
     413: "too_large",
     422: "invalid_body",
+    502: "bad_gateway",
 }
 
 
@@ -40,6 +45,7 @@ def install(app: FastAPI) -> None:
     app.add_exception_handler(RequestValidationError, _invalid_body)
     app.add_exception_handler(NotFound, _not_found)
     app.add_exception_handler(HTTPException, _http_error)
+    app.add_exception_handler(httpx.TransportError, _upstream_down)
 
 
 async def _http_error(request: Request, exc: Exception) -> JSONResponse:
@@ -79,6 +85,15 @@ async def _not_found(request: Request, exc: Exception) -> JSONResponse:
     # a row checked a moment ago was deleted concurrently
     return JSONResponse(
         {"detail": "Not found.", "code": "not_found"}, status_code=404
+    )
+
+
+async def _upstream_down(request: Request, exc: Exception) -> JSONResponse:
+    # the executor or pr-batch did not answer
+    log.warning("upstream_unreachable path=%s error=%r", request.url.path, exc)
+    return JSONResponse(
+        {"detail": "A backing service did not answer.", "code": "bad_gateway"},
+        status_code=502,
     )
 
 

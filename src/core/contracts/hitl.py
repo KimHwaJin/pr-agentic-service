@@ -117,8 +117,7 @@ class PlanCandidate(View):
         description="Workflow 1.0 문서 "
         "(core/workflows/workflow_schema_1.0.json)"
     )
-    # empty only in pauses stored before calls were added
-    calls: list[PlanCall] = Field(default_factory=list)
+    calls: list[PlanCall]
     input_slots: list[InputSlot]
     input_values: dict[str, Any] = Field(
         default_factory=dict, description="요청에서 이미 정해진 입력값"

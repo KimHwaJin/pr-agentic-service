@@ -13,6 +13,8 @@ from core.workflows.spec import Call
 
 OBSERVATION_PREFIX = "AGENTIC_OBSERVATION "
 SETUP_TOOL = "setup"
+# lineage skill_name of code the agent wrote (run_custom_code)
+CUSTOM_SKILL = "custom"
 
 SETUP = """
 # 에이전트 준비 셀: 그림을 노트북에 표시하고, 각 단계 결과를 에이전트가
@@ -126,8 +128,8 @@ def _agentic_observe(name, value):
         summary = f"(요약 실패: {type(exc).__name__}) {repr(value)[:300]}"
     payload = {"var": name, "value": summary}
     dumped = json.dumps(payload, default=str, ensure_ascii=False)
-    print("AGENTIC_OBSERVATION " + dumped)
-""".strip()
+    print(__PREFIX__ + dumped)
+""".strip().replace("__PREFIX__", repr(OBSERVATION_PREFIX))
 
 
 def _literal(value: Any) -> str:

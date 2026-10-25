@@ -85,7 +85,7 @@ async def update_user(
         user = await db.get(User, user_id)
         if user is None:
             raise HTTPException(404, "User not found.")
-        for key, value in body.model_dump(exclude_unset=True).items():
+        for key, value in body.changes().items():
             setattr(user, key, value)
         await db.commit()
         return user

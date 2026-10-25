@@ -1,4 +1,3 @@
-from collections.abc import AsyncIterator
 from datetime import UTC, datetime
 from typing import Any, cast
 from uuid import uuid4
@@ -61,10 +60,6 @@ class Database:
             pool_pre_ping=True,
         )
         self.sessions = async_sessionmaker(self.engine, expire_on_commit=False)
-
-    async def session(self) -> AsyncIterator[AsyncSession]:
-        async with self.sessions() as session:
-            yield session
 
     async def close(self) -> None:
         await self.engine.dispose()

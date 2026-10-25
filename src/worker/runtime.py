@@ -2,10 +2,7 @@ import asyncio
 import os
 import socket
 
-from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
-
 from agent.graph import AgentGraphs
-from core.bootstrap import PgPool
 from core.services import Services
 from worker.batch_reports import BatchReportRecovery, BatchReportWorker
 from worker.executor_events import ExecutorEventConsumer, MissedEventRecovery
@@ -19,11 +16,11 @@ class Worker:
     Agent runs, executor events, batch report jobs.
     """
 
-    def __init__(self, services: Services, pool: PgPool):
+    def __init__(self, services: Services):
         settings = services.settings
         self.owner = f"{socket.gethostname()}:{os.getpid()}"
         graphs = AgentGraphs(
-            settings, AsyncPostgresSaver(pool), services.memory.store
+            settings, services.checkpointer, services.memory.store
         )
         self.scheduler = RunScheduler(services, graphs, self.owner)
         self.reports = BatchReportWorker(services, self.owner)

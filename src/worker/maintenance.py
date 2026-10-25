@@ -1,6 +1,7 @@
 """Bounded growth of transport data.
 
-Purges old session events, executor inbox rows and code files already
+Purges old session and batch report events, executor inbox rows, run
+idempotency keys, images of deleted sessions and code files already
 snapshotted by the executor.
 """
 
@@ -8,10 +9,17 @@ import asyncio
 import logging
 from datetime import timedelta
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, select, tuple_
 
 from core.db import affected, utcnow
-from core.models import ChatSession, ExecutorInbox, Image, RunEvent, RunRequest
+from core.models import (
+    BatchReportEvent,
+    ChatSession,
+    ExecutorInbox,
+    Image,
+    RunEvent,
+    RunRequest,
+)
 from core.services import Services
 
 log = logging.getLogger(__name__)
@@ -36,19 +44,25 @@ class Retention:
         settings = self.services.settings
         await self._purge(
             RunEvent,
-            RunEvent.id,
+            (RunEvent.id,),
             RunEvent.created_at,
             settings.run_event_retention_days,
         )
         await self._purge(
+            BatchReportEvent,
+            (BatchReportEvent.id,),
+            BatchReportEvent.created_at,
+            settings.run_event_retention_days,
+        )
+        await self._purge(
             ExecutorInbox,
-            ExecutorInbox.event_id,
+            (ExecutorInbox.event_id,),
             ExecutorInbox.received_at,
             settings.executor_inbox_retention_days,
         )
         await self._purge(
             RunRequest,
-            RunRequest.key,
+            (RunRequest.session_id, RunRequest.key),
             RunRequest.created_at,
             settings.run_request_retention_days,
         )
@@ -75,22 +89,24 @@ class Retention:
             if len(ids) < BATCH:
                 return
 
-    async def _purge(self, model, key, stamp, days: int) -> None:
+    async def _purge(self, model, keys, stamp, days: int) -> None:
         """Delete in small batches.
 
         Concurrent pods and live traffic never wait on one long delete.
+        ``keys`` are the primary key columns.
         """
         cutoff = utcnow() - timedelta(days=days)
         while True:
             async with self.services.db.sessions() as db:
-                ids = (
-                    select(key)
+                old = (
+                    select(*keys)
                     .where(stamp < cutoff)
                     .limit(BATCH)
                     .with_for_update(skip_locked=True)
-                    .scalar_subquery()
                 )
-                result = await db.execute(delete(model).where(key.in_(ids)))
+                result = await db.execute(
+                    delete(model).where(tuple_(*keys).in_(old))
+                )
                 await db.commit()
             if affected(result) < BATCH:
                 return

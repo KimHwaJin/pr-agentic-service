@@ -6,21 +6,17 @@ report id), so the chat components draw a report screen too. Separate from
 ``/batch/*``, which relays to pr-batch.
 """
 
-import asyncio
-import json
-
 from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import StreamingResponse
 from sqlalchemy import select
 
 from api_service import pagination
 from api_service.deps import ServicesDep, UserDep
-from api_service.routers.sessions import HEARTBEAT, _sse
 from api_service.schemas.batch import (
     BatchReportDetail,
     BatchReportEvents,
     BatchReportPage,
 )
+from api_service.sse import event_stream
 from core.db import get_row
 from core.models import BatchReportEvent, BatchReportJob, User
 from core.services import Services
@@ -144,36 +140,12 @@ async def report_stream(
     """
     await _report_for(services, user, report_id)
     cursor = request.headers.get("last-event-id") or after
-    channel = services.events.report_channel(report_id)
-    queue = services.events.listen_to(channel)
-
-    async def stream():
-        try:
-            last = int(cursor) if cursor else 0
-            for event in await services.events.report_history(report_id, last):
-                last = event["id"]
-                yield _sse(event)
-            while not await request.is_disconnected():
-                try:
-                    raw = await asyncio.wait_for(queue.get(), 15.0)
-                except TimeoutError:
-                    yield HEARTBEAT
-                    continue
-                event = json.loads(raw)
-                if "id" in event:
-                    if event["id"] <= last:
-                        continue
-                    last = event["id"]
-                yield _sse(event)
-        except asyncio.CancelledError:
-            pass
-        finally:
-            services.events.stop_listening(channel, queue)
-
-    return StreamingResponse(
-        stream(),
-        media_type="text/event-stream",
-        headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"},
+    return event_stream(
+        request,
+        services.events,
+        services.events.report_channel(report_id),
+        lambda after_id: services.events.report_history(report_id, after_id),
+        cursor,
     )
 
 

@@ -118,7 +118,10 @@ class Settings(BaseSettings):
     session_cookie_name: str = "agentic_session"
     cookie_secure: bool = False
     cookie_samesite: Literal["lax", "strict", "none"] = "lax"
+    # Login sessions slide: idle this long ends one, activity extends it,
+    # up to session_max_seconds after the login.
     session_ttl_seconds: int = Field(1800, ge=60, le=86400)
+    session_max_seconds: int = Field(43200, ge=300, le=7 * 86400)
     login_flow_ttl_seconds: int = Field(300, ge=60, le=1800)
     sso_call_timeout_seconds: float = 10.0
     dev_employee_id: str = "dev0001"
@@ -229,6 +232,8 @@ class Settings(BaseSettings):
     )  # turns are I/O bound (LLM, executor)
     run_lease_seconds: int = Field(60, ge=10)
     run_poll_seconds: float = 5.0  # fallback only; runs are woken over Redis
+    # claims without reaching a pause before a run is failed (crash loops)
+    run_max_attempts: int = Field(5, ge=1)
 
     # Retention of transport data.
     run_event_retention_days: int = 30
@@ -289,6 +294,10 @@ class Settings(BaseSettings):
             raise ValueError(
                 "EMBEDDING_PROVIDER=openai needs EMBEDDING_BASE_URL and "
                 "EMBEDDING_MODEL"
+            )
+        if self.session_max_seconds < self.session_ttl_seconds:
+            raise ValueError(
+                "SESSION_MAX_SECONDS must be at least SESSION_TTL_SECONDS"
             )
         if self.executor_tenant_id in RESERVED_TENANT_IDS:
             raise ValueError(

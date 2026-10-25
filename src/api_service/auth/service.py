@@ -145,7 +145,8 @@ class SsoService:
         response.set_cookie(
             self.settings.session_cookie_name,
             sid,
-            max_age=ttl,
+            # the server's idle expiry decides; the cookie lasts to the cap
+            max_age=self.settings.session_max_seconds,
             path="/",
             secure=self.settings.cookie_secure,
             httponly=True,
@@ -154,9 +155,8 @@ class SsoService:
         return response
 
     async def authenticate(self, request: Request) -> LoginSession:
-        session = await self.store.read_session(
-            request.cookies.get(self.settings.session_cookie_name, "")
-        )
+        sid = request.cookies.get(self.settings.session_cookie_name, "")
+        session = await self.store.read_session(sid)
         if session is None:
             raise HTTPException(401, "Login required.")
         if request.method not in {"GET", "HEAD", "OPTIONS"}:
@@ -167,14 +167,23 @@ class SsoService:
                 raise HTTPException(
                     403, "A valid X-CSRF-Token header is required."
                 )
-        return session
+        return await self.store.touch(
+            sid,
+            session,
+            self.settings.session_ttl_seconds,
+            self.settings.session_max_seconds,
+        )
 
     async def session(
         self, request: Request, response: Response
     ) -> LoginSessionRead:
         session = await self.authenticate(request)
         response.headers.update(NO_STORE)
-        return LoginSessionRead(**session.__dict__)
+        return LoginSessionRead(
+            user_id=session.user_id,
+            csrf_token=session.csrf_token,
+            expires_at=session.expires_at,
+        )
 
     async def logout(self, request: Request) -> Response:
         await self.authenticate(request)

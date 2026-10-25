@@ -27,6 +27,7 @@ from langgraph.types import Command, interrupt
 
 from agent import plan_format
 from agent.codegen import (
+    CUSTOM_SKILL,
     SETUP,
     SETUP_TOOL,
     custom_step_code,
@@ -41,6 +42,7 @@ from core.db import new_id
 from core.executor.client import ExecutorError
 from core.executor.sources import SourceOwner, file_name
 from core.notebook_links import lab_url
+from core.services import TOOL_EFFECTS
 from core.workflows import spec
 from core.workflows.service import WorkflowError
 from core.workflows.view import call_views
@@ -491,7 +493,7 @@ async def revise_call(
     position = order.index(key)
     try:
         arguments = {
-            p: plan_format._argument(v, position, order, p)
+            p: plan_format.argument(v, position, order, p)
             for p, v in new_args.items()
         }
     except plan_format.PlanFormatError as exc:
@@ -595,7 +597,7 @@ async def _once(runtime: Runtime, name: str, effect) -> Any:
     executor again (whose state has moved on).
     """
     namespace, key = (
-        ("tool_effects", runtime.context.run_id),
+        (TOOL_EFFECTS, runtime.context.run_id),
         f"{runtime.tool_call_id}:{name}",
     )
     store = runtime.store
@@ -987,7 +989,7 @@ async def run_custom_code(
         "payload": {"type": "PYTHON_EXECUTE", "source": source},
         "step_timeout_seconds": timeout,
         "lineage": {
-            "skill_name": "custom",
+            "skill_name": CUSTOM_SKILL,
             "tool_name": custom_id,
             "input_parameters": {"purpose": purpose},
         },
@@ -1087,22 +1089,28 @@ async def write_report(title: str, focus: str, runtime: Runtime) -> Command:
             execution=closed,
         )
 
-    evidence = await collect_evidence(ctx.services, execution["id"], plan)
-    async with ctx.activity("report_writing"):
-        markdown = await generate_report(
-            ctx, title=title, focus=focus, evidence=evidence
+    async def publish() -> list:
+        evidence = await collect_evidence(ctx.services, execution["id"], plan)
+        async with ctx.activity("report_writing"):
+            markdown = await generate_report(
+                ctx, title=title, focus=focus, evidence=evidence
+            )
+        artifact = await executor.create_report(
+            execution["id"],
+            idempotency_key=_key(runtime, "report"),
+            markdown=markdown,
+            name="final-report.md",
+            metadata={
+                "title": title,
+                "session_id": ctx.session_id,
+                "run_id": ctx.run_id,
+            },
         )
-    artifact = await executor.create_report(
-        execution["id"],
-        idempotency_key=_key(runtime, "report"),
-        markdown=markdown,
-        name="final-report.md",
-        metadata={
-            "title": title,
-            "session_id": ctx.session_id,
-            "run_id": ctx.run_id,
-        },
-    )
+        return [markdown, artifact]
+
+    # once: a replay must not send a regenerated (different) report under
+    # the same idempotency key
+    markdown, artifact = await _once(runtime, "report", publish)
     notebook = await executor.notebook(execution["id"])
     links = {
         "report": artifact["artifact_id"],
@@ -1131,16 +1139,11 @@ async def write_report(title: str, focus: str, runtime: Runtime) -> Command:
                 ),
             },
         )
-    reports = [
-        *runtime.state.get("reports", []),
-        {"title": title, "execution_id": execution["id"], **links},
-    ]
     return _reply(
         runtime,
         f"리포트 게시 완료 (report={links['report']}, "
         f"notebook={links['notebook']}).\n\n{markdown[:6000]}",
         execution=None,
-        reports=reports,
     )
 
 

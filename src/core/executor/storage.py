@@ -95,12 +95,22 @@ class SharedStorage:
         """Bounded view of one Step manifest for the model and the UI."""
         if not result_ref:
             return {"available": False}
-        manifest = json.loads(
-            self.resolve_result(result_ref["relative_path"]).read_text("utf-8")
-        )
+        try:
+            manifest = json.loads(
+                self.resolve_result(result_ref["relative_path"]).read_text(
+                    "utf-8"
+                )
+            )
+        except (OSError, ValueError) as exc:
+            # a missing or broken manifest is one step's problem, not the
+            # whole operation's: the caller still records every result
+            return {
+                "available": False,
+                "error": f"결과 파일을 읽지 못했습니다: {type(exc).__name__}",
+            }
         texts: list[str] = []
         images: list[str] = []
-        budget = max_chars
+        budget, truncated = max_chars, False
         for output in manifest.get("outputs", []):
             reps = output.get("representations", [])
             images += [
@@ -114,17 +124,26 @@ class SharedStorage:
             text_rep = next(
                 (r for r in reps if r.get("media_type") in TEXT_TYPES), None
             )
-            if text_rep and budget > 0:
-                text = self.resolve_result(
-                    text_rep["relative_path"]
-                ).read_text("utf-8", errors="replace")
+            if text_rep and not truncated:
+                text = self._read_text(text_rep["relative_path"], budget + 1)
+                truncated = len(text) > budget
                 texts.append(text[:budget])
                 budget -= len(texts[-1])
         return {
             "available": True,
             "complete": manifest.get("complete", False),
             "text": "\n".join(texts),
-            "truncated": budget <= 0,
+            "truncated": truncated,
             "images": images,
             "error": manifest.get("error_message"),
         }
+
+    def _read_text(self, relative_path: str, limit: int) -> str:
+        """At most ``limit`` characters; outputs can be very large."""
+        try:
+            with self.resolve_result(relative_path).open(
+                encoding="utf-8", errors="replace"
+            ) as file:
+                return file.read(limit)
+        except OSError as exc:
+            return f"(출력 파일을 읽지 못했습니다: {type(exc).__name__})"

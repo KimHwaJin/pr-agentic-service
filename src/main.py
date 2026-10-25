@@ -27,11 +27,11 @@ api_enabled, worker_enabled = mode in {"all", "api"}, mode in {"all", "worker"}
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    async with build_services(settings) as (services, pool):
+    async with build_services(settings) as services:
         app.state.services = services
         if api_enabled:
             start_api(app, services)
-        worker = Worker(services, pool) if worker_enabled else None
+        worker = Worker(services) if worker_enabled else None
         if worker:
             worker.start()
         app.state.ready = True

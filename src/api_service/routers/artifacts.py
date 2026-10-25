@@ -6,6 +6,7 @@ Proxy + landing page.
 import json
 from html import escape
 from pathlib import Path
+from urllib.parse import quote
 
 from fastapi import APIRouter
 from fastapi.responses import HTMLResponse, StreamingResponse
@@ -64,9 +65,38 @@ async def artifact_content(
         relay(),
         media_type=media,
         headers={
-            "Content-Disposition": f'inline; filename="{artifact["name"]}"'
+            "Content-Disposition": content_disposition(
+                "inline"
+                if media.split(";")[0] in INLINE_TYPES
+                else "attachment",
+                artifact["name"],
+            ),
+            # analysis output is untrusted: never sniffed, never scripted on
+            # this origin (an html or svg file cannot run with our cookie)
+            "X-Content-Type-Options": "nosniff",
+            "Content-Security-Policy": "sandbox; default-src 'none'",
         },
     )
+
+
+# shown in the browser; anything else (html, svg, ...) is downloaded
+INLINE_TYPES = {
+    "image/png",
+    "image/jpeg",
+    "image/gif",
+    "image/webp",
+    "text/plain",
+    "text/csv",
+    "text/markdown",
+    "application/json",
+    "application/x-ipynb+json",
+}
+
+
+def content_disposition(kind: str, name: str) -> str:
+    """RFC 6266 header; ``filename*`` carries non-ASCII (Korean) names."""
+    fallback = name.encode("ascii", "replace").decode().replace('"', "_")
+    return f"{kind}; filename=\"{fallback}\"; filename*=UTF-8''{quote(name)}"
 
 
 @router.get("/view/artifacts/{artifact_id}", response_class=HTMLResponse)

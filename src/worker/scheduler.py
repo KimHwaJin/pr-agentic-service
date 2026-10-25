@@ -45,6 +45,10 @@ class LeaseLost(Exception):
     pass
 
 
+class TooManyAttempts(RuntimeError):
+    """The run was claimed again and again without reaching a pause."""
+
+
 class RunScheduler:
     def __init__(self, services: Services, graphs: AgentGraphs, owner: str):
         self.services, self.graphs, self.owner = services, graphs, owner
@@ -101,7 +105,11 @@ class RunScheduler:
                 update(Run)
                 .where(Run.lease_owner == self.owner, Run.status == "running")
                 .values(
-                    status="queued", lease_owner=None, lease_expires_at=None
+                    status="queued",
+                    lease_owner=None,
+                    lease_expires_at=None,
+                    # a shutdown is not a failed attempt
+                    attempts=Run.attempts - 1,
                 )
             )
             await db.commit()
@@ -190,23 +198,32 @@ class RunScheduler:
             user_content=run.input.get("content"),
         )
 
+    async def _emit(self, run: Run, type: str, data: dict[str, Any]) -> None:
+        await self.services.events.emit(run.session_id, run.id, type, data)
+
     async def _execute(self, run: Run) -> None:
-        ctx = await self._context(run)
         current = asyncio.current_task()
         assert current is not None  # called inside a task
         heartbeat = asyncio.create_task(self._heartbeat(run.id, current))
         try:
             if run.cancel_requested:
                 raise asyncio.CancelledError
-            await ctx.emit("run_status", {"status": "running"})
+            # attempts counts claims since the last pause: a run that keeps
+            # failing before it pauses (a crash, a deleted session) stops
+            if run.attempts > self.settings.run_max_attempts:
+                raise TooManyAttempts(
+                    f"{run.attempts - 1} attempts ended without a result"
+                )
+            ctx = await self._context(run)
+            await self._emit(run, "run_status", {"status": "running"})
             result = await self.graphs.run_turn(ctx, run.resume)
             if result.interrupt:
-                await self._wait(run, ctx, result.interrupt)
+                await self._wait(run, result.interrupt)
             else:
-                await self._finish(run, ctx, "succeeded", answer=result.answer)
+                await self._finish(run, "succeeded", answer=result.answer)
         except asyncio.CancelledError:
             if await self._cancel_requested(run.id):
-                await self._finish(run, ctx, "cancelled")
+                await self._finish(run, "cancelled")
                 await self._cancel_executor(run.id)
             # otherwise lease lost or shutdown: the next owner continues from
             # the checkpoint
@@ -215,7 +232,7 @@ class RunScheduler:
         except Exception as exc:  # noqa: BLE001
             log.exception("run_failed run_id=%s", run.id)
             await self._finish(
-                run, ctx, "failed", error=f"{type(exc).__name__}: {exc}"
+                run, "failed", error=f"{type(exc).__name__}: {exc}"
             )
         finally:
             heartbeat.cancel()
@@ -255,9 +272,7 @@ class RunScheduler:
                 )
             )
 
-    async def _wait(
-        self, run: Run, ctx: RunContext, interrupt: dict[str, Any]
-    ) -> None:
+    async def _wait(self, run: Run, interrupt: dict[str, Any]) -> None:
         value = interrupt["value"]
         # the pause contract readers rely on (RunRead.waiting, hitl_request)
         _PAUSE.validate_python({"interrupt_id": interrupt["id"], **value})
@@ -287,8 +302,10 @@ class RunScheduler:
                         None,
                     )
                 owned.lease_owner = owned.lease_expires_at = None
+                owned.attempts = 0
                 await db.commit()
-            await ctx.emit(
+            await self._emit(
+                run,
                 "run_status",
                 {
                     "status": "waiting_executor",
@@ -320,6 +337,7 @@ class RunScheduler:
                     resume=None,
                     lease_owner=None,
                     lease_expires_at=None,
+                    attempts=0,
                 )
             )
             await db.commit()
@@ -327,10 +345,10 @@ class RunScheduler:
             if await self._cancel_requested(run.id):
                 raise asyncio.CancelledError
             raise LeaseLost(run.id)
-        await ctx.emit(
-            "hitl_request", {"interrupt_id": interrupt["id"], **value}
+        await self._emit(
+            run, "hitl_request", {"interrupt_id": interrupt["id"], **value}
         )
-        await ctx.emit("run_status", {"status": "waiting_input"})
+        await self._emit(run, "run_status", {"status": "waiting_input"})
 
     @staticmethod
     async def _arrived_event(
@@ -351,15 +369,23 @@ class RunScheduler:
     async def _finish(
         self,
         run: Run,
-        ctx: RunContext,
         status: str,
         answer: str | None = None,
         error: str | None = None,
     ) -> None:
+        """End the run while this worker still holds it.
+
+        A run whose lease another worker took over (or that ended
+        otherwise) is left alone, events included.
+        """
         async with self.services.db.sessions() as db:
             result = await db.execute(
                 update(Run)
-                .where(Run.id == run.id, Run.status.notin_(TERMINAL))
+                .where(
+                    Run.id == run.id,
+                    Run.lease_owner == self.owner,
+                    Run.status.notin_(TERMINAL),
+                )
                 .values(
                     status=status,
                     error=error,
@@ -370,7 +396,8 @@ class RunScheduler:
                     finished_at=utcnow(),
                 )
             )
-            if affected(result):
+            finished = bool(affected(result))
+            if finished:
                 if answer:
                     artifacts = await db.scalars(
                         select(RunEvent.data)
@@ -398,21 +425,20 @@ class RunScheduler:
                     .values(active_run_id=None)
                 )
             await db.commit()
-        await self._forget_tool_effects(run.id)
+        if not finished:
+            log.warning("run_finish_skipped run_id=%s", run.id)
+            return
+        await self.services.forget_tool_effects(run.id)
         if answer:
-            await ctx.emit("message_final", {"content": answer})
-            title_task = asyncio.create_task(
-                self._auto_title(run, ctx, answer)
-            )
+            await self._emit(run, "message_final", {"content": answer})
+            title_task = asyncio.create_task(self._auto_title(run, answer))
             self.background.add(title_task)
             title_task.add_done_callback(self.background.discard)
         if error:
-            await ctx.emit("run_error", {"message": error})
-        await ctx.emit("run_status", {"status": status})
+            await self._emit(run, "run_error", {"message": error})
+        await self._emit(run, "run_status", {"status": status})
 
-    async def _auto_title(
-        self, run: Run, ctx: RunContext, answer: str
-    ) -> None:
+    async def _auto_title(self, run: Run, answer: str) -> None:
         """Replace the first-message title with an LLM summary once.
 
         Never touches a user's rename.
@@ -431,7 +457,7 @@ class RunScheduler:
             return
         try:
             title = await summarize_title(
-                self.settings, run.model, ctx.user_text, answer
+                self.settings, run.model, run.input["text"], answer
             )
         except Exception:  # noqa: BLE001 - keep the first-message title
             log.warning("auto_title_failed session=%s", run.session_id)
@@ -449,18 +475,7 @@ class RunScheduler:
             )
             await db.commit()
         if affected(renamed):
-            await ctx.emit("session_titled", {"title": title})
-
-    async def _forget_tool_effects(self, run_id: str) -> None:
-        """Drop replay guards once the run is over.
-
-        The guards (agent.tools.analysis._once) are only needed while the run
-        is alive.
-        """
-        store = self.services.memory.store
-        namespace = ("tool_effects", run_id)
-        for item in await store.asearch(namespace, limit=1000):
-            await store.adelete(namespace, item.key)
+            await self._emit(run, "session_titled", {"title": title})
 
     async def progress(self, execution_id: str, event: dict[str, Any]) -> None:
         """Forward executor step progress.

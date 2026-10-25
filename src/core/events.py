@@ -55,20 +55,10 @@ class EventBus:
         data: dict[str, Any],
         durable: bool = True,
     ) -> None:
-        contracts.check(type, data)  # the shape readers rely on
-        event: dict[str, Any] = {"type": type, "run_id": run_id, "data": data}
-        if durable:
-            async with self.db.sessions() as db:
-                row = RunEvent(
-                    session_id=session_id, run_id=run_id, type=type, data=data
-                )
-                db.add(row)
-                await db.commit()
-                event["id"] = row.id
-        await self.redis.publish(
-            self.channel(session_id),
-            json.dumps(event, ensure_ascii=False, default=str),
+        row = RunEvent(
+            session_id=session_id, run_id=run_id, type=type, data=data
         )
+        await self._publish(self.channel(session_id), run_id, row, durable)
 
     async def emit_report(
         self,
@@ -78,17 +68,29 @@ class EventBus:
         durable: bool = True,
     ) -> None:
         """A batch report job's event; ``run_id`` is the job id."""
-        contracts.check(type, data)
-        event: dict[str, Any] = {"type": type, "run_id": job_id, "data": data}
+        row = BatchReportEvent(job_id=job_id, type=type, data=data)
+        await self._publish(self.report_channel(job_id), job_id, row, durable)
+
+    async def _publish(
+        self,
+        channel: str,
+        run_id: str,
+        row: RunEvent | BatchReportEvent,
+        durable: bool,
+    ) -> None:
+        contracts.check(row.type, row.data)  # the shape readers rely on
+        event: dict[str, Any] = {
+            "type": row.type,
+            "run_id": run_id,
+            "data": row.data,
+        }
         if durable:
             async with self.db.sessions() as db:
-                row = BatchReportEvent(job_id=job_id, type=type, data=data)
                 db.add(row)
                 await db.commit()
                 event["id"] = row.id
         await self.redis.publish(
-            self.report_channel(job_id),
-            json.dumps(event, ensure_ascii=False, default=str),
+            channel, json.dumps(event, ensure_ascii=False, default=str)
         )
 
     async def report_history(
@@ -129,13 +131,6 @@ class EventBus:
         ]
 
     # --- local fan-out -----------------------------------------------------
-
-    def subscribe(self, session_id: str) -> asyncio.Queue:
-        """Register before replaying history so nothing falls in between."""
-        return self.listen_to(self.channel(session_id))
-
-    def unsubscribe(self, session_id: str, queue: asyncio.Queue) -> None:
-        self.stop_listening(self.channel(session_id), queue)
 
     def listen_to(self, channel: str) -> asyncio.Queue:
         if self._listener is None or self._listener.done():

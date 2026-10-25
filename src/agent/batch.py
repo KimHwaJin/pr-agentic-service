@@ -18,11 +18,11 @@ from langchain.agents.middleware import (
     ModelCallLimitMiddleware,
     ToolErrorMiddleware,
 )
-from langchain_core.messages import AIMessage, AIMessageChunk, HumanMessage
+from langchain_core.messages import AIMessage, HumanMessage
 from langgraph.store.base import BaseStore
 
 from agent.context import BatchReportContext, BatchReportState
-from agent.graph import brief_args, tool_error
+from agent.graph import relay, tool_error
 from agent.llm import chat_model
 from agent.middleware import JsonArgumentsMiddleware
 from agent.prompts import load_prompt
@@ -30,7 +30,6 @@ from agent.reporter import collect_evidence
 from agent.tools.batch import read_step, submit_report
 from core.config import Settings
 from core.db import utcnow
-from core.events import TokenBuffer
 
 TOOLS = [read_step, submit_report]
 
@@ -66,6 +65,7 @@ async def remember_run(
             memory_namespace(batch_id),
             execution_id,
             {**value, "created_at": utcnow().isoformat()},
+            index=False,  # read back by namespace, never searched by meaning
         )
 
 
@@ -110,37 +110,16 @@ class BatchReportAgent:
         )
         graph = self.get(ctx.model)
         request = HumanMessage(_request(execution, history, evidence))
-        tokens = TokenBuffer(ctx.emit)
-        state: dict[str, Any] = {}
         async with ctx.activity("report_writing"):
-            async for mode, chunk in graph.astream(
-                {"messages": [request]},
-                {"recursion_limit": self.settings.agent_recursion_limit},
-                context=ctx,
-                stream_mode=["messages", "updates", "values"],
-            ):
-                if mode == "values":
-                    state = chunk
-                elif mode == "messages":
-                    message, meta = chunk
-                    if (
-                        isinstance(message, AIMessageChunk)
-                        and meta.get("langgraph_node") == "model"
-                        and message.text
-                    ):
-                        tokens.add(message.text)
-                elif "model" in chunk:
-                    await tokens.flush()
-                    for message in chunk["model"].get("messages", []):
-                        for call in getattr(message, "tool_calls", []):
-                            await ctx.emit(
-                                "tool_call",
-                                {
-                                    "name": call["name"],
-                                    "args": brief_args(call["args"]),
-                                },
-                            )
-            await tokens.flush()
+            state = await relay(
+                graph.astream(
+                    {"messages": [request]},
+                    {"recursion_limit": self.settings.agent_recursion_limit},
+                    context=ctx,
+                    stream_mode=["messages", "updates", "values"],
+                ),
+                ctx.emit,
+            )
         return _report(state)
 
 

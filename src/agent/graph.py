@@ -1,3 +1,4 @@
+from collections.abc import AsyncIterator, Awaitable, Callable, Collection
 from dataclasses import dataclass
 from typing import Any, cast
 
@@ -179,37 +180,17 @@ class AgentGraphs:
                 ]
             }
 
-        tokens = TokenBuffer(ctx.emit)
-        stream = graph.astream(
-            command,
-            config,
-            context=ctx,
-            stream_mode=["messages", "updates"],
-            durability="async",
+        await relay(
+            graph.astream(
+                command,
+                config,
+                context=ctx,
+                stream_mode=["messages", "updates"],
+                durability="async",
+            ),
+            ctx.emit,
+            quiet=QUIET_TOOLS,
         )
-        async for mode, chunk in stream:
-            if mode == "messages":
-                message, meta = chunk
-                if (
-                    isinstance(message, AIMessageChunk)
-                    and meta.get("langgraph_node") == "model"
-                    and message.text
-                ):
-                    tokens.add(message.text)
-            elif "model" in chunk:
-                # keep token text ahead of the events that follow it
-                await tokens.flush()
-                for message in chunk["model"].get("messages", []):
-                    for call in getattr(message, "tool_calls", []):
-                        if call["name"] not in QUIET_TOOLS:
-                            await ctx.emit(
-                                "tool_call",
-                                {
-                                    "name": call["name"],
-                                    "args": brief_args(call["args"]),
-                                },
-                            )
-        await tokens.flush()
 
         state = await graph.aget_state(config)
         if state.interrupts:
@@ -253,6 +234,45 @@ def _dangling_tool_results(messages: list) -> list[ToolMessage]:
         for c in calls
         if c["id"] not in answered
     ]
+
+
+async def relay(
+    stream: AsyncIterator[tuple[str, Any]],
+    emit: Callable[..., Awaitable[None]],
+    quiet: Collection[str] = (),
+) -> dict[str, Any]:
+    """Send a graph stream's token deltas and tool calls as events.
+
+    Returns the last ``values`` chunk when the stream carries them.
+    """
+    tokens = TokenBuffer(emit)
+    state: dict[str, Any] = {}
+    async for mode, chunk in stream:
+        if mode == "values":
+            state = chunk
+        elif mode == "messages":
+            message, meta = chunk
+            if (
+                isinstance(message, AIMessageChunk)
+                and meta.get("langgraph_node") == "model"
+                and message.text
+            ):
+                tokens.add(message.text)
+        elif "model" in chunk:
+            # keep token text ahead of the events that follow it
+            await tokens.flush()
+            for message in chunk["model"].get("messages", []):
+                for call in getattr(message, "tool_calls", []):
+                    if call["name"] not in quiet:
+                        await emit(
+                            "tool_call",
+                            {
+                                "name": call["name"],
+                                "args": brief_args(call["args"]),
+                            },
+                        )
+    await tokens.flush()
+    return state
 
 
 def brief_args(args: dict[str, Any], limit: int = 600) -> dict[str, Any]:
