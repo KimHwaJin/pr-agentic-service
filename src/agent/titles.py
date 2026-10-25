@@ -25,9 +25,7 @@ async def summarize_title(
             ),
         ]
     )
-    title = (
-        response.text if hasattr(response, "text") else str(response.content)
-    ).strip()
+    title = (response.text).strip()
     title = (
         title.splitlines()[0].strip().strip("\"'「」『』.").strip()
         if title

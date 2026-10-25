@@ -11,7 +11,7 @@ from typing import Any
 
 from langchain_core.messages import HumanMessage, SystemMessage
 
-from agent.codegen import SETUP_TOOL, parse_observations
+from agent.codegen import CUSTOM_SKILL, SETUP_TOOL, parse_observations
 from agent.llm import chat_model
 from agent.prompts import load_prompt
 from core.services import Services
@@ -50,7 +50,12 @@ async def collect_evidence(
                 else "code"
             )
             source = ""
-            if not lineage.get("tool_name") and view.get("available"):
+            written = (
+                not lineage.get("tool_name")
+                or lineage.get("skill_name") == CUSTOM_SKILL
+            )
+            if written and view.get("available"):
+                # code the agent or the batch author wrote: show it
                 source = source_preview(services, step_result["result_ref"])
             status = step_result.get("status")
             error = step_result.get("error_message")
@@ -83,17 +88,23 @@ def _dumps(value: Any) -> str:
 
 
 def source_preview(services: Services, result_ref: dict[str, Any]) -> str:
-    manifest = json.loads(
-        services.storage.resolve_result(result_ref["relative_path"]).read_text(
-            "utf-8"
+    """The step's code as the executor snapshotted it ("" if unreadable)."""
+    storage = services.storage
+    try:
+        manifest = json.loads(
+            storage.resolve_result(result_ref["relative_path"]).read_text(
+                "utf-8"
+            )
         )
-    )
-    source = manifest.get("source") or {}
-    if not source.get("relative_path"):
+        source = manifest.get("source") or {}
+        if not source.get("relative_path"):
+            return ""
+        with storage.resolve_result(source["relative_path"]).open(
+            encoding="utf-8", errors="replace"
+        ) as file:
+            return file.read(2000)
+    except (OSError, ValueError):
         return ""
-    return services.storage.resolve_result(source["relative_path"]).read_text(
-        "utf-8"
-    )[:2000]
 
 
 async def write_markdown(
@@ -103,9 +114,7 @@ async def write_markdown(
     response = await llm.ainvoke(
         [SystemMessage(system), HumanMessage(request)]
     )
-    return (
-        response.text if hasattr(response, "text") else str(response.content)
-    )
+    return response.text
 
 
 async def generate_report(

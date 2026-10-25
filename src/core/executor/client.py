@@ -7,7 +7,7 @@ import httpx
 
 log = logging.getLogger(__name__)
 
-AGENT_ACTOR = {"type": "AGENT", "id": "pr-agentic-service"}
+SERVICE_ACTOR = {"type": "AGENT", "id": "pr-agentic-service"}
 
 
 def trigger_type(execution: dict[str, Any]) -> str | None:
@@ -34,9 +34,7 @@ class ExecutorClient:
     call (pod crash, graph replay) returns the original receipt.
     """
 
-    def __init__(
-        self, base_url: str, timeout: float, tenant_id: str | None = None
-    ):
+    def __init__(self, base_url: str, timeout: float, tenant_id: str):
         self.http = httpx.AsyncClient(
             base_url=base_url.rstrip("/") + "/api/v1", timeout=timeout
         )
@@ -81,9 +79,9 @@ class ExecutorClient:
             lifecycle["operation_wait_timeout_seconds"] = wait_seconds
         body = {
             "idempotency_key": idempotency_key,
-            **({"tenant_id": self.tenant_id} if self.tenant_id else {}),
+            "tenant_id": self.tenant_id,
             "lifecycle": lifecycle,
-            "trigger": {"type": trigger, "actor": AGENT_ACTOR},
+            "trigger": {"type": trigger, "actor": SERVICE_ACTOR},
             "runtime": {"type": "JUPYTER", "profile": profile},
             "context": context,
             "operation": {"spec": {"schema_version": "1.0", "steps": steps}},
@@ -103,7 +101,7 @@ class ExecutorClient:
             "idempotency_key": idempotency_key,
             "expected_version": expected_version,
             "spec": {"schema_version": "1.0", "steps": steps},
-            "actor": AGENT_ACTOR,
+            "actor": SERVICE_ACTOR,
         }
         return await self._call(
             "POST", f"/executions/{execution_id}/operations", json=body
@@ -115,7 +113,7 @@ class ExecutorClient:
         body = {
             "idempotency_key": idempotency_key,
             "expected_version": expected_version,
-            "actor": AGENT_ACTOR,
+            "actor": SERVICE_ACTOR,
         }
         return await self._call(
             "POST", f"/executions/{execution_id}/finalize", json=body
@@ -127,7 +125,7 @@ class ExecutorClient:
         body = {
             "idempotency_key": idempotency_key,
             "reason": reason,
-            "actor": AGENT_ACTOR,
+            "actor": SERVICE_ACTOR,
         }
         return await self._call(
             "POST", f"/executions/{execution_id}/cancel", json=body
@@ -222,7 +220,7 @@ class ExecutorClient:
             "media_type": "text/markdown",
             "append_to_notebook": True,
             "metadata": metadata,
-            "actor": AGENT_ACTOR,
+            "actor": SERVICE_ACTOR,
         }
         return await self._call(
             "POST", f"/executions/{execution_id}/artifacts", json=body

@@ -26,7 +26,7 @@ def test_tenant_must_be_a_valid_unreserved_name(tenant):
         Settings(executor_tenant_id=tenant)
 
 
-def _client(tenant_id: str | None, sent: list[dict[str, Any]]):
+def _client(tenant_id: str, sent: list[dict[str, Any]]):
     def handle(request: httpx.Request) -> httpx.Response:
         sent.append(json.loads(request.content))
         return httpx.Response(202, json={"execution_id": "x-1"})
@@ -58,12 +58,6 @@ def test_submission_carries_the_tenant_at_the_top_level():
     assert "tenant_id" not in sent[0]["context"]
 
 
-def test_submission_without_a_tenant_leaves_the_field_out():
-    sent: list[dict[str, Any]] = []
-    _submit(_client(None, sent))
-    assert "tenant_id" not in sent[0]
-
-
 def test_executor_error_code():
     body = {"error": {"code": "EXECUTION_VERSION_CONFLICT", "message": "m"}}
     assert ExecutorError(409, body).code == "EXECUTION_VERSION_CONFLICT"
@@ -90,7 +84,7 @@ def test_notebook_is_read_in_full_for_its_path():
             },
         )
 
-    client = ExecutorClient("http://executor", 5, None)
+    client = ExecutorClient("http://executor", 5, "pr-agentic")
     client.http = httpx.AsyncClient(
         base_url="http://executor/api/v1",
         transport=httpx.MockTransport(handle),
@@ -129,7 +123,7 @@ def test_executions_are_read_until_they_pass_the_cutoff():
         asked.append(params)
         return httpx.Response(200, json=pages[params.get("cursor")])
 
-    client = ExecutorClient("http://executor", 5, None)
+    client = ExecutorClient("http://executor", 5, "pr-agentic")
     client.http = httpx.AsyncClient(
         base_url="http://executor/api/v1",
         transport=httpx.MockTransport(handle),

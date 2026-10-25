@@ -103,9 +103,7 @@ class Message(Base):
 
     __tablename__ = "messages"
     id: Mapped[str] = mapped_column(ID, primary_key=True, default=new_id)
-    session_id: Mapped[str] = mapped_column(
-        ID, ForeignKey("sessions.id"), index=True
-    )
+    session_id: Mapped[str] = mapped_column(ID, ForeignKey("sessions.id"))
     run_id: Mapped[str | None] = mapped_column(ID)
     role: Mapped[str] = mapped_column(String(16))  # user | assistant
     content: Mapped[str] = mapped_column(Text)
@@ -149,12 +147,12 @@ class RunEvent(Base):
     id: Mapped[int] = mapped_column(
         BigInteger, primary_key=True, autoincrement=True
     )
-    session_id: Mapped[str] = mapped_column(ID, index=True)
+    session_id: Mapped[str] = mapped_column(ID)
     run_id: Mapped[str] = mapped_column(ID)
     type: Mapped[str] = mapped_column(String(40))
     data: Mapped[dict[str, Any]] = mapped_column(JSONB)
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=utcnow
+        DateTime(timezone=True), default=utcnow, index=True
     )
 
 
@@ -171,7 +169,7 @@ class ExecutorInbox(Base):
     event_sequence: Mapped[int] = mapped_column(Integer)
     payload: Mapped[dict[str, Any]] = mapped_column(JSONB)
     received_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=utcnow
+        DateTime(timezone=True), default=utcnow, index=True
     )
 
 
@@ -290,11 +288,20 @@ class BatchReportEvent(Base):
     type: Mapped[str] = mapped_column(String(40))
     data: Mapped[dict[str, Any]] = mapped_column(JSONB)
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=utcnow
+        DateTime(timezone=True), default=utcnow, index=True
     )
 
 
 Index("ix_runs_claim", Run.status, Run.lease_expires_at)
+# executor events look up the run waiting on an execution
+Index(
+    "ix_runs_waiting_execution",
+    Run.waiting["execution_id"].astext,
+    postgresql_where=Run.status == "waiting_executor",
+)
+# SSE replay reads a session's events after a cursor
+Index("ix_run_events_session_id_id", RunEvent.session_id, RunEvent.id)
+Index("ix_messages_session_created", Message.session_id, Message.created_at)
 
 
 class CodeSource(Base):

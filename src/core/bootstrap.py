@@ -47,7 +47,7 @@ def _alembic_upgrade(settings: Settings) -> None:
 @asynccontextmanager
 async def build_services(
     settings: Settings,
-) -> AsyncGenerator[tuple[Services, PgPool]]:
+) -> AsyncGenerator[Services]:
     db = Database(settings.database_url, settings.db_pool_size)
     redis = Redis.from_url(settings.redis_url, decode_responses=True)
     pool: PgPool = AsyncConnectionPool(
@@ -108,6 +108,7 @@ async def build_services(
         ),
         workflows=workflows,
         embedder=embedder,
+        checkpointer=AsyncPostgresSaver(pool),
         analysis_skills=AssetLoader(
             settings.catalog_roots("skills"), SkillCatalog.load_many
         ),
@@ -119,9 +120,9 @@ async def build_services(
         ),
     )
     if settings.auto_migrate:
-        await migrate(services, pool)
+        await migrate(services)
     try:
-        yield services, pool
+        yield services
     finally:
         await services.events.close()
         await executor.close()
@@ -130,7 +131,7 @@ async def build_services(
         await db.close()
 
 
-async def migrate(services: Services, pool: PgPool) -> None:
+async def migrate(services: Services) -> None:
     """App tables (Alembic), LangGraph checkpointer/store tables.
 
     Also the workflow vector index.
@@ -143,7 +144,8 @@ async def migrate(services: Services, pool: PgPool) -> None:
             await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
             await conn.commit()
             await asyncio.to_thread(_alembic_upgrade, services.settings)
-            await AsyncPostgresSaver(pool).setup()
+            if isinstance(services.checkpointer, AsyncPostgresSaver):
+                await services.checkpointer.setup()
             if isinstance(services.memory.store, AsyncPostgresStore):
                 await services.memory.store.setup()
             await services.workflows.ensure_index()

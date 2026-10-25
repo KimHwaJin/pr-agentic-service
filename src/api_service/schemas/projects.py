@@ -1,12 +1,12 @@
 """Projects and project memory."""
 
 from datetime import datetime
-from typing import Literal
 
 from pydantic import Field, computed_field
 
 from api_service.schemas.base import Model
 from core.config import get_settings
+from core.memory.service import Category
 
 
 class ProjectCreate(Model):
@@ -41,26 +41,13 @@ class ProjectRead(Model):
 
 
 class MemoryCreate(Model):
-    category: Literal[
-        "background",
-        "analysis_preferences",
-        "report_preferences",
-        "shared_findings",
-    ]
+    category: Category
     title: str = Field(min_length=1, max_length=200)
     content: str = Field(min_length=1)
 
 
 class MemoryUpdate(Model):
     expected_version: int
-    category: (
-        Literal[
-            "background",
-            "analysis_preferences",
-            "report_preferences",
-            "shared_findings",
-        ]
-        | None
-    ) = None
+    category: Category | None = None
     title: str | None = Field(None, min_length=1, max_length=200)
     content: str | None = Field(None, min_length=1)

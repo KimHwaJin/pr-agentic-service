@@ -7,7 +7,7 @@ Every change is appended to ``memory_history``.
 """
 
 from dataclasses import dataclass
-from typing import Any, Literal
+from typing import Any, Literal, get_args
 
 from langgraph.store.base import BaseStore
 from sqlalchemy import select
@@ -15,12 +15,13 @@ from sqlalchemy import select
 from core.db import Database, new_id, utcnow
 from core.models import MemoryHistory
 
-CATEGORIES = (
+Category = Literal[
     "background",
     "analysis_preferences",
     "report_preferences",
     "shared_findings",
-)
+]
+CATEGORIES: tuple[str, ...] = get_args(Category)
 CATEGORY_TITLES = {
     "background": "프로젝트 배경",
     "analysis_preferences": "분석 선호",
@@ -30,7 +31,7 @@ CATEGORY_TITLES = {
 Author = Literal["user", "agent"]
 
 
-class MemoryError(Exception):
+class MemoryItemError(Exception):
     def __init__(self, status: int, message: str):
         super().__init__(message)
         self.status = status
@@ -128,10 +129,10 @@ class ProjectMemory:
     ) -> dict[str, Any]:
         item = await self.store.aget(self.namespace(project_id), item_id)
         if item is None:
-            raise MemoryError(404, "memory item not found")
+            raise MemoryItemError(404, "memory item not found")
         before = item.value
         if before["version"] != expected_version:
-            raise MemoryError(
+            raise MemoryItemError(
                 409,
                 f"version conflict: current version is {before['version']}",
             )
@@ -140,7 +141,7 @@ class ProjectMemory:
             and actor.type == "agent"
             and not approved_by_user
         ):
-            raise MemoryError(
+            raise MemoryItemError(
                 423, "user-authored memory requires user approval"
             )
         after = dict(before)
@@ -177,15 +178,15 @@ class ProjectMemory:
     ) -> None:
         item = await self.store.aget(self.namespace(project_id), item_id)
         if item is None:
-            raise MemoryError(404, "memory item not found")
+            raise MemoryItemError(404, "memory item not found")
         if item.value["version"] != expected_version:
-            raise MemoryError(
+            raise MemoryItemError(
                 409,
                 "version conflict: current version is "
                 f"{item.value['version']}",
             )
         if item.value["author"] == "user" and actor.type == "agent":
-            raise MemoryError(
+            raise MemoryItemError(
                 423, "user-authored memory requires user approval"
             )
         await self.store.adelete(self.namespace(project_id), item_id)
@@ -223,11 +224,11 @@ class ProjectMemory:
 
     def _check(self, category: str, title: str, content: str) -> None:
         if category not in CATEGORIES:
-            raise MemoryError(422, f"category must be one of {CATEGORIES}")
+            raise MemoryItemError(422, f"category must be one of {CATEGORIES}")
         if not title.strip() or not content.strip():
-            raise MemoryError(422, "title and content are required")
+            raise MemoryItemError(422, "title and content are required")
         if len(content) > self.item_max:
-            raise MemoryError(
+            raise MemoryItemError(
                 422, f"content exceeds {self.item_max} characters"
             )
 
@@ -238,7 +239,7 @@ class ProjectMemory:
             len(i["content"]) for i in await self.entries(project_id)
         )
         if current + delta > self.total_max:
-            raise MemoryError(
+            raise MemoryItemError(
                 422,
                 f"project memory is full ({current}/{self.total_max} "
                 "characters)",

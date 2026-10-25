@@ -46,7 +46,7 @@ def test_check_refuses_unknown_types_and_wrong_shapes():
         events.check("tool_call", {"args": {}})  # no name
 
 
-def test_stored_events_read_by_type_and_keep_old_types():
+def test_stored_events_read_by_type():
     stored = TypeAdapter(list[events.StoredEvent])
     now = datetime.now(UTC)
     items = stored.validate_python(
@@ -59,16 +59,16 @@ def test_stored_events_read_by_type_and_keep_old_types():
             },
             {
                 "id": 2,
-                "type": "error",
-                "data": {"message": "x"},
-                "created_at": now,
-            },
-            {
-                "id": 3,
                 "type": "execution_completed",
                 "data": {
                     "execution_id": "e",
-                    "results": {"#0 extract_data": {"status": "SUCCEEDED"}},
+                    "results": [
+                        {
+                            "call": 0,
+                            "tool": "extract_data",
+                            "status": "SUCCEEDED",
+                        }
+                    ],
                     "error": None,
                 },
                 "created_at": now,
@@ -77,6 +77,5 @@ def test_stored_events_read_by_type_and_keep_old_types():
     )
     assert [type(i).__name__ for i in items] == [
         "TokenEvent",
-        "OtherEvent",
         "ExecutionCompletedEvent",
     ]

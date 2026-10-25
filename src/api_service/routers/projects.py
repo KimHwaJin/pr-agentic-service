@@ -10,7 +10,7 @@ from api_service.schemas.projects import (
     ProjectUpdate,
 )
 from core.db import get_row, utcnow
-from core.memory.service import Actor, MemoryError
+from core.memory.service import Actor, MemoryItemError
 from core.models import Project, ProjectMember
 
 router = APIRouter(prefix="/projects", tags=["projects"])
@@ -57,7 +57,7 @@ async def update_project(
     await project_for(services, user, project_id, write=True)
     async with services.db.sessions() as db:
         project = await db.get(Project, project_id)
-        for key, value in body.model_dump(exclude_unset=True).items():
+        for key, value in body.changes(nullable={"code_level"}).items():
             setattr(project, key, value)
         await db.commit()
         return project
@@ -79,7 +79,7 @@ async def delete_project(
 # --- project shared memory -------------------------------------------------
 
 
-def _memory_error(exc: MemoryError) -> HTTPException:
+def _memory_error(exc: MemoryItemError) -> HTTPException:
     return HTTPException(exc.status, str(exc))
 
 
@@ -103,7 +103,7 @@ async def create_memory(
         return await services.memory.create(
             project_id, **body.model_dump(), actor=Actor("user", user.id)
         )
-    except MemoryError as exc:
+    except MemoryItemError as exc:
         raise _memory_error(exc) from None
 
 
@@ -123,7 +123,7 @@ async def update_memory(
             actor=Actor("user", user.id),
             **body.model_dump(),
         )
-    except MemoryError as exc:
+    except MemoryItemError as exc:
         raise _memory_error(exc) from None
 
 
@@ -143,7 +143,7 @@ async def delete_memory(
             expected_version=expected_version,
             actor=Actor("user", user.id),
         )
-    except MemoryError as exc:
+    except MemoryItemError as exc:
         raise _memory_error(exc) from None
     return Response(status_code=204)
 

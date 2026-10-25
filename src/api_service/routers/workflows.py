@@ -154,9 +154,7 @@ async def update_workflow(
     user: UserDep,
 ):
     try:
-        changes = body.model_dump(
-            exclude_unset=True, exclude={"expected_revision"}
-        )
+        changes = body.changes(exclude={"expected_revision"})
         if "document" in changes:
             changes["document"] = _validated(services, changes["document"])
         return await services.workflows.update(

@@ -3,21 +3,12 @@
 Domain knowledge, project memory, hand-off to analysis.
 """
 
-from typing import Literal
-
 from langchain.tools import ToolRuntime, tool
 from langchain_core.messages import ToolMessage
 from langgraph.types import Command, interrupt
 
 from agent.context import AnalysisState, RunContext
-from core.memory.service import Actor, MemoryError
-
-Category = Literal[
-    "background",
-    "analysis_preferences",
-    "report_preferences",
-    "shared_findings",
-]
+from core.memory.service import Actor, Category, MemoryItemError
 
 
 @tool
@@ -140,7 +131,7 @@ async def save_memory(
                 approved_by_user=approved,
             )
             action = "updated"
-    except MemoryError as exc:
+    except MemoryItemError as exc:
         return f"메모리 저장 실패: {exc}"
     await ctx.emit("memory_updated", {"action": action, "item": item})
     return f"메모리 {action}: id={item['id']} v{item['version']}"
@@ -162,7 +153,7 @@ async def delete_memory(
             expected_version=expected_version,
             actor=Actor("agent", "main", ctx.session_id, ctx.run_id),
         )
-    except MemoryError as exc:
+    except MemoryItemError as exc:
         return f"메모리 삭제 실패: {exc}"
     await ctx.emit(
         "memory_updated", {"action": "deleted", "item": {"id": item_id}}
@@ -190,6 +181,9 @@ async def start_analysis(
     return Command(
         update={
             "active_agent": "analyst",
+            # a new analysis plans anew: the last one's plan never carries
+            # over (run_plan, save_workflow and the prompt read it)
+            "plan": None,
             "messages": [
                 ToolMessage(message, tool_call_id=runtime.tool_call_id)
             ],

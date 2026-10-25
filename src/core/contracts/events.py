@@ -107,9 +107,7 @@ class StepResult(View):
 
 class ExecutionCompletedData(View):
     execution_id: str
-    # a list in execution order; events stored before that are
-    # {"#<call> <tool>": result}
-    results: list[StepResult] | dict[str, StepResult]
+    results: list[StepResult] = Field(description="실행 순서대로")
     error: str | None = None
 
 
@@ -217,21 +215,11 @@ def _event_model(type_name: str, data: Any) -> type[View]:
     )
 
 
-class OtherEvent(View):
-    """A type stored by an older version (e.g. ``error``)."""
-
-    id: int
-    type: str
-    data: dict[str, Any]
-    created_at: datetime
-
-
 _STORED = {name: _event_model(name, e.data) for name, e in EVENTS.items()}
 
 
 def _stored_type(value: Any) -> str:
-    kind = value.get("type") if isinstance(value, dict) else value.type
-    return kind if kind in _STORED else "other"
+    return value.get("type") if isinstance(value, dict) else value.type
 
 
 if TYPE_CHECKING:
@@ -240,7 +228,6 @@ else:
     StoredEvent = Annotated[
         Union[  # noqa: UP007
             tuple(Annotated[m, Tag(n)] for n, m in _STORED.items())
-            + (Annotated[OtherEvent, Tag("other")],)
         ],
         Discriminator(_stored_type),
     ]

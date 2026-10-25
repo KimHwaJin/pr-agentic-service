@@ -25,7 +25,7 @@ from core.assets import SkillCatalog
 from core.workflows import spec
 
 _REF = re.compile(r"^@(\d+)\.([A-Za-z_][\w]*)$")
-AGENT_ACTOR = {"type": "AGENT", "id": "analyst"}
+ANALYST_ACTOR = {"type": "AGENT", "id": "analyst"}
 
 
 class PlanFormatError(ValueError):
@@ -62,7 +62,7 @@ def to_workflow(
             else None
         )
         arguments = {
-            param: _argument(value, index, keys, param)
+            param: argument(value, index, keys, param)
             for param, value in (call.get("args") or {}).items()
         }
         steps[-1]["tools"].append(
@@ -76,7 +76,7 @@ def to_workflow(
     document = {
         "workflow_version": "1.0",
         "workflow": {
-            "actor": AGENT_ACTOR,
+            "actor": ANALYST_ACTOR,
             "name": name,
             "user_request": user_request,
             "execution_mode": "static",
@@ -87,7 +87,7 @@ def to_workflow(
     return spec.normalize(document), keys
 
 
-def _argument(
+def argument(
     value: Any, index: int, keys: list[str], param: str
 ) -> dict[str, Any]:
     if value == "$input":

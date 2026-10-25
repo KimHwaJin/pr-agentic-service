@@ -1,10 +1,8 @@
-import asyncio
-import json
 from pathlib import Path
 from typing import Annotated
 
 from fastapi import APIRouter, Header, HTTPException, Request, Response
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.responses import FileResponse
 from sqlalchemy import delete, select, update
 
 from api_service import pagination
@@ -25,6 +23,7 @@ from api_service.schemas.sessions import (
 )
 from api_service.services.access import execution_of_session
 from api_service.services.runs import create_run
+from api_service.sse import event_stream
 from core.db import get_row, utcnow
 from core.executor.client import ExecutorError
 from core.models import (
@@ -37,7 +36,6 @@ from core.models import (
 from core.services import Services
 
 router = APIRouter(tags=["sessions"])
-HEARTBEAT = ": keep-alive\n\n"
 
 
 @router.post(
@@ -144,7 +142,7 @@ async def update_session(
     await session_for(services, user, session_id, write=True)
     async with services.db.sessions() as db:
         session = await get_row(db, ChatSession, session_id)
-        for key, value in body.model_dump(exclude_unset=True).items():
+        for key, value in body.changes(nullable={"code_level"}).items():
             setattr(session, key, value)
         if body.title is not None:
             session.title_source = "user"  # never auto-renamed again
@@ -166,6 +164,8 @@ async def delete_session(
             .values(deleted_at=utcnow())
         )
         await db.commit()
+    # the agent's history of the session goes with it (thread = session)
+    await services.checkpointer.adelete_thread(session_id)
     return Response(status_code=204)
 
 
@@ -328,6 +328,8 @@ async def cancel_run(run_id: str, services: ServicesDep, user: UserDep):
                 .values(active_run_id=None)
             )
         await db.commit()
+    if run.status == "cancelled":
+        await services.forget_tool_effects(run_id)
     if execution_id:
         try:
             await services.executor.cancel(
@@ -360,47 +362,23 @@ async def session_events(
     """
     session = await session_for(services, user, session_id)
     cursor = request.headers.get("last-event-id") or after
-    queue = services.events.subscribe(session_id)
 
-    async def stream():
-        try:
-            last = int(cursor) if cursor else 0
-            history = await services.events.history(
-                session_id, last, None if cursor else session.active_run_id
-            )
-            if not cursor and not session.active_run_id:
-                history = []
-            for event in history:
-                last = event["id"]
-                yield _sse(event)
-            while not await request.is_disconnected():
-                try:
-                    raw = await asyncio.wait_for(queue.get(), 15.0)
-                except TimeoutError:
-                    yield HEARTBEAT
-                    continue
-                event = json.loads(raw)
-                if "id" in event:
-                    if event["id"] <= last:
-                        continue
-                    last = event["id"]
-                yield _sse(event)
-        except asyncio.CancelledError:
-            pass
-        finally:
-            services.events.unsubscribe(session_id, queue)
+    async def history(after_id: int) -> list[dict]:
+        if cursor:
+            return await services.events.history(session_id, after_id)
+        if not session.active_run_id:
+            return []
+        return await services.events.history(
+            session_id, after_id, session.active_run_id
+        )
 
-    return StreamingResponse(
-        stream(),
-        media_type="text/event-stream",
-        headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"},
+    return event_stream(
+        request,
+        services.events,
+        services.events.channel(session_id),
+        history,
+        cursor,
     )
-
-
-def _sse(event: dict) -> str:
-    head = f"id: {event['id']}\n" if "id" in event else ""
-    data = json.dumps(event, ensure_ascii=False, default=str)
-    return f"{head}event: {event['type']}\ndata: {data}\n\n"
 
 
 @router.get("/sessions/{session_id}/outputs")
