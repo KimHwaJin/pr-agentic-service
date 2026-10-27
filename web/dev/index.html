@@ -1405,8 +1405,10 @@ async function openBatchModal(editId = null) {
   $('bmName').value = b?.name || ''; $('bmVersion').value = b ? b.script_version_number : '';
   $('bmScript').innerHTML = BT.scripts.map(x => `<option value="${x.id}">${esc(x.name)} (최신 v${x.latest_version.version_number})</option>`).join('');
   if (b) $('bmScript').value = b.script_id;
-  $('bmRuntime').innerHTML = BT.runtimes.map(r => `<option value="${esc(r.profile)}">${esc(r.type)} · ${esc(r.profile)}</option>`).join('');
-  $('bmRuntime').value = b ? b.runtime.profile : (BT.runtimes.some(r => r.profile === 'default') ? 'default' : BT.runtimes[0]?.profile);
+  // pr-batch offers the enabled targets of the executor's BATCH pool only
+  $('bmRuntime').innerHTML = BT.runtimes.map(r => `<option value="${esc(r.profile)}">${esc(r.type)} · ${esc(r.profile)}</option>`).join('')
+    || '<option value="" disabled selected>BATCH 풀에 켜진 런타임이 없습니다 (시스템 > 런타임에서 풀 BATCH로 추가)</option>';
+  if (BT.runtimes.length) $('bmRuntime').value = b ? b.runtime.profile : (BT.runtimes.some(r => r.profile === 'default') ? 'default' : BT.runtimes[0].profile);
   const form = scheduleForm(b?.schedule);
   $('bmKeep').hidden = form.kind !== 'KEEP';
   $('bmKind').value = form.kind; $('bmValue').value = form.value; $('bmStart').value = form.start; $('bmEnd').value = form.end;
@@ -1443,6 +1445,7 @@ const seoul = (key, value) => value ? { [key]: `${value.length === 16 ? `${value
 async function saveBatch() {
   const name = $('bmName').value.trim(), kind = $('bmKind').value, value = $('bmValue').value.trim(), version = $('bmVersion').value.trim();
   if (!name) return $('bmName').focus();
+  if (!$('bmRuntime').value) return alert('BATCH 풀에 켜진 런타임이 없습니다. 시스템 > 런타임에서 풀을 BATCH로 하여 추가하세요.');
   if (kind && !value) return $('bmValue').focus();
   const definition = kind === 'INTERVAL' ? { kind, seconds: Math.round(+value * 60) } : kind === 'DAILY' ? { kind: 'CALENDAR', frequency: 'DAILY', at: `${value}:00`.slice(0, 8) } : kind === 'CRON' ? { kind, expression: value } : null;
   const daily = kind === 'DAILY', start = $('bmStart').value, end = $('bmEnd').value;
