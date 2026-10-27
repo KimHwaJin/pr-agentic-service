@@ -58,6 +58,7 @@ uv run uvicorn mock_llm:app --app-dir scripts --port 8001   # 게이트웨이 �
 uv run uvicorn main:app --app-dir src --port 8080
 ```
 
+- executor PV를 마운트할 수 없을 때(executor는 원격 k8s, 서비스는 로컬): `cp .env.testmode.example .env`. `EXECUTOR_IO_MODE=api` 테스트 모드로 코드는 INLINE으로 보내고 결과는 executor 노트북 API로 읽습니다(채팅 이미지 출력은 보이지 않음, 운영 미사용).
 - 테스트 콘솔: http://localhost:8080/dev/ (`SSO_ALLOWED_RETURN_ROOTS=["/", "/dev"]`, `SSO_ADAPTER=dev`)
 - 종단 점검: `uv run python scripts/smoke_e2e.py`
 - 단위 테스트: `uv run pytest`
