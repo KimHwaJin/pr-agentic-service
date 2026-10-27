@@ -817,7 +817,7 @@ function emptyState() {
 }
 function useIdea(b) { $('input').value = b.textContent; autosize(); $('input').focus(); }
 
-function newSession() { showChat(); closeHitl(); S.session = null; S.run = null; closeStream(); setBusy(false); $('title').textContent = '새 대화'; $('level').value = ''; emptyState(); loadSessions(); }
+function newSession() { showChat(); closeHitl(); S.session = null; S.run = null; S.answerEl = S.activity = S.notes = null; S.waiting = false; closeStream(); setBusy(false); $('title').textContent = '새 대화'; $('level').value = ''; emptyState(); loadSessions(); }
 
 async function openSession(id) {
   showChat(); closeHitl(); S.session = id; closeStream(); $('log').innerHTML = ''; S.answerEl = S.activity = S.notes = null;
@@ -961,7 +961,8 @@ function openStream() {
     if (st === 'queued' || st === 'running') { setBusy(true); startActivity(); setActivityTitle('생각하는 중'); }
     if (st === 'waiting_executor') setActivityTitle(`코드 실행 중 · ${(e.data.steps || []).length}단계`);
     if (st === 'waiting_input') { setActivityTitle('확인을 기다리는 중'); setBusy(true); }
-    if (['succeeded', 'failed', 'cancelled'].includes(st)) { setBusy(false); finishActivity(st !== 'succeeded'); loadSessions(); if (st === 'cancelled') showError('작업을 중지했습니다.'); }
+    // a turn that ended without message_final keeps its partial answer on screen, not as the next turn's start
+    if (['succeeded', 'failed', 'cancelled'].includes(st)) { S.answerEl = null; setBusy(false); finishActivity(st !== 'succeeded'); loadSessions(); if (st === 'cancelled') showError('작업을 중지했습니다.'); }
   });
   on('token', e => { if (!S.answerEl) S.answerEl = addAnswer(''); S.answerEl.dataset.raw += e.data.text; S.answerEl.innerHTML = md(S.answerEl.dataset.raw); scrollDown(); });
   on('message_final', e => { if (S.answerEl) S.answerEl.remove(); S.answerEl = null; finishActivity(false); addAnswer(e.data.content); });
