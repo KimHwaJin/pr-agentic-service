@@ -32,7 +32,7 @@ class Prompt:
         )
 
 
-_loaders: dict[Path, AssetLoader] = {}
+ROOT = Path(__file__).parent
 
 
 def _parse(root: Path) -> dict[str, Prompt]:
@@ -45,7 +45,9 @@ def _parse(root: Path) -> dict[str, Prompt]:
     return prompts
 
 
-def load_prompt(root: Path, name: str) -> Prompt:
+_loader = AssetLoader(ROOT, _parse)
+
+
+def load_prompt(name: str) -> Prompt:
     """Edited prompt files apply to the next model call without a restart."""
-    loader = _loaders.setdefault(root, AssetLoader(root, _parse))
-    return loader.get()[name]
+    return _loader.get()[name]

@@ -87,14 +87,8 @@ CODE_LEVELS = {
 class PersonaMiddleware(AgentMiddleware[AnalysisState, RunContext]):
     state_schema = AnalysisState
 
-    def __init__(self, prompts_root):
-        super().__init__()
-        self.prompts_root = prompts_root
-
     def _prompt(self, name: str) -> Prompt:
-        return load_prompt(
-            self.prompts_root, name
-        )  # read per call: edits apply without a restart
+        return load_prompt(name)  # read per call: edits apply at once
 
     async def abefore_agent(
         self, state: AnalysisState, runtime

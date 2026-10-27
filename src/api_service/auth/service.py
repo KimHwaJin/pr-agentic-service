@@ -6,6 +6,7 @@ from fastapi import HTTPException, Request, Response
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 
+from api_service import API_PREFIX
 from api_service.auth.adapters import SsoAdapter
 from api_service.auth.sdk import Employee
 from api_service.auth.store import AuthStore, LoginFlow, LoginSession
@@ -119,8 +120,9 @@ class SsoService:
                 )
             flow_id = secrets.token_urlsafe(32)
             origin = self.settings.public_api_origin
-            prefix = self.settings.api_prefix
-            callback = f"{origin}{prefix}/auth/login/sso/callback/{flow_id}"
+            callback = (
+                f"{origin}{API_PREFIX}/auth/login/sso/callback/{flow_id}"
+            )
             url = self._checked_login_url(
                 await self.adapter.login_url(request, callback), callback
             )

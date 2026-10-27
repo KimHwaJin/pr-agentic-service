@@ -2,7 +2,7 @@ from fastapi import APIRouter, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from api_service import errors
+from api_service import API_PREFIX, errors
 from api_service.auth.adapters import load_adapter
 from api_service.auth.service import SsoService
 from api_service.auth.store import AuthStore
@@ -24,7 +24,7 @@ from core.services import Services
 
 
 def mount_api(app: FastAPI, settings: Settings) -> None:
-    api = APIRouter(prefix=settings.api_prefix)
+    api = APIRouter(prefix=API_PREFIX)
     for module in (
         auth,
         users,

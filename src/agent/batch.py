@@ -95,9 +95,7 @@ class BatchReportAgent:
             self._graphs[name] = create_agent(
                 chat_model(self.settings, name),
                 tools=TOOLS,
-                system_prompt=load_prompt(
-                    self.settings.prompts_root, "batch_analyst"
-                ).render(),
+                system_prompt=load_prompt("batch_analyst").render(),
                 middleware=middleware,
                 state_schema=BatchReportState,
                 context_schema=BatchReportContext,

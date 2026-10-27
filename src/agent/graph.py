@@ -104,7 +104,7 @@ class AgentGraphs:
         if name not in self._graphs:
             model = chat_model(self.settings, name)
             middleware: list[AgentMiddleware[Any, Any, Any]] = [
-                PersonaMiddleware(self.settings.prompts_root),
+                PersonaMiddleware(),
                 JsonArgumentsMiddleware(),
                 ToolFailureLimitMiddleware(
                     self.settings.agent_tool_failure_limit
@@ -126,9 +126,9 @@ class AgentGraphs:
                     # (a message count can stay above it and re-summarize on
                     # every call)
                     keep=("tokens", trigger // 2),
-                    summary_prompt=load_prompt(
-                        self.settings.prompts_root, "summary"
-                    ).render(max_chars=self.settings.agent_summary_max_chars),
+                    summary_prompt=load_prompt("summary").render(
+                        max_chars=self.settings.agent_summary_max_chars
+                    ),
                     trim_tokens_to_summarize=None,  # summarize all of it
                 )
             )
