@@ -58,6 +58,8 @@ EXECUTOR_RUNTIME_PROFILE: default
 EXECUTOR_OPERATION_WAIT_SECONDS: 1800
 EXECUTOR_STEP_TIMEOUT_SECONDS: null
 EXECUTOR_TIMEOUT_SECONDS: 30.0
+# api: no shared PV, test environments only (src/core/executor/testmode)
+EXECUTOR_IO_MODE: pv
 
 # JupyterLab link for executor notebooks/reports (empty = no link).
 NOTEBOOK_LAB_BASE_URL: https://executor-jupyter-lab.frodo.com
