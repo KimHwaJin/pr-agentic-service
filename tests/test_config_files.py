@@ -106,3 +106,50 @@ def test_relative_paths_are_under_the_repo_root(root):
     settings = Settings()
     assert settings.skills_root == root / "x/skills"
     assert str(settings.storage_root) == "/abs/storage"
+
+
+def test_settings_files_are_read_as_utf8_on_any_locale(root):
+    # Windows reads files as cp949 unless told otherwise; ours carry Korean
+    (root / "config.yml").write_text(
+        "dev_employee_name: 개발자\n", encoding="utf-8"
+    )
+    (root / ".env").write_text(
+        "# 한글 주석\nDEV_EMPLOYEE_ID=사번1\n", encoding="utf-8"
+    )
+    assert Settings.model_config.get("env_file_encoding") == "utf-8"
+    sources = Settings.settings_customise_sources(
+        Settings,
+        *(None,) * 4,  # type: ignore[arg-type]
+    )
+    assert [s.yaml_file_encoding for s in sources[3:]] == ["utf-8"]
+    settings = Settings()
+    assert settings.dev_employee_name == "개발자"
+    assert settings.dev_employee_id == "사번1"
+
+
+def test_settings_load_under_a_cp949_locale(root):
+    # the Windows failure itself, where the host has a CP949 locale
+    import os
+    import subprocess
+    import sys
+
+    (root / "config.yml").write_text(
+        "dev_employee_name: 개발자\n", encoding="utf-8"
+    )
+    (root / ".env").write_text("# 한글 주석\n", encoding="utf-8")
+    env = {**os.environ, "LC_ALL": "ko_KR.CP949", "PYTHONUTF8": "0"}
+    code = (
+        "import locale, sys\n"
+        "if locale.getpreferredencoding(False).lower() != 'cp949':\n"
+        "    sys.exit(3)\n"
+        "from core import config\n"
+        "from pathlib import Path\n"
+        "config.ROOT = Path.cwd()\n"
+        "assert config.Settings().dev_employee_name == '개발자'\n"
+    )
+    done = subprocess.run(
+        [sys.executable, "-c", code], cwd=root, env=env, capture_output=True
+    )
+    if done.returncode == 3:
+        pytest.skip("no CP949 locale on this host")
+    assert done.returncode == 0, done.stderr.decode("utf-8", "replace")

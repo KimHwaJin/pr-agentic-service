@@ -39,7 +39,9 @@ RESERVED_TENANT_IDS = frozenset({"dlq", "work"})
 
 def app_env() -> str | None:
     """The deployment environment, or None for a local run."""
-    env = os.environ.get("APP_ENV") or dotenv_values(".env").get("APP_ENV")
+    env = os.environ.get("APP_ENV") or dotenv_values(
+        ".env", encoding="utf-8"
+    ).get("APP_ENV")
     if env and env not in APP_ENVS:
         raise ValueError(f"APP_ENV must be one of {', '.join(APP_ENVS)}.")
     return env or None
@@ -84,7 +86,10 @@ class ModelSpec(BaseModel):
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+    # utf-8 files (Korean comments): never the locale's code page (cp949)
+    model_config = SettingsConfigDict(
+        env_file=".env", env_file_encoding="utf-8", extra="ignore"
+    )
 
     @classmethod
     def settings_customise_sources(
@@ -96,7 +101,9 @@ class Settings(BaseSettings):
         file_secret_settings: PydanticBaseSettingsSource,
     ) -> tuple[PydanticBaseSettingsSource, ...]:
         files = [
-            YamlConfigSettingsSource(settings_cls, yaml_file=path)
+            YamlConfigSettingsSource(
+                settings_cls, yaml_file=path, yaml_file_encoding="utf-8"
+            )
             for path in config_files()
         ]
         return init_settings, env_settings, dotenv_settings, *files
