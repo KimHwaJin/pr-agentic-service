@@ -89,22 +89,7 @@ def _dumps(value: Any) -> str:
 
 def source_preview(services: Services, result_ref: dict[str, Any]) -> str:
     """The step's code as the executor snapshotted it ("" if unreadable)."""
-    storage = services.storage
-    try:
-        manifest = json.loads(
-            storage.resolve_result(result_ref["relative_path"]).read_text(
-                "utf-8"
-            )
-        )
-        source = manifest.get("source") or {}
-        if not source.get("relative_path"):
-            return ""
-        with storage.resolve_result(source["relative_path"]).open(
-            encoding="utf-8", errors="replace"
-        ) as file:
-            return file.read(2000)
-    except (OSError, ValueError):
-        return ""
+    return services.storage.step_source(result_ref)
 
 
 async def write_markdown(
