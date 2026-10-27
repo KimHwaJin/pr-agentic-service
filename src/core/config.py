@@ -241,6 +241,9 @@ class Settings(BaseSettings):
     agent_model_call_limit: int = (
         40  # per turn; stops a model that keeps repeating a failing call
     )
+    # a tool failing with the same error this many times in a row in one
+    # turn is not run again; the model explains the error instead
+    agent_tool_failure_limit: int = Field(3, ge=1)
     # Shrink tool results of an analysis once finish_analysis closes it.
     agent_compact_finished_analysis: bool = True
     # Conversation summarization starts past this many estimated tokens
