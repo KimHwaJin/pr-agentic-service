@@ -15,7 +15,13 @@ from pathlib import Path
 from typing import Any, Literal
 
 from dotenv import dotenv_values
-from pydantic import BaseModel, Field, PrivateAttr, model_validator
+from pydantic import (
+    BaseModel,
+    Field,
+    PrivateAttr,
+    field_validator,
+    model_validator,
+)
 from pydantic_settings import (
     BaseSettings,
     PydanticBaseSettingsSource,
@@ -186,6 +192,19 @@ class Settings(BaseSettings):
     # replaces a skill, tool or knowledge entry of the same name. Removing
     # an entry here restores the base catalog.
     catalog_extensions: list[Path] = []
+
+    @field_validator(
+        "storage_root",
+        "executor_result_root",
+        "prompts_root",
+        "skills_root",
+        "tools_root",
+        "knowledge_root",
+    )
+    @classmethod
+    def _under_root(cls, path: Path) -> Path:
+        # Relative paths in config files are under the repo root, not cwd.
+        return path if path.is_absolute() else ROOT / path
 
     @property
     def executor_tenant_stream(self) -> str:

@@ -1,4 +1,5 @@
-# APP_ENV=stg: values for this environment on top of config.yml (shared).
+# APP_ENV=stg: the values that differ per environment, on top of config.yml
+# (shared; every other key is there).
 # Fill the <...> values; environment variables (Deployment env:) win.
 DATABASE_URL: postgresql+psycopg://<user>:<password>@<pg-host>:5432/agentic
 REDIS_URL: redis://<redis-host>:6379/0
@@ -6,6 +7,10 @@ REDIS_URL: redis://<redis-host>:6379/0
 PUBLIC_API_ORIGIN: https://<api-host>
 FRONTEND_ORIGIN: https://<front-host>
 CORS_ORIGINS: ["https://<front-host>"]
+COOKIE_SECURE: true
+
+# employee ids with the admin role
+ADMIN_EMPLOYEE_IDS: []
 
 LLM_API_KEY: <llm-api-key>
 

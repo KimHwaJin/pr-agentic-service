@@ -20,6 +20,8 @@ config.stg.yml
 config.prd.yml
 ```
 
+`config.yml`에는 `Settings`의 모든 키를 적고, 환경마다 다른 키(`DATABASE_URL`, `REDIS_URL`, `PUBLIC_API_ORIGIN`, `FRONTEND_ORIGIN`, `CORS_ORIGINS`, `COOKIE_SECURE`, `ADMIN_EMPLOYEE_IDS`, `LLM_API_KEY`, `MODELS`, `EXECUTOR_BASE_URL`, `BATCH_BASE_URL`)만 `config.{APP_ENV}.yml`에 둡니다. 이 구분은 `tests/test_config_files.py`가 확인하므로, `Settings`에 필드를 추가하면 둘 중 한 곳에 키를 넣어야 합니다. 상대 경로는 레포 루트 기준으로 풉니다. `RUN_MODE`, `PHOENIX_*`는 `Settings`가 아니라 환경변수로만 읽습니다.
+
 각 파일은 지금 환경변수로 받는 설정(`core/config.py`의 `Settings`)과 모델 목록을 함께 담습니다. 키 이름은 `Settings` 필드 이름을 대문자로 씁니다(대소문자를 가리지 않아 소문자도 됨). `MODELS` 항목의 키(`NAME`, `DEFAULT` 등)도 마찬가지이고, `PARAMS` 안의 값은 모델에 그대로 보내므로 적힌 그대로 씁니다.
 
 ```yaml
