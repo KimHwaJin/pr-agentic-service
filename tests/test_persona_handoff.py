@@ -3,7 +3,6 @@ from types import SimpleNamespace
 from langchain_core.messages import AIMessage, RemoveMessage
 
 from agent.middleware.persona import ANALYST_NUDGES, PersonaMiddleware
-from core.config import ROOT
 
 
 class _Ctx:
@@ -18,7 +17,7 @@ def _run(state):
     import asyncio
 
     ctx = _Ctx()
-    middleware = PersonaMiddleware(ROOT / "src/agent/prompts")
+    middleware = PersonaMiddleware()
     runtime = SimpleNamespace(context=ctx)
     return asyncio.run(middleware.aafter_model(state, runtime)), ctx
 

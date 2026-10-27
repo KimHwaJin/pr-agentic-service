@@ -110,7 +110,6 @@ class Settings(BaseSettings):
 
     # APP_ENV, or local when it is empty (not a settings key).
     _env: Literal["local", "dev", "stg", "prd"] = PrivateAttr("local")
-    api_prefix: str = "/api/v1"
     cors_origins: list[str] = []
 
     database_url: str = (
@@ -136,7 +135,6 @@ class Settings(BaseSettings):
     session_ttl_seconds: int = Field(1800, ge=60, le=86400)
     session_max_seconds: int = Field(43200, ge=300, le=7 * 86400)
     login_flow_ttl_seconds: int = Field(300, ge=60, le=1800)
-    sso_call_timeout_seconds: float = 10.0
     dev_employee_id: str = "dev0001"
     dev_employee_name: str = "개발자"
     admin_employee_ids: list[str] = []
@@ -194,7 +192,6 @@ class Settings(BaseSettings):
     notebook_lab_workspace_prefix: str = "agentic-"
 
     # Agent assets.
-    prompts_root: Path = ROOT / "src/agent/prompts"
     skills_root: Path = ROOT / "assets/skills"
     tools_root: Path = ROOT / "assets/tools"
     knowledge_root: Path = ROOT / "assets/knowledge"
@@ -207,7 +204,6 @@ class Settings(BaseSettings):
     @field_validator(
         "storage_root",
         "executor_result_root",
-        "prompts_root",
         "skills_root",
         "tools_root",
         "knowledge_root",

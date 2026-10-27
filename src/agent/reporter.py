@@ -110,7 +110,7 @@ async def generate_report(
     ``ctx`` is the agent RunContext (project prompt + memory preferences).
     """
     services = ctx.services
-    prompt = load_prompt(services.settings.prompts_root, "reporter")
+    prompt = load_prompt("reporter")
     preferences = [
         m
         for m in await services.memory.entries(ctx.project_id)
