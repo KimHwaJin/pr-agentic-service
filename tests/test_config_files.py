@@ -1,4 +1,5 @@
 import pytest
+import yaml
 
 from core import config
 from core.config import Settings
@@ -68,3 +69,40 @@ def test_keys_are_case_insensitive(root):
     assert settings.redis_namespace == "upper"
     assert [m.name for m in settings.models] == ["m-upper", "m-lower"]
     assert settings.default_model.params == {"reasoning_effort": "low"}
+
+
+PER_ENV_KEYS = {
+    "database_url",
+    "redis_url",
+    "public_api_origin",
+    "frontend_origin",
+    "cors_origins",
+    "cookie_secure",
+    "admin_employee_ids",
+    "llm_api_key",
+    "models",
+    "executor_base_url",
+    "batch_base_url",
+}
+
+
+def _keys(path):
+    return {k.lower() for k in yaml.safe_load(path.read_text())}
+
+
+def test_config_files_split_every_setting():
+    # config.yml holds every key but the per-environment ones, which live
+    # only in config.{dev,stg,prd}.yml.
+    shared = _keys(config.ROOT / "config.yml")
+    assert shared == set(Settings.model_fields) - PER_ENV_KEYS
+    for env in config.APP_ENVS:
+        assert _keys(config.ROOT / f"config.{env}.yml") == PER_ENV_KEYS
+
+
+def test_relative_paths_are_under_the_repo_root(root):
+    (root / "config.yml").write_text(
+        "SKILLS_ROOT: x/skills\nSTORAGE_ROOT: /abs/storage\n"
+    )
+    settings = Settings()
+    assert settings.skills_root == root / "x/skills"
+    assert str(settings.storage_root) == "/abs/storage"

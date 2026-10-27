@@ -1,27 +1,121 @@
-# Values shared by every environment (copied into the image). On top of it:
-# config.{APP_ENV}.yml for dev/stg/prd, and locally (APP_ENV empty) the
-# docker-compose.yml environment or .env. Precedence: environment > .env >
-# config.{APP_ENV}.yml > this file. Keep environment-specific values out.
-REDIS_NAMESPACE: agentic
+# Values shared by every environment (copied into the image): every Settings
+# key (src/core/config.py) except the per-environment ones, which live only in
+# config.{APP_ENV}.yml: DATABASE_URL, REDIS_URL, PUBLIC_API_ORIGIN,
+# FRONTEND_ORIGIN, CORS_ORIGINS, COOKIE_SECURE, ADMIN_EMPLOYEE_IDS,
+# LLM_API_KEY, MODELS, EXECUTOR_BASE_URL, BATCH_BASE_URL.
+# Locally (APP_ENV empty) the docker-compose.yml environment or .env adds the
+# local values. Precedence: environment > .env > config.{APP_ENV}.yml > this
+# file. Relative paths are under the repo root. RUN_MODE and PHOENIX_* are
+# read from the environment only.
+API_PREFIX: /api/v1
 
+# Database / Redis.
+REDIS_NAMESPACE: agentic
+DB_POOL_SIZE: 10
+AUTO_MIGRATE: true
+
+# SSO. dev (fixed employee) is refused when APP_ENV is set.
 SSO_ADAPTER: company
 SSO_ADAPTER_FACTORY: "company_sso:create_sdk"
+SSO_ALLOWED_ORIGINS: []
 SSO_ALLOWED_RETURN_ROOTS: ["/"]
-COOKIE_SECURE: true
+SESSION_COOKIE_NAME: agentic_session
+COOKIE_SAMESITE: lax
+# Login sessions slide: idle this long ends one, activity extends it, up to
+# SESSION_MAX_SECONDS after the login.
+SESSION_TTL_SECONDS: 1800
+SESSION_MAX_SECONDS: 43200
+LOGIN_FLOW_TTL_SECONDS: 300
+SSO_CALL_TIMEOUT_SECONDS: 10.0
+# SSO_ADAPTER=dev only
+DEV_EMPLOYEE_ID: dev0001
+DEV_EMPLOYEE_NAME: 개발자
 
+# LLM gateway (OpenAI compatible, vLLM).
 LLM_BASE_URL: http://model.frodo.com/v1
+LLM_TEMPERATURE: 0.2
+LLM_TIMEOUT_SECONDS: 120.0
 LLM_ENABLE_THINKING: false
-EMBEDDING_PROVIDER: none
 
+# none (keyword search) | openai (gateway) | mock (local, hashed n-grams)
+EMBEDDING_PROVIDER: none
+EMBEDDING_BASE_URL: ""
+EMBEDDING_API_KEY: EMPTY
+EMBEDDING_MODEL: ""
+EMBEDDING_DIMS: 1024
+
+# Executor. STORAGE_ROOT: this service's folder on the executor input PV
+# (mounted here), STORAGE_EXECUTOR_PATH: the same folder relative to the
+# executor's INPUT_STORAGE_ROOT, EXECUTOR_RESULT_ROOT: the mount of its
+# SHARED_STORAGE_ROOT.
+EXECUTOR_TENANT_ID: pr-agentic
 STORAGE_ROOT: /mnt/data/agent/pr-agentic-service
 STORAGE_EXECUTOR_PATH: pr-agentic-service
 EXECUTOR_RESULT_ROOT: /mnt/data/executor
+EXECUTOR_EVENT_STREAM: executor.events
+EXECUTOR_EVENT_RECOVERY_SECONDS: 120
 EXECUTOR_RUNTIME_PROFILE: default
-EXECUTOR_TENANT_ID: pr-agentic
-NOTEBOOK_LAB_BASE_URL: https://executor-jupyter-lab.frodo.com
+EXECUTOR_OPERATION_WAIT_SECONDS: 1800
+EXECUTOR_STEP_TIMEOUT_SECONDS: null
+EXECUTOR_TIMEOUT_SECONDS: 30.0
 
-# RS256 signing key for pr-batch, copied into keys/ before the image build
+# JupyterLab link for executor notebooks/reports (empty = no link).
+NOTEBOOK_LAB_BASE_URL: https://executor-jupyter-lab.frodo.com
+NOTEBOOK_LAB_PATH_PREFIX: ""
+NOTEBOOK_LAB_WORKSPACE_PREFIX: agentic-
+
+# Agent assets. CATALOG_EXTENSIONS: extra catalogs (each with skills/,
+# tools/, knowledge/) on top of the roots, later ones replace same names.
+PROMPTS_ROOT: src/agent/prompts
+SKILLS_ROOT: assets/skills
+TOOLS_ROOT: assets/tools
+KNOWLEDGE_ROOT: assets/knowledge
+CATALOG_EXTENSIONS: []
+
+# Agent.
+DEFAULT_CODE_LEVEL: 3
+PLAN_CANDIDATES: 5
+WORKFLOW_SIMILARITY: 0.93
+AGENT_RECURSION_LIMIT: 200
+AGENT_MODEL_CALL_LIMIT: 40
+AGENT_COMPACT_FINISHED_ANALYSIS: true
+AGENT_SUMMARY_TRIGGER_TOKENS: 30000
+AGENT_SUMMARY_MAX_CHARS: 6000
+
+# Project memory.
+MEMORY_ITEM_MAX_CHARS: 1000
+MEMORY_TOTAL_MAX_CHARS: 30000
+MEMORY_PROMPT_MAX_CHARS: 12000
+MEMORY_PROMPT_ITEMS: 8
+
+# Run scheduler.
+RUN_CONCURRENCY: 32
+RUN_LEASE_SECONDS: 60
+RUN_POLL_SECONDS: 5.0
+RUN_MAX_ATTEMPTS: 5
+
+# Retention (days).
+RUN_EVENT_RETENTION_DAYS: 30
+EXECUTOR_INBOX_RETENTION_DAYS: 7
+CODE_SOURCE_RETENTION_DAYS: 7
+IMAGE_RETENTION_DAYS: 7
+RUN_REQUEST_RETENTION_DAYS: 1
+
+# Images sent with a turn (vision models only).
+IMAGE_MAX_BYTES: 10485760
+IMAGE_MAX_TOTAL_BYTES: 20971520
+IMAGE_CONTEXT_TURNS: 3
+
+# pr-batch. RS256 signing key, copied into keys/ before the image build
 # (keys/README.md); never committed. iss/aud match pr-batch.
 BATCH_JWT_PRIVATE_KEY_FILE: keys/auth_private.pem
 BATCH_JWT_ISSUER: batch-client
 BATCH_JWT_AUDIENCE: batch-service
+# Reports of successful BATCH executions; empty model = the default model.
+BATCH_REPORT_MODEL: ""
+BATCH_REPORT_COLLECT_TIMEOUT_SECONDS: 1800
+BATCH_REPORT_POLL_SECONDS: 10
+BATCH_REPORT_MEMORY_RUNS: 5
+BATCH_REPORT_MODEL_CALL_LIMIT: 20
+BATCH_REPORT_RECOVERY_INTERVAL_SECONDS: 600
+BATCH_REPORT_RECOVERY_LOOKBACK_DAYS: 14
