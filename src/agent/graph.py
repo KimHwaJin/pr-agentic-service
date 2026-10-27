@@ -24,6 +24,7 @@ from agent.middleware import (
     JsonArgumentsMiddleware,
     PersonaMiddleware,
     ReportingSummarizationMiddleware,
+    ToolFailureLimitMiddleware,
     compaction_rules,
 )
 from agent.prompts import load_prompt
@@ -105,6 +106,9 @@ class AgentGraphs:
             middleware: list[AgentMiddleware[Any, Any, Any]] = [
                 PersonaMiddleware(self.settings.prompts_root),
                 JsonArgumentsMiddleware(),
+                ToolFailureLimitMiddleware(
+                    self.settings.agent_tool_failure_limit
+                ),
                 ToolErrorMiddleware(on_error=tool_error),
                 ModelCallLimitMiddleware(
                     run_limit=self.settings.agent_model_call_limit,

@@ -24,7 +24,10 @@ from langgraph.store.base import BaseStore
 from agent.context import BatchReportContext, BatchReportState
 from agent.graph import relay, tool_error
 from agent.llm import chat_model
-from agent.middleware import JsonArgumentsMiddleware
+from agent.middleware import (
+    JsonArgumentsMiddleware,
+    ToolFailureLimitMiddleware,
+)
 from agent.prompts import load_prompt
 from agent.reporter import collect_evidence
 from agent.tools.batch import read_step, submit_report
@@ -80,6 +83,9 @@ class BatchReportAgent:
         if name not in self._graphs:
             middleware: list[AgentMiddleware[Any, Any, Any]] = [
                 JsonArgumentsMiddleware(),
+                ToolFailureLimitMiddleware(
+                    self.settings.agent_tool_failure_limit
+                ),
                 ToolErrorMiddleware(on_error=tool_error),
                 ModelCallLimitMiddleware(
                     run_limit=self.settings.batch_report_model_call_limit,
