@@ -7,6 +7,7 @@ import hashlib
 import json
 import os
 import re
+import secrets
 from pathlib import Path
 from typing import Any
 
@@ -46,15 +47,15 @@ class SharedStorage:
         code first sent for that path. Returns the executor PATH source and
         the file size.
         """
-        target = (self.sources_root / relative).resolve()
-        if not target.is_relative_to(self.sources_root.resolve()):
-            raise ValueError("source path escapes the storage root")
+        target = self.source_file(relative)
         if target.exists():
             data = target.read_bytes()
         else:
             data = code.encode("utf-8")
             target.parent.mkdir(parents=True, exist_ok=True)
-            temp = target.with_name(f".{target.name}.{os.getpid()}.tmp")
+            # a short temp name: never a longer path than the file itself
+            # (Windows MAX_PATH); mkstemp would make it owner-only (0600)
+            temp = target.with_name(f".{secrets.token_hex(4)}.tmp")
             temp.write_bytes(data)
             os.replace(temp, target)
         path = "/".join(
@@ -62,6 +63,13 @@ class SharedStorage:
         )
         sha = hashlib.sha256(data).hexdigest()
         return {"type": "PATH", "path": path, "sha256": sha}, len(data)
+
+    def source_file(self, relative: str) -> Path:
+        """Where the file sent as ``sources/<relative>`` is kept."""
+        target = (self.sources_root / relative).resolve()
+        if not target.is_relative_to(self.sources_root.resolve()):
+            raise ValueError("source path escapes the storage root")
+        return target
 
     def delete_source(self, executor_path: str) -> None:
         """Remove a sent file and the folders it leaves empty."""
@@ -72,7 +80,10 @@ class SharedStorage:
         )
         if not executor_path.startswith(prefix):
             return
-        target = self.sources_root / executor_path[len(prefix) :]
+        try:
+            target = self.source_file(executor_path[len(prefix) :])
+        except ValueError:
+            return
         target.unlink(missing_ok=True)
         root = self.sources_root.resolve()
         parent = target.parent.resolve()

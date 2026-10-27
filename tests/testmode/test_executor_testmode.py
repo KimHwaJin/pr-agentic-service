@@ -192,3 +192,26 @@ def test_api_mode_builds_the_testmode_pair():
     assert isinstance(storage, NotebookResultStorage)
     asyncio.run(client.close())
     assert Settings().executor_io_mode == "pv"
+
+
+def test_source_copies_stay_short_for_windows_paths(tmp_path):
+    # five nested ids pushed the old local path past Windows' MAX_PATH
+    storage = _storage(tmp_path, [], [])
+    client = InlineExecutorClient("http://executor", 5, "t-1", storage)
+    ids = [EXECUTION, STEP, EXECUTION, STEP]
+    relative = (
+        "users/{}/projects/{}/sessions/{}/runs/{}/01-run_plan/"
+        "00-setup.py".format(*ids)
+    )
+    source, _ = storage.write_source("print(1)\n", relative)
+
+    assert source["path"] == f"svc/sources/{relative}"  # what link() keeps
+    files = [p for p in storage.sources_root.rglob("*") if p.is_file()]
+    assert len(files) == 1 and files[0].parent == storage.sources_root
+    assert len(files[0].name) < 40
+    assert client.read(source["path"]) == "print(1)\n"
+    # write-once: a re-run keeps the code first sent
+    assert storage.write_source("print(2)\n", relative)[0] == source
+
+    storage.delete_source(source["path"])
+    assert not files[0].exists()

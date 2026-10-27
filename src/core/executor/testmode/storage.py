@@ -14,8 +14,10 @@ The callers are synchronous, so the API is called with a blocking client;
 these calls are short and this mode is for tests only.
 """
 
+import hashlib
 import json
 import re
+from pathlib import Path, PurePosixPath
 from typing import Any
 
 import httpx
@@ -94,6 +96,18 @@ class NotebookResultStorage(SharedStorage):
         self.api_url = base_url.rstrip("/") + "/api/v1"
         self.timeout = timeout
         self.transport = transport
+
+    def source_file(self, relative: str) -> Path:
+        """A short flat name for the file sent as ``sources/<relative>``.
+
+        The executor-side path nests five ids (~190 characters), which a
+        Windows checkout pushes past MAX_PATH (260): the folders get made
+        but the file write fails. Nothing reads these copies by path but
+        this service, so they are kept as ``sources/<hash>-<file name>``.
+        """
+        digest = hashlib.sha256(relative.encode("utf-8")).hexdigest()[:16]
+        name = PurePosixPath(relative).name or "source.py"
+        return self.sources_root.resolve() / f"{digest}-{name}"
 
     def read_step_outputs(
         self, result_ref: dict[str, Any] | None, max_chars: int = 12000

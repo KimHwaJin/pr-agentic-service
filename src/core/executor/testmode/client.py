@@ -59,8 +59,5 @@ class InlineExecutorClient(ExecutorClient):
         )
         if not executor_path.startswith(prefix + "/"):
             raise ValueError(f"not a source of this service: {executor_path}")
-        root = self.storage.sources_root.resolve()
-        target = (root / executor_path[len(prefix) + 1 :]).resolve()
-        if not target.is_relative_to(root):
-            raise ValueError("source path escapes the storage root")
-        return target.read_text("utf-8")
+        relative = executor_path[len(prefix) + 1 :]
+        return self.storage.source_file(relative).read_text("utf-8")
