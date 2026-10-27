@@ -138,6 +138,26 @@ class SharedStorage:
             "error": manifest.get("error_message"),
         }
 
+    def step_source(
+        self, result_ref: dict[str, Any], limit: int = 2000
+    ) -> str:
+        """The step's code as the executor snapshotted it, or ""."""
+        try:
+            manifest = json.loads(
+                self.resolve_result(result_ref["relative_path"]).read_text(
+                    "utf-8"
+                )
+            )
+            source = manifest.get("source") or {}
+            if not source.get("relative_path"):
+                return ""
+            with self.resolve_result(source["relative_path"]).open(
+                encoding="utf-8", errors="replace"
+            ) as file:
+                return file.read(limit)
+        except (OSError, ValueError):
+            return ""
+
     def _read_text(self, relative_path: str, limit: int) -> str:
         """At most ``limit`` characters; outputs can be very large."""
         try:

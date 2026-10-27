@@ -74,11 +74,6 @@ async def build_services(
         else None
     )
     store = AsyncPostgresStore(pool, index=index)
-    executor = ExecutorClient(
-        settings.executor_base_url,
-        settings.executor_timeout_seconds,
-        settings.executor_tenant_id,
-    )
     workflows = WorkflowService(
         db,
         embedder,
@@ -86,11 +81,21 @@ async def build_services(
         settings.embedding_dims,
         settings.workflow_similarity,
     )
-    storage = SharedStorage(
-        settings.storage_root,
-        settings.storage_executor_path,
-        settings.executor_result_root,
-    )
+    if settings.executor_io_mode == "api":  # no shared PV: tests only
+        from core.executor.testmode import build
+
+        executor, storage = build(settings)
+    else:
+        executor = ExecutorClient(
+            settings.executor_base_url,
+            settings.executor_timeout_seconds,
+            settings.executor_tenant_id,
+        )
+        storage = SharedStorage(
+            settings.storage_root,
+            settings.storage_executor_path,
+            settings.executor_result_root,
+        )
     services = Services(
         settings=settings,
         db=db,

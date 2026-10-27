@@ -168,6 +168,10 @@ class Settings(BaseSettings):
     executor_operation_wait_seconds: int = Field(1800, ge=30)
     executor_step_timeout_seconds: int | None = None
     executor_timeout_seconds: float = 30.0
+    # "api": no shared PV with the executor (test environments only; see
+    # core/executor/testmode). Code goes INLINE, results come from the
+    # executor notebook API.
+    executor_io_mode: Literal["pv", "api"] = "pv"
 
     # JupyterLab link for executor notebooks/reports (empty = no link).
     notebook_lab_base_url: str = ""
