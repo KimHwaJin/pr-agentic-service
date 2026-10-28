@@ -5,9 +5,9 @@ from typing import Any, cast
 import pytest
 from fastapi import HTTPException
 
-from api_service.routers import workflows
-from api_service.schemas.workflows import WorkflowUpdate
-from core.workflows.service import WorkflowError
+from src.dtest.api_service.routers import workflows
+from src.dtest.api_service.schemas.workflows import WorkflowUpdate
+from src.dtest.core.workflows.service import WorkflowError
 
 USER = cast(Any, SimpleNamespace(id="u-1", role="user"))
 

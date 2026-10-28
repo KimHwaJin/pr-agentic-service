@@ -1,6 +1,6 @@
 from fastapi import Request
 
-from api_service.auth.sdk import login_url, verify_employee
+from src.dtest.api_service.auth.sdk import login_url, verify_employee
 
 
 def _request(cookie: str | None = None, query: bytes = b"") -> Request:
@@ -58,8 +58,8 @@ def test_login_url_replaces_client_origin_with_callback():
 
 
 def test_lab_url_uses_a_workspace_per_employee():
-    from core.config import Settings
-    from core.notebook_links import lab_url
+    from src.dtest.core.config import Settings
+    from src.dtest.core.notebook_links import lab_url
 
     settings = Settings(
         notebook_lab_base_url="https://lab.example/",

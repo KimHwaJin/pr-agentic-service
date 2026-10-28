@@ -6,8 +6,10 @@ from langchain.agents.middleware import SummarizationMiddleware
 from langchain_core.messages import HumanMessage
 from langgraph.errors import GraphInterrupt
 
-from agent.activity import LABELS, activity
-from agent.middleware.summarization import ReportingSummarizationMiddleware
+from src.dtest.agent.activity import LABELS, activity
+from src.dtest.agent.middleware.summarization import (
+    ReportingSummarizationMiddleware,
+)
 
 
 class _Events:
@@ -59,7 +61,7 @@ def test_end_state_follows_how_the_block_ended(error, state):
 
 
 def test_summary_reports_progress_and_marks_the_history(monkeypatch):
-    from agent.middleware import summarization
+    from src.dtest.agent.middleware import summarization
 
     # the hook overridden here is private in LangChain
     assert hasattr(SummarizationMiddleware, "_acreate_summary")

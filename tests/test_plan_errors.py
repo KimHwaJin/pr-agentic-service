@@ -2,10 +2,10 @@
 
 from types import SimpleNamespace
 
-from agent import plan_format
-from agent.graph import tool_error
-from agent.tools.analysis import _plan_help, _referenced
-from core.workflows import spec
+from src.dtest.agent import plan_format
+from src.dtest.agent.graph import tool_error
+from src.dtest.agent.tools.analysis import _plan_help, _referenced
+from src.dtest.core.workflows import spec
 
 
 def _validate(calls, skills, tools):

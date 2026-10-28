@@ -1,6 +1,6 @@
 from typing import Any, cast
 
-from worker.executor_events import matches
+from src.dtest.worker.executor_events import matches
 
 
 def test_operation_wait_matches_only_its_operation():
@@ -28,7 +28,7 @@ def test_recovery_delivers_the_event_the_run_waits_for(monkeypatch):
     import asyncio
     from types import SimpleNamespace
 
-    from worker import executor_events
+    from src.dtest.worker import executor_events
 
     delivered = []
 
@@ -78,7 +78,7 @@ def test_recovery_leaves_runs_whose_event_has_not_happened(monkeypatch):
     import asyncio
     from types import SimpleNamespace
 
-    from worker import executor_events
+    from src.dtest.worker import executor_events
 
     class Executor:
         async def events(self, execution_id):

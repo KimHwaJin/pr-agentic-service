@@ -29,7 +29,7 @@ def test_tool_parameters_reach_the_model_under_their_own_names():
     # so the model's calls never match the function
     from langchain_core.utils.function_calling import convert_to_openai_tool
 
-    from agent.graph import TOOLS
+    from src.dtest.agent.graph import TOOLS
 
     for tool in TOOLS:
         sent = convert_to_openai_tool(tool)["function"]["parameters"]
@@ -38,7 +38,7 @@ def test_tool_parameters_reach_the_model_under_their_own_names():
 
 
 def test_summary_prompt_keeps_the_messages_slot():
-    from agent.prompts import load_prompt
+    from src.dtest.agent.prompts import load_prompt
 
     prompt = load_prompt("summary")
     body = prompt.render(max_chars=6000)

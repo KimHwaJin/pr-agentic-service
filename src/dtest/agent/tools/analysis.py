@@ -1,0 +1,1216 @@
+"""Tools of the analyst agent.
+
+Plan = Workflow 1.0 document + run bindings, kept in graph state:
+    {"id", "title", "document", "input_values": {"s.t.param": value},
+     "source": {...} | None,
+     "calls": {"s.t": {"status": pending|succeeded|failed|skipped,
+                       "reason"?, "step_id"?}},
+     "custom": [{"id", "purpose", "status", "step_id"}]}
+Execution = the session's executor MULTI execution (one kernel, one
+notebook):
+    {"id", "version", "next_sequence", "alive": bool,
+     "steps": {step_id: label}}
+
+Every executor mutation uses an idempotency key derived from
+(run_id, tool_call_id), so when LangGraph replays a tool after an interrupt
+or a pod crash the executor returns the same receipt.
+"""
+
+import hashlib
+import json
+import re
+from typing import Any, TypeGuard
+
+from langchain.tools import ToolRuntime, tool
+from langchain_core.messages import HumanMessage, ToolMessage
+from langgraph.types import Command, interrupt
+
+from src.dtest.agent import plan_format
+from src.dtest.agent.codegen import (
+    CUSTOM_SKILL,
+    SETUP,
+    SETUP_TOOL,
+    custom_step_code,
+    parse_observations,
+    setup_step,
+    tool_step_code,
+)
+from src.dtest.agent.context import AnalysisState, RunContext
+from src.dtest.agent.reporter import collect_evidence, generate_report
+from src.dtest.core.assets import SkillCatalog, ToolCatalog
+from src.dtest.core.db import new_id
+from src.dtest.core.executor.client import ExecutorError
+from src.dtest.core.executor.sources import SourceOwner, file_name
+from src.dtest.core.notebook_links import lab_url
+from src.dtest.core.services import TOOL_EFFECTS
+from src.dtest.core.workflows import spec
+from src.dtest.core.workflows.service import WorkflowError
+from src.dtest.core.workflows.view import call_views
+
+Runtime = ToolRuntime[RunContext, AnalysisState]
+# agent tools that send an executor operation (one folder each)
+EXECUTION_TOOLS = ("run_plan", "run_custom_code")
+
+
+def _reply(runtime: Runtime, content: str, **update: Any) -> Command:
+    return Command(
+        update={
+            **update,
+            "messages": [
+                ToolMessage(content, tool_call_id=runtime.tool_call_id)
+            ],
+        }
+    )
+
+
+def _approved(plan: dict[str, Any] | None) -> TypeGuard[dict[str, Any]]:
+    """A plan the user approved (custom code alone leaves one without it)."""
+    return bool(plan and plan.get("document"))
+
+
+def _owner(runtime: Runtime) -> SourceOwner:
+    ctx = runtime.context
+    return SourceOwner(
+        ctx.user_id,
+        ctx.project_id,
+        ctx.session_id,
+        ctx.run_id,
+    )
+
+
+def _source_folder(runtime: Runtime, tool: str) -> str:
+    """This executor operation's folder: "<NN>-<tool>" by turn order.
+
+    NN counts the execution tool calls of this turn up to this one, read
+    from the checkpointed messages, so a re-run gets the same folder.
+    """
+    messages = runtime.state.get("messages", [])
+    start = next(
+        (
+            i
+            for i, m in enumerate(messages)
+            if isinstance(m, HumanMessage) and m.id == runtime.context.run_id
+        ),
+        0,
+    )
+    number = 0
+    for message in messages[start:]:
+        for call in getattr(message, "tool_calls", None) or []:
+            if call["name"] in EXECUTION_TOOLS:
+                number += 1
+            if call["id"] == runtime.tool_call_id:
+                return _owner(runtime).folder(number, tool)
+    return _owner(runtime).folder(number + 1, tool)
+
+
+def _key(runtime: Runtime, suffix: str) -> str:
+    return f"{runtime.context.run_id}:{runtime.tool_call_id}:{suffix}"
+
+
+# --- catalog -----------------------------------------------------------------
+
+
+@tool
+async def read_skill(name: str, runtime: Runtime) -> str:
+    """Read an analysis skill: what it is for, its tools and when each tool
+    runs (always/conditional)."""
+    services = runtime.context.services
+    skill = services.skills("analysis").skills.get(name)
+    if skill is None:
+        return f"'{name}' skill이 없습니다."
+    tools = services.tool_catalog()
+    signatures = "\n\n".join(
+        tools.describe(t.tool) for t in skill.tools if t.tool in tools.tools
+    )
+    return f"{skill.body}\n\n## Tool signatures\n\n{signatures}"
+
+
+@tool
+async def read_tool(name: str, runtime: Runtime) -> str:
+    """Read one tool's signature, outputs and docstring."""
+    tools = runtime.context.services.tool_catalog()
+    return (
+        tools.describe(name)
+        if name in tools.tools
+        else f"'{name}' tool이 없습니다."
+    )
+
+
+@tool
+async def search_tools(query: str, runtime: Runtime) -> str:
+    """Find tools whose name or docstring mentions the query words."""
+    words = [w.lower() for w in query.split() if w]
+    tools = runtime.context.services.tool_catalog().tools.values()
+    hits = [
+        t
+        for t in tools
+        if any(w in f"{t.name} {t.docstring}".lower() for w in words)
+    ]
+    lines = []
+    for t in hits:
+        summary = t.docstring.splitlines()[0] if t.docstring else ""
+        lines.append(f"- {t.name} ({t.category}): {summary}")
+    return "\n".join(lines) or "없음"
+
+
+@tool
+async def search_workflows(query: str, runtime: Runtime) -> str:
+    """Search registered (promoted) workflow templates similar to the
+    user's request."""
+    ctx = runtime.context
+    hits = await ctx.services.workflows.search(
+        query, limit=ctx.services.settings.plan_candidates
+    )
+    if not hits:
+        return "추천할 워크플로우가 없습니다. 새로 계획하세요."
+    lines = []
+    for h in hits:
+        w = h["workflow"]
+        calls = json.dumps(
+            plan_format.describe(w.document), ensure_ascii=False
+        )
+        lines.append(
+            f"- workflow_id={w.id} similarity={h['similarity']} "
+            f"name={w.name}\n"
+            f"  user_request: {w.user_request}\n  calls: {calls}"
+        )
+    return "\n".join(lines)
+
+
+# --- planning ----------------------------------------------------------------
+
+
+@tool
+async def propose_plans(
+    candidates: list[dict[str, Any]],
+    runtime: Runtime,
+) -> Command:
+    """Show plan candidates to the user and wait for one to be approved.
+
+    Each candidate is either a registered template or a new plan written as
+    a flat call list:
+      {"title": "...", "rationale": "...",
+       "workflow_id": "<id from search_workflows>", "inputs": {...}}
+      {"title": "...", "rationale": "...", "calls": [
+          {"skill": "data_load", "tool": "extract_data",
+           "args": {"data_type": "$input", "limit": 5000}},
+          {"skill": "data_load", "tool": "transform_nce",
+           "args": {"data": "@0.data"}},
+          {"skill": "eda_analysis", "tool": "boxplot_eda",
+           "args": {"data": "@1.data"}}],
+       "inputs": {"0.data_type": "nce"}}
+    args values: "$input" = value the user provides,
+    "@<call index>.<output name>" = an earlier call's output,
+    anything else = a fixed value. Leave out args that should keep the tool
+    default.
+    inputs prefill "$input" args as "<call index>.<param>" with what the
+    user already said.
+    Templates first, then new plans; at most the configured number of
+    candidates.
+    """
+    ctx = runtime.context
+    services = ctx.services
+    skills, tools = services.skills("analysis"), services.tool_catalog()
+    prepared, problems = [], []
+    references: dict[str, set[str]] = {}
+    for index, candidate in enumerate(
+        candidates[: services.settings.plan_candidates]
+    ):
+        title = candidate.get("title") or f"계획 {index + 1}"
+        source = None
+        try:
+            if workflow_id := candidate.get("workflow_id"):
+                template = await services.workflows.readable(
+                    workflow_id, ctx.user_id
+                )
+                document = template.document
+                keys = [c.key for c in spec.calls(document)]
+                source = {
+                    "workflow_id": template.id,
+                    "revision": template.revision,
+                    "name": template.name,
+                }
+            elif not candidate.get("calls"):
+                problems.append(f"후보 {index} ({title}): {NO_CALLS}")
+                continue
+            else:
+                document, keys = plan_format.to_workflow(
+                    candidate.get("calls") or [],
+                    name=title,
+                    user_request=ctx.user_text,
+                    skills=skills,
+                )
+        except (plan_format.PlanFormatError, WorkflowError) as exc:
+            problems.append(f"후보 {index} ({title}): {exc}")
+            continue
+        errors = spec.validate(document, skills, tools)
+        if errors:
+            problems.append(
+                f"후보 {index} ({title}):\n  "
+                + "\n  ".join(_by_call_index(errors, keys))
+            )
+            for kind, names in _referenced(errors).items():
+                references.setdefault(kind, set()).update(names)
+            continue
+        document = spec.normalize(document)
+        slots = spec.input_slots(document, tools)
+        values = {
+            k: v
+            for k, v in plan_format.input_keys(
+                candidate.get("inputs") or {}, keys
+            ).items()
+            if k in {s["key"] for s in slots}
+        }
+        prepared.append(
+            {
+                "title": title,
+                "rationale": candidate.get("rationale", ""),
+                "source": source,
+                "document": document,
+                "calls": call_views(document, values, skills, tools),
+                "input_slots": [
+                    s | {"value": values.get(s["key"])} for s in slots
+                ],
+                "input_values": values,
+            }
+        )
+    if problems:
+        return _reply(
+            runtime,
+            "계획 검증 실패. 해당 후보만 고쳐 다시 제안하세요.\n"
+            + "\n".join(problems)
+            + _plan_help(references, skills, tools),
+        )
+    if not prepared:
+        return _reply(runtime, "제안할 계획이 없습니다.")
+
+    first = prepared[0]
+    missing = [
+        s["key"]
+        for s in first["input_slots"]
+        if s["required"] and s["value"] is None
+    ]
+    if (
+        first["source"]
+        and first["document"]["workflow"]["allow_immediate_execution"]
+        and not missing
+    ):
+        choice: Any = {
+            "action": "approve",
+            "index": 0,
+            "input_values": first["input_values"],
+        }
+        await ctx.emit(
+            "plan_auto_approved",
+            {"title": first["title"], "source": first["source"]},
+        )
+    else:
+        choice = interrupt({"type": "plan_approval", "candidates": prepared})
+
+    if not isinstance(choice, dict) or choice.get("action") == "cancel":
+        return _reply(
+            runtime,
+            "사용자가 계획을 취소했습니다. 이유를 묻거나 분석을 종료하세요.",
+        )
+    if choice.get("action") == "revise":
+        return _reply(
+            runtime,
+            f"사용자가 계획 수정을 요청했습니다: {choice.get('feedback', '')}",
+        )
+    chosen = prepared[int(choice.get("index", 0))]
+    edits = {
+        **(choice.get("input_values") or {}),
+        **(choice.get("overrides") or {}),
+    }
+    try:
+        document, values = plan_format.apply_overrides(
+            chosen["document"], chosen["input_values"], edits
+        )
+    except plan_format.PlanFormatError as exc:
+        return _reply(
+            runtime, f"사용자가 수정한 값을 반영하지 못했습니다: {exc}"
+        )
+    errors = spec.validate(document, skills, tools)
+    if errors:
+        return _reply(
+            runtime,
+            "사용자가 수정한 값으로 계획이 맞지 않습니다:\n"
+            + "\n".join(errors),
+        )
+    chosen = {**chosen, "document": document}
+    missing = [
+        s["key"]
+        for s in chosen["input_slots"]
+        if s["required"] and values.get(s["key"]) is None
+    ]
+    if missing:
+        return _reply(
+            runtime,
+            f"필수 입력값이 비어 있습니다: {missing}. "
+            "ask_user로 받은 뒤 다시 제안하세요.",
+        )
+    changed = list(choice.get("overrides") or {})  # never input slots
+    plan = {
+        "id": new_id(),
+        "title": chosen["title"],
+        "document": chosen["document"],
+        "input_values": values,
+        "source": chosen["source"],
+        "calls": {
+            c.key: {"status": "pending"}
+            for c in spec.calls(chosen["document"])
+        },
+        "custom": [],
+    }
+    await ctx.emit(
+        "plan_approved",
+        {
+            "plan_id": plan["id"],
+            "title": plan["title"],
+            "document": plan["document"],
+        },
+    )
+    calls = ", ".join(
+        f"#{i} {c.tool}" for i, c in enumerate(spec.calls(plan["document"]))
+    )
+    note = f" 사용자가 값을 바꾼 파라미터: {changed}." if changed else ""
+    return _reply(
+        runtime,
+        f"계획 승인됨: {plan['title']} ({calls}).{note} "
+        "run_plan으로 실행하세요.",
+        plan=plan,
+    )
+
+
+def _by_call_index(errors: list[str], keys: list[str]) -> list[str]:
+    """Validation speaks steps[s].tools[t]; the model wrote call numbers."""
+    index = {
+        f"steps[{k.split('.')[0]}].tools[{k.split('.')[1]}]": f"calls[{i}]"
+        for i, k in enumerate(keys)
+    }
+    out = []
+    for error in errors:
+        for where, call in index.items():
+            error = error.replace(where, call)
+        out.append(error)
+    return out
+
+
+NO_CALLS = (
+    "`calls`(호출 목록)도 `workflow_id`도 없습니다. 새 계획이면 `calls`에 "
+    "tool 호출을 순서대로 넣고, 등록된 워크플로우를 쓰려면 "
+    "search_workflows의 `workflow_id`를 넣으세요. 예: "
+    '{"title": "...", "calls": [{"skill": "<skill>", "tool": "<tool>", '
+    '"args": {"<param>": "$input"}}]}'
+)
+# validation messages name the tool they are about (core.workflows.spec)
+_ABOUT_TOOL = re.compile(
+    r"'(\w+)' (?:has no parameter|is missing required parameter|has no output)"
+    r"|unknown tool '(\w+)'|tool '(\w+)' does not belong"
+)
+_ABOUT_SKILL = re.compile(r"unknown skill '(\w+)'")
+
+
+def _referenced(errors: list[str]) -> dict[str, set[str]]:
+    """Tools and skills the validation errors are about."""
+    found: dict[str, set[str]] = {"tools": set(), "skills": set()}
+    for error in errors:
+        for m in _ABOUT_TOOL.finditer(error):
+            found["tools"].add(next(g for g in m.groups() if g))
+        found["skills"].update(_ABOUT_SKILL.findall(error))
+    return found
+
+
+def _plan_help(
+    found: dict[str, set[str]], skills: SkillCatalog, tools: ToolCatalog
+) -> str:
+    """What the model needs to fix the plan: real signatures and owners."""
+    lines = []
+    for name in sorted(found.get("tools", ())):
+        if name in tools.tools:
+            owner = next(
+                (
+                    s.name
+                    for s in skills.skills.values()
+                    if any(t.tool == name for t in s.tools)
+                ),
+                None,
+            )
+            where = f" (skill `{owner}`)" if owner else ""
+            lines.append(f"### {name}{where}\n{tools.describe(name)}")
+        else:
+            close = [t for t in tools.tools if name in t or t in name]
+            hint = f" 비슷한 tool: {close}" if close else ""
+            lines.append(f"### {name}\n없는 tool입니다.{hint}")
+    for name in sorted(found.get("skills", ())):
+        lines.append(
+            f"### skill {name}\n없는 skill입니다. 있는 skill: "
+            f"{sorted(skills.skills)}"
+        )
+    if not lines:
+        return ""
+    return "\n\n## 고칠 때 참고 (실제 정의)\n" + "\n\n".join(lines)
+
+
+def _call_key(plan: dict[str, Any], ref: str | int) -> str | None:
+    """Resolves a call reference to its "<step>.<tool>" key.
+
+    Calls are numbered in plan order (#0, #1, ...) for the model;
+    "<step>.<tool>" also works.
+    """
+    order = [c.key for c in spec.calls(plan["document"])]
+    ref = str(ref).lstrip("#")
+    if ref.isdigit():
+        return order[int(ref)] if int(ref) < len(order) else None
+    return ref if ref in order else None
+
+
+@tool
+async def revise_call(
+    call: str,
+    new_args: dict[str, Any],
+    runtime: Runtime,
+) -> Command:
+    """Repair a failed or pending call of the approved plan by replacing its
+    args.
+
+    call: the call number from the plan ("#2" or "2").
+    new_args: the call's args by name, in the propose_plans notation
+    ("$input", "@<call>.<output>", or a fixed value). A fixed value
+    replaces an input the user gave.
+    """
+    plan = runtime.state.get("plan")
+    if not _approved(plan):
+        return _reply(runtime, "승인된 계획이 없습니다.")
+    key = _call_key(plan, call)
+    if key is None:
+        return _reply(runtime, f"{call}번 호출이 없습니다.")
+    if plan["calls"][key]["status"] == "succeeded":
+        return _reply(
+            runtime, f"#{call}은 이미 성공했습니다. 새 계획을 제안하세요."
+        )
+    order = [c.key for c in spec.calls(plan["document"])]
+    position = order.index(key)
+    try:
+        arguments = {
+            p: plan_format.argument(v, position, order, p)
+            for p, v in new_args.items()
+        }
+    except plan_format.PlanFormatError as exc:
+        return _reply(runtime, f"수정안 형식 오류: {exc}")
+    document = json.loads(json.dumps(plan["document"]))
+    si, ti = (int(x) for x in key.split("."))
+    document["workflow"]["steps"][si]["tools"][ti]["arguments"] = arguments
+    services = runtime.context.services
+    errors = spec.validate(
+        document, services.skills("analysis"), services.tool_catalog()
+    )
+    if errors:
+        return _reply(
+            runtime,
+            "수정안 검증 실패:\n"
+            + "\n".join(_by_call_index(errors, order))
+            + _plan_help(
+                _referenced(errors),
+                services.skills("analysis"),
+                services.tool_catalog(),
+            ),
+        )
+    values = {
+        k: v
+        for k, v in plan["input_values"].items()
+        if not k.startswith(key + ".")
+        or arguments.get(k[len(key) + 1 :], {}).get("source") == "input"
+    }
+    plan = {
+        **plan,
+        "document": document,
+        "input_values": values,
+        "calls": {**plan["calls"], key: {"status": "pending"}},
+    }
+    await runtime.context.emit(
+        "plan_revised", {"call": position, "args": new_args}
+    )
+    return _reply(
+        runtime,
+        f"#{position} 인자를 수정했습니다. run_plan으로 다시 실행하세요.",
+        plan=plan,
+    )
+
+
+# --- execution ---------------------------------------------------------------
+
+
+def _segment(
+    plan: dict[str, Any], decisions: dict[str, dict[str, Any]]
+) -> tuple[list[spec.Call], list[str]]:
+    """Next calls to run, stopping before an undecided conditional call."""
+    calls = spec.calls(plan["document"])
+    states = plan["calls"]
+    skipped = {k for k, v in states.items() if v["status"] == "skipped"}
+    for key, decision in decisions.items():
+        if (
+            key in states
+            and states[key]["status"] == "pending"
+            and not decision.get("run", True)
+        ):
+            states[key] = {
+                "status": "skipped",
+                "reason": decision.get("reason", ""),
+            }
+            skipped.add(key)
+    segment: list[spec.Call] = []
+    for call in calls:
+        state = states[call.key]
+        if state["status"] in {"succeeded", "skipped"}:
+            continue
+        depends = {
+            f"{a['step_index']}.{a['tool_index']}"
+            for a in call.arguments.values()
+            if a["source"] == "tool_output"
+        }
+        if depends & skipped:
+            states[call.key] = {
+                "status": "skipped",
+                "reason": "선행 조건부 호출이 생략됨",
+            }
+            skipped.add(call.key)
+            continue
+        if call.execution == "conditional" and call.key not in decisions:
+            break  # the agent decides after reading earlier results
+        segment.append(call)
+    undecided = [
+        c.key
+        for c in calls
+        if c.execution == "conditional"
+        and states[c.key]["status"] == "pending"
+        and c.key not in decisions
+    ]
+    return segment, undecided
+
+
+async def _once(runtime: Runtime, name: str, effect) -> Any:
+    """Run an executor side effect once per tool call.
+
+    LangGraph re-executes a tool from the top when it resumes after an
+    interrupt; the recorded result is returned instead of calling the
+    executor again (whose state has moved on).
+    """
+    namespace, key = (
+        (TOOL_EFFECTS, runtime.context.run_id),
+        f"{runtime.tool_call_id}:{name}",
+    )
+    store = runtime.store
+    assert store is not None, "the agent graph is compiled with a store"
+    if (item := await store.aget(namespace, key)) is not None:
+        return item.value["result"]
+    result = await effect()
+    await store.aput(namespace, key, {"result": result}, index=False)
+    return result
+
+
+async def _submit(
+    runtime: Runtime,
+    steps: list[dict[str, Any]],
+    labels: list[str],
+    folder: str,
+) -> tuple[dict, dict]:
+    return tuple(
+        await _once(
+            runtime,
+            "submit",
+            lambda: _submit_now(runtime, steps, labels, folder),
+        )
+    )
+
+
+async def _append(
+    runtime: Runtime, execution: dict[str, Any], steps: list[dict[str, Any]]
+) -> dict[str, Any] | None:
+    """Add an operation to the live execution.
+
+    None when it takes no more operations (the wait expired, the kernel is
+    gone, it was cancelled). A stale version is read again: the kernel and
+    its variables are still there.
+    """
+    executor = runtime.context.services.executor
+    key, version = _key(runtime, "op"), execution["version"]
+    for _ in range(3):
+        try:
+            return await executor.append_operation(
+                execution["id"],
+                idempotency_key=key,
+                expected_version=version,
+                steps=steps,
+            )
+        except ExecutorError as exc:
+            if exc.code == "PERSISTENCE_CONFLICT":
+                continue  # a concurrent write; the same request goes through
+            if exc.code == "EXECUTION_VERSION_CONFLICT":
+                state = (await executor.get(execution["id"]))["state"]
+                if state["status"] != "WAITING_FOR_OPERATION":
+                    return None
+                # a new version is a new request: it needs its own key
+                version = state["version"]
+                key = _key(runtime, f"op-v{version}")
+                continue
+            # IDEMPOTENCY_CONFLICT is a key bug here: let it surface
+            if exc.status in (404, 409) and exc.code != "IDEMPOTENCY_CONFLICT":
+                return None
+            raise
+    return None
+
+
+async def _submit_now(
+    runtime: Runtime,
+    steps: list[dict[str, Any]],
+    labels: list[str],
+    folder: str,
+) -> list[dict]:
+    """Append to the live execution or open a new MULTI execution.
+
+    Returns [receipt, execution].
+    """
+    ctx = runtime.context
+    settings = ctx.services.settings
+    executor = ctx.services.executor
+    execution: dict[str, Any] | None = runtime.state.get("execution")
+    if execution and execution.get("alive"):
+        for i, step in enumerate(steps):
+            step["sequence"] = execution["next_sequence"] + i
+        receipt = await _append(runtime, execution, steps)
+        if receipt is None:
+            # wait expired / kernel gone: start over in a new execution
+            execution = None
+        else:
+            execution = {
+                **execution,
+                "next_sequence": execution["next_sequence"] + len(steps),
+            }
+    if not execution or not execution.get("alive"):
+        # a fresh kernel: define the observation helper first
+        timeout = settings.executor_step_timeout_seconds
+        source = await ctx.services.code_sources.write(
+            SETUP + "\n",
+            owner=_owner(runtime),
+            tool_call_id=runtime.tool_call_id or "",
+            relative=f"{folder}/{file_name(0, SETUP_TOOL)}",
+            kind=SETUP_TOOL,
+        )
+        steps = [setup_step(source, timeout), *steps]
+        labels = [SETUP_TOOL, *labels]
+        for i, step in enumerate(steps):
+            step["sequence"] = i
+        receipt = await executor.submit(
+            idempotency_key=_key(runtime, "submit"),
+            context={
+                "user_id": ctx.user_id,
+                "project_id": ctx.project_id,
+                "session_id": ctx.session_id,
+            },
+            steps=steps,
+            profile=settings.executor_runtime_profile,
+            wait_seconds=settings.executor_operation_wait_seconds,
+            metadata={"service": "pr-agentic-service", "run_id": ctx.run_id},
+        )
+        execution = {
+            "id": receipt["execution_id"],
+            "version": receipt["state"]["version"],
+            "next_sequence": len(steps),
+            "alive": True,
+            "steps": {},
+        }
+    step_ids = {
+        s["sequence"]: s["step_id"] for s in receipt["operation"]["steps"]
+    }
+    await ctx.services.code_sources.link(
+        receipt,
+        {s["sequence"]: s["payload"]["source"]["path"] for s in steps},
+    )
+    execution["steps"] = {
+        **execution.get("steps", {}),
+        **{
+            step_ids[s["sequence"]]: label
+            for s, label in zip(steps, labels, strict=True)
+        },
+    }
+    return [receipt, execution]
+
+
+def _wait_operation(execution: dict, receipt: dict) -> dict[str, Any]:
+    """Pause until the executor reports the operation.
+
+    The scheduler announces the wait.
+    """
+    labels = [
+        execution["steps"][s["step_id"]]
+        for s in receipt["operation"]["steps"]
+        if execution["steps"][s["step_id"]] != SETUP_TOOL
+    ]
+    return interrupt(
+        {
+            "type": "executor_wait",
+            "execution_id": execution["id"],
+            "operation_id": receipt["operation"]["operation_id"],
+            "steps": labels,
+        }
+    )
+
+
+def _apply_event(
+    execution: dict, event: dict[str, Any]
+) -> tuple[dict, dict[str, dict[str, Any]], str | None]:
+    """Returns (execution, results by step_id, error)."""
+    payload = event.get("payload", {})
+    results = {r["step_id"]: r for r in payload.get("step_results", [])}
+    error = (payload.get("error") or {}).get("message")
+    if event.get(
+        "event_type"
+    ) == "execution.operation_completed" and payload.get("continuation"):
+        execution = {
+            **execution,
+            "version": payload["continuation"]["expected_version"],
+            "alive": True,
+        }
+    else:
+        execution = {**execution, "alive": False}
+    return execution, results, error
+
+
+def _bounded(value: Any, limit: int = 3000) -> Any:
+    text = json.dumps(value, ensure_ascii=False, default=str)
+    return value if len(text) <= limit else text[:limit] + " ...(생략)"
+
+
+def _step_view(
+    runtime: Runtime, result: dict[str, Any] | None
+) -> dict[str, Any]:
+    if not result:
+        return {"status": "NOT_RUN"}
+    view = runtime.context.services.storage.read_step_outputs(
+        result.get("result_ref")
+    )
+    observations, text = parse_observations(view.get("text", ""))
+    return {
+        "status": result["status"],
+        "observations": [_bounded(o) for o in observations],
+        "stdout": text[-1500:],
+        "images": view.get("images", []),
+        "error": view.get("error"),
+    }
+
+
+@tool
+async def run_plan(
+    runtime: Runtime,
+    decisions: dict[str, dict[str, Any]] | None = None,
+) -> Command:
+    """Run the next calls of the approved plan on the executor and wait for
+    their results.
+
+    Runs pending calls in order and stops before a conditional call you have
+    not decided yet.
+    decisions: {"<call number>": {"run": true|false, "reason": "..."}} for
+    conditional calls, decided from the condition in the skill's Tool list
+    and the condition_tool's results you already observed.
+    """
+    ctx = runtime.context
+    plan = runtime.state.get("plan")
+    if not _approved(plan):
+        return _reply(
+            runtime,
+            "승인된 계획이 없습니다. propose_plans로 먼저 승인을 받으세요.",
+        )
+    plan = json.loads(json.dumps(plan))
+    decisions = {
+        key: d
+        for ref, d in (decisions or {}).items()
+        if (key := _call_key(plan, ref))
+    }
+    number = {c.key: i for i, c in enumerate(spec.calls(plan["document"]))}
+    execution = runtime.state.get("execution")
+    if not (execution and execution.get("alive")):
+        # A new kernel has none of the earlier variables: re-run everything
+        # that had succeeded.
+        for state in plan["calls"].values():
+            if state["status"] == "succeeded":
+                state["status"] = "pending"
+    segment, undecided = _segment(plan, decisions)
+    if not segment:
+        if undecided:
+            pending = [f"#{number[k]}" for k in undecided]
+            return _reply(
+                runtime,
+                f"조건부 호출 {pending}의 실행 여부를 "
+                "decisions로 정해 주세요.",
+                plan=plan,
+            )
+        return _reply(
+            runtime,
+            "계획의 모든 호출이 끝났습니다. "
+            "결과를 해석하고 write_report를 호출하세요.",
+            plan=plan,
+        )
+
+    tools = ctx.services.tool_catalog()
+    timeout = ctx.services.settings.executor_step_timeout_seconds
+    producers = {c.key: c.tool for c in spec.calls(plan["document"])}
+    folder = _source_folder(runtime, "run_plan")
+    steps, labels = [], []
+    for sequence, call in enumerate(segment, start=1):
+        code = tool_step_code(call, plan["input_values"], tools, producers)
+        tool_code = tools.tools[call.tool].code.encode("utf-8")
+        source = await ctx.services.code_sources.write(
+            code,
+            owner=_owner(runtime),
+            tool_call_id=runtime.tool_call_id or "",
+            relative=f"{folder}/{file_name(sequence, 'tool', call.tool)}",
+            kind="tool",
+            skill=call.skill,
+            tool=call.tool,
+            call_key=call.key,
+            tool_version=hashlib.sha256(tool_code).hexdigest(),
+        )
+        inputs = {
+            k[len(call.key) + 1 :]: v
+            for k, v in plan["input_values"].items()
+            if k.startswith(call.key + ".")
+        }
+        steps.append(
+            {
+                "payload": {"type": "PYTHON_EXECUTE", "source": source},
+                "step_timeout_seconds": timeout,
+                "lineage": {
+                    "skill_name": call.skill,
+                    "tool_name": call.tool,
+                    "input_parameters": inputs,
+                },
+            }
+        )
+        labels.append(call.key)
+    receipt, execution = await _submit(runtime, steps, labels, folder)
+    event = _wait_operation(execution, receipt)
+    execution, results, error = _apply_event(execution, event)
+
+    by_label = {
+        label: step_id for step_id, label in execution["steps"].items()
+    }
+    report: dict[str, Any] = {}
+    ordered: list[dict[str, Any]] = []  # event payload: jsonb drops key order
+    for call in segment:
+        step_id = by_label.get(call.key)
+        view = _step_view(runtime, results.get(step_id))
+        status = {"SUCCEEDED": "succeeded", "NOT_RUN": "pending"}.get(
+            view["status"], "failed"
+        )
+        plan["calls"][call.key] = {"status": status, "step_id": step_id}
+        report[f"#{number[call.key]} {call.tool}"] = view
+        ordered.append({"call": number[call.key], "tool": call.tool, **view})
+    await ctx.emit(
+        "execution_completed",
+        {"execution_id": execution["id"], "results": ordered, "error": error},
+    )
+    _, undecided = _segment(json.loads(json.dumps(plan)), {})
+    summary = {
+        "results": report,
+        "operation_error": error,
+        "kernel_alive": execution["alive"],
+        "remaining_conditional_calls": [f"#{number[k]}" for k in undecided],
+        "pending_calls": [
+            f"#{number[k]}"
+            for k, v in plan["calls"].items()
+            if v["status"] == "pending"
+        ],
+    }
+    return _reply(
+        runtime,
+        json.dumps(summary, ensure_ascii=False, default=str),
+        plan=plan,
+        execution=execution,
+    )
+
+
+@tool
+async def run_custom_code(
+    code: str,
+    purpose: str,
+    runtime: Runtime,
+    observe: list[str] | None = None,
+) -> Command:
+    """Run Python you wrote yourself in the same kernel (after the user
+    approves the code).
+
+    Allowed by the session's code level only (2: glue code between tools,
+    3: new functions when no tool fits or to fill a failure, 4: anything).
+    Earlier tool results are kernel variables named _r_s<step>_t<tool>.
+    observe: variable names whose value summary you want back.
+    """
+    ctx = runtime.context
+    if ctx.code_level < 2:
+        return _reply(
+            runtime,
+            "현재 코드 레벨(1)에서는 직접 작성한 코드를 실행할 수 없습니다. "
+            "등록된 tool만 사용하세요.",
+        )
+    answer = interrupt(
+        {
+            "type": "code_approval",
+            "purpose": purpose,
+            "code": code,
+            "code_level": ctx.code_level,
+        }
+    )
+    if not (isinstance(answer, dict) and answer.get("approve")):
+        feedback = (
+            answer.get("feedback", "") if isinstance(answer, dict) else ""
+        )
+        return _reply(
+            runtime, f"사용자가 코드 실행을 거절했습니다. {feedback}"
+        )
+    edited = bool(answer.get("code")) and answer["code"] != code
+    code = answer.get("code") or code
+    plan = json.loads(
+        json.dumps(runtime.state.get("plan") or {"custom": [], "calls": {}})
+    )
+    custom_id = f"custom-{len(plan.get('custom', [])) + 1}"
+    timeout = ctx.services.settings.executor_step_timeout_seconds
+    folder = _source_folder(runtime, "run_custom_code")
+    source = await ctx.services.code_sources.write(
+        custom_step_code(code, observe or []),
+        owner=_owner(runtime),
+        tool_call_id=runtime.tool_call_id or "",
+        relative=f"{folder}/{file_name(1, 'custom', custom_id)}",
+        kind="custom",
+        purpose=purpose,
+        approved_by=ctx.user_id,
+        edited=edited,
+    )
+    step = {
+        "payload": {"type": "PYTHON_EXECUTE", "source": source},
+        "step_timeout_seconds": timeout,
+        "lineage": {
+            "skill_name": CUSTOM_SKILL,
+            "tool_name": custom_id,
+            "input_parameters": {"purpose": purpose},
+        },
+    }
+    receipt, execution = await _submit(runtime, [step], [custom_id], folder)
+    event = _wait_operation(execution, receipt)
+    execution, results, error = _apply_event(execution, event)
+    step_id = receipt["operation"]["steps"][-1]["step_id"]
+    view = _step_view(runtime, results.get(step_id))
+    plan.setdefault("custom", []).append(
+        {
+            "id": custom_id,
+            "purpose": purpose,
+            "code": code,
+            "status": view["status"],
+            "step_id": step_id,
+        }
+    )
+    await ctx.emit(
+        "execution_completed",
+        {
+            "execution_id": execution["id"],
+            "results": [{"call": None, "tool": None, "id": custom_id, **view}],
+            "error": error,
+        },
+    )
+    body = json.dumps(
+        {"result": view, "kernel_alive": execution["alive"]},
+        ensure_ascii=False,
+        default=str,
+    )
+    return _reply(runtime, body, plan=plan, execution=execution)
+
+
+# --- wrap-up -----------------------------------------------------------------
+
+
+@tool
+async def write_report(title: str, focus: str, runtime: Runtime) -> Command:
+    """Finish the analysis: finalize the notebook, write the report and
+    publish both.
+
+    Call once the user's question is answered by successful results.
+    focus: what the report should emphasise. After this the kernel is
+    closed; a follow-up analysis starts a new execution.
+    """
+    ctx = runtime.context
+    executor = ctx.services.executor
+    execution = runtime.state.get("execution")
+    plan = runtime.state.get("plan")
+    if not execution:
+        return _reply(runtime, "실행된 분석이 없습니다.")
+    if execution.get("alive"):
+        try:
+            await _once(
+                runtime,
+                "finalize",
+                lambda: executor.finalize(
+                    execution["id"],
+                    idempotency_key=_key(runtime, "finalize"),
+                    expected_version=execution["version"],
+                ),
+            )
+        except ExecutorError as exc:
+            if exc.status != 409:
+                raise
+            # the last operation failed, or the execution moved on
+            state = (await executor.get(execution["id"]))["state"]
+            if state["status"] == "WAITING_FOR_OPERATION":
+                return _reply(
+                    runtime,
+                    "노트북을 확정하지 못했습니다. 마지막 실행이 "
+                    "실패했거나 실행 상태가 바뀌었습니다. 실패한 호출이 "
+                    "있으면 고쳐 다시 실행한 뒤 write_report를 다시 "
+                    "호출하고, 아니면 결과를 채팅으로 정리해 전달하세요.",
+                    execution={**execution, "version": state["version"]},
+                )
+            status = state["status"]
+        else:
+            event = interrupt(
+                {
+                    "type": "executor_wait",
+                    "execution_id": execution["id"],
+                    "operation_id": None,
+                    "steps": ["finalize"],
+                }
+            )
+            status = event.get("payload", {}).get("status")
+    else:
+        status = (await executor.get(execution["id"]))["state"]["status"]
+    closed = {**execution, "alive": False}
+    if status != "SUCCEEDED":
+        return _reply(
+            runtime,
+            f"노트북 확정에 실패했습니다(상태 {status}). "
+            "결과를 채팅으로 정리해 전달하세요.",
+            execution=closed,
+        )
+
+    async def publish() -> list:
+        evidence = await collect_evidence(ctx.services, execution["id"], plan)
+        async with ctx.activity("report_writing"):
+            markdown = await generate_report(
+                ctx, title=title, focus=focus, evidence=evidence
+            )
+        artifact = await executor.create_report(
+            execution["id"],
+            idempotency_key=_key(runtime, "report"),
+            markdown=markdown,
+            name="final-report.md",
+            metadata={
+                "title": title,
+                "session_id": ctx.session_id,
+                "run_id": ctx.run_id,
+            },
+        )
+        return [markdown, artifact]
+
+    # once: a replay must not send a regenerated (different) report under
+    # the same idempotency key
+    markdown, artifact = await _once(runtime, "report", publish)
+    notebook = await executor.notebook(execution["id"])
+    links = {
+        "report": artifact["artifact_id"],
+        "notebook": notebook["artifact_id"] if notebook else None,
+    }
+    settings = ctx.services.settings
+    await ctx.emit(
+        "artifact",
+        {
+            "kind": "report",
+            "artifact_id": links["report"],
+            "title": title,
+        },
+    )
+    if notebook:
+        await ctx.emit(
+            "artifact",
+            {
+                "kind": "notebook",
+                "artifact_id": links["notebook"],
+                "title": f"{title} 노트북",
+                "lab_url": lab_url(
+                    settings,
+                    notebook["storage"].get("relative_path"),
+                    ctx.user_id,
+                ),
+            },
+        )
+    return _reply(
+        runtime,
+        f"리포트 게시 완료 (report={links['report']}, "
+        f"notebook={links['notebook']}).\n\n{markdown[:6000]}",
+        execution=None,
+    )
+
+
+@tool
+async def save_workflow(
+    name: str,
+    user_queries: list[str],
+    runtime: Runtime,
+    tags: list[str] | None = None,
+) -> str:
+    """Offer to save the approved plan as a reusable workflow (the user
+    confirms and may edit).
+
+    user_queries: example questions this workflow answers (start with the
+    user's own request).
+    Code you wrote yourself is not part of a workflow; only registered tool
+    calls are saved.
+    """
+    ctx = runtime.context
+    plan = runtime.state.get("plan")
+    if not _approved(plan):
+        return "저장할 계획이 없습니다."
+    document = json.loads(json.dumps(plan["document"]))
+    document["workflow"]["name"] = name
+    excluded = len(plan.get("custom", []))
+    answer = interrupt(
+        {
+            "type": "workflow_save",
+            "name": name,
+            "user_queries": user_queries,
+            "tags": tags or [],
+            "document": document,
+            "excluded_custom_steps": excluded,
+        }
+    )
+    if not (isinstance(answer, dict) and answer.get("approve")):
+        feedback = answer.get("feedback") if isinstance(answer, dict) else None
+        return "사용자가 워크플로우 저장을 원하지 않습니다." + (
+            f" 사용자 메시지: {feedback}" if feedback else ""
+        )
+    document["workflow"]["name"] = answer.get("name") or name
+    document["workflow"]["actor"] = {"type": "USER", "id": ctx.user_id}
+    async with ctx.activity("workflow_saving"):  # embeds the queries
+        workflow = await ctx.services.workflows.create(
+            author_id=ctx.user_id,
+            document=document,
+            user_queries=answer.get("user_queries") or user_queries,
+            tags=answer.get("tags") or tags or [],
+            source_run_id=ctx.run_id,
+        )
+    await ctx.emit(
+        "workflow_saved", {"workflow_id": workflow.id, "name": workflow.name}
+    )
+    note = (
+        f" Agent가 작성한 코드 {excluded}개는 제외했습니다."
+        if excluded
+        else ""
+    )
+    return (
+        f"워크플로우 '{workflow.name}'를 저장했습니다"
+        f"(승격 전 candidate).{note}"
+    )
+
+
+@tool
+async def finish_analysis(summary: str, runtime: Runtime) -> Command:
+    """Hand the conversation back to the main agent with a short summary of
+    what was done and found."""
+    await runtime.context.emit("agent_switched", {"agent": "main"})
+    return _reply(runtime, f"분석 종료. 요약:\n{summary}", active_agent="main")

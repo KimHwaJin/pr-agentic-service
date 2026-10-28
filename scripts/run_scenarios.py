@@ -4,8 +4,9 @@
     uv run python scripts/run_scenarios.py s03_lot_compare s05_fdc_drift
     uv run python scripts/run_scenarios.py --out results.json
 
-Scenarios: catalogs/analysis_test/scenarios.yml (format at its top). Each
-scenario gets its own session. Approval cards are answered automatically:
+Scenarios: src/dtest/catalogs/analysis_test/scenarios.yml (format at its
+top). Each scenario gets its own session. Approval cards are answered
+automatically:
 the first candidate, empty inputs filled from the scenario's ``inputs``;
 questions from its ``answers``; code runs approved; workflow saves and
 memory changes declined. Prints a table and writes JSON with the details.
@@ -22,7 +23,7 @@ import httpx
 import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
-SCENARIOS = ROOT / "catalogs/analysis_test/scenarios.yml"
+SCENARIOS = ROOT / "src/dtest/catalogs/analysis_test/scenarios.yml"
 TERMINAL = {"succeeded", "failed", "cancelled"}
 
 

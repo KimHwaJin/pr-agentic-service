@@ -16,14 +16,14 @@ from pathlib import Path
 
 import httpx
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from agent import plan_format  # noqa: E402
-from core.assets import SkillCatalog  # noqa: E402
-from core.config import ROOT  # noqa: E402
+from src.dtest.agent import plan_format  # noqa: E402
+from src.dtest.core.assets import SkillCatalog  # noqa: E402
+from src.dtest.core.config import ROOT  # noqa: E402
 
 TAG = "test-catalog"
-CATALOG = ROOT / "catalogs/analysis_test"
+CATALOG = ROOT / "src/dtest/catalogs/analysis_test"
 
 WORKFLOWS = [
     {
@@ -200,7 +200,7 @@ def client() -> httpx.Client:
 
 def add(c: httpx.Client) -> None:
     skills = SkillCatalog.load_many(
-        [ROOT / "assets/skills", CATALOG / "skills"]
+        [ROOT / "src/dtest/assets/skills", CATALOG / "skills"]
     )
     for spec in WORKFLOWS:
         document, _ = plan_format.to_workflow(

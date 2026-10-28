@@ -1,5 +1,5 @@
-from agent.codegen import parse_observations, tool_step_code
-from core.workflows import spec
+from src.dtest.agent.codegen import parse_observations, tool_step_code
+from src.dtest.core.workflows import spec
 
 
 def test_tool_step_code(adaptive, tools):
@@ -18,7 +18,7 @@ def test_tool_step_code(adaptive, tools):
 
 
 def test_setup_defines_the_observation_helper():
-    from agent.codegen import SETUP
+    from src.dtest.agent.codegen import SETUP
 
     namespace: dict = {"get_ipython": lambda: None}
     exec(compile(SETUP, "setup", "exec"), namespace)
@@ -39,7 +39,7 @@ def test_parse_observations():
 
 
 def test_json_string_arguments_are_decoded():
-    from agent.middleware.json_arguments import _structured
+    from src.dtest.agent.middleware.json_arguments import _structured
 
     assert _structured({"type": "array"}) and _structured(
         {"anyOf": [{"type": "object"}, {"type": "null"}]}
@@ -50,7 +50,7 @@ def test_json_string_arguments_are_decoded():
 def test_observation_summarises_plain_objects(capsys):
     import json
 
-    from agent.codegen import SETUP
+    from src.dtest.agent.codegen import SETUP
 
     namespace: dict = {"get_ipython": lambda: None}
     exec(compile(SETUP, "setup", "exec"), namespace)

@@ -3,8 +3,8 @@ from typing import Any, cast
 
 from langchain_core.messages import AIMessage, HumanMessage
 
-from core.executor.sources import SourceOwner, file_name
-from core.executor.storage import SharedStorage
+from src.dtest.core.executor.sources import SourceOwner, file_name
+from src.dtest.core.executor.storage import SharedStorage
 
 OWNER = SourceOwner("u-1", "p-1", "s-1", "r-1")
 
@@ -36,7 +36,7 @@ def test_write_once_and_cleanup(tmp_path):
 
 
 def test_operation_folder_counts_execution_calls_of_this_turn():
-    from agent.tools.analysis import _source_folder
+    from src.dtest.agent.tools.analysis import _source_folder
 
     def call(name, call_id):
         return AIMessage(

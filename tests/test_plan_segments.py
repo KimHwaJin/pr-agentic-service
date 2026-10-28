@@ -1,5 +1,5 @@
-from agent.tools.analysis import _segment
-from core.workflows import spec
+from src.dtest.agent.tools.analysis import _segment
+from src.dtest.core.workflows import spec
 
 
 def _plan(document):
@@ -37,7 +37,7 @@ def test_decisions_run_or_skip(adaptive):
 
 
 def test_compact_plan_to_workflow(skills, tools):
-    from agent import plan_format
+    from src.dtest.agent import plan_format
 
     calls = [
         {

@@ -1,8 +1,8 @@
 import pytest
 import yaml
 
-from core import config
-from core.config import Settings
+from src.dtest.core import config
+from src.dtest.core.config import Settings
 
 
 @pytest.fixture

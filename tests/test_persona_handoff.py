@@ -2,7 +2,10 @@ from types import SimpleNamespace
 
 from langchain_core.messages import AIMessage, RemoveMessage
 
-from agent.middleware.persona import ANALYST_NUDGES, PersonaMiddleware
+from src.dtest.agent.middleware.persona import (
+    ANALYST_NUDGES,
+    PersonaMiddleware,
+)
 
 
 class _Ctx:

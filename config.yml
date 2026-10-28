@@ -1,5 +1,5 @@
 # Values shared by every environment (copied into the image): every Settings
-# key (src/core/config.py) except the per-environment ones, which live only in
+# key (src/dtest/core/config.py) except the per-environment ones, which live only in
 # config.{APP_ENV}.yml: DATABASE_URL, REDIS_URL, PUBLIC_API_ORIGIN,
 # FRONTEND_ORIGIN, CORS_ORIGINS, COOKIE_SECURE, ADMIN_EMPLOYEE_IDS,
 # LLM_API_KEY, MODELS, EXECUTOR_BASE_URL, BATCH_BASE_URL.
@@ -15,7 +15,7 @@ AUTO_MIGRATE: true
 
 # SSO. dev (fixed employee) is refused when APP_ENV is set.
 SSO_ADAPTER: company
-SSO_ADAPTER_FACTORY: "company_sso:create_sdk"
+SSO_ADAPTER_FACTORY: "src.dtest.company_sso:create_sdk"
 SSO_ALLOWED_ORIGINS: []
 SSO_ALLOWED_RETURN_ROOTS: ["/"]
 SESSION_COOKIE_NAME: agentic_session
@@ -56,7 +56,7 @@ EXECUTOR_RUNTIME_PROFILE: default
 EXECUTOR_OPERATION_WAIT_SECONDS: 1800
 EXECUTOR_STEP_TIMEOUT_SECONDS: null
 EXECUTOR_TIMEOUT_SECONDS: 30.0
-# api: no shared PV, test environments only (src/core/executor/testmode)
+# api: no shared PV, test environments only (src/dtest/core/executor/testmode)
 EXECUTOR_IO_MODE: pv
 
 # JupyterLab link for executor notebooks/reports (empty = no link).
@@ -66,9 +66,9 @@ NOTEBOOK_LAB_WORKSPACE_PREFIX: agentic-
 
 # Agent assets. CATALOG_EXTENSIONS: extra catalogs (each with skills/,
 # tools/, knowledge/) on top of the roots, later ones replace same names.
-SKILLS_ROOT: assets/skills
-TOOLS_ROOT: assets/tools
-KNOWLEDGE_ROOT: assets/knowledge
+SKILLS_ROOT: src/dtest/assets/skills
+TOOLS_ROOT: src/dtest/assets/tools
+KNOWLEDGE_ROOT: src/dtest/assets/knowledge
 CATALOG_EXTENSIONS: []
 
 # Agent.

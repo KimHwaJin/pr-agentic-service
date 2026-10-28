@@ -21,8 +21,8 @@ PHOENIX_PROJECT_NAME=pr-agentic-service-local
 
 | 위치 | 내용 |
 | --- | --- |
-| `src/tracing_phoenix.py` | 계측 코드 전부 (`setup()`) |
-| `src/main.py` | `import tracing_phoenix` 한 줄, `tracing_phoenix.setup()` 한 줄 |
+| `src/dtest/tracing_phoenix.py` | 계측 코드 전부 (`setup()`) |
+| `src/dtest/entry.py` | `tracing_phoenix` import 한 줄, `tracing_phoenix.setup()` 한 줄 |
 | `pyproject.toml` | `[dependency-groups]`의 `phoenix = [...]` (arize-phoenix-otel, openinference-instrumentation-langchain), 이후 `uv lock` |
 | `Dockerfile` | `uv sync`의 `--group phoenix` 두 군데 |
 | `docker-compose.yml` | `PHOENIX_*` 환경변수 세 줄, `phoenix.frodo.com` extra_hosts 한 줄 |

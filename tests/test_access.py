@@ -5,7 +5,7 @@ from typing import Any, cast
 import pytest
 from fastapi import HTTPException
 
-from api_service.services import access
+from src.dtest.api_service.services import access
 
 OWNER = "0c8a2f86-5d0e-4e55-9a3c-6f2f0f6a1b11"
 

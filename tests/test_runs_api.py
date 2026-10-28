@@ -5,10 +5,10 @@ import pytest
 from PIL import Image as PILImage
 from pydantic import ValidationError
 
-from api_service.schemas.sessions import RunCreate
-from api_service.services import hitl
-from core.config import ModelSpec, Settings
-from core.images import MAX_SIDE, ImageError, prepare
+from src.dtest.api_service.schemas.sessions import RunCreate
+from src.dtest.api_service.services import hitl
+from src.dtest.core.config import ModelSpec, Settings
+from src.dtest.core.images import MAX_SIDE, ImageError, prepare
 
 PLAN = {
     "type": "plan_approval",
@@ -143,7 +143,7 @@ def test_images_reach_only_vision_models_for_recent_turns():
 
     from langchain_core.messages import AIMessage, HumanMessage
 
-    from agent.middleware.persona import _with_images
+    from src.dtest.agent.middleware.persona import _with_images
 
     def turn(image_id: str) -> HumanMessage:
         return HumanMessage(
@@ -236,7 +236,7 @@ def test_resume_value_is_kept_as_sent():
 def test_openapi_documents_the_reply_models():
     from fastapi import FastAPI
 
-    from api_service.app import mount_api
+    from src.dtest.api_service.app import mount_api
 
     app = FastAPI()
     mount_api(app, Settings())
@@ -256,10 +256,10 @@ def _asked_question_types() -> set[str]:
     """``type`` of every interrupt({...}) the agent tools raise."""
     import ast
 
-    from core.config import ROOT
+    from src.dtest.core.config import ROOT
 
     kinds: set[str] = set()
-    for path in (ROOT / "src/agent/tools").glob("*.py"):
+    for path in (ROOT / "src/dtest/agent/tools").glob("*.py"):
         for node in ast.walk(ast.parse(path.read_text("utf-8"))):
             if (
                 isinstance(node, ast.Call)
@@ -281,9 +281,9 @@ def _asked_question_types() -> set[str]:
 
 
 def test_every_question_the_agent_asks_has_a_reply_model_and_rules():
-    from api_service.schemas.hitl import REPLIES
-    from api_service.services.hitl import REPLY_RULES
-    from core.contracts.hitl import REQUESTS
+    from src.dtest.api_service.schemas.hitl import REPLIES
+    from src.dtest.api_service.services.hitl import REPLY_RULES
+    from src.dtest.core.contracts.hitl import REQUESTS
 
     paused = _asked_question_types()
     assert paused, "no interrupts found: the scan is broken"
@@ -297,7 +297,7 @@ def test_every_question_the_agent_asks_has_a_reply_model_and_rules():
 def test_pause_models_read_what_the_tools_raise():
     from pydantic import TypeAdapter
 
-    from core.contracts.hitl import PauseRequest
+    from src.dtest.core.contracts.hitl import PauseRequest
 
     pause = TypeAdapter(PauseRequest)
     question = pause.validate_python(
@@ -430,7 +430,7 @@ PLAN_FULL = {
 def test_apply_overrides_refuses_what_it_cannot_apply():
     import pytest
 
-    from agent import plan_format
+    from src.dtest.agent import plan_format
 
     document = {
         "workflow": {

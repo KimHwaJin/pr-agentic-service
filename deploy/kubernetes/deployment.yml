@@ -26,10 +26,10 @@ spec:
             - {name: APP_ENV, value: prd}
             - {name: RUN_MODE, value: all}
           readinessProbe:
-            httpGet: {path: /readyz, port: 8080}
+            httpGet: {path: /api/admin/appReady, port: 8080}
             periodSeconds: 5
           livenessProbe:
-            httpGet: {path: /healthz, port: 8080}
+            httpGet: {path: /api/admin/appReady, port: 8080}
             periodSeconds: 15
             failureThreshold: 4
           lifecycle:

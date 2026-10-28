@@ -37,9 +37,9 @@ x-app-env: &app-env
   # pair from its `make auth-keys`, keys/auth_private.pem is a copy of the
   # private half (config.yml batch_jwt_private_key_file).
   BATCH_BASE_URL: http://host.docker.internal:8100
-  # Test catalog on top of assets/ (catalogs/analysis_test/README.md); set
+  # Test catalog on top of assets/ (src/dtest/catalogs/analysis_test/README.md); set
   # '[]' to go back to the base catalog.
-  CATALOG_EXTENSIONS: '["catalogs/analysis_test"]'
+  CATALOG_EXTENSIONS: '["src/dtest/catalogs/analysis_test"]'
   # Chat models (exactly one default). Only qwen38-27b-nvfp4 is served on the
   # local gateway. Per-model request fields go in "params", e.g.
   # {"chat_template_kwargs": {"enable_thinking": false}}.
@@ -64,6 +64,8 @@ services:
   app:
     build: .
     image: pr-agentic-service:local
+    # no gaia template outside the company network: the plain FastAPI entry
+    command: ["uvicorn", "src.dtest.local:app", "--host", "0.0.0.0", "--port", "8080", "--timeout-graceful-shutdown", "30"]
     depends_on:
       db-init:
         condition: service_completed_successfully
@@ -74,10 +76,10 @@ services:
       # Agent/Executor shared volume: PATH sources we write, step results the executor writes.
       - ${EXECUTOR_SHARED_DIR:-../executor/shared_dir}:/mnt/executor-shared
       # Skills/tools/knowledge and prompts are read live, so edits apply without a rebuild.
-      - ./assets:/app/assets:ro
-      - ./catalogs:/app/catalogs:ro
-      - ./src/agent/prompts:/app/src/agent/prompts:ro
-      - ./web:/app/web:ro
+      - ./src/dtest/assets:/app/src/dtest/assets:ro
+      - ./src/dtest/catalogs:/app/src/dtest/catalogs:ro
+      - ./src/dtest/agent/prompts:/app/src/dtest/agent/prompts:ro
+      - ./src/dtest/web:/app/src/dtest/web:ro
       - ./config.yml:/app/config.yml:ro
       # pr-batch signing key (keys/README.md), read without a rebuild.
       - ./keys:/app/keys:ro
@@ -86,7 +88,7 @@ services:
       - "model.frodo.com:10.250.110.99"
       - "phoenix.frodo.com:10.250.110.100"  # Phoenix tracing (optional)
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/readyz')"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/api/admin/appReady')"]
       interval: 10s
       timeout: 3s
       retries: 12

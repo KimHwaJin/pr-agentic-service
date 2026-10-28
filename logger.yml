@@ -1,5 +1,5 @@
 # Standard logging.dictConfig used when the internal HCP library is absent
-# (src/core/logging_setup.py). Inside the company network HCP's
+# (src/dtest/core/logging_setup.py). Inside the company network HCP's
 # init_logger() reads its own logger.yml; replace this file with that one
 # when moving the code in.
 version: 1

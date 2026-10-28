@@ -8,14 +8,14 @@ from typing import Any
 import httpx
 import pytest
 
-from core.config import Settings
-from core.executor.storage import SharedStorage
-from core.executor.testmode import (
+from src.dtest.core.config import Settings
+from src.dtest.core.executor.storage import SharedStorage
+from src.dtest.core.executor.testmode import (
     InlineExecutorClient,
     NotebookResultStorage,
     build,
 )
-from core.executor.testmode.storage import cell_outputs, step_of
+from src.dtest.core.executor.testmode.storage import cell_outputs, step_of
 
 EXECUTION = "11111111-1111-1111-1111-111111111111"
 STEP = "22222222-2222-2222-2222-222222222222"

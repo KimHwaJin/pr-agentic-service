@@ -5,7 +5,7 @@ from typing import Any, cast
 import pytest
 from fastapi import HTTPException
 
-from api_service.routers import users
+from src.dtest.api_service.routers import users
 
 ME = "0c8a2f86-5d0e-4e55-9a3c-6f2f0f6a1b11"
 OTHER = "8921979f-3b7d-4210-85e8-546ae153ff28"

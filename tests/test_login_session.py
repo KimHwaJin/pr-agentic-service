@@ -1,6 +1,6 @@
 import time
 
-from api_service.auth.store import AuthStore
+from src.dtest.api_service.auth.store import AuthStore
 
 
 class FakeRedis:

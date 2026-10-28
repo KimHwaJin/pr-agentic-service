@@ -3,19 +3,19 @@ from pathlib import Path
 
 import pytest
 
-from core.assets import SkillCatalog, ToolCatalog
+from src.dtest.core.assets import SkillCatalog, ToolCatalog
 
 ROOT = Path(__file__).resolve().parents[1]
 
 
 @pytest.fixture(scope="session")
 def skills() -> SkillCatalog:
-    return SkillCatalog.load(ROOT / "assets/skills")
+    return SkillCatalog.load(ROOT / "src/dtest/assets/skills")
 
 
 @pytest.fixture(scope="session")
 def tools() -> ToolCatalog:
-    return ToolCatalog.load(ROOT / "assets/tools")
+    return ToolCatalog.load(ROOT / "src/dtest/assets/tools")
 
 
 @pytest.fixture

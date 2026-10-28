@@ -1,4 +1,5 @@
-"""The test catalog (catalogs/analysis_test) on top of the base catalog.
+"""The test catalog (src/dtest/catalogs/analysis_test) on top of the base
+catalog.
 
 Structure tests run everywhere. Tool tests need the analysis libraries:
 ``uv run --group catalog-test pytest tests/test_catalog_extension.py``.
@@ -8,14 +9,16 @@ from pathlib import Path
 
 import pytest
 
-from core.assets import SkillCatalog, ToolCatalog
-from core.config import ROOT, Settings
+from src.dtest.core.assets import SkillCatalog, ToolCatalog
+from src.dtest.core.config import ROOT, Settings
 
-EXT = ROOT / "catalogs/analysis_test"
+EXT = ROOT / "src/dtest/catalogs/analysis_test"
 
 
 def _catalogs():
-    settings = Settings(catalog_extensions=[Path("catalogs/analysis_test")])
+    settings = Settings(
+        catalog_extensions=[Path("src/dtest/catalogs/analysis_test")]
+    )
     skills = SkillCatalog.load_many(settings.catalog_roots("skills"))
     tools = ToolCatalog.load_many(settings.catalog_roots("tools"))
     knowledge = SkillCatalog.load_many(settings.catalog_roots("knowledge"))
@@ -23,7 +26,7 @@ def _catalogs():
 
 
 def test_extension_adds_on_top_and_overrides_by_name():
-    base = SkillCatalog.load(ROOT / "assets/skills")
+    base = SkillCatalog.load(ROOT / "src/dtest/assets/skills")
     skills, tools, knowledge = _catalogs()
     assert set(base.skills) < set(skills.skills)  # base skills all still there
     assert "eda_analysis" in skills.skills  # untouched base skill

@@ -8,8 +8,8 @@ from langchain_core.language_models.fake_chat_models import (
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 from langchain_core.tools import tool
 
-from agent.graph import tool_error
-from agent.middleware.tool_failures import (
+from src.dtest.agent.graph import tool_error
+from src.dtest.agent.middleware.tool_failures import (
     STOPPED,
     ToolFailureLimitMiddleware,
     failure_streak,

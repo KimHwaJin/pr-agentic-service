@@ -14,9 +14,9 @@ from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 from fastapi import HTTPException
 
-from api_service.routers import batch
-from api_service.routers.artifacts import render_view
-from core.config import Settings
+from src.dtest.api_service.routers import batch
+from src.dtest.api_service.routers.artifacts import render_view
+from src.dtest.core.config import Settings
 
 SCRIPT = UUID("58623b2f-216e-4edc-b251-b5e8975c04f3")
 VERSION = UUID("6ee4a862-3ddd-49dc-aceb-fac516450cea")

@@ -5,7 +5,7 @@ import sys
 import types
 from pathlib import Path
 
-from core import logging_setup
+from src.dtest.core import logging_setup
 
 
 def test_falls_back_to_logger_yml(tmp_path: Path, monkeypatch):

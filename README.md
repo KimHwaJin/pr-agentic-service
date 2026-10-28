@@ -6,20 +6,26 @@
 - 프론트 연동: [docs/api-guide.md](docs/api-guide.md)
 - 부하 설계·측정: [docs/load-design.md](docs/load-design.md)
 - Workflow 표준: [docs/specs/workflow-1.0](docs/specs/workflow-1.0/workflow_spec_1.0.md)
+- 내부망(gaia 템플릿) 반영: [docs/internal-network.md](docs/internal-network.md)
 
 ## 구조
 
+내부망 gaia 템플릿 구조에 맞춰 서비스 코드는 모두 `src/dtest/` 아래에 있습니다(템플릿의 `src/gaia`, `src/common` 등과 섞이지 않게). import는 `from src.dtest.core.config import ...`처럼 항상 `src.dtest.`로 씁니다(테스트가 옛 형식을 막음).
+
 ```text
-src/
-  main.py        진입점. RUN_MODE=all(기본) | api | worker
+app.py           gaia 템플릿 진입점 + attach 한 줄 (내부망에서만 실행 가능)
+src/dtest/
+  entry.py       attach(app): 라우터 + 시작/종료(DtestLifespan 미들웨어). RUN_MODE=all(기본) | api | worker
+  local.py       gaia 없이 실행하는 진입점(사외 개발, docker compose)
   api_service/   FastAPI 라우터, SSO(로그인·세션·CSRF), 요청/응답 스키마. agent를 import하지 않음
   agent/         LangGraph 그래프, persona middleware, 도구, 코드 조립, 리포트 작성
     prompts/     Agent 프롬프트(.md) — main, analyst, reporter
   worker/        run 스케줄러(lease·재개), executor 이벤트 consumer, 배치 리포트 작업
   core/          설정, DB 모델, 이벤트 버스, executor 클라이언트, 메모리·Workflow 서비스, skill/tool 카탈로그
-assets/          skills/(분석 skill .md) tools/(분석 함수 .py) knowledge/(도메인 지식 .md) — 현재 mock
-migrations/      Alembic
-web/dev/         테스트 콘솔(로컬·dev에서 /dev/)
+  assets/        skills/(분석 skill .md) tools/(분석 함수 .py) knowledge/(도메인 지식 .md) — 현재 mock
+  catalogs/      테스트 카탈로그
+  migrations/    Alembic (alembic.ini도 여기)
+  web/dev/       테스트 콘솔(로컬·dev에서 /dev/)
 scripts/         mock_llm.py(게이트웨이 대역), smoke_e2e.py(종단 점검)
 ```
 
@@ -43,7 +49,7 @@ docker compose up -d --build
 - http://localhost:8080/dev/ 테스트 콘솔, http://localhost:8080/docs API 문서
 - 서비스 DB(`agentic`)는 `db-init`이 공용 Postgres에 없으면 만듭니다.
 - executor 공유 볼륨은 `../executor/shared_dir`(`EXECUTOR_SHARED_DIR`로 변경), LLM은 `model.frodo.com` 게이트웨이를 씁니다.
-- `assets/`와 `src/agent/prompts/`는 마운트되어 있어 수정하면 재빌드 없이 다음 요청부터 반영됩니다.
+- `src/dtest/assets/`와 `src/dtest/agent/prompts/`는 마운트되어 있어 수정하면 재빌드 없이 다음 요청부터 반영됩니다.
 - 게이트웨이 대신 mock LLM: `.env`에 `LLM_BASE_URL=http://mock-llm:8001/v1`을 넣고 `docker compose --profile mock up -d`
 - 로컬 설정은 `APP_ENV`를 비운 채 공통 `config.yml` 위에 `docker-compose.yml`의 `environment:` 값(DB·executor 주소, dev SSO, 모델 목록 등)이 덮습니다. compose 옆 `.env`는 `APP_PORT`, `PG_PASSWORD`, `LLM_API_KEY` 같은 값만 채웁니다.
 
@@ -55,7 +61,7 @@ docker compose up -d --build
 cp .env.example .env   # DATABASE_URL, EXECUTOR_* 경로 등 수정
 uv sync
 uv run uvicorn mock_llm:app --app-dir scripts --port 8001   # 게이트웨이 대신 (선택)
-uv run uvicorn main:app --app-dir src --port 8080
+uv run uvicorn src.dtest.local:app --port 8080   # 레포 루트에서
 ```
 
 - executor PV를 마운트할 수 없을 때(executor는 원격 k8s, 서비스는 로컬): `cp .env.testmode.example .env`. `EXECUTOR_IO_MODE=api` 테스트 모드로 코드는 INLINE으로 보내고 결과는 executor 노트북 API로 읽습니다(채팅 이미지 출력은 보이지 않음, 운영 미사용).
@@ -69,7 +75,7 @@ uv run uvicorn main:app --app-dir src --port 8080
 
 ## 운영 연결 지점
 
-- **사내 SSO**: `SSO_ADAPTER=company`, `SSO_ADAPTER_FACTORY=company_sso:create_sdk`. 폐쇄망에서 `src/company_sso.py`를 아래처럼 추가합니다.
+- **사내 SSO**: `SSO_ADAPTER=company`, `SSO_ADAPTER_FACTORY=src.dtest.company_sso:create_sdk`. 폐쇄망에서 `src/dtest/company_sso.py`를 아래처럼 추가합니다.
   ```python
   from your_private_module import SSO
 
@@ -79,10 +85,10 @@ uv run uvicorn main:app --app-dir src --port 8080
   ```
 - **LLM**: `llm_base_url`, `llm_api_key`, `llm_enable_thinking`, 그리고 사용자에게 보여 줄 모델 목록 `models`(게이트웨이 모델 이름, 표시 이름, `default: true` 하나, 이미지 입력 가능 여부, 모델별 요청 파라미터 `params` 예: `reasoning_effort`). 목록에 적힌 모델만 씁니다.
 - **임베딩**: `EMBEDDING_BASE_URL`, `EMBEDDING_MODEL`, `EMBEDDING_DIMS`(HNSW 인덱스는 2,000차원 이하).
-- **skill/tool**: `SKILLS_ROOT`, `TOOLS_ROOT`, `KNOWLEDGE_ROOT`(기본은 레포의 `assets/`). 파일이 바뀌면 다음 run부터 반영됩니다.
+- **skill/tool**: `SKILLS_ROOT`, `TOOLS_ROOT`, `KNOWLEDGE_ROOT`(기본은 `src/dtest/assets/`, 상대 경로는 레포 루트 기준, 절대 경로 가능. 카탈로그 추가는 `CATALOG_EXTENSIONS`). 파일이 바뀌면 다음 run부터 반영됩니다.
 - **executor**: `EXECUTOR_BASE_URL`, 결과 PVC 마운트 경로 `EXECUTOR_RESULT_ROOT`(executor의 SHARED_STORAGE_ROOT).
 - **설정 파일**: 배포는 `APP_ENV`(dev, stg, prd)로 `config.{APP_ENV}.yml`을 고릅니다(이미지에 포함). `config.yml`은 모든 환경의 공통값(이미지에 포함)이고, 로컬은 `APP_ENV`를 비워 두고 `config.yml` 위에 compose 환경변수나 `.env`로 로컬 값을 덮습니다. 우선순위는 환경변수 > `.env` > `config.{APP_ENV}.yml` > `config.yml`입니다. 환경마다 다른 값(DB·Redis·executor·pr-batch 주소, 프론트 주소와 CORS, `COOKIE_SECURE`, 관리자 ID, LLM 키, 모델 목록)만 `config.{APP_ENV}.yml`에 있고, 나머지 설정 키는 모두 `config.yml`에 기본값과 함께 적혀 있습니다. 상대 경로(`SKILLS_ROOT` 등)는 레포 루트 기준입니다. 자세한 규칙은 [docs/design/03-config.md](docs/design/03-config.md).
 - **JupyterLab 링크**: `NOTEBOOK_LAB_BASE_URL`(Lab 서버 주소), Lab 루트가 Jupyter 공유 저장소 루트와 다르면 `NOTEBOOK_LAB_PATH_PREFIX`.
 - **pr-batch**: `BATCH_BASE_URL`, `BATCH_JWT_PRIVATE_KEY_FILE`(RS256 개인키 경로, 기본 배포는 `keys/auth_private.pem`, [keys/README.md](keys/README.md)), `BATCH_JWT_ISSUER`/`BATCH_JWT_AUDIENCE`(pr-batch의 AUTH_ISSUER/AUTH_AUDIENCE, 기본 `batch-client`/`batch-service`). 배치 리포트는 `BATCH_REPORT_MODEL`(비우면 기본 모델), `BATCH_REPORT_COLLECT_TIMEOUT_SECONDS`, `BATCH_REPORT_MEMORY_RUNS`.
-- **로깅**: 사내 HCP 라이브러리가 설치돼 있으면 `hcp.framework.logger.init_logger()`가 맡고(사내 `logger.yml`을 스스로 읽음), 없으면 루트의 `logger.yml`을 표준 `logging.dictConfig`로 적용합니다(`src/core/logging_setup.py`, pr-batch와 같은 구조). 사내로 옮길 때는 HCP 의존성과 사내용 `logger.yml`만 바꾸면 됩니다. 로그 레벨도 `logger.yml`에서 바꿉니다.
+- **로깅**: 사내 HCP 라이브러리가 설치돼 있으면 `hcp.framework.logger.init_logger()`가 맡고(사내 `logger.yml`을 스스로 읽음), 없으면 루트의 `logger.yml`을 표준 `logging.dictConfig`로 적용합니다(`src/dtest/core/logging_setup.py`, pr-batch와 같은 구조). 내부망에서는 gaia/HCP가 로깅을 맡으므로 `attach`는 로깅을 건드리지 않고, `local.py`만 `configure_logging()`을 부릅니다. 사내로 옮길 때는 HCP 의존성과 사내용 `logger.yml`만 바꾸면 됩니다. 로그 레벨도 `logger.yml`에서 바꿉니다.
 - 배포 예시: [deploy/kubernetes/deployment.yml](deploy/kubernetes/deployment.yml)

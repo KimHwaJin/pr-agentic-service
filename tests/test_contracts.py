@@ -6,8 +6,8 @@ from datetime import UTC, datetime
 import pytest
 from pydantic import TypeAdapter, ValidationError
 
-from core.config import ROOT
-from core.contracts import events
+from src.dtest.core.config import ROOT
+from src.dtest.core.contracts import events
 
 
 def _emitted_types() -> set[str]:

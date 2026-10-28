@@ -1,6 +1,6 @@
-from agent.llm import request_extras
-from api_service.schemas.users import ModelList
-from core.config import ModelSpec, Settings
+from src.dtest.agent.llm import request_extras
+from src.dtest.api_service.schemas.users import ModelList
+from src.dtest.core.config import ModelSpec, Settings
 
 
 def _settings(**kwargs) -> Settings:

@@ -8,11 +8,11 @@ import httpx
 import pytest
 from pydantic import ValidationError
 
-from agent.tools import analysis
-from api_service.routers.batch import sets_tenant, with_tenant
-from core.config import Settings
-from core.executor.client import ExecutorClient, ExecutorError
-from worker import executor_events
+from src.dtest.agent.tools import analysis
+from src.dtest.api_service.routers.batch import sets_tenant, with_tenant
+from src.dtest.core.config import Settings
+from src.dtest.core.executor.client import ExecutorClient, ExecutorError
+from src.dtest.worker import executor_events
 
 
 def test_events_come_from_the_tenant_stream():

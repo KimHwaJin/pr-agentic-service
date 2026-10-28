@@ -1,4 +1,4 @@
-from core.workflows import spec
+from src.dtest.core.workflows import spec
 
 
 def test_examples_are_valid(adaptive, static, skills, tools):

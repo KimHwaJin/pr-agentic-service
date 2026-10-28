@@ -11,8 +11,8 @@ from langchain_core.messages import AIMessage
 from langgraph.store.memory import InMemoryStore
 from sqlalchemy.dialects import postgresql
 
-from agent import batch as batch_agent
-from agent.batch import (
+from src.dtest.agent import batch as batch_agent
+from src.dtest.agent.batch import (
     BatchReportAgent,
     ReportMissing,
     _report,
@@ -20,14 +20,14 @@ from agent.batch import (
     previous_runs,
     remember_run,
 )
-from agent.context import BatchReportContext
-from api_service.schemas.batch import BatchReportDetail
-from core.config import Settings
-from core.contracts import events as contracts
-from core.db import utcnow
-from core.executor.client import trigger_type
-from worker import batch_reports
-from worker.batch_reports import BatchReportWorker, NotReady, enqueue
+from src.dtest.agent.context import BatchReportContext
+from src.dtest.api_service.schemas.batch import BatchReportDetail
+from src.dtest.core.config import Settings
+from src.dtest.core.contracts import events as contracts
+from src.dtest.core.db import utcnow
+from src.dtest.core.executor.client import trigger_type
+from src.dtest.worker import batch_reports
+from src.dtest.worker.batch_reports import BatchReportWorker, NotReady, enqueue
 
 EXECUTION = "674ff370-c4c6-42c4-a423-eba72d18352b"
 OWNER = "0c8a2f86-5d0e-4e55-9a3c-6f2f0f6a1b11"
@@ -320,7 +320,7 @@ def test_a_failed_stage_is_recorded():
 
 
 def test_consumer_hands_completions_to_the_reports(monkeypatch):
-    from worker import executor_events
+    from src.dtest.worker import executor_events
 
     async def deliver(db, event):
         return None
@@ -462,7 +462,7 @@ def test_detail_names_the_owner():
         finished_at=now,
     )
     user = SimpleNamespace(id=OWNER, employee_id="00123", name="홍길동")
-    from api_service.routers.batch_reports import _detail
+    from src.dtest.api_service.routers.batch_reports import _detail
 
     detail = _detail(cast(Any, job), cast(Any, user))
     assert isinstance(detail, BatchReportDetail)

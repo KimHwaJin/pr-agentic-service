@@ -2,7 +2,7 @@
 name = "pr-agentic-service"
 version = "0.1.0"
 description = "Agentic data-analysis service: User/Project/Session API and LangGraph agents"
-requires-python = ">=3.12,<3.13"
+requires-python = ">=3.11,<3.12"
 dependencies = [
     "alembic>=1.20.0",
     "fastapi>=0.143.0",
@@ -22,19 +22,19 @@ dependencies = [
     "redis>=5,<6",
     "sqlalchemy[asyncio]>=2.1.4",
     "uvicorn[standard]>=0.54.0",
+    # Company network: HCP (hcp.framework) and the gaia template's base
+    # requirements go here.
 ]
 
-[build-system]
-requires = ["uv_build>=0.11.29,<0.12.0"]
-build-backend = "uv_build"
-
-[tool.uv.build-backend]
-module-name = ["core", "api_service", "agent", "worker"]
+# Not installed as a package: the gaia template's app.py runs from the repo
+# root and imports src.dtest.* (src/dtest/local.py outside the network).
+[tool.uv]
+package = false
 
 [tool.ruff]
-target-version = "py312"
+target-version = "py311"
 line-length = 79
-src = ["src"]
+src = ["."]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]
@@ -42,6 +42,7 @@ select = ["E", "F", "I", "UP", "B"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = ["."]
 asyncio_mode = "auto"
 addopts = "-ra"
 
@@ -56,7 +57,7 @@ phoenix = [
     "arize-phoenix-otel>=0.17.2",
     "openinference-instrumentation-langchain>=0.1.79",
 ]
-# runs the test catalog's tools in tests (catalogs/, not shipped)
+# runs the test catalog's tools in tests (src/dtest/catalogs/)
 catalog-test = [
     "matplotlib>=3.10",
     "numpy>=2.2",
@@ -67,13 +68,13 @@ catalog-test = [
 ]
 
 [tool.ty.environment]
-python-version = "3.12"
-extra-paths = ["src", "scripts"]
+python-version = "3.11"
+extra-paths = [".", "scripts"]
 
-# assets/ and catalogs/ tools run in the executor's Jupyter kernel, whose
+# src/dtest/assets/ and src/dtest/catalogs/ tools run in the executor's Jupyter kernel, whose
 # packages are not in this venv.
 [[tool.ty.overrides]]
-include = ["assets/**", "catalogs/**"]
+include = ["src/dtest/assets/**", "src/dtest/catalogs/**"]
 
 [tool.ty.overrides.rules]
 unresolved-import = "ignore"
