@@ -443,6 +443,26 @@
   .nb-cell .nb-out img { max-width: 100%; display: block; padding: 8px 12px; }
   .lightbox { position: fixed; inset: 0; background: rgba(0,0,0,.7); display: none; place-items: center; z-index: 10; cursor: zoom-out; }
   .lightbox img { max-width: 92vw; max-height: 92vh; border-radius: 8px; background: #fff; }
+
+  /* request/response inspector (dev console only) */
+  .net-drawer { position: fixed; top: 0; right: 0; bottom: 0; width: min(760px, 100vw); background: var(--panel); border-left: 1px solid var(--line); box-shadow: -12px 0 40px rgba(0,0,0,.12); display: none; flex-direction: column; z-index: 25; }
+  .net-drawer.open { display: flex; }
+  .net-head { display: flex; align-items: center; gap: 8px; padding: 12px 16px; border-bottom: 1px solid var(--line); }
+  .net-head h2 { font-size: 15px; margin: 0; font-weight: 600; }
+  #netFilter { flex: 1; min-width: 80px; border: 1px solid var(--line); border-radius: 8px; padding: 5px 10px; background: var(--bg); font-size: 13px; }
+  .net-head label { font-size: 12px; cursor: pointer; color: var(--muted); display: flex; align-items: center; gap: 4px; white-space: nowrap; }
+  .net-split { flex: 1; display: grid; grid-template-rows: minmax(120px, 42%) 1fr; min-height: 0; }
+  .net-list { overflow: auto; border-bottom: 1px solid var(--line); }
+  .net-row { display: grid; grid-template-columns: 62px 52px 1fr 64px 62px; gap: 8px; padding: 5px 16px; font: 12px/1.5 "SF Mono", Menlo, monospace; cursor: pointer; border-bottom: 1px solid var(--line); }
+  .net-row:hover { background: var(--hover); } .net-row.sel { background: var(--user); }
+  .net-row .path { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .net-row .num { text-align: right; color: var(--muted); }
+  .net-st.ok { color: var(--ok); } .net-st.bad { color: var(--bad); } .net-st.wait { color: var(--faint); }
+  .net-detail { overflow: auto; padding: 12px 16px 24px; font-size: 13px; }
+  .net-detail h4 { margin: 14px 0 4px; font-size: 12px; color: var(--muted); font-weight: 500; display: flex; align-items: center; gap: 8px; }
+  .net-detail pre { background: var(--code); padding: 10px 12px; border-radius: 8px; margin: 0; overflow: auto; max-height: 420px; font-size: 12px; line-height: 1.45; white-space: pre-wrap; word-break: break-all; }
+  .net-badge { position: fixed; right: 16px; bottom: 16px; z-index: 24; border: 1px solid var(--line); background: var(--panel); box-shadow: var(--shadow); border-radius: 999px; padding: 6px 12px; font: 12px "SF Mono", Menlo, monospace; color: var(--muted); }
+  .net-badge:hover { color: var(--ink); }
 </style>
 </head>
 <body>
@@ -648,6 +668,90 @@
 </div>
 <div class="lightbox" id="lightbox" onclick="this.style.display='none'"><img id="lightboxImg" alt=""></div>
 
+<button class="net-badge" id="netBadge" onclick="toggleNet()" title="이 화면이 보낸 API 요청과 응답 보기 (Ctrl+`)">요청·응답 <span id="netCount">0</span></button>
+<div class="net-drawer" id="netDrawer">
+  <div class="net-head"><h2>요청·응답</h2>
+    <input id="netFilter" placeholder="경로·메서드·상태로 거르기" oninput="renderNet()">
+    <label><input type="checkbox" id="netErrOnly" onchange="renderNet()">오류만</label>
+    <label><input type="checkbox" id="netSse" checked onchange="renderNet()">SSE</label>
+    <button class="ghost" onclick="NET.items = []; NET.sel = null; renderNet()">지우기</button>
+    <button class="icon-btn" onclick="toggleNet(false)" title="닫기"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 6l12 12M18 6 6 18"/></svg></button></div>
+  <div class="net-split"><div class="net-list" id="netList"></div><div class="net-detail" id="netDetail"><div class="muted">왼쪽 목록에서 요청을 고르면 요청·응답 본문이 여기에 보입니다. 이 화면을 연 뒤에 보낸 요청만 기록됩니다.</div></div></div>
+</div>
+
+<script>
+/* request/response inspector: records what this page sends and receives (fetch + SSE), kept in memory only */
+const NET = { items: [], sel: null, seq: 0, max: 300, bodyMax: 200000 };
+function netAdd(item) { item.id = ++NET.seq; item.at = new Date(); NET.items.push(item); if (NET.items.length > NET.max) NET.items.shift(); netChanged(); return item; }
+let netTimer = null;
+function netChanged() { if (netTimer) return; netTimer = setTimeout(() => { netTimer = null; $('netCount').textContent = NET.items.length; if ($('netDrawer').classList.contains('open')) renderNet(); }, 150); }
+function netBody(b) {
+  if (b == null) return null;
+  if (typeof b === 'string') return b;
+  if (b instanceof FormData) return [...b.entries()].map(([k, v]) => `${k}: ${v instanceof File ? `[파일 ${v.name}, ${v.size} bytes]` : v}`).join('\n');
+  if (b instanceof URLSearchParams) return b.toString();
+  return `[${b.constructor?.name || typeof b}]`;
+}
+const _fetch = window.fetch.bind(window);
+window.fetch = async (input, init = {}) => {
+  const url = typeof input === 'string' ? input : input.url;
+  const it = netAdd({ kind: 'fetch', method: (init.method || input.method || 'GET').toUpperCase(), url, reqHeaders: init.headers instanceof Headers ? Object.fromEntries(init.headers.entries()) : { ...(init.headers || {}) }, reqBody: netBody(init.body), status: null });
+  const t0 = performance.now();
+  try {
+    const r = await _fetch(input, init);
+    it.ms = Math.round(performance.now() - t0); it.status = r.status; it.resHeaders = Object.fromEntries(r.headers.entries());
+    const type = r.headers.get('content-type') || '';
+    if (/json|text|xml|html|javascript/.test(type)) r.clone().text().then(t => { it.resBody = t.length > NET.bodyMax ? t.slice(0, NET.bodyMax) + `\n… (${t.length - NET.bodyMax}자 생략)` : t; netChanged(); }).catch(() => {});
+    else it.resBody = type ? `[${type} · 본문 표시 안 함]` : '';
+    netChanged(); return r;
+  } catch (e) { it.ms = Math.round(performance.now() - t0); it.status = 'ERR'; it.resBody = String(e); netChanged(); throw e; }
+};
+const _ES = window.EventSource;
+window.EventSource = class extends _ES {
+  constructor(url, opts) {
+    super(url, opts);
+    const it = netAdd({ kind: 'sse', method: 'SSE', url: String(url), status: 'open', events: [], ms: null });
+    const t0 = performance.now();
+    this.addEventListener('open', () => { it.status = 200; netChanged(); });
+    this.addEventListener('error', () => { it.status = this.readyState === _ES.CLOSED ? 'closed' : 'retry'; netChanged(); });
+    const add = super.addEventListener.bind(this), seen = new Set();
+    // record every event type the page listens for, plus unnamed messages
+    const record = e => { it.events.push({ at: new Date(), type: e.type, data: e.data }); if (it.events.length > 500) it.events.shift(); it.ms = Math.round(performance.now() - t0); netChanged(); };
+    this.addEventListener = (type, fn, o) => { if (!seen.has(type) && !['open', 'error'].includes(type)) { seen.add(type); add(type, record); } return add(type, fn, o); };
+    this.addEventListener('message', () => {});
+    const close = this.close.bind(this); this.close = () => { it.status = 'closed'; netChanged(); close(); };
+  }
+};
+function toggleNet(open) { const d = $('netDrawer'); d.classList.toggle('open', open ?? !d.classList.contains('open')); if (d.classList.contains('open')) renderNet(); }
+document.addEventListener('keydown', e => { if (e.ctrlKey && e.key === '`') { e.preventDefault(); toggleNet(); } if (e.key === 'Escape' && $('netDrawer').classList.contains('open')) toggleNet(false); });
+const netPath = u => { try { const x = new URL(u, location.href); return x.pathname + x.search; } catch { return u; } };
+const netTime = d => d.toTimeString().slice(0, 8);
+function netStClass(st) { return typeof st !== 'number' ? (st === 'ERR' ? 'bad' : 'wait') : st >= 400 ? 'bad' : 'ok'; }
+function renderNet() {
+  const q = $('netFilter').value.trim().toLowerCase(), errOnly = $('netErrOnly').checked, sse = $('netSse').checked;
+  const rows = NET.items.filter(it => (sse || it.kind !== 'sse') && (!errOnly || netStClass(it.status) === 'bad')
+    && (!q || `${it.method} ${netPath(it.url)} ${it.status}`.toLowerCase().includes(q))).reverse();
+  $('netList').innerHTML = rows.length ? rows.map(it => `<div class="net-row ${it.id === NET.sel ? 'sel' : ''}" onclick="NET.sel = ${it.id}; renderNet()">
+    <span>${netTime(it.at)}</span><span>${it.method}</span><span class="path" title="${esc(it.url)}">${esc(netPath(it.url))}</span>
+    <span class="num net-st ${netStClass(it.status)}">${it.status ?? '…'}</span><span class="num">${it.kind === 'sse' ? `${it.events.length}건` : it.ms != null ? `${it.ms}ms` : ''}</span></div>`).join('')
+    : '<div class="muted" style="padding:14px 16px;font-size:13px">기록된 요청이 없습니다.</div>';
+  const it = NET.items.find(x => x.id === NET.sel);
+  if (it) $('netDetail').innerHTML = netDetail(it);
+}
+function netPretty(t) { if (t == null || t === '') return ''; try { return JSON.stringify(JSON.parse(t), null, 2); } catch { return t; } }
+function netCopy(btn, id, which) { const it = NET.items.find(x => x.id === id); navigator.clipboard?.writeText(netPretty(it?.[which]) || ''); btn.textContent = '복사됨'; setTimeout(() => btn.textContent = '복사', 1200); }
+function netDetail(it) {
+  const hdr = h => h && Object.keys(h).length ? `<pre>${esc(Object.entries(h).map(([k, v]) => `${k}: ${v}`).join('\n'))}</pre>` : '<div class="muted">없음</div>';
+  const head = `<div class="mono" style="font-size:13px;word-break:break-all"><b>${it.method}</b> ${esc(it.url)}</div>
+    <div class="muted" style="font-size:12px;margin-top:2px">${it.at.toLocaleString()} · 상태 <span class="net-st ${netStClass(it.status)}">${it.status ?? '대기 중'}</span>${it.kind === 'fetch' && it.ms != null ? ` · ${it.ms}ms` : ''}</div>`;
+  if (it.kind === 'sse') return head + `<h4>받은 이벤트 ${it.events.length}건 (최근 500건)</h4>` + (it.events.length ? it.events.slice().reverse().map(e =>
+    `<details style="margin:4px 0"><summary class="mono" style="cursor:pointer">${netTime(e.at)} · ${esc(e.type)}</summary><pre>${esc(netPretty(e.data))}</pre></details>`).join('') : '<div class="muted">아직 받은 이벤트가 없습니다.</div>');
+  return head
+    + `<h4>요청 본문 <button class="ghost" style="padding:0 6px" onclick="netCopy(this, ${it.id}, 'reqBody')">복사</button></h4>${it.reqBody ? `<pre>${esc(netPretty(it.reqBody))}</pre>` : '<div class="muted">없음</div>'}`
+    + `<h4>응답 본문 <button class="ghost" style="padding:0 6px" onclick="netCopy(this, ${it.id}, 'resBody')">복사</button></h4>${it.resBody == null ? '<div class="muted">' + (it.status == null ? '응답 대기 중' : '읽는 중') + '</div>' : it.resBody === '' ? '<div class="muted">없음</div>' : `<pre>${esc(netPretty(it.resBody))}</pre>`}`
+    + `<details style="margin-top:14px"><summary class="muted" style="cursor:pointer;font-size:12px">헤더</summary><h4>요청 헤더</h4>${hdr(it.reqHeaders)}<h4>응답 헤더</h4>${hdr(it.resHeaders)}</details>`;
+}
+</script>
 <script>
 const API = '/api/v1';
 const S = { projects: [], models: [], images: [], waiting: false, csrf: null, project: null, session: null, run: null, es: null, answerEl: null, activity: null, notes: null, busy: false };
