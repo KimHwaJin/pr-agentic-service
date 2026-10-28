@@ -8,10 +8,11 @@
 | --- | --- |
 | `app.py` | `GaiaService()` 다음, `main()` 전에 `attach(gaia_service.app)` 한 줄. 레포의 `app.py`가 그 형태 그대로입니다 |
 | `src/router.py` | `users` 예제 include만 지웁니다. 우리 라우터는 `attach`가 붙입니다 |
-| `src/server.py`, `src/config.py`, `src/gaia/`, `src/common/`, `src/lib/`, `src/workflows/`, `src/routers/` | 손대지 않음 |
+| `src/workflows/dtest/analyst.py` | gaia workflow로 쓸 graph를 내보내는 두 줄(아래 "gaia 채팅에서 쓰기") |
+| `src/server.py`, `src/config.py`, `src/gaia/`, `src/common/`, `src/lib/`, `src/routers/` | 손대지 않음 |
 | `config.yml`, `config.{dev,stg,prd}.yml`, `logger.yml` | 우리 설정 그대로. 템플릿 고정값 `PORT`, `PROJECT_NAME`, `SERVICE_NAME`만 추가 |
 
-서비스 코드는 전부 `src/dtest/`에 있습니다. 내부망 레포에는 `src/dtest/`, `app.py`(또는 템플릿 `app.py`에 위 한 줄), `tests/`, `scripts/`, `deploy/`, `docs/`, `keys/`, `Dockerfile`, `pyproject.toml`, `uv.lock`, 설정 yml을 가져갑니다.
+서비스 코드는 전부 `src/dtest/`에 있습니다. 내부망 레포에는 `src/dtest/`, `src/workflows/dtest/`, `app.py`(또는 템플릿 `app.py`에 위 한 줄), `tests/`, `scripts/`, `deploy/`, `docs/`, `keys/`, `Dockerfile`, `pyproject.toml`, `uv.lock`, 설정 yml을 가져갑니다.
 
 ## 시작과 종료
 
@@ -28,6 +29,18 @@
 - CORS: gaia가 회사 도메인을 허용하므로 내부망 `config.{env}.yml`의 `CORS_ORIGINS`는 비워 둡니다(비면 우리 CORS 미들웨어를 붙이지 않음).
 - 로깅: gaia/HCP가 맡습니다. `attach`는 로깅 설정을 하지 않습니다.
 - Phoenix: gaia가 `PHOENIX_ENDPOINT`, `PHOENIX_API_KEY`로 등록합니다. 우리는 에이전트 단계 계측만 켜고 `PHOENIX_COLLECTOR_ENDPOINT`는 쓰지 않습니다([phoenix-tracing.md](phoenix-tracing.md)).
+
+## gaia 채팅에서 쓰기 (workflow)
+
+`src/workflows/dtest/analyst.py`가 gaia workflow `dtest.analyst`입니다(`/analyst/api/completion`, gaia 화면). 파일은 두 줄이고 구현은 전부 `src/dtest/gaia_bridge/`에 있습니다. API, agent, worker는 이 다리를 모릅니다.
+
+- gaia 메시지 하나가 우리 채팅의 한 턴입니다. `POST /sessions/{id}/runs`와 같은 `create_run`으로 run을 만들고 worker가 실행하며, 다리는 세션 이벤트를 따라가다 run이 끝나면 답을 돌려줍니다. 답 텍스트는 오는 대로 LangGraph custom stream(`str`)으로 흘려 gaia가 바로 보여 줍니다.
+- 사용자: gaia `user_id`(SSO 사번)로 우리 사용자를 찾고, 처음이면 SSO 첫 로그인처럼 만들어 기본 프로젝트를 줍니다.
+- 세션: gaia `session_id`마다 기본 프로젝트에 우리 세션 하나(`gaia_sessions` 테이블, migration 0002). 같은 대화가 우리 화면에도 보입니다. 우리 화면에서 지운 세션이면 새로 만듭니다.
+- 확인 질문(gaia HITL은 쓰지 않음): 계획 승인은 첫 후보로 자동 승인(필수 입력값이 비면 그 값을 물음), 코드 승인은 승인, 메모리 변경과 워크플로우 저장 제안은 거절합니다. Agent의 질문은 그 질문을 답으로 보내 턴을 끝내고, 다음 gaia 메시지가 그 질문의 답이 됩니다(우리 채팅에서 질문 중에 입력한 글과 같음).
+- 결과물: 리포트, 노트북 같은 artifact는 `urls`(`{"name", "url"}`)로 보냅니다. `docs`는 비어 있고 gaia가 주는 모델 이름과 세션 system prompt는 쓰지 않습니다.
+- gaia 연결이 끊겨도 run은 worker에서 끝까지 돕니다. 같은 세션에 다음 메시지가 오면, 아직 돌고 있는 run이 있을 때 그 run을 이어서 따라갑니다.
+- `src.common.return_node.gaia_return_adapter`로 마지막 노드를 감쌉니다(템플릿 밖에서는 감싸지 않음).
 
 ## 사용자가 채울 것
 

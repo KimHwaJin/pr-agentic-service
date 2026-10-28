@@ -31,6 +31,7 @@ from src.dtest import tracing_phoenix  # optional (docs/phoenix-tracing.md)
 from src.dtest.api_service.app import mount_api, start_api
 from src.dtest.core.bootstrap import build_services
 from src.dtest.core.config import get_settings
+from src.dtest.gaia_bridge import runtime as gaia_runtime
 from src.dtest.winloop import use_selector_loop
 from src.dtest.worker.runtime import Worker
 
@@ -109,6 +110,8 @@ class DtestLifespan:
         api_enabled, worker_enabled = run_mode()
         services = await stack.enter_async_context(build_services(settings))
         app.state.services = services
+        gaia_runtime.set_services(services)  # the gaia workflow's graph
+        stack.callback(gaia_runtime.set_services, None)
         if api_enabled:
             start_api(app, services)
         if worker_enabled:
