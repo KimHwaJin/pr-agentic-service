@@ -672,6 +672,7 @@
 <div class="net-drawer" id="netDrawer">
   <div class="net-head"><h2>요청·응답</h2>
     <input id="netFilter" placeholder="경로·메서드·상태로 거르기" oninput="renderNet()">
+    <label title="지금 열어 둔 대화에서 보낸 요청만 보기"><input type="checkbox" id="netMine" checked onchange="renderNet()">현재 대화만</label>
     <label><input type="checkbox" id="netErrOnly" onchange="renderNet()">오류만</label>
     <label><input type="checkbox" id="netSse" checked onchange="renderNet()">SSE</label>
     <button class="ghost" onclick="NET.items = []; NET.sel = null; renderNet()">지우기</button>
@@ -682,7 +683,7 @@
 <script>
 /* request/response inspector: records what this page sends and receives (fetch + SSE), kept in memory only */
 const NET = { items: [], sel: null, seq: 0, max: 300, bodyMax: 200000 };
-function netAdd(item) { item.id = ++NET.seq; item.at = new Date(); NET.items.push(item); if (NET.items.length > NET.max) NET.items.shift(); netChanged(); return item; }
+function netAdd(item) { item.id = ++NET.seq; item.at = new Date(); item.session = typeof S !== 'undefined' ? S.session : null; NET.items.push(item); if (NET.items.length > NET.max) NET.items.shift(); netChanged(); return item; }
 let netTimer = null;
 function netChanged() { if (netTimer) return; netTimer = setTimeout(() => { netTimer = null; $('netCount').textContent = NET.items.length; if ($('netDrawer').classList.contains('open')) renderNet(); }, 150); }
 function netBody(b) {
@@ -727,9 +728,11 @@ document.addEventListener('keydown', e => { if (e.ctrlKey && e.key === '`') { e.
 const netPath = u => { try { const x = new URL(u, location.href); return x.pathname + x.search; } catch { return u; } };
 const netTime = d => d.toTimeString().slice(0, 8);
 function netStClass(st) { return typeof st !== 'number' ? (st === 'ERR' ? 'bad' : 'wait') : st >= 400 ? 'bad' : 'ok'; }
+// a request belongs to the open chat if it was sent while that chat was open or its URL names it
+function netInSession(it) { const cur = S.session || null; return it.session === cur || (!!cur && it.url.includes(cur)); }
 function renderNet() {
-  const q = $('netFilter').value.trim().toLowerCase(), errOnly = $('netErrOnly').checked, sse = $('netSse').checked;
-  const rows = NET.items.filter(it => (sse || it.kind !== 'sse') && (!errOnly || netStClass(it.status) === 'bad')
+  const q = $('netFilter').value.trim().toLowerCase(), errOnly = $('netErrOnly').checked, sse = $('netSse').checked, mine = $('netMine').checked;
+  const rows = NET.items.filter(it => (sse || it.kind !== 'sse') && (!errOnly || netStClass(it.status) === 'bad') && (!mine || netInSession(it))
     && (!q || `${it.method} ${netPath(it.url)} ${it.status}`.toLowerCase().includes(q))).reverse();
   $('netList').innerHTML = rows.length ? rows.map(it => `<div class="net-row ${it.id === NET.sel ? 'sel' : ''}" onclick="NET.sel = ${it.id}; renderNet()">
     <span>${netTime(it.at)}</span><span>${it.method}</span><span class="path" title="${esc(it.url)}">${esc(netPath(it.url))}</span>
