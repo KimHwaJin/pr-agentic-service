@@ -5,7 +5,10 @@ description = "Agentic data-analysis service: User/Project/Session API and LangG
 requires-python = ">=3.11,<3.12"
 dependencies = [
     "alembic>=1.20.0",
-    "fastapi>=0.143.0",
+    # <0.137: from 0.137 included routers are lazy _IncludedRouter routes
+    # without .path, which prometheus-fastapi-instrumentator (the gaia
+    # template's Instrumentor) reads on every request.
+    "fastapi>=0.115,<0.137",
     "httpx>=0.28.1",
     "json-repair>=0.64.0",
     "jsonschema>=4.26.0",
