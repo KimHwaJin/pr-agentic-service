@@ -31,6 +31,7 @@ from src.dtest import tracing_phoenix  # optional (docs/phoenix-tracing.md)
 from src.dtest.api_service.app import mount_api, start_api
 from src.dtest.core.bootstrap import build_services
 from src.dtest.core.config import get_settings
+from src.dtest.winloop import use_selector_loop
 from src.dtest.worker.runtime import Worker
 
 log = logging.getLogger(__name__)
@@ -45,9 +46,11 @@ def run_mode() -> tuple[bool, bool]:
 def attach(app: FastAPI) -> None:
     """Adds this service's routes and startup/shutdown to ``app``.
 
-    Call before the app serves anything. ``app.state.ready`` is True
-    between our startup and shutdown.
+    Call before the app serves anything (before ``uvicorn.run``: on
+    Windows it switches uvicorn to the selector loop psycopg needs).
+    ``app.state.ready`` is True between our startup and shutdown.
     """
+    use_selector_loop()
     settings = get_settings()
     tracing_phoenix.setup()
     api_enabled, _ = run_mode()

@@ -61,7 +61,7 @@ docker compose up -d --build
 cp .env.example .env   # DATABASE_URL, EXECUTOR_* 경로 등 수정
 uv sync
 uv run uvicorn mock_llm:app --app-dir scripts --port 8001   # 게이트웨이 대신 (선택)
-uv run uvicorn src.dtest.local:app --port 8080   # 레포 루트에서
+uv run python -m src.dtest.local   # 레포 루트에서, 포트 8080 (내부망은 uv run python app.py)
 ```
 
 - executor PV를 마운트할 수 없을 때(executor는 원격 k8s, 서비스는 로컬): `cp .env.testmode.example .env`. `EXECUTOR_IO_MODE=api` 테스트 모드로 코드는 INLINE으로 보내고 결과는 executor 노트북 API로 읽습니다(채팅 이미지 출력은 보이지 않음, 운영 미사용).

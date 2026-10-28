@@ -1,10 +1,14 @@
-"""Entrypoint without the gaia template (outside the company network):
-``uvicorn src.dtest.local:app`` from the repo root.
+"""Entrypoint without the gaia template (outside the company network),
+from the repo root: ``python -m src.dtest.local`` (port 8080, or PORT), or
+``uvicorn src.dtest.local:app``, which on Windows needs
+``--loop asyncio:SelectorEventLoop`` (src/dtest/winloop.py).
 
 Builds a plain FastAPI app and attaches the service as the template's
 ``app.py`` does (src/dtest/entry.py). ``/api/admin/appReady`` stands in for
 the template's readiness route.
 """
+
+import os
 
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
@@ -22,3 +26,15 @@ attach(app)
 async def app_ready() -> JSONResponse:
     ready = getattr(app.state, "ready", False)
     return JSONResponse({"ready": ready}, 200 if ready else 503)
+
+
+if __name__ == "__main__":
+    import uvicorn
+
+    uvicorn.run(
+        app,
+        host="0.0.0.0",
+        port=int(os.environ.get("PORT", "8080")),
+        log_config=None,
+        timeout_graceful_shutdown=30,
+    )

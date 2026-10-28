@@ -38,7 +38,8 @@
 ## 실행
 
 - 내부망(Windows 개발 PC 포함): 레포 루트에서 `uv run python app.py`
-- 사외: `uv run uvicorn src.dtest.local:app --port 8080`(레포 루트에서) 또는 `docker compose up -d --build`. gaia 없이 일반 FastAPI에 같은 `attach`를 붙이고 `/api/admin/appReady`도 흉내 냅니다.
+- 사외: `uv run python -m src.dtest.local`(레포 루트에서, 포트 8080 또는 `PORT`) 또는 `docker compose up -d --build`. gaia 없이 일반 FastAPI에 같은 `attach`를 붙이고 `/api/admin/appReady`도 흉내 냅니다.
+- Windows 이벤트 루프: psycopg async는 Windows 기본 루프(Proactor)에서 안 돌고, uvicorn 0.36+는 Windows에서 스스로 Proactor를 고릅니다. gaia가 `uvicorn.run()`을 `loop` 인자 없이 부르므로 `attach`가 그 전에 uvicorn의 루프 선택을 Selector로 바꿉니다(`src/dtest/winloop.py`, 다른 OS에서는 아무것도 안 함). uvicorn CLI로 직접 띄울 때는 앱을 읽기 전에 루프가 정해지므로 `--loop asyncio:SelectorEventLoop`을 붙여야 합니다.
 
 ## 두 브랜치 같이 가기
 
