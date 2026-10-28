@@ -17,6 +17,12 @@ PHOENIX_PROJECT_NAME=pr-agentic-service-local
 - OTLP HTTP(`<endpoint>/v1/traces`)로 보냅니다. gRPC(4317)는 쓰지 않습니다. 보내기는 백그라운드 배치라 요청 처리 시간에 영향이 없습니다.
 - 트레이스의 `session.id`가 우리 세션 ID라 Phoenix의 Sessions 화면에서 대화 단위로 묶여 보입니다. 세션 제목 생성 같은 그래프 밖 호출은 세션 없이 따로 보입니다.
 
+## 내부망 (gaia 템플릿)
+
+gaia 템플릿이 `PHOENIX_ENDPOINT`, `PHOENIX_API_KEY`로 Phoenix를 직접 등록합니다. 그래서 내부망에서는 `PHOENIX_COLLECTOR_ENDPOINT`를 넣지 않습니다(넣으면 우리 provider가 따로 생겨 이중 등록).
+
+`PHOENIX_ENDPOINT`가 있으면 `setup()`은 등록은 하지 않고 LangChain/LangGraph 계측만, 아직 아무도 안 켰을 때 전역 provider에 켭니다. gaia가 먼저 켰으면 건너뛰고, 우리가 먼저 켜면 gaia 쪽이 건너뜁니다(instrumentor가 싱글턴). gaia가 provider를 나중에 등록해도 span이 그쪽으로 갑니다.
+
 ## 구성 요소 (제거할 때 이것만 지우면 됨)
 
 | 위치 | 내용 |

@@ -27,6 +27,7 @@
 - 에러 응답: 우리 형식(`{"detail", "code"}`)은 우리 경로에만 적용되고, 다른 경로는 원래 핸들러(gaia가 등록한 것 또는 FastAPI 기본)를 씁니다(`src/dtest/api_service/errors.py`).
 - CORS: gaia가 회사 도메인을 허용하므로 내부망 `config.{env}.yml`의 `CORS_ORIGINS`는 비워 둡니다(비면 우리 CORS 미들웨어를 붙이지 않음).
 - 로깅: gaia/HCP가 맡습니다. `attach`는 로깅 설정을 하지 않습니다.
+- Phoenix: gaia가 `PHOENIX_ENDPOINT`, `PHOENIX_API_KEY`로 등록합니다. 우리는 에이전트 단계 계측만 켜고 `PHOENIX_COLLECTOR_ENDPOINT`는 쓰지 않습니다([phoenix-tracing.md](phoenix-tracing.md)).
 
 ## 사용자가 채울 것
 
