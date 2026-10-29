@@ -24,9 +24,7 @@ def test_read_skill_gives_one_line_per_tool(skills, tools):
 
 def test_read_tool_reads_several_names(skills, tools):
     text = asyncio.run(
-        read_tool.coroutine(
-            ["extract_data", "nope"], _runtime(skills, tools)
-        )
+        read_tool.coroutine(["extract_data", "nope"], _runtime(skills, tools))
     )
     assert f"### extract_data\n{tools.describe('extract_data')}" in text
     assert "### nope\n'nope' tool이 없습니다." in text
