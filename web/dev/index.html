@@ -765,7 +765,7 @@ const CAT = { background: '프로젝트 배경', analysis_preferences: '분석 �
 const TOOL_TEXT = {
   read_knowledge: a => `도메인 지식 확인 · ${a.name}`, search_memory: () => '프로젝트 메모리 검색', save_memory: a => `메모리 저장 · ${a.title || ''}`,
   delete_memory: () => '메모리 삭제', start_analysis: () => '분석 담당에게 전달', read_skill: a => `분석 skill 확인 · ${a.name}`,
-  read_tool: a => `도구 확인 · ${a.name}`, search_tools: () => '도구 검색', search_workflows: () => '등록된 워크플로우 검색',
+  read_tool: a => `도구 확인 · ${(a.names || [a.name]).join(', ')}`, search_tools: () => '도구 검색', search_workflows: () => '등록된 워크플로우 검색',
   propose_plans: () => '실행 계획 작성', revise_call: a => `파라미터 수정 · #${a.call}`, run_plan: a => a.decisions ? '조건 판단 후 이어서 실행' : '코드 실행 요청',
   run_custom_code: a => `직접 작성한 코드 실행 · ${a.purpose || ''}`, write_report: () => '리포트·노트북 확정', save_workflow: () => '워크플로우 저장 제안', finish_analysis: () => '분석 정리',
 };

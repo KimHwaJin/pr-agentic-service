@@ -113,26 +113,30 @@ def _key(runtime: Runtime, suffix: str) -> str:
 @tool
 async def read_skill(name: str, runtime: Runtime) -> str:
     """Read an analysis skill: what it is for, its tools and when each tool
-    runs (always/conditional)."""
+    runs (always/conditional), with one summary line per tool."""
     services = runtime.context.services
     skill = services.skills("analysis").skills.get(name)
     if skill is None:
         return f"'{name}' skill이 없습니다."
     tools = services.tool_catalog()
-    signatures = "\n\n".join(
-        tools.describe(t.tool) for t in skill.tools if t.tool in tools.tools
+    summaries = "\n".join(
+        tools.summary(t.tool) for t in skill.tools if t.tool in tools.tools
     )
-    return f"{skill.body}\n\n## Tool signatures\n\n{signatures}"
+    return (
+        f"{skill.body}\n\n## Tools\n\n{summaries}\n\n"
+        "계획에 쓸 tool은 read_tool로 파라미터와 설명을 확인하세요."
+    )
 
 
 @tool
-async def read_tool(name: str, runtime: Runtime) -> str:
-    """Read one tool's signature, outputs and docstring."""
+async def read_tool(names: list[str], runtime: Runtime) -> str:
+    """Read tools' signatures, outputs and docstrings (several at once)."""
     tools = runtime.context.services.tool_catalog()
-    return (
-        tools.describe(name)
+    return "\n\n".join(
+        f"### {name}\n{tools.describe(name)}"
         if name in tools.tools
-        else f"'{name}' tool이 없습니다."
+        else f"### {name}\n'{name}' tool이 없습니다."
+        for name in names
     )
 
 

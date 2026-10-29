@@ -266,6 +266,12 @@ class ToolCatalog:
         outputs = list(tool.outputs)
         return f"{tool.signature}\noutputs: {outputs}\n\n{tool.docstring}"
 
+    def summary(self, name: str) -> str:
+        """One line: name, first docstring line, outputs."""
+        tool = self.tools[name]
+        first = tool.docstring.splitlines()[0] if tool.docstring else ""
+        return f"- `{name}`: {first} (outputs: {list(tool.outputs)})"
+
 
 class AssetLoader:
     """Parsed view of a directory, reloaded when a file changes.
