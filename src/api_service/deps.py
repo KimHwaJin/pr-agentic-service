@@ -2,7 +2,8 @@ import re
 import time
 from typing import Annotated
 
-from fastapi import Depends, HTTPException, Request
+from fastapi import Depends, Header, HTTPException, Request, Security
+from fastapi.security import APIKeyHeader
 from sqlalchemy import select
 
 from api_service.errors import ApiError
@@ -23,7 +24,52 @@ _USER_CACHE: dict[str, tuple[float, User]] = {}
 USER_CACHE_SECONDS = 30  # role/deactivation changes apply within this window
 
 
-async def current_user(request: Request) -> User:
+# Shown in OpenAPI (Swagger "Authorize"); current_user reads the headers.
+API_KEY = APIKeyHeader(
+    name="X-Api-Key",
+    scheme_name="X-Api-Key",
+    auto_error=False,
+    description="Key of a service or agent (시스템 > API 키). Not with the "
+    "SSO cookie: a request with the cookie is decided by it alone.",
+)
+USER_HEADER = APIKeyHeader(
+    name="X-User-Id",
+    scheme_name="X-User-Id",
+    auto_error=False,
+    description="Our users.id the key caller acts for (required with "
+    "X-Api-Key; alone in AUTH_MODE=header, local/dev).",
+)
+
+
+async def identity_headers(
+    x_api_key: Annotated[str | None, Security(API_KEY)] = None,
+    x_user_id: Annotated[str | None, Security(USER_HEADER)] = None,
+    x_project_id: Annotated[
+        str | None,
+        Header(
+            alias="X-Project-Id",
+            description="Key callers, optional: must repeat the path's "
+            "project; on the executor and batch gateways the project the "
+            "call is for.",
+        ),
+    ] = None,
+    x_session_id: Annotated[
+        str | None,
+        Header(
+            alias="X-Session-Id",
+            description="Key callers, optional (needs X-Project-Id).",
+        ),
+    ] = None,
+) -> None:
+    """Documents the caller headers; ``current_user`` checks them."""
+
+
+IdentityHeaders = Annotated[None, Depends(identity_headers)]
+
+
+async def current_user(
+    request: Request, _headers: IdentityHeaders = None
+) -> User:
     """The SSO user of the cookie, else the user a key caller names.
 
     A request with the session cookie is decided by SSO alone (CSRF
