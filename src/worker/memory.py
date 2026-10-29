@@ -6,10 +6,12 @@ chats have been quiet for ``memory_worker_quiet_seconds``, or after
 ``memory_worker_max_turns`` turns, one worker claims it (FOR UPDATE SKIP
 LOCKED + lease), reads the user/assistant messages after its cursor (one
 chunk of ``memory_worker_max_input_tokens``) and asks the model, in one
-call, for line edits of the memory sections.
+call, for line edits of the project's memory topics (their ids, titles and
+descriptions are put in the prompt; formats such as "starts with a date"
+live in the descriptions, which the user may edit).
 
 The model may only keep durable facts, preferences, interests and events
-the USER stated; code checks every edit (``plan_section``) and drops the
+the USER stated; code checks every edit (``plan_topic``) and drops the
 ones that fail, keeping the rest. A chunk that keeps failing is skipped
 after ``MAX_ATTEMPTS`` so a project is never stuck.
 """
@@ -34,14 +36,14 @@ from agent.prompts import load_prompt
 from core.db import utcnow
 from core.memory.service import (
     HEADING,
-    SECTION_TITLES,
-    SECTIONS,
     Actor,
     Line,
     MemoryEditError,
+    Topic,
     content_of,
     make_line,
     new_line_id,
+    render_topic_index,
     updated_event,
 )
 from core.models import ChatSession, MemoryExtractionState, Message, Run
@@ -69,7 +71,6 @@ URL = re.compile(r"https?://|www\.", re.I)
 PATH = re.compile(
     r"[A-Za-z]:\\|\\\\|(?:^|[\s(])~?/[\w.-]+/|\b[\w.-]+/[\w./-]*\.[A-Za-z]\w{0,4}\b"
 )
-DATE = re.compile(r"^(?:[-*]\s+)?(\d{4}-\d{2}-\d{2})\b")
 TRIVIAL = {
     "안녕", "안녕하세요", "하이", "헬로", "고마워", "고마워요", "고맙습니다",
     "감사", "감사해요", "감사합니다", "땡큐", "네", "넵", "넹", "예", "응",
@@ -201,14 +202,14 @@ def parse_ops(text: str) -> list[dict[str, Any]]:
 
 @dataclass
 class Plan:
-    """What one section becomes; ``lines`` is None when nothing changes."""
+    """What one topic becomes; ``lines`` is None when nothing changes."""
 
     lines: list[Line] | None
     accepted: list[dict[str, Any]] = field(default_factory=list)
     rejected: list[tuple[dict[str, Any], str]] = field(default_factory=list)
 
 
-def check_text(section: str, text: str) -> str | None:
+def check_text(text: str) -> str | None:
     if not text:
         return "empty text"
     if HEADING.match(text):
@@ -219,14 +220,11 @@ def check_text(section: str, text: str) -> str | None:
         return "url"
     if PATH.search(text):
         return "file path"
-    if section == "key_events" and not DATE.match(text):
-        return "key_events line must start with YYYY-MM-DD"
     return None
 
 
 def check_op(
     op: dict[str, Any],
-    section: str,
     lines: list[Line],
     user_texts: list[str],
 ) -> str | None:
@@ -239,7 +237,7 @@ def check_op(
     if kind == "delete":
         return None
     text = " ".join(str(op.get("text") or "").split())
-    problem = check_text(section, text)
+    problem = check_text(text)
     if problem:
         return problem
     quote = normalize(str(op.get("quote") or ""))
@@ -261,7 +259,6 @@ def check_op(
 
 
 def apply_ops(
-    section: str,
     lines: list[Line],
     ops: list[dict[str, Any]],
     user_texts: list[str],
@@ -273,7 +270,7 @@ def apply_ops(
     accepted: list[tuple[dict, int]] = []
     rejected: list[tuple[dict, str]] = []
     for op in ops:
-        problem = check_op(op, section, work, user_texts)
+        problem = check_op(op, work, user_texts)
         if problem:
             rejected.append((op, problem))
             continue
@@ -294,23 +291,10 @@ def apply_ops(
                     for line in work
                 ]
         accepted.append((op, len(content_of(work)) - before))
-    if section == "key_events":
-        work = sort_events(work)
     return work, accepted, rejected
 
 
-def sort_events(lines: list[Line]) -> list[Line]:
-    """Newest first; undated lines keep their order at the end."""
-
-    def date(line: Line) -> str:
-        match = DATE.match(line["text"])
-        return match.group(1) if match else ""
-
-    return sorted(lines, key=date, reverse=True)
-
-
-def plan_section(
-    section: str,
+def plan_topic(
     lines: list[Line],
     ops: list[dict[str, Any]],
     user_texts: list[str],
@@ -324,7 +308,7 @@ def plan_section(
     original = len(content_of(lines))
     while True:
         work, accepted, rejected = apply_ops(
-            section, lines, candidates, user_texts, actor, now
+            lines, candidates, user_texts, actor, now
         )
         size = len(content_of(work))
         if size <= limit or size <= original:
@@ -334,26 +318,32 @@ def plan_section(
             return Plan(None, [], rejected + dropped)
         last = growing[-1]
         candidates = [op for op in candidates if op is not last]
-        dropped.append((last, f"section over {limit} characters"))
+        dropped.append((last, f"topic over {limit} characters"))
     if not accepted:
         return Plan(None, [], rejected + dropped)
     return Plan(work, [op for op, _ in accepted], rejected + dropped)
 
 
-def render_memory(values: dict[str, dict[str, Any]], limits) -> str:
+def render_memory(contents: list[dict[str, Any]]) -> str:
+    """Every topic with its lines and ids (``ProjectMemory.contents``)."""
     blocks = []
-    for section in SECTIONS:
-        lines = values[section]["lines"]
+    for t in contents:
         body = "\n".join(
             f"- [{line['id']}] ({line['author']}) {line['text']}"
-            for line in lines
+            for line in t["lines"]
         )
         blocks.append(
-            f"## {section} ({SECTION_TITLES[section]}) "
-            f"{len(content_of(lines))}/{limits[section]}자\n"
+            f"## {t['topic']} ({t['title']}) "
+            f"{len(t['content'])}/{t['max_chars']}자\n"
             f"{body or '(비어 있음)'}"
         )
     return "\n\n".join(blocks)
+
+
+def worker_prompt(topics: list[Topic], today: str) -> str:
+    return load_prompt("memory_worker").render(
+        today=today, topics=render_topic_index(topics)
+    )
 
 
 def render_chat(messages: list[ChatMessage]) -> str:
@@ -485,31 +475,32 @@ class MemoryWorker:
     async def extract(
         self, project_id: str, chunk: list[ChatMessage]
     ) -> list[str]:
-        """One model call for the chunk; returns the changed sections."""
+        """One model call for the chunk; returns the changed topic ids."""
         user_texts = [m.content for m in chunk if m.role == "user"]
         if all(is_trivial(t) for t in user_texts):
             return []  # covers a chunk with no user message too
-        values = {s: await self.memory.value(project_id, s) for s in SECTIONS}
-        limits = self.memory.max_chars
+        contents = await self.memory.contents(project_id)
+        topics = {t["topic"] for t in contents}
         model = await self.model_for(chunk)
-        prompt = load_prompt("memory_worker").render(
-            today=f"{utcnow():%Y-%m-%d}",
-            limits=", ".join(f"{s} {limits[s]}자" for s in SECTIONS),
+        prompt = worker_prompt(
+            await self.memory.topics(project_id), f"{utcnow():%Y-%m-%d}"
         )
         request = (
-            f"# 현재 프로젝트 메모리\n{render_memory(values, limits)}\n\n"
+            f"# 현재 프로젝트 메모리\n{render_memory(contents)}\n\n"
             f"# 새 대화\n{render_chat(chunk)}"
         )
         response = await chat_model(self.settings, model).ainvoke(
             [SystemMessage(prompt), HumanMessage(request)]
         )
         ops = parse_ops(response.text)
-        by_section: dict[str, list[dict[str, Any]]] = {}
+        by_topic: dict[str, list[dict[str, Any]]] = {}
         for op in ops:
-            if op.get("section") in SECTIONS:
-                by_section.setdefault(op["section"], []).append(op)
+            # "section": the name before topics were editable
+            topic_id = op.get("topic") or op.get("section")
+            if topic_id in topics:
+                by_topic.setdefault(topic_id, []).append(op)
             else:
-                log.info("memory_op_rejected reason=section op=%s", _dump(op))
+                log.info("memory_op_rejected reason=topic op=%s", _dump(op))
         actor = Actor(
             "agent",
             ACTOR_ID,
@@ -519,32 +510,35 @@ class MemoryWorker:
             },
         )
         changed = []
-        for section, section_ops in by_section.items():
+        for topic_id, topic_ops in by_topic.items():
             view = await self.apply(
-                project_id, section, section_ops, user_texts, actor
+                project_id, topic_id, topic_ops, user_texts, actor
             )
             if view:
-                changed.append(section)
+                changed.append(topic_id)
                 await self.announce(chunk, view)
         return changed
 
     async def apply(
         self,
         project_id: str,
-        section: str,
+        topic_id: str,
         ops: list[dict[str, Any]],
         user_texts: list[str],
         actor: Actor,
     ) -> dict[str, Any] | None:
-        """Plan against the current lines; on a version conflict, once more."""
+        """Plan against the current lines; on a version conflict, once more
+        (a topic replaced meanwhile is gone: 404, nothing saved)."""
         for attempt in range(2):
-            current = await self.memory.value(project_id, section)
-            plan = plan_section(
-                section,
+            try:
+                current = await self.memory.content(project_id, topic_id)
+            except MemoryEditError:
+                return None
+            plan = plan_topic(
                 current["lines"],
                 ops,
                 user_texts,
-                self.memory.limit(section),
+                current["max_chars"],
                 actor,
                 utcnow().isoformat(),
             )
@@ -560,7 +554,7 @@ class MemoryWorker:
             try:
                 return await self.memory.edit(
                     project_id,
-                    section,
+                    topic_id,
                     lambda _, lines=plan.lines: lines,
                     actor=actor,
                     expected_version=current["version"],
@@ -569,9 +563,9 @@ class MemoryWorker:
                 if exc.status == 409 and attempt == 0:
                     continue
                 log.warning(
-                    "memory_apply_failed project=%s section=%s: %s",
+                    "memory_apply_failed project=%s topic=%s: %s",
                     project_id,
-                    section,
+                    topic_id,
                     exc,
                 )
                 return None

@@ -40,7 +40,7 @@ def test_check_refuses_unknown_types_and_wrong_shapes():
     events.check(
         "memory_updated",
         {
-            "section": "preferences",
+            "topic": "preferences",
             "title": "Preferences",
             "content": "- 표 위주",
             "version": 2,

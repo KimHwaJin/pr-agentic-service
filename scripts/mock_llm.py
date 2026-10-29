@@ -59,7 +59,7 @@ def _decide(body: dict) -> tuple[str, list[dict]]:
                 _call(
                     "save_memory",
                     {
-                        "section": "preferences",
+                        "topic": "preferences",
                         "text": f"- {content}",
                         "reason": "사용자 요청",
                     },

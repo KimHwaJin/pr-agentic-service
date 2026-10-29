@@ -3,12 +3,13 @@ from sqlalchemy import select
 
 from api_service.deps import ServicesDep, UserDep, project_for
 from api_service.schemas.projects import (
+    MemoryContentWrite,
     MemoryHistoryRead,
     MemoryRead,
     MemoryRevert,
-    MemorySection,
-    MemorySectionName,
-    MemorySectionWrite,
+    MemoryTopicContent,
+    MemoryTopicsRead,
+    MemoryTopicsWrite,
     ProjectCreate,
     ProjectRead,
     ProjectUpdate,
@@ -89,9 +90,39 @@ def _memory_error(exc: MemoryEditError) -> HTTPException:
 
 @router.get("/{project_id}/memory", response_model=MemoryRead)
 async def get_memory(project_id: str, services: ServicesDep, user: UserDep):
-    """All four sections, empty ones included."""
+    """Every topic in order with its body, empty ones included."""
     await project_for(services, user, project_id)
-    return {"sections": await services.memory.sections(project_id)}
+    return await services.memory.memory(project_id)
+
+
+@router.get("/{project_id}/memory/topics", response_model=MemoryTopicsRead)
+async def get_memory_topics(
+    project_id: str, services: ServicesDep, user: UserDep
+):
+    await project_for(services, user, project_id)
+    return await services.memory.topic_list(project_id)
+
+
+@router.put("/{project_id}/memory/topics", response_model=MemoryTopicsRead)
+async def put_memory_topics(
+    project_id: str,
+    body: MemoryTopicsWrite,
+    services: ServicesDep,
+    user: UserDep,
+):
+    """Replace the topic list. Same id = edit (body kept); no id or
+    ``replace`` = a new, empty topic; a dropped topic's body is cleared
+    and can be restored from history."""
+    await project_for(services, user, project_id, write=True)
+    try:
+        return await services.memory.put_topics(
+            project_id,
+            [t.model_dump() for t in body.topics],
+            expected_version=body.expected_version,
+            actor=Actor("user", user.id),
+        )
+    except MemoryEditError as exc:
+        raise _memory_error(exc) from None
 
 
 @router.get("/{project_id}/memory/history", response_model=MemoryHistoryRead)
@@ -99,27 +130,54 @@ async def memory_history(
     project_id: str,
     services: ServicesDep,
     user: UserDep,
-    section: MemorySectionName | None = None,
+    topic: str | None = None,
+    removed: bool = Query(
+        False, description="only replaced/removed topics (restorable)"
+    ),
     limit: int = Query(100, ge=1, le=500),
 ):
     await project_for(services, user, project_id)
-    return {"items": await services.memory.history(project_id, section, limit)}
+    return {
+        "items": await services.memory.history(
+            project_id, topic, limit, removed=removed
+        )
+    }
 
 
-@router.put("/{project_id}/memory/{section}", response_model=MemorySection)
-async def put_memory_section(
+@router.post(
+    "/{project_id}/memory/history/{history_id}/restore",
+    response_model=MemoryRead,
+)
+async def restore_memory_topic(
+    project_id: str, history_id: int, services: ServicesDep, user: UserDep
+):
+    """Bring back a replaced or removed topic with its body (added at the
+    end of the list)."""
+    await project_for(services, user, project_id, write=True)
+    try:
+        return await services.memory.restore(
+            project_id, history_id, actor=Actor("user", user.id)
+        )
+    except MemoryEditError as exc:
+        raise _memory_error(exc) from None
+
+
+@router.put(
+    "/{project_id}/memory/{topic_id}", response_model=MemoryTopicContent
+)
+async def put_memory_content(
     project_id: str,
-    section: str,
-    body: MemorySectionWrite,
+    topic_id: str,
+    body: MemoryContentWrite,
     services: ServicesDep,
     user: UserDep,
 ):
-    """Replace a section's body; unchanged lines keep their author."""
+    """Replace a topic's body; unchanged lines keep their author."""
     await project_for(services, user, project_id, write=True)
     try:
         return await services.memory.put_content(
             project_id,
-            section,
+            topic_id,
             body.content,
             expected_version=body.expected_version,
             actor=Actor("user", user.id),
@@ -129,21 +187,22 @@ async def put_memory_section(
 
 
 @router.post(
-    "/{project_id}/memory/{section}/revert", response_model=MemorySection
+    "/{project_id}/memory/{topic_id}/revert",
+    response_model=MemoryTopicContent,
 )
-async def revert_memory_section(
+async def revert_memory_content(
     project_id: str,
-    section: str,
+    topic_id: str,
     body: MemoryRevert,
     services: ServicesDep,
     user: UserDep,
 ):
-    """Undo one history entry of the section (a new version)."""
+    """Undo one history entry of the topic (a new version)."""
     await project_for(services, user, project_id, write=True)
     try:
         return await services.memory.revert(
             project_id,
-            section,
+            topic_id,
             body.history_id,
             actor=Actor("user", user.id),
             expected_version=body.expected_version,

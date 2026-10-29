@@ -33,12 +33,6 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 APP_ENVS = ("dev", "stg", "prd")
-MEMORY_SECTION_DEFAULTS = {
-    "overview": 500,
-    "preferences": 500,
-    "core_interests": 500,
-    "key_events": 700,
-}
 # executor stream names a tenant_id may not take
 RESERVED_TENANT_IDS = frozenset({"dlq", "work"})
 
@@ -255,11 +249,11 @@ class Settings(BaseSettings):
     agent_summary_trigger_tokens: int = 30000
     agent_summary_max_chars: int = 6000  # length asked of the summary
 
-    # Project memory: four sections, each a short Markdown body, all of
-    # it in every prompt. Writes past a section's limit are refused.
-    memory_section_max_chars: dict[str, int] = Field(
-        default_factory=lambda: dict(MEMORY_SECTION_DEFAULTS)
-    )
+    # Project memory: up to 6 topics per project (editable), each a short
+    # Markdown body with its own limit, all of it in every prompt. The
+    # topics' limits of one project add up to at most this; the default
+    # four topics take 2200.
+    memory_total_max_chars: int = Field(2200, ge=2200, le=20000)
     # Background extraction of what the user said (worker.memory): a
     # project is processed once its chats are quiet this long or after
     # this many finished turns. Turns are counted even while disabled.
@@ -346,14 +340,6 @@ class Settings(BaseSettings):
         if self.executor_tenant_id in RESERVED_TENANT_IDS:
             raise ValueError(
                 f"EXECUTOR_TENANT_ID {self.executor_tenant_id!r} is reserved"
-            )
-        if (
-            set(self.memory_section_max_chars) != set(MEMORY_SECTION_DEFAULTS)
-            or min(self.memory_section_max_chars.values()) < 1
-        ):
-            raise ValueError(
-                "MEMORY_SECTION_MAX_CHARS needs a positive limit for each of "
-                + ", ".join(MEMORY_SECTION_DEFAULTS)
             )
         names = [m.name for m in self.models]
         if len(set(names)) != len(names):

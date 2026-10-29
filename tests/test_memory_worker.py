@@ -20,8 +20,10 @@ from worker.memory import (
     is_trivial,
     mark_dirty,
     parse_ops,
-    plan_section,
+    plan_topic,
+    render_memory,
     take_chunk,
+    worker_prompt,
 )
 from worker.scheduler import RunScheduler
 
@@ -97,7 +99,7 @@ class _Events:
 def _worker(db=None, **settings) -> MemoryWorker:
     db = db or _Db()
     memory = ProjectMemory(
-        InMemoryStore(), cast(Any, db), Settings().memory_section_max_chars
+        InMemoryStore(), cast(Any, db), Settings().memory_total_max_chars
     )
     services = SimpleNamespace(
         settings=Settings(**settings),
@@ -325,14 +327,12 @@ LINES = [
 ]
 
 
-def _plan(ops, section="preferences", lines=LINES, limit=500):
-    return plan_section(
-        section, lines, ops, [USER_TEXT], limit, ACTOR, "2026-10-29"
-    )
+def _plan(ops, lines=LINES, limit=500):
+    return plan_topic(lines, ops, [USER_TEXT], limit, ACTOR, "2026-10-29")
 
 
-def _add(text, quote="보고서는 표 위주로", section="preferences"):
-    return {"op": "add", "section": section, "text": text, "quote": quote}
+def _add(text, quote="보고서는 표 위주로", topic="preferences"):
+    return {"op": "add", "topic": topic, "text": text, "quote": quote}
 
 
 def test_valid_ops_apply_in_order():
@@ -394,33 +394,23 @@ def test_each_rule_rejects_only_its_op(op, reason):
     assert plan.lines is not None and len(plan.accepted) == 1
 
 
-def test_key_events_need_a_date_and_stay_newest_first():
+def test_formats_are_left_to_the_topic_description():
+    # no date rule or ordering in code: the Key Events description asks
     lines = [
         {"id": "e1", "text": "2026-09-01 설비 교체", "author": "user"},
     ]
-    plan = plan_section(
-        "key_events",
+    plan = plan_topic(
         lines,
-        [
-            _add("- 목표 확정", quote="목표는 A라인", section="key_events"),
-            _add(
-                "2026-10-28 목표 확정: A라인 수율 개선",
-                quote="목표는 A라인",
-                section="key_events",
-            ),
-        ],
+        [_add("- 목표 확정: A라인", quote="목표는 A라인", topic="key_events")],
         [USER_TEXT],
         700,
         ACTOR,
         "t",
     )
-    assert [r for _, r in plan.rejected] == [
-        "key_events line must start with YYYY-MM-DD"
-    ]
-    assert plan.lines is not None
-    assert [line["text"][:10] for line in plan.lines] == [
-        "2026-10-28",
-        "2026-09-01",
+    assert plan.rejected == [] and plan.lines is not None
+    assert [line["text"] for line in plan.lines] == [
+        "2026-09-01 설비 교체",
+        "- 목표 확정: A라인",
     ]
 
 
@@ -438,14 +428,14 @@ def test_growing_ops_are_dropped_to_fit_the_limit():
         "- 결론 먼저",
         "- 보고서는 표 중심으로 쓴다",
     ]
-    assert [r for _, r in plan.rejected] == ["section over 35 characters"]
+    assert [r for _, r in plan.rejected] == ["topic over 35 characters"]
 
 
 def test_nothing_left_means_no_change():
     assert _plan([_add("- x", quote="")]).lines is None
     full = _plan([_add("- " + "가" * 600)], limit=500)
     assert full.lines is None
-    assert [r for _, r in full.rejected] == ["section over 500 characters"]
+    assert [r for _, r in full.rejected] == ["topic over 500 characters"]
 
 
 # --- one claim end to end --------------------------------------------------
@@ -453,10 +443,11 @@ def test_nothing_left_means_no_change():
 
 class _Model:
     def __init__(self, reply):
-        self.reply, self.calls = reply, 0
+        self.reply, self.calls, self.messages = reply, 0, []
 
     async def ainvoke(self, messages):
         self.calls += 1
+        self.messages = messages
         if isinstance(self.reply, Exception):
             raise self.reply
         return AIMessage(self.reply)
@@ -465,11 +456,11 @@ class _Model:
 def test_extract_applies_valid_ops_and_tells_the_sessions(monkeypatch):
     model = _Model(
         '{"ops": ['
-        '{"op": "add", "section": "preferences", "text": "- 보고서는 표 위주",'
+        '{"op": "add", "topic": "preferences", "text": "- 보고서는 표 위주",'
         ' "quote": "보고서는 표 위주로 써 줘"},'
-        '{"op": "add", "section": "overview", "text": "- 분석 결과 편차 큼",'
+        '{"op": "add", "topic": "overview", "text": "- 분석 결과 편차 큼",'
         ' "quote": "편차가 큽니다"},'
-        '{"op": "add", "section": "nope", "text": "x", "quote": "x"}'
+        '{"op": "add", "topic": "nope", "text": "x", "quote": "x"}'
         "]}"
     )
     monkeypatch.setattr(mw, "chat_model", lambda settings, name: model)
@@ -481,7 +472,7 @@ def test_extract_applies_valid_ops_and_tells_the_sessions(monkeypatch):
     ]
     changed = run(worker.extract("p", chunk))
     assert changed == ["preferences"]
-    section = run(worker.memory.section("p", "preferences"))
+    section = run(worker.memory.content("p", "preferences"))
     assert section["content"] == "- 보고서는 표 위주"
     line = section["lines"][0]
     assert line["author"] == "agent"
@@ -562,3 +553,131 @@ def test_a_model_error_goes_to_the_failure_path(monkeypatch):
     worker.failed = failed  # type: ignore[method-assign]
     run(worker.process(cast(Any, SimpleNamespace(project_id="p"))))
     assert seen["error"] == "TimeoutError: slow" and len(seen["chunk"]) == 1
+
+
+# --- topics ----------------------------------------------------------------
+
+
+def _custom_topics(worker):
+    """Overview kept, the rest replaced by one 용어 topic."""
+    return run(
+        worker.memory.put_topics(
+            "p",
+            [
+                {
+                    "id": "overview",
+                    "title": "배경",
+                    "description": "왜 분석하는지",
+                    "max_chars": 500,
+                },
+                {
+                    "title": "용어",
+                    "description": "사내 약어와 뜻",
+                    "max_chars": 300,
+                },
+            ],
+            expected_version=0,
+            actor=Actor("user", "u-1"),
+        )
+    )["topics"]
+
+
+def test_worker_prompt_lists_the_topics():
+    prompt = worker_prompt(
+        [
+            {
+                "id": "overview",
+                "title": "배경",
+                "description": "왜 분석하는지",
+                "max_chars": 500,
+            },
+            {"id": "t1", "title": "용어", "description": "", "max_chars": 300},
+        ],
+        "2026-10-29",
+    )
+    assert "- overview: 배경 — 왜 분석하는지 (한도 500자)" in prompt
+    assert "- t1: 용어 (한도 300자)" in prompt
+    assert "오늘 날짜: 2026-10-29" in prompt
+    assert "key_events" not in prompt and "core_interests" not in prompt
+    assert (
+        "{topics}" not in prompt and "맞지 않으면 저장하지 않습니다" in prompt
+    )
+
+
+def test_default_prompt_carries_the_key_events_rule_in_its_description():
+    worker = _worker()
+    prompt = worker_prompt(run(worker.memory.topics("p")), "2026-10-29")
+    assert "- key_events: Key Events — 날짜가 있는 사건" in prompt
+    assert "날짜(YYYY-MM-DD)로 시작, 최신이 위 (한도 700자)" in prompt
+
+
+def test_render_memory_shows_topic_ids_titles_and_usage():
+    worker = _worker()
+    topics = _custom_topics(worker)
+    run(
+        worker.memory.save_line(
+            "p", "overview", "- 수율 개선", actor=Actor("user", "u-1")
+        )
+    )
+    text = render_memory(run(worker.memory.contents("p")))
+    lines = run(worker.memory.content("p", "overview"))["lines"]
+    assert text == (
+        f"## overview (배경) 7/500자\n- [{lines[0]['id']}] (user) - 수율 개선"
+        f"\n\n## {topics[1]['id']} (용어) 0/300자\n(비어 있음)"
+    )
+
+
+def test_extract_uses_the_project_topics(monkeypatch):
+    worker = _worker(_Db([None]))
+    topics = _custom_topics(worker)
+    term = topics[1]["id"]
+    model = _Model(
+        '{"ops": ['
+        f'{{"op": "add", "topic": "{term}", "text": "- NCE: 불량 분류",'
+        ' "quote": "우리 목표는 A라인 수율 개선"},'
+        # the name used before topics were editable
+        '{"op": "add", "section": "overview", "text": "- A라인 수율 개선",'
+        ' "quote": "우리 목표는 A라인 수율 개선"},'
+        '{"op": "add", "topic": "preferences", "text": "- 표 위주",'
+        ' "quote": "보고서는 표 위주로 써 줘"}'
+        "]}"
+    )
+    monkeypatch.setattr(mw, "chat_model", lambda settings, name: model)
+    changed = run(worker.extract("p", [_msg(0, "user", USER_TEXT)]))
+    assert changed == [term, "overview"]  # preferences is gone
+    system, request = model.messages
+    assert f"- {term}: 용어 — 사내 약어와 뜻 (한도 300자)" in system.content
+    assert "preferences" not in system.content
+    assert f"## {term} (용어) 0/300자" in request.content
+
+
+def test_a_topic_removed_before_apply_saves_nothing():
+    worker = _worker()
+    _custom_topics(worker)
+    view = run(
+        worker.apply(
+            "p", "preferences", [_add("- 표 중심")], [USER_TEXT], ACTOR
+        )
+    )
+    assert view is None
+
+
+def test_per_topic_limits_apply():
+    worker = _worker()
+    run(
+        worker.memory.put_topics(
+            "p",
+            [{"id": "preferences", "title": "P", "max_chars": 100}],
+            expected_version=0,
+            actor=Actor("user", "u-1"),
+        )
+    )
+    long = "- 보고서는 표 위주로 " + "가" * 100
+    assert (
+        run(worker.apply("p", "preferences", [_add(long)], [USER_TEXT], ACTOR))
+        is None
+    )
+    view = run(
+        worker.apply("p", "preferences", [_add("- 표")], [USER_TEXT], ACTOR)
+    )
+    assert view is not None and view["max_chars"] == 100

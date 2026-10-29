@@ -2,13 +2,12 @@
 
 오늘 날짜: {today}
 
-## 섹션
-- overview: 프로젝트의 배경·목적·대상(무엇을 왜 분석하는지)
-- preferences: 분석 방식·보고서 형식·용어에 대한 사용자 선호 ("앞으로는 표로", "수율은 % 소수 첫째 자리")
-- core_interests: 사용자가 계속 관심을 두는 제품·공정·설비·지표
-- key_events: 날짜가 있는 사건·결정 (설비 교체, 기준 변경, 목표 확정 등). 줄은 `YYYY-MM-DD`로 시작하고 최신이 위입니다. 대화에 날짜가 없으면 대화 날짜를 씁니다.
+## 주제
+이 프로젝트의 메모리 주제입니다 (topic id: 제목 — 설명, 한도).
+{topics}
 
-섹션 한도(글자 수): {limits}
+- 내용은 제목과 설명에 맞는 주제에만 넣습니다. 어느 주제에도 맞지 않으면 저장하지 않습니다.
+- 설명이 정한 형식(예: 날짜로 시작, 최신이 위)을 따릅니다. 날짜가 필요한데 대화에 날짜가 없으면 대화 날짜를 씁니다.
 
 ## 저장하지 않는 것
 - Agent(ASSISTANT)의 분석 결과·결론·추측·제안. 사용자가 그 결론을 직접 말하며 확정한 경우만 예외입니다.
@@ -20,13 +19,14 @@
 ## 출력
 JSON 하나만 출력합니다. 설명 문장은 쓰지 않습니다.
 {"ops": [
-  {"op": "add", "section": "preferences", "text": "- 보고서는 표 중심으로, 결론을 먼저 쓴다", "quote": "앞으로 보고서는 표 위주로 써 주고 결론부터"},
-  {"op": "replace", "section": "overview", "line_id": "a1b2c3d4", "text": "- ...", "quote": "..."},
-  {"op": "delete", "section": "core_interests", "line_id": "e5f6a7b8", "quote": "..."}
+  {"op": "add", "topic": "<topic id>", "text": "- 보고서는 표 중심으로, 결론을 먼저 쓴다", "quote": "앞으로 보고서는 표 위주로 써 주고 결론부터"},
+  {"op": "replace", "topic": "<topic id>", "line_id": "a1b2c3d4", "text": "- ...", "quote": "..."},
+  {"op": "delete", "topic": "<topic id>", "line_id": "e5f6a7b8", "quote": "..."}
 ]}
 - 바꿀 것이 없으면 {"ops": []}
 - text: Markdown 한 줄. `#`, `##` 제목 금지. 짧고 사실만.
 - quote: 근거가 된 USER 발화를 **그대로** 복사한 일부 (요약·번역 금지). add/replace에 필수입니다.
 - line_id: 현재 메모리에 [ ]로 표시된 id. replace/delete에 필수입니다.
 - 사용자가 예전 내용을 바꾸거나 취소하면 새 줄을 더하지 말고 그 줄을 replace하거나 delete합니다.
-- 반영 후 섹션이 한도를 넘으면 오래되었거나 덜 중요한 줄을 합치거나(replace) 지워서(delete) 한도 안에 맞춥니다.
+- topic: 위 목록의 topic id.
+- 반영 후 주제가 한도를 넘으면 오래되었거나 덜 중요한 줄을 합치거나(replace) 지워서(delete) 한도 안에 맞춥니다.

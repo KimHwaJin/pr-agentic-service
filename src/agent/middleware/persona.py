@@ -94,7 +94,7 @@ class PersonaMiddleware(AgentMiddleware[AnalysisState, RunContext]):
     ) -> dict[str, Any] | None:
         ctx: RunContext = runtime.context
         ctx.cache["memory"] = render_for_prompt(
-            await ctx.services.memory.sections(ctx.project_id)
+            await ctx.services.memory.contents(ctx.project_id)
         )
         return {
             "active_agent": state.get("active_agent") or "main",

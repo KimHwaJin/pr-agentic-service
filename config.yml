@@ -83,12 +83,10 @@ AGENT_COMPACT_FINISHED_ANALYSIS: true
 AGENT_SUMMARY_TRIGGER_TOKENS: 30000
 AGENT_SUMMARY_MAX_CHARS: 6000
 
-# Project memory: four Markdown sections, all of them in every prompt.
-MEMORY_SECTION_MAX_CHARS:
-  overview: 500
-  preferences: 500
-  core_interests: 500
-  key_events: 700
+# Project memory: topics per project (default Overview / Preferences /
+# Core Interests / Key Events, 500/500/500/700), editable in the console.
+# A project's topic limits add up to at most this (at least 2200).
+MEMORY_TOTAL_MAX_CHARS: 2200
 # Background memory worker: reads finished chats and keeps durable facts
 # the user stated. A project is processed after QUIET_SECONDS without a
 # finished turn, or after MAX_TURNS turns; one LLM call per batch of
