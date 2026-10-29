@@ -1,10 +1,10 @@
-"""Embedding model for memory and workflow search.
+"""Embedding model for workflow search (project memory has no index).
 
 EMBEDDING_PROVIDER: none (keyword fallback)
 | openai (gateway, OpenAI compatible) | mock.
 The mock is a deterministic hashed character n-gram vector: no model server,
 but similar texts still land close together, so the vector paths
-(pgvector index, Store search) run end to end.
+(pgvector index) run end to end.
 """
 
 import hashlib

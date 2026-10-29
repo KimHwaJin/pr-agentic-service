@@ -1,37 +1,55 @@
 """Project shared memory on the LangGraph Store.
 
-Namespace ("project_memory", project_id); one Store item per memory entry.
-Entries written by a user (author=user) are locked: the agent proposes a
-change and the user approves it.
-Every change is appended to ``memory_history``.
+Namespace ("project_memory", project_id); one Store item per section
+(``SECTIONS``). A section is a short Markdown body kept as lines::
+
+    {section, lines: [{id, text, author, updated_at, source}],
+     version, updated_at}
+
+``author`` records who wrote a line (user | agent); it does not lock the
+line. Every write checks the section's version (409 on a stale one), its
+character limit and that it has no ``#``/``##`` headings (422; the prompt
+uses those levels). Writes of one section are serialised with a Postgres
+advisory lock held in the transaction that appends to ``memory_history``.
+Items are stored without an embedding index: the whole memory is put in
+the prompt.
 """
 
-from dataclasses import dataclass
+import difflib
+import re
+import uuid
+from collections.abc import Callable
+from dataclasses import dataclass, field
 from typing import Any, Literal, get_args
 
 from langgraph.store.base import BaseStore
-from sqlalchemy import select
+from sqlalchemy import select, text
 
-from core.db import Database, new_id, utcnow
+from core.db import Database, utcnow
 from core.models import MemoryHistory
 
-Category = Literal[
-    "background",
-    "analysis_preferences",
-    "report_preferences",
-    "shared_findings",
-]
-CATEGORIES: tuple[str, ...] = get_args(Category)
-CATEGORY_TITLES = {
-    "background": "프로젝트 배경",
-    "analysis_preferences": "분석 선호",
-    "report_preferences": "보고서 선호",
-    "shared_findings": "공유할 주요 발견",
+Section = Literal["overview", "preferences", "core_interests", "key_events"]
+SECTIONS: tuple[str, ...] = get_args(Section)
+SECTION_TITLES = {
+    "overview": "Overview",
+    "preferences": "Preferences",
+    "core_interests": "Core Interests",
+    "key_events": "Key Events",
 }
 Author = Literal["user", "agent"]
+# headings of the levels the prompt itself uses
+HEADING = re.compile(r"^#{1,2}\s")
+LEGACY_SECTIONS = {
+    "background": "overview",
+    "analysis_preferences": "preferences",
+    "report_preferences": "preferences",
+    "shared_findings": "key_events",
+}
+
+Line = dict[str, Any]
 
 
-class MemoryItemError(Exception):
+class MemoryEditError(Exception):
     def __init__(self, status: int, message: str):
         super().__init__(message)
         self.status = status
@@ -43,263 +61,445 @@ class Actor:
     id: str
     session_id: str | None = None
     run_id: str | None = None
+    # stored on the lines this actor writes (session/run ids, reason)
+    source: dict[str, Any] = field(default_factory=dict)
+
+
+def new_line_id(taken: set[str] | frozenset[str] = frozenset()) -> str:
+    while True:
+        line_id = uuid.uuid4().hex[:8]
+        if line_id not in taken:
+            return line_id
+
+
+def content_of(lines: list[Line]) -> str:
+    return "\n".join(line["text"] for line in lines)
+
+
+def split_content(content: str) -> list[str]:
+    """Body -> lines; trailing spaces and surrounding blank lines dropped."""
+    lines = [
+        line.rstrip() for line in content.replace("\r\n", "\n").split("\n")
+    ]
+    while lines and not lines[0].strip():
+        lines.pop(0)
+    while lines and not lines[-1].strip():
+        lines.pop()
+    return lines
+
+
+def check_content(
+    section: str, content: str, max_chars: int, before: int = 0
+) -> None:
+    """422 past the limit, unless the body shrinks (``before`` = old
+    length; migrated sections may start over the limit)."""
+    if section not in SECTIONS:
+        raise MemoryEditError(404, f"unknown memory section: {section}")
+    if len(content) > max_chars and len(content) > before:
+        raise MemoryEditError(
+            422,
+            f"{SECTION_TITLES[section]} exceeds {max_chars} characters "
+            f"({len(content)})",
+        )
+    for line in content.split("\n"):
+        if HEADING.match(line):
+            raise MemoryEditError(
+                422, "'# ' and '## ' headings are not allowed; use '###'"
+            )
+
+
+def diff_lines(
+    old: list[Line], new_texts: list[str], actor: Actor, now: str
+) -> list[Line]:
+    """New body as lines, keeping the id/author of every unchanged line.
+
+    Added or changed lines get new ids and ``actor`` as author.
+    """
+    matcher = difflib.SequenceMatcher(
+        a=[line["text"] for line in old], b=new_texts, autojunk=False
+    )
+    taken = {line["id"] for line in old}
+    out: list[Line] = []
+    for tag, i1, i2, j1, j2 in matcher.get_opcodes():
+        if tag == "equal":
+            out.extend(old[i1:i2])
+            continue
+        for text_ in new_texts[j1:j2]:
+            line_id = new_line_id(taken)
+            taken.add(line_id)
+            out.append(make_line(line_id, text_, actor, now))
+    return out
+
+
+def make_line(line_id: str, text_: str, actor: Actor, now: str) -> Line:
+    return {
+        "id": line_id,
+        "text": text_,
+        "author": actor.type,
+        "updated_at": now,
+        "source": dict(actor.source),
+    }
+
+
+def empty_value(section: str) -> dict[str, Any]:
+    return {"section": section, "lines": [], "version": 0, "updated_at": None}
 
 
 class ProjectMemory:
     def __init__(
-        self, store: BaseStore, db: Database, item_max: int, total_max: int
+        self, store: BaseStore, db: Database, max_chars: dict[str, int]
     ):
-        self.store, self.db, self.item_max, self.total_max = (
-            store,
-            db,
-            item_max,
-            total_max,
-        )
+        self.store, self.db, self.max_chars = store, db, max_chars
 
     @staticmethod
     def namespace(project_id: str) -> tuple[str, ...]:
         return ("project_memory", project_id)
 
-    async def entries(self, project_id: str) -> list[dict[str, Any]]:
-        items = await self.store.asearch(
-            self.namespace(project_id), limit=1000
-        )
-        return sorted(
-            (self._view(i.key, i.value) for i in items),
-            key=lambda v: (v["category"], v["created_at"]),
-        )
+    def limit(self, section: str) -> int:
+        return self.max_chars[section]
 
-    async def get(
-        self, project_id: str, item_id: str
-    ) -> dict[str, Any] | None:
-        item = await self.store.aget(self.namespace(project_id), item_id)
-        return self._view(item.key, item.value) if item else None
-
-    async def search(
-        self, project_id: str, query: str, limit: int
-    ) -> list[dict[str, Any]]:
-        """Semantic when the Store has an embedding index.
-
-        Otherwise newest first.
-        """
-        items = await self.store.asearch(
-            self.namespace(project_id), query=query or None, limit=limit
-        )
-        return [self._view(i.key, i.value) | {"score": i.score} for i in items]
-
-    async def create(
-        self,
-        project_id: str,
-        *,
-        category: str,
-        title: str,
-        content: str,
-        actor: Actor,
-        source: dict | None = None,
-    ) -> dict[str, Any]:
-        self._check(category, title, content)
-        await self._check_total(project_id, len(content))
-        now = utcnow().isoformat()
-        value = {
-            "category": category,
-            "title": title.strip(),
-            "content": content.strip(),
-            "author": actor.type,
-            "version": 1,
-            "source": source or {},
-            "created_at": now,
-            "updated_at": now,
+    def view(self, value: dict[str, Any]) -> dict[str, Any]:
+        section = value["section"]
+        return {
+            "section": section,
+            "title": SECTION_TITLES[section],
+            "content": content_of(value["lines"]),
+            "lines": value["lines"],
+            "version": value["version"],
+            "updated_at": value["updated_at"],
+            "max_chars": self.limit(section),
         }
-        item_id = new_id()
-        await self.store.aput(self.namespace(project_id), item_id, value)
-        await self._history(project_id, item_id, "create", None, value, actor)
-        return self._view(item_id, value)
 
-    async def update(
+    async def value(self, project_id: str, section: str) -> dict[str, Any]:
+        if section not in SECTIONS:
+            raise MemoryEditError(404, f"unknown memory section: {section}")
+        item = await self.store.aget(self.namespace(project_id), section)
+        return item.value if item else empty_value(section)
+
+    async def sections(self, project_id: str) -> list[dict[str, Any]]:
+        """All four sections in order, empty ones included."""
+        items = {
+            i.key: i.value
+            for i in await self.store.asearch(
+                self.namespace(project_id), limit=100
+            )
+            if i.key in SECTIONS
+        }
+        return [self.view(items.get(s) or empty_value(s)) for s in SECTIONS]
+
+    async def section(self, project_id: str, section: str) -> dict[str, Any]:
+        return self.view(await self.value(project_id, section))
+
+    async def edit(
         self,
         project_id: str,
-        item_id: str,
+        section: str,
+        change: Callable[[list[Line]], list[Line]],
         *,
-        expected_version: int,
         actor: Actor,
-        title: str | None = None,
-        content: str | None = None,
-        category: str | None = None,
-        approved_by_user: bool = False,
-    ) -> dict[str, Any]:
-        item = await self.store.aget(self.namespace(project_id), item_id)
-        if item is None:
-            raise MemoryItemError(404, "memory item not found")
-        before = item.value
-        if before["version"] != expected_version:
-            raise MemoryItemError(
-                409,
-                f"version conflict: current version is {before['version']}",
+        expected_version: int | None = None,
+        action: str = "update",
+    ) -> dict[str, Any] | None:
+        """Apply ``change`` to the section's lines.
+
+        None when nothing changed. ``change`` may raise MemoryEditError.
+        """
+        if section not in SECTIONS:
+            raise MemoryEditError(404, f"unknown memory section: {section}")
+        async with self.db.sessions() as db:
+            await db.execute(
+                text("SELECT pg_advisory_xact_lock(hashtextextended(:k, 0))"),
+                {"k": f"project_memory:{project_id}:{section}"},
             )
-        if (
-            before["author"] == "user"
-            and actor.type == "agent"
-            and not approved_by_user
-        ):
-            raise MemoryItemError(
-                423, "user-authored memory requires user approval"
+            before = await self.value(project_id, section)
+            if (
+                expected_version is not None
+                and before["version"] != expected_version
+            ):
+                raise MemoryEditError(
+                    409,
+                    "version conflict: current version is "
+                    f"{before['version']}",
+                )
+            lines = change([dict(line) for line in before["lines"]])
+            content = content_of(lines)
+            if content == content_of(before["lines"]) and [
+                line["id"] for line in lines
+            ] == [line["id"] for line in before["lines"]]:
+                return None
+            check_content(
+                section,
+                content,
+                self.limit(section),
+                len(content_of(before["lines"])),
             )
-        after = dict(before)
-        after.update(
-            {
-                k: v.strip()
-                for k, v in {"title": title, "content": content}.items()
-                if v is not None
+            after = {
+                "section": section,
+                "lines": lines,
+                "version": before["version"] + 1,
+                "updated_at": utcnow().isoformat(),
             }
-        )
-        if category is not None:
-            after["category"] = category
-        self._check(after["category"], after["title"], after["content"])
-        await self._check_total(
-            project_id, len(after["content"]) - len(before["content"])
-        )
-        if actor.type == "user":
-            after["author"] = "user"
-        after["version"] = before["version"] + 1
-        after["updated_at"] = utcnow().isoformat()
-        await self.store.aput(self.namespace(project_id), item_id, after)
-        await self._history(
-            project_id, item_id, "update", before, after, actor
-        )
-        return self._view(item_id, after)
+            await self.store.aput(
+                self.namespace(project_id), section, after, index=False
+            )
+            db.add(_history_row(project_id, action, before, after, actor))
+            await db.commit()
+        return self.view(after)
 
-    async def delete(
+    async def put_content(
         self,
         project_id: str,
-        item_id: str,
+        section: str,
+        content: str,
         *,
         expected_version: int,
         actor: Actor,
-    ) -> None:
-        item = await self.store.aget(self.namespace(project_id), item_id)
-        if item is None:
-            raise MemoryItemError(404, "memory item not found")
-        if item.value["version"] != expected_version:
-            raise MemoryItemError(
-                409,
-                "version conflict: current version is "
-                f"{item.value['version']}",
-            )
-        if item.value["author"] == "user" and actor.type == "agent":
-            raise MemoryItemError(
-                423, "user-authored memory requires user approval"
-            )
-        await self.store.adelete(self.namespace(project_id), item_id)
-        await self._history(
-            project_id, item_id, "delete", item.value, None, actor
+    ) -> dict[str, Any]:
+        """Replace the whole body (the user's editor)."""
+        now = utcnow().isoformat()
+        texts = split_content(content)
+        changed = await self.edit(
+            project_id,
+            section,
+            lambda old: diff_lines(old, texts, actor, now),
+            actor=actor,
+            expected_version=expected_version,
+        )
+        return changed or await self.section(project_id, section)
+
+    async def save_line(
+        self,
+        project_id: str,
+        section: str,
+        text_: str,
+        *,
+        actor: Actor,
+        line_id: str | None = None,
+    ) -> dict[str, Any] | None:
+        """Add a line, or replace line ``line_id``."""
+        text_ = " ".join(text_.split("\n")).strip()
+        if not text_:
+            raise MemoryEditError(422, "text is empty")
+        now = utcnow().isoformat()
+
+        def change(lines: list[Line]) -> list[Line]:
+            if line_id is None:
+                taken = {line["id"] for line in lines}
+                return [
+                    *lines,
+                    make_line(new_line_id(taken), text_, actor, now),
+                ]
+            index = _index(lines, line_id)
+            lines[index] = make_line(line_id, text_, actor, now)
+            return lines
+
+        return await self.edit(project_id, section, change, actor=actor)
+
+    async def delete_line(
+        self, project_id: str, section: str, line_id: str, *, actor: Actor
+    ) -> dict[str, Any] | None:
+        def change(lines: list[Line]) -> list[Line]:
+            lines.pop(_index(lines, line_id))
+            return lines
+
+        return await self.edit(
+            project_id, section, change, actor=actor, action="delete"
         )
 
     async def history(
-        self, project_id: str, item_id: str | None = None, limit: int = 100
+        self, project_id: str, section: str | None = None, limit: int = 100
     ) -> list[dict[str, Any]]:
         query = select(MemoryHistory).where(
-            MemoryHistory.project_id == project_id
+            MemoryHistory.project_id == project_id,
+            MemoryHistory.item_id.in_(SECTIONS),
         )
-        if item_id:
-            query = query.where(MemoryHistory.item_id == item_id)
+        if section:
+            query = query.where(MemoryHistory.item_id == section)
         async with self.db.sessions() as db:
             rows = (
                 await db.scalars(
                     query.order_by(MemoryHistory.id.desc()).limit(limit)
                 )
             ).all()
-        return [
-            {
-                "item_id": r.item_id,
-                "action": r.action,
-                "before": r.before,
-                "after": r.after,
-                "actor": {"type": r.actor_type, "id": r.actor_id},
-                "session_id": r.session_id,
-                "run_id": r.run_id,
-                "created_at": r.created_at,
-            }
-            for r in rows
-        ]
+        return [_history_view(r) for r in rows]
 
-    def _check(self, category: str, title: str, content: str) -> None:
-        if category not in CATEGORIES:
-            raise MemoryItemError(422, f"category must be one of {CATEGORIES}")
-        if not title.strip() or not content.strip():
-            raise MemoryItemError(422, "title and content are required")
-        if len(content) > self.item_max:
-            raise MemoryItemError(
-                422, f"content exceeds {self.item_max} characters"
-            )
-
-    async def _check_total(self, project_id: str, delta: int) -> None:
-        if delta <= 0:
-            return
-        current = sum(
-            len(i["content"]) for i in await self.entries(project_id)
-        )
-        if current + delta > self.total_max:
-            raise MemoryItemError(
-                422,
-                f"project memory is full ({current}/{self.total_max} "
-                "characters)",
-            )
-
-    async def _history(
+    async def revert(
         self,
         project_id: str,
-        item_id: str,
+        section: str,
+        history_id: int,
+        *,
+        actor: Actor,
+        expected_version: int | None = None,
+    ) -> dict[str, Any]:
+        """Undo one change: the section gets that change's ``before`` body.
+
+        A new version, recorded in history like any other change.
+        """
+        async with self.db.sessions() as db:
+            row = await db.get(MemoryHistory, history_id)
+        if (
+            row is None
+            or row.project_id != project_id
+            or (row.item_id != section)
+        ):
+            raise MemoryEditError(404, "memory history entry not found")
+        target = (row.before or {}).get("lines") or []
+        changed = await self.edit(
+            project_id,
+            section,
+            lambda _: [dict(line) for line in target],
+            actor=actor,
+            expected_version=expected_version,
+            action="revert",
+        )
+        return changed or await self.section(project_id, section)
+
+    # --- migration of the former item-per-entry memory ---------------------
+
+    async def migrate_legacy(self, project_id: str) -> int:
+        """Old entries (category/title/content) -> lines of the sections.
+
+        background -> overview, analysis/report preferences -> preferences,
+        shared_findings -> key_events; each entry becomes "- title: content"
+        with its author. A line keeps the entry's id, so a run that stopped
+        half way adds nothing twice. Limits are not enforced here. Returns
+        the number of entries moved.
+        """
+        namespace = self.namespace(project_id)
+        legacy = [
+            i
+            for i in await self.store.asearch(namespace, limit=10000)
+            if i.key not in SECTIONS and "category" in i.value
+        ]
+        if not legacy:
+            return 0
+        legacy.sort(key=lambda i: i.value.get("created_at") or "")
+        by_section: dict[str, list[Any]] = {}
+        for item in legacy:
+            section = LEGACY_SECTIONS.get(item.value["category"], "overview")
+            by_section.setdefault(section, []).append(item)
+        actor = Actor("agent", "memory_migration")
+        for section, items in by_section.items():
+            before = await self.value(project_id, section)
+            lines = [dict(line) for line in before["lines"]]
+            ids = {line["id"] for line in lines}
+            for item in items:
+                if item.key in ids:
+                    continue
+                v = item.value
+                body = " ".join(str(v.get("content", "")).split())
+                lines.append(
+                    {
+                        "id": item.key,
+                        "text": f"- {v.get('title', '').strip()}: {body}",
+                        "author": v.get("author", "agent"),
+                        "updated_at": v.get("updated_at")
+                        or utcnow().isoformat(),
+                        "source": v.get("source") or {},
+                    }
+                )
+            if len(lines) != len(before["lines"]):
+                after = {
+                    "section": section,
+                    "lines": lines,
+                    "version": before["version"] + 1,
+                    "updated_at": utcnow().isoformat(),
+                }
+                await self.store.aput(namespace, section, after, index=False)
+                await self._record(project_id, "migrate", before, after, actor)
+        for item in legacy:
+            await self.store.adelete(namespace, item.key)
+        return len(legacy)
+
+    async def migrate_all_legacy(self) -> int:
+        moved = 0
+        for namespace in await self.store.alist_namespaces(
+            prefix=("project_memory",), max_depth=2, limit=100000
+        ):
+            if len(namespace) == 2:
+                moved += await self.migrate_legacy(namespace[1])
+        return moved
+
+    async def _record(
+        self,
+        project_id: str,
         action: str,
-        before,
-        after,
+        before: dict[str, Any],
+        after: dict[str, Any],
         actor: Actor,
     ) -> None:
         async with self.db.sessions() as db:
-            db.add(
-                MemoryHistory(
-                    project_id=project_id,
-                    item_id=item_id,
-                    action=action,
-                    before=before,
-                    after=after,
-                    actor_type=actor.type,
-                    actor_id=actor.id,
-                    session_id=actor.session_id,
-                    run_id=actor.run_id,
-                )
-            )
+            db.add(_history_row(project_id, action, before, after, actor))
             await db.commit()
 
-    @staticmethod
-    def _view(item_id: str, value: dict[str, Any]) -> dict[str, Any]:
-        return {
-            "id": item_id,
-            **{k: value[k] for k in value if k != "source"},
-            "source": value.get("source", {}),
-        }
+
+def _index(lines: list[Line], line_id: str) -> int:
+    for i, line in enumerate(lines):
+        if line["id"] == line_id:
+            return i
+    raise MemoryEditError(404, f"memory line {line_id} not found")
 
 
-def render_for_prompt(
-    index: list[dict[str, Any]], relevant: list[dict[str, Any]], max_chars: int
-) -> str:
-    """Titles of every entry + bodies of the most relevant ones.
+def _history_row(
+    project_id: str,
+    action: str,
+    before: dict[str, Any],
+    after: dict[str, Any],
+    actor: Actor,
+) -> MemoryHistory:
+    return MemoryHistory(
+        project_id=project_id,
+        item_id=after["section"],
+        action=action,
+        before=_snapshot(before),
+        after=_snapshot(after),
+        actor_type=actor.type,
+        actor_id=actor.id,
+        session_id=actor.session_id,
+        run_id=actor.run_id,
+    )
 
-    The titles let the agent know what exists.
-    """
-    if not index:
-        return ""
-    lines = ["# Project memory (공유 메모리)", "", "## 항목 목록"]
-    lines += [
-        f"- [{CATEGORY_TITLES[m['category']]}] {m['title']} "
-        f"(id={m['id']}, author={m['author']})"
-        for m in index
+
+def _snapshot(value: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "content": content_of(value["lines"]),
+        "lines": value["lines"],
+        "version": value["version"],
+    }
+
+
+def _history_view(row: MemoryHistory) -> dict[str, Any]:
+    return {
+        "id": row.id,
+        "section": row.item_id,
+        "action": row.action,
+        "before": (row.before or {}).get("content", ""),
+        "after": (row.after or {}).get("content", ""),
+        "version": (row.after or {}).get("version"),
+        "actor": {"type": row.actor_type, "id": row.actor_id},
+        "session_id": row.session_id,
+        "run_id": row.run_id,
+        "created_at": row.created_at,
+    }
+
+
+def updated_event(view: dict[str, Any], by: Author) -> dict[str, Any]:
+    """``memory_updated`` data: the section as it is now."""
+    return {
+        **{k: view[k] for k in ("section", "title", "content", "version")},
+        "updated_at": view["updated_at"],
+        "by": by,
+    }
+
+
+def render_for_prompt(sections: list[dict[str, Any]]) -> str:
+    """The whole memory, one ``##`` block per non-empty section."""
+    blocks = [
+        f"## {s['title']}\n{s['content']}"
+        for s in sections
+        if s["content"].strip()
     ]
-    body_lines = ["", "## 현재 요청과 관련된 항목 본문"]
-    used = sum(len(line) for line in lines)
-    for item in relevant:
-        entry = f"- {item['title']} (v{item['version']}): {item['content']}"
-        if used + len(entry) > max_chars:
-            break
-        body_lines.append(entry)
-        used += len(entry)
-    return "\n".join(lines + (body_lines if len(body_lines) > 2 else []))
+    if not blocks:
+        return ""
+    return "\n\n".join(["# Project memory", *blocks])

@@ -84,7 +84,7 @@ def _answer(waiting: dict, scenario: dict, state: dict):
         return {fields[0]["key"]: reply} if len(fields) == 1 else reply
     if kind == "code_approval":
         return {"approve": True}
-    return {"approve": False}  # workflow_save, memory_change
+    return {"approve": False}  # workflow_save
 
 
 def _run_turn(s: Session, sid: str, text: str, scenario: dict, state: dict):
