@@ -289,6 +289,21 @@
   .mem-edit h3 { font-size: 13px; margin: 0 0 6px; display: flex; gap: 8px; align-items: baseline; }
   .mem-edit h3 .usage { margin: 0 0 0 auto; font-weight: 400; min-width: 140px; }
   .mem-edit textarea.over { border-color: var(--bad); }
+  .mem-topics { border: 1px solid var(--line); border-radius: 12px; padding: 12px; margin-bottom: 12px; background: var(--bg); }
+  .mem-topics h3 { font-size: 13px; margin: 0 0 8px; display: flex; gap: 8px; align-items: baseline; }
+  .mem-topics h3 .usage { margin: 0 0 0 auto; font-weight: 400; min-width: 160px; }
+  .mem-topic { display: grid; grid-template-columns: 150px 1fr 76px auto; gap: 6px; align-items: center; margin-bottom: 6px; }
+  .mem-topic input { width: 100%; border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; background: var(--panel); font-size: 12.5px; }
+  .mem-topic input.bad { border-color: var(--bad); }
+  .mem-topic .acts { display: flex; gap: 2px; }
+  .mem-topic .acts .ghost { font-size: 11.5px; }
+  .mem-topic .tag { grid-column: 1 / -1; font-size: 11px; color: var(--bad); margin-top: -3px; }
+  .mem-topics .foot { display: flex; gap: 8px; align-items: center; margin-top: 8px; font-size: 12px; }
+  .mem-topics .foot .err { color: var(--bad); flex: 1; }
+  .mem-topics .foot .ok { color: var(--faint); flex: 1; }
+  .mem-removed { margin-top: 8px; border-top: 1px dashed var(--line); padding-top: 8px; font-size: 12px; }
+  .mem-removed .h { display: grid; grid-template-columns: 1fr auto; gap: 4px 8px; padding: 6px 0; border-bottom: 1px solid var(--line); }
+  .mem-removed pre { grid-column: 1 / -1; margin: 0; white-space: pre-wrap; font: 11.5px/1.45 'SF Mono', Menlo, monospace; color: var(--muted); max-height: 120px; overflow: auto; }
   .mem-hist { margin-top: 8px; border-top: 1px dashed var(--line); padding-top: 8px; font-size: 12px; }
   .mem-hist .h { display: grid; grid-template-columns: 1fr auto; gap: 4px 8px; padding: 6px 0; border-bottom: 1px solid var(--line); }
   .mem-hist pre { grid-column: 1 / -1; margin: 0; white-space: pre-wrap; font: 11.5px/1.45 'SF Mono', Menlo, monospace; color: var(--muted); max-height: 160px; overflow: auto; }
@@ -666,7 +681,7 @@
       </div>
       <div data-pane="memory" style="display:none">
         <div id="pmMemory"></div>
-        <div class="help" style="font-size:12px;color:var(--faint);margin-top:8px">모든 대화의 프롬프트에 그대로 들어가는 Markdown입니다(<code>#</code>, <code>##</code> 제목은 쓸 수 없습니다). 대화가 끝나면 Agent가 사용자가 말한 사실·선호를 자동으로 정리해 넣고, "기억해줘"라고 하면 바로 저장합니다. 바뀐 내용은 기록에서 되돌릴 수 있습니다.</div>
+        <div class="help" style="font-size:12px;color:var(--faint);margin-top:8px">주제마다 모든 대화의 프롬프트에 <code>## 제목</code> 아래 그대로 들어가는 Markdown입니다(본문에 <code>#</code>, <code>##</code> 제목은 쓸 수 없습니다). 주제의 설명은 Agent가 어떤 내용을 어디에 넣을지 정하는 기준입니다. 대화가 끝나면 Agent가 사용자가 말한 사실·선호를 자동으로 정리해 넣고, "기억해줘"라고 하면 바로 저장합니다. 바뀐 내용은 기록에서 되돌릴 수 있습니다.</div>
       </div>
     </div>
     <div class="modal-foot"><button class="btn" id="pmDelete" style="margin-right:auto;color:var(--bad)" onclick="deleteProject()">프로젝트 삭제</button><button class="btn" onclick="closeProjectModal()">취소</button><button class="btn primary" id="pmSave" onclick="saveProject()">만들기</button></div>
@@ -768,7 +783,7 @@ const $ = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const md = s => marked.parse(esc(s));
 const TOOL_TEXT = {
-  read_knowledge: a => `도메인 지식 확인 · ${a.name}`, save_memory: a => `메모리 저장 · ${a.section || ''}`,
+  read_knowledge: a => `도메인 지식 확인 · ${a.name}`, save_memory: a => `메모리 저장 · ${a.topic || ''}`,
   delete_memory: () => '메모리 삭제', start_analysis: () => '분석 담당에게 전달', read_skill: a => `분석 skill 확인 · ${a.name}`,
   read_tool: a => `도구 확인 · ${(a.names || [a.name]).join(', ')}`, search_tools: () => '도구 검색', search_workflows: () => '등록된 워크플로우 검색',
   propose_plans: () => '실행 계획 작성', revise_call: a => `파라미터 수정 · #${a.call}`, run_plan: a => a.decisions ? '조건 판단 후 이어서 실행' : '코드 실행 요청',
@@ -866,13 +881,13 @@ $('projectSearch').addEventListener('input', renderProjects);
 $('projectSort').addEventListener('change', renderProjects);
 
 /* project modal: create / edit + shared memory ------------------------------- */
-const PM = { id: null, sections: [], open: {} };
+const PM = { id: null, sections: [], open: {}, topics: [], topicsOrig: '[]', topicsVersion: 0, total: 0, removed: null };
 document.querySelectorAll('.tab').forEach(t => t.onclick = () => {
   document.querySelectorAll('.tab').forEach(x => x.classList.toggle('on', x === t));
   document.querySelectorAll('[data-pane]').forEach(p => p.style.display = p.dataset.pane === t.dataset.tab ? '' : 'none');
 });
 async function openProjectModal(id) {
-  PM.id = id || null; PM.open = {};
+  PM.id = id || null; PM.open = {}; PM.removed = null; PM.sections = [];
   const p = id ? S.projects.find(x => x.id === id) : null;
   $('pmTitle').textContent = p ? '프로젝트 설정' : '새 프로젝트';
   $('pmSave').textContent = p ? '저장' : '만들기';
@@ -884,30 +899,128 @@ async function openProjectModal(id) {
   $('projectModal').classList.add('open'); $('pmName').focus();
 }
 function closeProjectModal() { $('projectModal').classList.remove('open'); }
-const MEM_HINT = {
-  overview: '프로젝트 배경·목적·분석 대상',
-  preferences: '분석 방식·보고서 형식 선호',
-  core_interests: '계속 관심 두는 제품·공정·지표',
-  key_events: '날짜가 있는 사건·결정 (YYYY-MM-DD로 시작, 최신이 위)',
-};
-async function loadMemory() {
-  PM.sections = PM.id ? (await api(`/projects/${PM.id}/memory`)).sections.map(m => ({ ...m, draft: m.content })) : [];
+/* memory topics: the headings of the project memory, editable per project */
+const TOPIC = { max: 6, min: 100, title: 40, desc: 200 };
+let topicKey = 0;
+async function loadMemory(keepDrafts) {
+  if (!PM.id) { PM.sections = []; PM.topics = []; renderMemory(); return; }
+  const drafts = keepDrafts ? Object.fromEntries(PM.sections.filter(m => m.draft !== m.content).map(m => [m.topic, m.draft])) : {};
+  const mem = await api(`/projects/${PM.id}/memory`);
+  PM.sections = mem.topics.map(m => ({ ...m, draft: drafts[m.topic] ?? m.content }));
+  PM.topicsVersion = mem.topics_version; PM.total = mem.total_max_chars;
+  PM.topics = mem.topics.map(t => ({ id: t.topic, title: t.title, description: t.description, max_chars: t.max_chars, replace: false, key: ++topicKey }));
+  PM.topicsOrig = topicsJson();
+  if (PM.removed) PM.removed = (await api(`/projects/${PM.id}/memory/history?removed=true&limit=30`)).items;
   renderMemory();
 }
+function topicsJson() { return JSON.stringify(PM.topics.map(({ id, title, description, max_chars, replace }) => ({ id, title, description, max_chars, replace }))); }
+function topicsDirty() { return PM.id && topicsJson() !== PM.topicsOrig; }
+function topicProblems() {
+  const out = {}, all = [], titles = {};
+  const ts = PM.topics;
+  if (!ts.length) all.push('주제가 하나는 있어야 합니다.');
+  if (ts.length > TOPIC.max) all.push(`주제는 ${TOPIC.max}개까지입니다.`);
+  ts.forEach(t => {
+    const p = [], title = t.title.trim();
+    if (!title) p.push('제목을 입력하세요');
+    else if (title.length > TOPIC.title) p.push(`제목은 ${TOPIC.title}자까지`);
+    if (title && titles[title.toLowerCase()]) p.push('같은 제목이 있습니다');
+    titles[title.toLowerCase()] = true;
+    if (t.description.trim().length > TOPIC.desc) p.push(`설명은 ${TOPIC.desc}자까지`);
+    if (!Number.isInteger(t.max_chars) || t.max_chars < TOPIC.min) p.push(`한도는 ${TOPIC.min}자 이상`);
+    if (p.length) out[t.key] = p;
+  });
+  const sum = ts.reduce((n, t) => n + (Number.isInteger(t.max_chars) ? t.max_chars : 0), 0);
+  if (sum > PM.total) all.push(`한도 합계 ${sum.toLocaleString()}자가 전체 한도 ${PM.total.toLocaleString()}자를 넘습니다.`);
+  return { out, all, sum, ok: !all.length && !Object.keys(out).length };
+}
+function renderTopics() {
+  const el = $('pmTopics'); if (!el) return;
+  const pr = topicProblems(), dirty = topicsDirty();
+  el.innerHTML = `
+    <h3>주제 <span style="font-weight:400;color:var(--faint);font-size:12px">메모리의 제목입니다. 제목·설명·한도를 고쳐도 내용은 그대로 남습니다.</span>
+      <span class="usage">한도 합계 ${pr.sum.toLocaleString()} / ${PM.total.toLocaleString()}자<div class="bar"><i style="width:${Math.min(100, pr.sum / PM.total * 100)}%;${pr.sum > PM.total ? 'background:var(--bad)' : ''}"></i></div></span></h3>
+    ${PM.topics.map((t, i) => `
+      <div class="mem-topic">
+        <input value="${esc(t.title)}" maxlength="60" placeholder="제목" class="${(pr.out[t.key] || []).some(x => x.includes('제목')) ? 'bad' : ''}" oninput="PM.topics[${i}].title=this.value; renderTopicsSoon()">
+        <input value="${esc(t.description)}" placeholder="설명 (한 줄, 어떤 내용을 넣을지 Agent가 따릅니다)" class="${(pr.out[t.key] || []).some(x => x.includes('설명')) ? 'bad' : ''}" oninput="PM.topics[${i}].description=this.value; renderTopicsSoon()">
+        <input type="number" min="${TOPIC.min}" step="50" value="${Number.isInteger(t.max_chars) ? t.max_chars : ''}" title="이 주제의 글자 수 한도" class="${(pr.out[t.key] || []).some(x => x.includes('한도')) ? 'bad' : ''}" oninput="PM.topics[${i}].max_chars=this.value === '' ? null : +this.value; renderTopicsSoon()">
+        <span class="acts">
+          <button class="ghost" title="위로" ${i ? '' : 'disabled'} onclick="moveTopic(${i}, -1)">↑</button>
+          <button class="ghost" title="새 주제로 바꿉니다 (지금 내용은 비워집니다)" ${t.id && !t.replace ? '' : 'disabled'} onclick="replaceTopic(${i})">교체</button>
+          <button class="ghost" style="color:var(--bad)" title="주제를 지웁니다 (내용은 비워집니다)" onclick="removeTopic(${i})">삭제</button></span>
+        ${!t.id ? '<div class="tag" style="color:var(--accent)">새 주제 · 저장 후 다음 대화부터 채워집니다</div>' : t.replace ? '<div class="tag">교체 예정 · 저장하면 지금 내용이 비워집니다 (기록에서 복원 가능)</div>' : ''}
+        ${(pr.out[t.key] || []).length ? `<div class="tag">${esc(pr.out[t.key].join(' · '))}</div>` : ''}
+      </div>`).join('')}
+    <div class="foot">
+      <button class="ghost" ${PM.topics.length >= TOPIC.max ? `disabled title="주제는 ${TOPIC.max}개까지입니다"` : ''} onclick="addTopic()">+ 주제 추가</button>
+      <span class="${pr.all.length ? 'err' : 'ok'}">${esc(pr.all.join(' ')) || (dirty ? '저장하지 않은 주제 변경이 있습니다.' : `최대 ${TOPIC.max}개, 주제마다 ${TOPIC.min}자 이상`)}</span>
+      ${dirty ? '<button class="ghost" onclick="resetTopics()">변경 취소</button>' : ''}
+      <button class="ghost" ${dirty && pr.ok ? '' : 'disabled'} onclick="saveTopics()">주제 저장</button>
+      <button class="ghost" onclick="toggleRemovedTopics()">${PM.removed ? '지운 주제 닫기' : '지운 주제'}</button></div>
+    ${PM.removed ? `<div class="mem-removed">${PM.removed.filter(h => !PM.topics.some(t => t.id === h.topic)).map(h => `
+      <div class="h"><span><b>${esc(h.title || h.topic)}</b> · ${h.action === 'topic_replaced' ? '교체됨' : '삭제됨'} · ${ago(h.created_at)}</span>
+        <button class="ghost" title="주제와 내용을 목록 끝에 다시 넣습니다" onclick="restoreTopic(${h.id})">복원</button>
+        <pre>${esc(h.before) || '(내용 없음)'}</pre></div>`).join('') || '<div class="muted">지운 주제가 없습니다.</div>'}</div>` : ''}`;
+}
+let topicsTimer = null;
+function renderTopicsSoon() {
+  // keep focus while typing: re-render the problems only, after a pause
+  clearTimeout(topicsTimer);
+  topicsTimer = setTimeout(() => { const f = document.activeElement, idx = [...$('pmTopics').querySelectorAll('input')].indexOf(f), pos = f?.selectionStart; renderTopics(); const again = $('pmTopics').querySelectorAll('input')[idx]; if (again) { again.focus(); try { again.setSelectionRange(pos, pos); } catch {} } }, 250);
+}
+function addTopic() { PM.topics.push({ id: null, title: '', description: '', max_chars: Math.max(TOPIC.min, Math.min(300, PM.total - topicProblems().sum)), replace: false, key: ++topicKey }); renderTopics(); }
+function moveTopic(i, d) { const [t] = PM.topics.splice(i, 1); PM.topics.splice(i + d, 0, t); renderTopics(); }
+function hasContent(t) { const m = PM.sections.find(x => x.topic === t.id); return m && m.content.trim(); }
+function replaceTopic(i) {
+  const t = PM.topics[i];
+  if (hasContent(t) && !confirm(`'${t.title}'을(를) 새 주제로 교체하면 내용이 비워집니다.\n지운 내용은 '지운 주제'에서 복원할 수 있습니다. 계속할까요?`)) return;
+  t.replace = true; renderTopics();
+}
+function removeTopic(i) {
+  const t = PM.topics[i];
+  if (t.id && hasContent(t) && !confirm(`'${t.title}'을(를) 지우면 내용이 비워집니다.\n지운 내용은 '지운 주제'에서 복원할 수 있습니다. 계속할까요?`)) return;
+  PM.topics.splice(i, 1); renderTopics();
+}
+function resetTopics() { PM.topics = JSON.parse(PM.topicsOrig).map(t => ({ ...t, key: ++topicKey })); renderTopics(); }
+async function saveTopics() {
+  if (!topicsDirty()) return true;
+  if (!topicProblems().ok) { renderTopics(); return false; }
+  const ids = new Set(PM.topics.map(t => t.id)), cleared = PM.sections.filter(m => m.content.trim() && (!ids.has(m.topic) || PM.topics.some(t => t.id === m.topic && t.replace)));
+  if (cleared.length && !confirm(`${cleared.map(m => m.title).join(', ')}의 내용이 비워집니다.\n지운 내용은 '지운 주제'에서 복원할 수 있습니다. 저장할까요?`)) return false;
+  try {
+    await api(`/projects/${PM.id}/memory/topics`, { method: 'PUT', body: { topics: PM.topics.map(t => ({ id: t.id, title: t.title.trim(), description: t.description.trim(), max_chars: t.max_chars, replace: t.replace })), expected_version: PM.topicsVersion } });
+  } catch (e) {
+    if (e.message === '409' && confirm('주제가 그동안 바뀌었습니다. 최신 주제를 불러올까요? (지금 바꾼 주제는 사라집니다)')) await loadMemory(true);
+    return false;
+  }
+  await loadMemory(true);
+  return true;
+}
+async function toggleRemovedTopics() {
+  PM.removed = PM.removed ? null : (await api(`/projects/${PM.id}/memory/history?removed=true&limit=30`)).items;
+  renderTopics();
+}
+async function restoreTopic(historyId) {
+  if (topicsDirty() && !confirm('저장하지 않은 주제 변경이 사라집니다. 복원할까요?')) return;
+  try { await api(`/projects/${PM.id}/memory/history/${historyId}/restore`, { method: 'POST' }); } catch { return; }
+  await loadMemory(true);
+}
 function renderMemory() {
-  $('pmMemory').innerHTML = PM.sections.length ? PM.sections.map((m, i) => {
+  $('pmMemory').innerHTML = PM.sections.length ? '<div class="mem-topics" id="pmTopics"></div>' + PM.sections.map((m, i) => {
     const authors = m.lines.reduce((n, l) => (n[l.author] = (n[l.author] || 0) + 1, n), {});
     return `
     <div class="mem-edit">
-      <h3>${esc(m.title)} <span style="font-weight:400;color:var(--faint);font-size:12px">${esc(MEM_HINT[m.section] || '')}</span>
+      <h3>${esc(m.title)} <span style="font-weight:400;color:var(--faint);font-size:12px">${esc(m.description || '')}</span>
         <span class="usage" id="memUse${i}"></span></h3>
       <textarea id="memText${i}" rows="4" placeholder="- 한 줄에 하나씩" oninput="PM.sections[${i}].draft=this.value; renderMemoryUsage(${i})">${esc(m.draft)}</textarea>
       <div class="meta">${m.version ? `v${m.version} · ${ago(m.updated_at)}` : '아직 없음'}${m.lines.length ? ` · 직접 작성 ${authors.user || 0}줄 · Agent ${authors.agent || 0}줄` : ''}
-        <button class="ghost" onclick="toggleMemoryHistory(${i})">${PM.open[m.section] ? '기록 닫기' : '기록'}</button></div>
+        <button class="ghost" onclick="toggleMemoryHistory(${i})">${PM.open[m.topic] ? '기록 닫기' : '기록'}</button></div>
       <div id="memHist${i}"></div>
     </div>`;
   }).join('') : '<div style="color:var(--faint);font-size:13px;margin-bottom:12px">프로젝트를 만든 뒤 공유 메모리를 쓸 수 있습니다.</div>';
-  PM.sections.forEach((m, i) => { renderMemoryUsage(i); if (PM.open[m.section]) renderMemoryHistory(i); });
+  renderTopics();
+  PM.sections.forEach((m, i) => { renderMemoryUsage(i); if (PM.open[m.topic]) renderMemoryHistory(i); });
 }
 function renderMemoryUsage(i) {
   const m = PM.sections[i], used = m.draft.length;
@@ -916,16 +1029,16 @@ function renderMemoryUsage(i) {
 }
 async function toggleMemoryHistory(i) {
   const m = PM.sections[i];
-  PM.open[m.section] = PM.open[m.section] ? null : (await api(`/projects/${PM.id}/memory/history?section=${m.section}&limit=30`)).items;
+  PM.open[m.topic] = PM.open[m.topic] ? null : (await api(`/projects/${PM.id}/memory/history?topic=${encodeURIComponent(m.topic)}&limit=30`)).items;
   renderMemory();
 }
 function lineDiff(before, after) {
   const a = before ? before.split('\n') : [], b = after ? after.split('\n') : [];
   return [...a.filter(l => !b.includes(l)).map(l => `<del>- ${esc(l)}</del>`), ...b.filter(l => !a.includes(l)).map(l => `<ins>+ ${esc(l)}</ins>`)].join('\n') || '(내용 변화 없음)';
 }
-const MEM_ACTION = { update: '수정', delete: '줄 삭제', revert: '되돌림', migrate: '이전 메모리 이관' };
+const MEM_ACTION = { update: '수정', delete: '줄 삭제', revert: '되돌림', migrate: '이전 메모리 이관', topic_restored: '주제 복원' };
 function renderMemoryHistory(i) {
-  const m = PM.sections[i], items = PM.open[m.section] || [];
+  const m = PM.sections[i], items = PM.open[m.topic] || [];
   const who = h => h.actor.type === 'user' ? '사용자' : h.actor.id === 'memory_worker' ? 'Agent(자동 정리)' : h.actor.id === 'memory_migration' ? '이관' : 'Agent';
   $(`memHist${i}`).innerHTML = `<div class="mem-hist">${items.map(h => `
     <div class="h"><span><b>${esc(MEM_ACTION[h.action] || h.action)}</b> · ${who(h)} · v${h.version ?? '?'} · ${ago(h.created_at)}</span>
@@ -935,19 +1048,20 @@ function renderMemoryHistory(i) {
 async function revertMemory(i, historyId) {
   const m = PM.sections[i];
   if (m.draft !== m.content && !confirm('저장하지 않은 수정이 사라집니다. 되돌릴까요?')) return;
-  const saved = await api(`/projects/${PM.id}/memory/${m.section}/revert`, { method: 'POST', body: { history_id: historyId, expected_version: m.version } });
+  const saved = await api(`/projects/${PM.id}/memory/${encodeURIComponent(m.topic)}/revert`, { method: 'POST', body: { history_id: historyId, expected_version: m.version } });
   PM.sections[i] = { ...saved, draft: saved.content };
-  PM.open[m.section] = (await api(`/projects/${PM.id}/memory/history?section=${m.section}&limit=30`)).items;
+  PM.open[m.topic] = (await api(`/projects/${PM.id}/memory/history?topic=${encodeURIComponent(m.topic)}&limit=30`)).items;
   renderMemory();
 }
 async function saveProject() {
   const body = { name: $('pmName').value.trim(), description: $('pmDesc').value.trim(), system_prompt: $('pmPrompt').value, code_level: $('pmLevel').value ? +$('pmLevel').value : null };
   if (!body.name) { $('pmName').focus(); return; }
+  if (topicsDirty() && !(await saveTopics())) { document.querySelector('.tab[data-tab="memory"]').click(); return; }
   const project = PM.id ? await api(`/projects/${PM.id}`, { method: 'PATCH', body }) : await api('/projects', { method: 'POST', body });
   for (const m of PM.sections) {
     if (m.draft === m.content) continue;
     try {
-      await api(`/projects/${project.id}/memory/${m.section}`, { method: 'PUT', body: { content: m.draft, expected_version: m.version } });
+      await api(`/projects/${project.id}/memory/${encodeURIComponent(m.topic)}`, { method: 'PUT', body: { content: m.draft, expected_version: m.version } });
     } catch (e) {
       // 409: changed meanwhile (e.g. the memory worker); 422: too long or a heading
       document.querySelector('.tab[data-tab="memory"]').click();
@@ -1131,7 +1245,7 @@ function openStream() {
   on('hitl_request', e => renderHitl(e.run_id, e.data));
   on('hitl_resolved', e => closeHitl(e.data.interrupt_id));
   on('artifact', e => addFiles([e.data]));
-  on('memory_updated', e => { step('ok', `프로젝트 메모리 업데이트 · ${e.data.title || e.data.section}`); });
+  on('memory_updated', e => { step('ok', `프로젝트 메모리 업데이트 · ${e.data.title || e.data.topic}`); });
   on('workflow_saved', e => { step('ok', `워크플로우 저장 · ${e.data.name}`); loadWorkflows(); });
   on('activity', e => { if (e.data.state === 'started') { S.activityId = e.data.id; setActivityTitle(e.data.label); } else if (S.activityId === e.data.id) { S.activityId = null; setActivityTitle('생각하는 중'); } });
   on('context_summarized', e => step('ok', `이전 대화 정리 · 메시지 ${e.data.messages}개를 요약`));

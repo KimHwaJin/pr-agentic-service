@@ -1,4 +1,4 @@
-"""Move the former item-per-entry project memory into the four sections.
+"""Move the former item-per-entry project memory into the default topics.
 
 The service does this itself at startup (``AUTO_MIGRATE``, in
 core.bootstrap.migrate); run this where AUTO_MIGRATE is off:
@@ -9,7 +9,7 @@ background -> overview, analysis_preferences + report_preferences ->
 preferences, shared_findings -> key_events; each entry becomes a line
 "- {title}: {content}" with its author. Idempotent: moved entries are
 removed, and a line keeps its entry's id so a half-done run adds nothing
-twice. Section limits are not applied to moved lines.
+twice. Topic limits are not applied to moved lines.
 """
 
 import asyncio
@@ -28,9 +28,7 @@ async def main() -> None:
         async with AsyncPostgresStore.from_conn_string(
             settings.psycopg_url
         ) as store:
-            memory = ProjectMemory(
-                store, db, settings.memory_section_max_chars
-            )
+            memory = ProjectMemory(store, db, settings.memory_total_max_chars)
             moved = await memory.migrate_all_legacy()
         print(f"moved {moved} memory entries")
     finally:

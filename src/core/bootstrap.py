@@ -98,7 +98,7 @@ async def build_services(
         storage=storage,
         code_sources=CodeSources(db, storage),
         images=Images(db, settings.storage_root),
-        memory=ProjectMemory(store, db, settings.memory_section_max_chars),
+        memory=ProjectMemory(store, db, settings.memory_total_max_chars),
         workflows=workflows,
         embedder=embedder,
         checkpointer=AsyncPostgresSaver(pool),
@@ -128,7 +128,7 @@ async def migrate(services: Services) -> None:
     """App tables (Alembic), LangGraph checkpointer/store tables.
 
     Also the workflow vector index and the move of the former project
-    memory entries into sections.
+    memory entries into the default topics.
     """
     async with services.db.engine.connect() as conn:
         await conn.execute(
@@ -142,7 +142,7 @@ async def migrate(services: Services) -> None:
                 await services.checkpointer.setup()
             if isinstance(services.memory.store, AsyncPostgresStore):
                 await services.memory.store.setup()
-            # former item-per-entry project memory -> sections (idempotent)
+            # former item-per-entry memory -> default topics (idempotent)
             moved = await services.memory.migrate_all_legacy()
             if moved:
                 log.info("project_memory_migrated entries=%d", moved)

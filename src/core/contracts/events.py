@@ -116,11 +116,11 @@ class HitlResolvedData(View):
 
 
 class MemoryUpdatedData(View):
-    """A project memory section changed (agent tool or memory worker)."""
+    """A project memory topic changed (agent tool or memory worker)."""
 
-    section: Literal["overview", "preferences", "core_interests", "key_events"]
+    topic: str = Field(description="주제 id")
     title: str
-    content: str = Field(description="섹션 본문 전체 (Markdown)")
+    content: str = Field(description="주제 본문 전체 (Markdown)")
     version: int
     updated_at: str | None
     by: Literal["user", "agent"]
