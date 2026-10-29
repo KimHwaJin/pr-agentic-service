@@ -514,10 +514,12 @@
   <div id="scroll"><div id="log"></div></div>
   <div id="systemView" style="display:none;flex:1;overflow:auto">
     <div class="page">
-      <div class="page-head"><h1>시스템</h1><span class="muted" style="font-size:13px">executor 런타임·점검 (관리자)</span></div>
+      <div class="page-head"><h1>시스템</h1><span class="muted" style="font-size:13px">executor 런타임·점검, 사용자, 외부 호출 API 키 (관리자)</span></div>
       <div class="systabs">
         <button class="systab on" data-sys="runtimes" onclick="sysTab('runtimes')">런타임</button>
         <button class="systab" data-sys="maintenance" onclick="sysTab('maintenance')">점검</button>
+        <button class="systab" data-sys="users" onclick="sysTab('users')">사용자</button>
+        <button class="systab" data-sys="apiClients" onclick="sysTab('apiClients')">API 키</button>
       </div>
       <div id="sysBody"></div>
     </div>
@@ -623,6 +625,8 @@
     <div class="modal-head"><h2 id="bmTitle">새 배치</h2><button class="ghost" onclick="$('batchModal').classList.remove('open')">닫기</button></div>
     <div class="modal-body">
       <div class="field"><label>이름</label><input id="bmName" maxlength="200" placeholder="예: 주간 수율 점검"></div>
+      <div class="field"><label>프로젝트</label><select id="bmProject"></select>
+        <div class="muted" style="font-size:12px;margin-top:4px" id="bmProjectHint"></div></div>
       <div class="field"><label>스크립트</label><select id="bmScript" onchange="$('bmVersion').value = ''"></select></div>
       <div class="field"><label>버전</label><input id="bmVersion" inputmode="numeric" placeholder="비우면 최신 버전"></div>
       <div class="field"><label>런타임</label><select id="bmRuntime"></select></div>
@@ -790,6 +794,11 @@ const TOOL_TEXT = {
   run_custom_code: a => `직접 작성한 코드 실행 · ${a.purpose || ''}`, write_report: () => '리포트·노트북 확정', save_workflow: () => '워크플로우 저장 제안', finish_analysis: () => '분석 정리',
 };
 
+// codes with a plainer message than the service's own
+const CODE_TEXT = {
+  OWNER_DEACTIVATED: '사용자가 비활성화되어 꺼진 배치입니다. 배치를 다시 켠 뒤 실행하세요.',
+  executor_admin_key_missing: 'executor 운영 key(EXECUTOR_ADMIN_API_KEY)가 설정되지 않아 런타임·점검 화면을 쓸 수 없습니다.',
+};
 async function api(path, opts = {}) {
   const headers = { 'Content-Type': 'application/json', ...(S.csrf ? { 'X-CSRF-Token': S.csrf } : {}), ...(opts.headers || {}) };
   const r = await fetch(API + path, { credentials: 'include', ...opts, headers, body: opts.body && JSON.stringify(opts.body) });
@@ -797,7 +806,8 @@ async function api(path, opts = {}) {
   const data = r.status === 204 ? null : await r.json();
   if (!r.ok) {
     const fields = (data?.errors || []).map(e => `${e.field}: ${e.message}`).join(', ');
-    showError(`${typeof data?.detail === 'string' ? data.detail : data?.message || JSON.stringify(data?.detail ?? data)}${data?.code ? ` (${data.code})` : ''}${fields ? ` · ${fields}` : ''}`);
+    const text = CODE_TEXT[data?.code] || (typeof data?.detail === 'string' ? data.detail : data?.message || JSON.stringify(data?.detail ?? data));
+    showError(`${text}${data?.code ? ` (${data.code})` : ''}${fields ? ` · ${fields}` : ''}`);
     throw new Error(r.status);
   }
   return data;
@@ -1572,14 +1582,21 @@ async function loadBatchLists() {
 async function renderBatches() {
   await loadBatchLists();
   const scriptName = id => (BT.scripts.find(x => x.id === id) || {}).name || id.slice(0, 8);
-  $('batchBody').innerHTML = BT.batches.length ? `<table class="tbl"><thead><tr><th>이름</th><th>스크립트</th><th>일정</th><th>다음 실행</th><th>상태</th><th></th></tr></thead><tbody>${BT.batches.map(b => `
-    <tr class="click" title="눌러서 실행 이력 보기" onclick="openRuns('${b.id}')"><td><b>${esc(b.name)}</b></td><td>${esc(scriptName(b.script_id))} <span class="muted">v${b.script_version_number}</span></td>
+  $('batchBody').innerHTML = BT.batches.length ? `<table class="tbl"><thead><tr><th>이름</th><th>프로젝트</th><th>스크립트</th><th>일정</th><th>다음 실행</th><th>상태</th><th></th></tr></thead><tbody>${BT.batches.map(b => `
+    <tr class="click" title="눌러서 실행 이력 보기" onclick="openRuns('${b.id}')"><td><b>${esc(b.name)}</b></td>
+      <td>${b.project_id ? esc(projectName(b.project_id) || b.project_id) : '<span class="muted">-</span>'}</td><td>${esc(scriptName(b.script_id))} <span class="muted">v${b.script_version_number}</span></td>
       <td>${esc(scheduleText(b.schedule))}</td><td>${b.next_run_at ? fmtTime(b.next_run_at) : '<span class="muted">-</span>'}</td>
-      <td>${b.enabled ? statusBadge('ACTIVE').replace('ACTIVE', '켜짐') : '<span class="badge">꺼짐</span>'}</td>
+      <td>${batchState(b)}</td>
       <td style="white-space:nowrap" onclick="event.stopPropagation()"><button class="btn" onclick="runBatch('${b.id}', this)">지금 실행</button>
         ${b.schedule || b.enabled ? `<button class="ghost" onclick="toggleBatch('${b.id}', ${b.enabled}, ${b.revision})">${b.enabled ? '끄기' : '켜기'}</button>` : '<span class="muted" style="font-size:12.5px;padding:0 8px" title="일정이 있어야 켤 수 있습니다. 지금 실행은 언제든 됩니다.">일정 없음</span>'}
         <button class="ghost" onclick="openBatchModal('${b.id}')">수정</button><button class="ghost" style="color:var(--bad)" onclick="deleteBatch('${b.id}')">삭제</button></td></tr>`).join('')}</tbody></table>`
     : '<div class="muted">배치가 없습니다. 먼저 스크립트를 등록하고 새 배치를 만드세요.</div>';
+}
+// off by its owner, or because the owner was deactivated (pr-batch disabled_reason)
+function batchState(b) {
+  if (b.enabled) return statusBadge('ACTIVE').replace('ACTIVE', '켜짐');
+  if (b.disabled_reason === 'USER_DEACTIVATED') return '<span class="badge bad" title="소유자가 비활성화되어 꺼졌습니다. 다시 활성화돼도 자동으로 켜지지 않습니다.">꺼짐 · 사용자 비활성화</span>';
+  return '<span class="badge">꺼짐</span>';
 }
 /* why a batch run did not complete, from pr-batch's run fields */
 const SKIP_TEXT = { OVERLAP: '앞 실행이 진행 중이라 건너뜀 (겹침 정책)', SKIPPED_CAPACITY: '대기열이 가득 차 건너뜀' };
@@ -1665,6 +1682,12 @@ async function openBatchModal(editId = null) {
   BT.editing = b;
   $('bmTitle').textContent = b ? `배치 수정 · ${b.name}` : '새 배치'; $('bmSave').textContent = b ? '저장' : '만들기';
   $('bmName').value = b?.name || ''; $('bmVersion').value = b ? b.script_version_number : '';
+  // pr-batch keeps the project a batch was made in (X-Project-Id on registration only)
+  const project = b ? b.project_id : S.project;
+  $('bmProject').innerHTML = `<option value="">(프로젝트 없음)</option>${S.projects.map(p => `<option value="${esc(p.id)}">${esc(p.name)}</option>`).join('')}`
+    + (project && !S.projects.some(p => p.id === project) ? `<option value="${esc(project)}">${esc(project)}</option>` : '');
+  $('bmProject').value = project || ''; $('bmProject').disabled = !!b;
+  $('bmProjectHint').textContent = b ? '배치의 프로젝트는 바꿀 수 없습니다. 다른 프로젝트로 옮기려면 새 배치를 만드세요.' : '배치 실행이 이 프로젝트에 묶입니다. 만든 뒤에는 바꿀 수 없습니다.';
   $('bmScript').innerHTML = BT.scripts.map(x => `<option value="${x.id}">${esc(x.name)} (최신 v${x.latest_version.version_number})</option>`).join('');
   if (b) $('bmScript').value = b.script_id;
   // pr-batch offers the enabled targets of the executor's BATCH pool only
@@ -1721,7 +1744,7 @@ async function saveBatch() {
   $('bmSave').disabled = true;
   try {
     if (b) await api(`/batch/batches/${b.id}`, { method: 'PATCH', headers: { ...idemKey(), 'If-Match': `"${b.revision}"` }, body });
-    else await api('/batch/batches', { method: 'POST', headers: idemKey(), body });
+    else await api('/batch/batches', { method: 'POST', headers: { ...idemKey(), ...($('bmProject').value ? { 'X-Project-Id': $('bmProject').value } : {}) }, body });
     $('batchModal').classList.remove('open'); batchTab('batches');
   } catch { alert(b ? '저장하지 못했습니다. 다른 곳에서 바뀌었다면 새로 고침 후 다시 시도하세요.' : '만들지 못했습니다. 화면의 오류 메시지를 확인하세요.'); }
   finally { $('bmSave').disabled = false; }
@@ -2032,7 +2055,8 @@ function showSystem() {
 function sysTab(name) {
   SYS.tab = name;
   document.querySelectorAll('.systab[data-sys]').forEach(t => t.classList.toggle('on', t.dataset.sys === name));
-  ({ runtimes: renderRuntimes, maintenance: renderMaintenance })[name]();
+  ({ runtimes: renderRuntimes, maintenance: renderMaintenance, users: renderUsers, apiClients: renderApiClients })[name]()
+    .catch(() => { $('sysBody').innerHTML = '<div class="muted">불러오지 못했습니다. 화면 위쪽 오류 메시지를 확인하세요.</div>'; });
 }
 
 /* executions (own nav; the relay shows a user their own, an admin everyone's) */
@@ -2281,6 +2305,87 @@ async function maintenanceAction(action) {
   await api(`/executor/maintenance/${action}`, { method: 'POST', body });
   renderMaintenance();
 }
+
+/* users: role and deactivation (a deactivated user's batches are turned off at pr-batch) */
+async function renderUsers() {
+  $('sysBody').innerHTML = `<div class="toolbar"><input id="uqText" placeholder="이름·사번" style="width:220px" onkeydown="if (event.key === 'Enter') loadUsers()">
+      <button class="btn" onclick="loadUsers()">조회</button></div>
+    <div class="muted" style="font-size:12.5px;margin:-4px 0 12px">비활성화하면 로그인과 API 호출이 막히고, 그 사람의 배치가 pr-batch에서 꺼집니다(다시 활성화해도 배치는 자동으로 켜지지 않음).</div>
+    <div id="userRows"><div class="muted">불러오는 중…</div></div>`;
+  await loadUsers();
+}
+async function loadUsers() {
+  const q = $('uqText').value.trim();
+  const users = await api(`/admin/users${q ? `?q=${encodeURIComponent(q)}` : ''}`);
+  $('userRows').innerHTML = users.length ? `<table class="tbl"><thead><tr><th>이름</th><th>사번</th><th>부서</th><th>ID</th><th>권한</th><th>상태</th><th></th></tr></thead><tbody>${users.map(u => `
+    <tr><td><b>${esc(u.name)}</b></td><td>${esc(u.employee_id)}</td><td>${esc(u.department || '')}</td><td>${short(u.id)}</td>
+      <td>${u.role === 'admin' ? '관리자' : '일반'}</td><td>${u.is_active ? statusBadge('ACTIVE').replace('ACTIVE', '활성') : '<span class="badge bad">비활성</span>'}</td>
+      <td style="white-space:nowrap">${u.id === S.me.user.id ? '<span class="muted">본인</span>' : `<button class="ghost" onclick="setUser('${u.id}', { role: '${u.role === 'admin' ? 'user' : 'admin'}' })">${u.role === 'admin' ? '일반으로' : '관리자로'}</button>
+        <button class="ghost" style="${u.is_active ? 'color:var(--bad)' : ''}" onclick="setUser('${u.id}', { is_active: ${!u.is_active} }, '${esc(u.name)}')">${u.is_active ? '비활성화' : '활성화'}</button>`}</td></tr>`).join('')}</tbody></table>`
+    : '<div class="muted">사용자가 없습니다.</div>';
+}
+async function setUser(id, change, name = '') {
+  if (change.is_active === false && !confirm(`${name} 사용자를 비활성화할까요? 그 사람의 배치도 모두 꺼집니다.`)) return;
+  await api(`/admin/users/${id}`, { method: 'PATCH', body: change });
+  loadUsers();
+}
+
+/* API keys of other services and agents (X-Api-Key + X-User-Id) */
+const CLIENT_STATE = { pending: '대기', active: '사용 중', revoked: '폐기' };
+async function renderApiClients() {
+  const clients = await api('/admin/api-clients');
+  $('sysBody').innerHTML = `<div class="toolbar"><button class="btn primary" onclick="openClientModal()">새 키 발급</button></div>
+    <div class="muted" style="font-size:12.5px;margin:-4px 0 12px;line-height:1.6">다른 서비스·에이전트가 이 서비스(채팅·배치·executor 입구)를 부를 때 쓰는 키입니다. 호출자는 <span class="mono">X-Api-Key</span>와 <span class="mono">X-User-Id</span>(우리 사용자 ID)를 보냅니다.
+      우리 tenant 키는 바로 사용 중이 되고, 다른 tenant 키는 executor·pr-batch의 허용 tenant에 반영된 뒤 활성화하세요. 폐기는 최대 1분 안에 모든 서버에 반영됩니다.</div>
+    ${clients.length ? `<table class="tbl"><thead><tr><th>이름</th><th>tenant</th><th>키</th><th>상태</th><th>마지막 사용</th><th>발급</th><th></th></tr></thead><tbody>${clients.map(c => `
+      <tr><td><b>${esc(c.name)}</b>${c.description ? `<br><span class="muted">${esc(c.description)}</span>` : ''}</td><td class="mono">${esc(c.tenant)}</td><td class="mono">${esc(c.key_prefix)}…</td>
+        <td>${c.status === 'active' ? statusBadge('ACTIVE').replace('ACTIVE', CLIENT_STATE.active) : `<span class="badge ${c.status === 'revoked' ? 'bad' : ''}">${CLIENT_STATE[c.status] || esc(c.status)}</span>`}</td>
+        <td>${c.last_used_at ? fmtTime(c.last_used_at) : '<span class="muted">-</span>'}</td><td>${fmtTime(c.created_at)}</td>
+        <td style="white-space:nowrap">${c.status === 'pending' ? `<button class="ghost" onclick="clientAction('${c.id}', 'activate')">활성화</button>` : ''}
+          ${c.status !== 'revoked' ? `<button class="ghost" style="color:var(--bad)" onclick="clientAction('${c.id}', 'revoke', '${esc(c.name)}')">폐기</button>` : ''}</td></tr>`).join('')}</tbody></table>`
+      : '<div class="muted">발급한 키가 없습니다.</div>'}`;
+}
+function openClientModal() {
+  $('acName').value = ''; $('acTenant').value = ''; $('acDesc').value = '';
+  $('acForm').hidden = false; $('acIssued').hidden = true; $('acSave').hidden = false;
+  $('clientModal').classList.add('open'); $('acName').focus();
+}
+async function issueClient() {
+  const name = $('acName').value.trim(), tenant = $('acTenant').value.trim(), description = $('acDesc').value.trim();
+  if (!name) return $('acName').focus();
+  $('acSave').disabled = true;
+  try {
+    const issued = await api('/admin/api-clients', { method: 'POST', body: { name, ...(tenant ? { tenant } : {}), ...(description ? { description } : {}) } });
+    $('acKey').value = issued.api_key;
+    $('acState').textContent = issued.client.status === 'active' ? '바로 쓸 수 있습니다.' : `tenant ${issued.client.tenant}가 executor·pr-batch에 반영된 뒤 목록에서 활성화하세요.`;
+    $('acForm').hidden = true; $('acIssued').hidden = false; $('acSave').hidden = true;
+    renderApiClients();
+  } finally { $('acSave').disabled = false; }
+}
+async function clientAction(id, action, name = '') {
+  if (action === 'revoke' && !confirm(`${name} 키를 폐기할까요? 되돌릴 수 없고, 그 키로 오는 호출은 모두 거부됩니다.`)) return;
+  await api(`/admin/api-clients/${id}/${action}`, { method: 'POST' });
+  renderApiClients();
+}
 </script>
+<div class="modal-back" id="clientModal" onclick="if (event.target === this) this.classList.remove('open')">
+  <div class="modal" style="width:min(560px,100%)">
+    <div class="modal-head"><h2>API 키 발급</h2><button class="ghost" onclick="$('clientModal').classList.remove('open')">닫기</button></div>
+    <div class="modal-body">
+      <div id="acForm">
+        <div class="field"><label>이름</label><input id="acName" maxlength="64" placeholder="호출하는 서비스·에이전트 (예: report-agent)"></div>
+        <div class="field"><label>tenant (선택)</label><input id="acTenant" maxlength="64" placeholder="비우면 이 서비스의 tenant · 소문자·숫자·- (예: report-agent)"></div>
+        <div class="field"><label>설명 (선택)</label><input id="acDesc" maxlength="2000"></div>
+        <div class="muted" style="font-size:12px;line-height:1.6">tenant는 그 호출자의 executor 실행·배치가 속하는 공간입니다. 다른 tenant의 실행·이벤트는 서로 보이지 않습니다.</div>
+      </div>
+      <div id="acIssued" hidden>
+        <div class="field"><label>발급된 키 (지금 한 번만 보입니다)</label><input id="acKey" class="mono" readonly onclick="this.select()"></div>
+        <div class="toolbar"><button class="btn" onclick="navigator.clipboard.writeText($('acKey').value)">복사</button></div>
+        <div class="muted" style="font-size:12.5px" id="acState"></div>
+      </div>
+    </div>
+    <div class="modal-foot"><button class="btn" onclick="$('clientModal').classList.remove('open')">닫기</button><button class="btn primary" id="acSave" onclick="issueClient()">발급</button></div>
+  </div>
+</div>
 </body>
 </html>

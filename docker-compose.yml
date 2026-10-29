@@ -2,8 +2,7 @@
 #   - shared-infra compose: postgres, redis (network "shared-infra")
 #   - executor compose: executor API + Jupyter runtimes (also on "shared-infra" as host "executor")
 #   - pr-batch compose (optional, for the 배치 page): API on the host port 8100
-#     (BATCH_BASE_URL below; keys/auth_private.pem is a copy of
-#     ../pr-batch/.local-keys/auth_private.pem)
+#     (BATCH_BASE_URL below)
 #
 #   docker compose up -d --build            # service at http://localhost:8080 (console: /dev/)
 #   docker compose --profile mock up -d     # + scripted mock LLM instead of the gateway
@@ -32,10 +31,16 @@ x-app-env: &app-env
   EXECUTOR_RESULT_ROOT: /mnt/executor-shared
   # Worker reads only the Redis stream executor.events.<EXECUTOR_TENANT_ID>.
   EXECUTOR_TENANT_ID: pr-agentic
+  # Our keys at the executor and pr-batch (.env). Empty works against an
+  # executor / pr-batch in AUTH_MODE=header (their local default).
+  EXECUTOR_API_KEY: ${EXECUTOR_API_KEY:-}
+  # operator key of the 시스템 page runtime/maintenance views (empty: 503)
+  EXECUTOR_ADMIN_API_KEY: ${EXECUTOR_ADMIN_API_KEY:-}
+  BATCH_API_KEY: ${BATCH_API_KEY:-}
+  # Callers may send X-User-Id without one of our keys (local testing).
+  AUTH_MODE: ${AUTH_MODE:-header}
   NOTEBOOK_LAB_BASE_URL: http://localhost:8888
-  # pr-batch compose (../pr-batch) on the host port 8100; it verifies with the
-  # pair from its `make auth-keys`, keys/auth_private.pem is a copy of the
-  # private half (config.yml batch_jwt_private_key_file).
+  # pr-batch compose (../pr-batch) on the host port 8100.
   BATCH_BASE_URL: http://host.docker.internal:8100
   # Test catalog on top of assets/ (catalogs/analysis_test/README.md); set
   # '[]' to go back to the base catalog.
@@ -79,8 +84,6 @@ services:
       - ./src/agent/prompts:/app/src/agent/prompts:ro
       - ./web:/app/web:ro
       - ./config.yml:/app/config.yml:ro
-      # pr-batch signing key (keys/README.md), read without a rebuild.
-      - ./keys:/app/keys:ro
     extra_hosts:
       - "host.docker.internal:host-gateway"  # pr-batch on the host port
       - "model.frodo.com:10.250.110.99"

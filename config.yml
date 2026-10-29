@@ -2,7 +2,9 @@
 # key (src/core/config.py) except the per-environment ones, which live only in
 # config.{APP_ENV}.yml: DATABASE_URL, REDIS_URL, PUBLIC_API_ORIGIN,
 # FRONTEND_ORIGIN, CORS_ORIGINS, COOKIE_SECURE, ADMIN_EMPLOYEE_IDS,
-# LLM_API_KEY, MODELS, EXECUTOR_BASE_URL, BATCH_BASE_URL.
+# LLM_API_KEY, MODELS, EXECUTOR_BASE_URL, BATCH_BASE_URL, and our keys at
+# the executor and pr-batch (EXECUTOR_API_KEY, EXECUTOR_ADMIN_API_KEY,
+# BATCH_API_KEY).
 # Locally (APP_ENV empty) the docker-compose.yml environment or .env adds the
 # local values. Precedence: environment > .env > config.{APP_ENV}.yml > this
 # file. Relative paths are under the repo root. RUN_MODE and PHOENIX_* are
@@ -19,6 +21,12 @@ SSO_ADAPTER_FACTORY: "company_sso:create_sdk"
 SSO_ALLOWED_ORIGINS: []
 SSO_ALLOWED_RETURN_ROOTS: ["/"]
 SESSION_COOKIE_NAME: agentic_session
+
+# Callers other than the browser (docs/specs/service-auth.md): X-Api-Key of
+# an api client (issued on the 시스템 page) + X-User-Id. header: X-User-Id
+# without a key, local/dev only.
+AUTH_MODE: api_key
+API_CLIENT_CACHE_SECONDS: 60
 COOKIE_SAMESITE: lax
 # Login sessions slide: idle this long ends one, activity extends it, up to
 # SESSION_MAX_SECONDS after the login.
@@ -115,11 +123,7 @@ IMAGE_MAX_BYTES: 10485760
 IMAGE_MAX_TOTAL_BYTES: 20971520
 IMAGE_CONTEXT_TURNS: 3
 
-# pr-batch. RS256 signing key, copied into keys/ before the image build
-# (keys/README.md); never committed. iss/aud match pr-batch.
-BATCH_JWT_PRIVATE_KEY_FILE: keys/auth_private.pem
-BATCH_JWT_ISSUER: batch-client
-BATCH_JWT_AUDIENCE: batch-service
+# pr-batch. Our key there (BATCH_API_KEY) is a secret: env only.
 # Reports of successful BATCH executions; empty model = the default model.
 BATCH_REPORT_MODEL: ""
 BATCH_REPORT_COLLECT_TIMEOUT_SECONDS: 1800

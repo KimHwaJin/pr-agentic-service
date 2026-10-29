@@ -43,7 +43,7 @@ def build(
     client = InlineExecutorClient(
         settings.executor_base_url,
         settings.executor_timeout_seconds,
-        settings.executor_tenant_id,
+        settings.executor_api_key,
         storage,
     )
     return client, storage

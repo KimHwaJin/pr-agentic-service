@@ -7,6 +7,7 @@ standard library so the same code runs everywhere (same as pr-batch).
 
 import logging
 import logging.config
+import re
 from pathlib import Path
 
 import yaml
@@ -14,6 +15,23 @@ import yaml
 from core.config import ROOT
 
 LOGGER_CONFIG = ROOT / "logger.yml"
+# our keys and theirs (pas_ ours, exe_ executor, bat_ pr-batch), and an
+# X-Api-Key header written out
+SECRET = re.compile(
+    r"\b(?:pas|exe|bat)_(?:live|dev|test)_[A-Za-z0-9_\-]+"
+    r"|(?i:x-api-key)[\"']?\s*[:=]\s*[\"']?[^\s,\"'}]+"
+)
+
+
+class SecretFilter(logging.Filter):
+    """Masks API keys in every record before a handler writes it."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        message = record.getMessage()
+        masked = SECRET.sub("***", message)
+        if masked != message:
+            record.msg, record.args = masked, None
+        return True
 
 
 def configure_logging(path: Path = LOGGER_CONFIG) -> None:
@@ -25,6 +43,21 @@ def configure_logging(path: Path = LOGGER_CONFIG) -> None:
         apply_logger_config(path)
     else:
         init_logger()
+    mask_secrets()
+
+
+def mask_secrets() -> None:
+    """Puts ``SecretFilter`` on every handler configured so far."""
+    secret_filter = SecretFilter()
+    loggers = [logging.getLogger()] + [
+        logger
+        for logger in logging.root.manager.loggerDict.values()
+        if isinstance(logger, logging.Logger)
+    ]
+    for logger in loggers:
+        for handler in logger.handlers:
+            if not any(isinstance(f, SecretFilter) for f in handler.filters):
+                handler.addFilter(secret_filter)
 
 
 def apply_logger_config(path: Path) -> None:

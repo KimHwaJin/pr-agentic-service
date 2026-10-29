@@ -39,7 +39,7 @@ from agent.context import AnalysisState, RunContext
 from agent.reporter import collect_evidence, generate_report
 from core.assets import SkillCatalog, ToolCatalog
 from core.db import new_id
-from core.executor.client import ExecutorError
+from core.executor.client import ExecutorError, Identity
 from core.executor.sources import SourceOwner, file_name
 from core.notebook_links import lab_url
 from core.services import TOOL_EFFECTS
@@ -75,6 +75,23 @@ def _owner(runtime: Runtime) -> SourceOwner:
         ctx.project_id,
         ctx.session_id,
         ctx.run_id,
+    )
+
+
+def _who(
+    runtime: Runtime, execution: dict[str, Any] | None = None
+) -> Identity:
+    """The executor identity of this run's calls.
+
+    An execution answers only to the user who opened it, so calls on an
+    existing execution go as its opener (another member of a shared
+    project may continue the session).
+    """
+    ctx = runtime.context
+    return Identity(
+        user_id=(execution or {}).get("user_id") or ctx.user_id,
+        project_id=ctx.project_id,
+        session_id=ctx.session_id,
     )
 
 
@@ -643,6 +660,7 @@ async def _append(
         try:
             return await executor.append_operation(
                 execution["id"],
+                who=_who(runtime, execution),
                 idempotency_key=key,
                 expected_version=version,
                 steps=steps,
@@ -707,11 +725,7 @@ async def _submit_now(
             step["sequence"] = i
         receipt = await executor.submit(
             idempotency_key=_key(runtime, "submit"),
-            context={
-                "user_id": ctx.user_id,
-                "project_id": ctx.project_id,
-                "session_id": ctx.session_id,
-            },
+            who=_who(runtime),
             steps=steps,
             profile=settings.executor_runtime_profile,
             wait_seconds=settings.executor_operation_wait_seconds,
@@ -719,6 +733,7 @@ async def _submit_now(
         )
         execution = {
             "id": receipt["execution_id"],
+            "user_id": ctx.user_id,
             "version": receipt["state"]["version"],
             "next_sequence": len(steps),
             "alive": True,
@@ -1053,6 +1068,7 @@ async def write_report(title: str, focus: str, runtime: Runtime) -> Command:
                 "finalize",
                 lambda: executor.finalize(
                     execution["id"],
+                    who=_who(runtime, execution),
                     idempotency_key=_key(runtime, "finalize"),
                     expected_version=execution["version"],
                 ),
@@ -1101,6 +1117,7 @@ async def write_report(title: str, focus: str, runtime: Runtime) -> Command:
             )
         artifact = await executor.create_report(
             execution["id"],
+            who=_who(runtime, execution),
             idempotency_key=_key(runtime, "report"),
             markdown=markdown,
             name="final-report.md",

@@ -9,6 +9,7 @@ from worker.executor_events import ExecutorEventConsumer, MissedEventRecovery
 from worker.maintenance import Retention
 from worker.memory import MemoryWorker
 from worker.scheduler import RunScheduler
+from worker.user_deactivation import BatchDisableRetry
 
 
 class Worker:
@@ -35,6 +36,7 @@ class Worker:
             on_wake=self.scheduler.notify,
             on_progress=self.scheduler.progress,
             on_completed=self.reports.enqueue,
+            executor=services.executor,
         )
         self.recovery = MissedEventRecovery(
             services.db,
@@ -43,6 +45,7 @@ class Worker:
             after_seconds=settings.executor_event_recovery_seconds,
         )
         self.retention = Retention(services)
+        self.batch_disable = BatchDisableRetry(services)
         self.memory = (
             MemoryWorker(services, self.owner)
             if settings.memory_worker_enabled
@@ -70,6 +73,9 @@ class Worker:
             ),
             asyncio.create_task(
                 self.retention.run_forever(), name="retention"
+            ),
+            asyncio.create_task(
+                self.batch_disable.run_forever(), name="batch-disable-retry"
             ),
         ]
         if self.memory:

@@ -33,7 +33,7 @@ from sqlalchemy.dialects.postgresql import insert
 from agent.batch import BatchReportAgent, previous_runs, remember_run
 from agent.context import BatchReportContext
 from core.db import new_id, utcnow
-from core.executor.client import trigger_type
+from core.executor.client import ExecutorError, Identity, trigger_type
 from core.models import BatchReportJob
 from core.notebook_links import lab_url
 from core.services import Services
@@ -47,16 +47,26 @@ class NotReady(Exception):
     """The executor has not projected the notebook yet."""
 
 
-async def enqueue(
-    services: Services, execution_id: str, payload: dict[str, Any]
-) -> str | None:
+async def enqueue(services: Services, execution_id: str) -> str | None:
     """Queue the report of a finished execution if it gets one.
 
-    The event's ``execution`` (trigger, context, metadata) decides.
+    Executor events can be forged (no Redis ACL), so the event only says
+    which execution to look at: the execution as the executor answers it
+    decides. Our key reads only our tenant's executions, so one that is
+    found is a run of a batch registered through us (pr-batch submitted
+    it; it is not in our tables).
     """
-    if payload.get("status") != "SUCCEEDED":
+    try:
+        execution = await services.executor.get(execution_id)
+    except ExecutorError as exc:
+        if exc.status != 404:
+            raise
+        log.warning(
+            "batch_report_unknown_execution execution=%s", execution_id
+        )
         return None
-    execution = payload.get("execution") or {}
+    if (execution.get("state") or {}).get("status") != "SUCCEEDED":
+        return None
     if trigger_type(execution) != "BATCH":
         return None
     context = execution.get("context") or {}
@@ -135,7 +145,6 @@ class BatchReportRecovery:
         now = utcnow()
         executions = await self.services.executor.executions(
             now - self.lookback,
-            tenant_id=self.services.settings.executor_tenant_id,
             trigger_type="BATCH",
             status="SUCCEEDED",
         )
@@ -163,11 +172,7 @@ class BatchReportRecovery:
             execution_id = execution["execution_id"]
             if execution_id in known:
                 continue
-            job_id = await enqueue(
-                self.services,
-                execution_id,
-                {"status": "SUCCEEDED", "execution": execution},
-            )
+            job_id = await enqueue(self.services, execution_id)
             if job_id:
                 log.warning(
                     "batch_report_recovered execution=%s job=%s",
@@ -193,7 +198,10 @@ class BatchReportWorker:
     async def enqueue(
         self, execution_id: str, payload: dict[str, Any]
     ) -> str | None:
-        return await enqueue(self.services, execution_id, payload)
+        """``on_completed`` of the event consumer; the payload is not used."""
+        if payload.get("status") not in (None, "SUCCEEDED"):
+            return None  # a failed run gets no report; skip the lookup
+        return await enqueue(self.services, execution_id)
 
     async def run_forever(self) -> None:
         while True:
@@ -378,8 +386,14 @@ class BatchReportWorker:
     ) -> None:
         executor = self.services.executor
         title = report["title"] or "배치 실행 리포트"
+        context = (job.execution or {}).get("context") or {}
         artifact = await executor.create_report(
             job.execution_id,
+            who=Identity(
+                user_id=job.owner_id,
+                project_id=context.get("project_id"),
+                session_id=context.get("session_id"),
+            ),
             idempotency_key=f"batch-report:{job.id}",
             markdown=report["markdown"],
             name=f"batch-{job.batch_run_id or job.execution_id}-report.md",

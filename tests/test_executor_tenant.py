@@ -9,9 +9,14 @@ import pytest
 from pydantic import ValidationError
 
 from agent.tools import analysis
-from api_service.routers.batch import sets_tenant, with_tenant
+from api_service.routers.batch import registers
 from core.config import Settings
-from core.executor.client import ExecutorClient, ExecutorError
+from core.executor.client import (
+    SYSTEM,
+    ExecutorClient,
+    ExecutorError,
+    Identity,
+)
 from worker import executor_events
 
 
@@ -26,12 +31,12 @@ def test_tenant_must_be_a_valid_unreserved_name(tenant):
         Settings(executor_tenant_id=tenant)
 
 
-def _client(tenant_id: str, sent: list[dict[str, Any]]):
+def _client(sent: list[httpx.Request], status=202, body=None):
     def handle(request: httpx.Request) -> httpx.Response:
-        sent.append(json.loads(request.content))
-        return httpx.Response(202, json={"execution_id": "x-1"})
+        sent.append(request)
+        return httpx.Response(status, json=body or {"execution_id": "x-1"})
 
-    client = ExecutorClient("http://executor", 5, tenant_id)
+    client = ExecutorClient("http://executor", 5, "exe_test_k", "exe_test_op")
     client.http = httpx.AsyncClient(
         base_url="http://executor/api/v1",
         transport=httpx.MockTransport(handle),
@@ -39,23 +44,59 @@ def _client(tenant_id: str, sent: list[dict[str, Any]]):
     return client
 
 
-def _submit(client: ExecutorClient):
-    return asyncio.run(
-        client.submit(
+def test_submission_names_its_user_in_headers_not_the_body():
+    sent: list[httpx.Request] = []
+    who = Identity(user_id="u-1", project_id="p-1", session_id="s-1")
+    asyncio.run(
+        _client(sent).submit(
             idempotency_key="k",
-            context={"user_id": "u-1"},
+            who=who,
             steps=[],
             profile="default",
             wait_seconds=600,
         )
     )
+    body = json.loads(sent[0].content)
+    assert "context" not in body and "tenant_id" not in body
+    headers = sent[0].headers
+    assert headers["x-api-key"] == "exe_test_k"
+    assert headers["x-user-id"] == "u-1"
+    assert headers["x-project-id"] == "p-1"
+    assert headers["x-session-id"] == "s-1"
+    assert "x-tenant-id" not in headers  # our key's own tenant
 
 
-def test_submission_carries_the_tenant_at_the_top_level():
-    sent: list[dict[str, Any]] = []
-    _submit(_client("pr-agentic", sent))
-    assert sent[0]["tenant_id"] == "pr-agentic"
-    assert "tenant_id" not in sent[0]["context"]
+def test_reads_are_system_calls():
+    sent: list[httpx.Request] = []
+    asyncio.run(_client(sent, 200).get("x-1"))
+    assert sent[0].headers["x-api-key"] == "exe_test_k"
+    assert "x-user-id" not in sent[0].headers
+
+
+def test_identity_headers():
+    assert SYSTEM.headers() == {}
+    assert Identity(user_id="u", session_id="s").headers() == {
+        "X-User-Id": "u"
+    }  # a session needs its project
+    assert Identity(user_id="u", tenant="other").headers() == {
+        "X-User-Id": "u",
+        "X-Tenant-Id": "other",
+    }
+
+
+def test_operator_key_is_used_only_when_asked():
+    client = _client([])
+    assert client.headers()["X-Api-Key"] == "exe_test_k"
+    assert client.headers(admin=True)["X-Api-Key"] == "exe_test_op"
+
+
+def test_opener_is_the_execution_context():
+    sent: list[httpx.Request] = []
+    body = {
+        "context": {"user_id": "u-2", "project_id": "p", "session_id": "s"}
+    }
+    who = asyncio.run(_client(sent, 200, body).opener("x-1"))
+    assert who == Identity(user_id="u-2", project_id="p", session_id="s")
 
 
 def test_executor_error_code():
@@ -84,7 +125,7 @@ def test_notebook_is_read_in_full_for_its_path():
             },
         )
 
-    client = ExecutorClient("http://executor", 5, "pr-agentic")
+    client = ExecutorClient("http://executor", 5, "exe_test_k")
     client.http = httpx.AsyncClient(
         base_url="http://executor/api/v1",
         transport=httpx.MockTransport(handle),
@@ -123,7 +164,7 @@ def test_executions_are_read_until_they_pass_the_cutoff():
         asked.append(params)
         return httpx.Response(200, json=pages[params.get("cursor")])
 
-    client = ExecutorClient("http://executor", 5, "pr-agentic")
+    client = ExecutorClient("http://executor", 5, "exe_test_k")
     client.http = httpx.AsyncClient(
         base_url="http://executor/api/v1",
         transport=httpx.MockTransport(handle),
@@ -135,37 +176,18 @@ def test_executions_are_read_until_they_pass_the_cutoff():
     assert asked[0] == {"trigger_type": "BATCH", "limit": "200"}
 
 
-def test_batch_registration_names_our_tenant():
-    body = with_tenant(
-        b'{"name": "daily", "tenant_id": "other"}', "pr-agentic"
-    )
-    assert json.loads(body) == {"name": "daily", "tenant_id": "pr-agentic"}
-    assert with_tenant(b"not json", "pr-agentic") == b"not json"
-    assert with_tenant(b"[1]", "pr-agentic") == b"[1]"
-
-
-def test_batch_edit_names_our_tenant_only_when_it_sends_one():
-    body = with_tenant(b'{"tenant_id": "other"}', "pr-agentic", edit=True)
-    assert json.loads(body) == {"tenant_id": "pr-agentic"}
-    name_only = b'{"name": "daily"}'
-    assert with_tenant(name_only, "pr-agentic", edit=True) == name_only
-
-
 @pytest.mark.parametrize(
     ("method", "path", "expected"),
     [
         ("POST", "batches", True),
         ("POST", "/batches/", True),
-        ("PATCH", "batches/b-1", True),
-        ("PATCH", "batches", False),
+        ("PATCH", "batches/b-1", False),  # pr-batch keeps its tenant
         ("POST", "batches/b-1/runs", False),
-        ("POST", "batches/b-1/enable", False),
-        ("PATCH", "scripts/s-1", False),
-        ("GET", "batches/b-1", False),
+        ("GET", "batches", False),
     ],
 )
-def test_registration_and_edit_name_our_tenant(method, path, expected):
-    assert sets_tenant(method, path) is expected
+def test_only_registration_names_a_tenant(method, path, expected):
+    assert registers(method, path) is expected
 
 
 # --- consumer --------------------------------------------------------------
@@ -246,7 +268,11 @@ def _error(status, code):
 def _append(executor):
     runtime = SimpleNamespace(
         context=SimpleNamespace(
-            run_id="run", services=SimpleNamespace(executor=executor)
+            run_id="run",
+            services=SimpleNamespace(executor=executor),
+            user_id="u-1",
+            project_id="p-1",
+            session_id="s-1",
         ),
         tool_call_id="call",
     )
