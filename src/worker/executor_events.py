@@ -8,6 +8,11 @@ Stream with at-least-once delivery. Each event is stored once in
 waiting after its event already arrived still finds it (see
 ``RunScheduler``). ``execution.completed`` also goes to ``on_completed``,
 which starts the report of a successful batch run (worker.batch_reports).
+
+Redis has no ACL here, so anyone on it can write a stream entry. An event
+that resumes a run is therefore taken from the executor's own timeline of
+that execution (matched by event_id), never from the stream entry; an
+event the executor does not know is dropped.
 Redis 6.0 compatible: stale pending entries are reclaimed
 with XPENDING + XCLAIM.
 """
@@ -97,7 +102,10 @@ class ExecutorEventConsumer:
         on_wake,
         on_progress,
         on_completed,
+        executor: ExecutorClient | None = None,
     ):
+        # confirms wake events against the executor (None: tests only)
+        self.executor = executor
         self.db, self.redis, self.stream, self.group, self.consumer = (
             db,
             redis,
@@ -180,6 +188,17 @@ class ExecutorEventConsumer:
             await self.redis.xack(self.stream, self.group, message_id)
             return
         if event["event_type"] in WAKE_TYPES:
+            confirmed = await self._confirmed(event)
+            if confirmed is None:
+                log.warning(
+                    "executor_event_unconfirmed message_id=%s execution=%s",
+                    message_id,
+                    event["execution_id"],
+                )
+                await self.redis.xack(self.stream, self.group, message_id)
+                return
+            event = confirmed
+            payload = event["payload"]
             run_id = await deliver(self.db, event)
             if run_id:
                 await self.on_wake(run_id)
@@ -188,6 +207,26 @@ class ExecutorEventConsumer:
         else:
             await self.on_progress(event["execution_id"], event)
         await self.redis.xack(self.stream, self.group, message_id)
+
+    async def _confirmed(self, event: dict[str, Any]) -> dict[str, Any] | None:
+        """The event as the executor's timeline has it, or None."""
+        if self.executor is None:
+            return event
+        try:
+            timeline = await self.executor.events(event["execution_id"])
+        except ExecutorError as exc:
+            if exc.status == 404:  # not an execution of our tenant
+                return None
+            raise
+        for item in timeline:
+            if str(item.get("event_id")) == event["event_id"]:
+                return {
+                    **event,
+                    "event_type": item["event_type"],
+                    "event_sequence": int(item["event_sequence"]),
+                    "payload": item.get("payload", {}),
+                }
+        return None
 
 
 class MissedEventRecovery:

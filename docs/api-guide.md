@@ -19,6 +19,20 @@
 
 `GET /api/v1/models` → `{items: [{name, label, default, input: ["text"] | ["text","image"], max_images}]}`: 고를 수 있는 모델(설정 파일 `config.{APP_ENV}.yml`의 `models`, 로컬은 compose `MODELS`). 요청의 `model`에는 `name`을 보내고, 화면에는 `label`(없으면 `name`)을 보여 줍니다. `input`에 `image`가 있는 모델만 이미지를 받습니다.
 
+### 다른 서비스·에이전트 (API key)
+
+브라우저가 아닌 호출자는 쿠키 없이 관리자가 발급한 key와 사용자를 헤더로 보냅니다. 쿠키가 있으면 SSO로만 판정합니다.
+
+| 헤더 | 규칙 |
+| --- | --- |
+| `X-Api-Key` | 시스템 화면 "API 키"에서 발급(`pas_live_…`, 로컬·dev `pas_dev_…`). 모르는·대기(pending)·폐기된 key는 401 `invalid_api_key` |
+| `X-User-Id` | 우리 `users.id`. 없거나 형식 오류 400 `INVALID_IDENTITY`, 미등록·비활성 사용자 403 |
+| `X-Project-Id`, `X-Session-Id` | 선택. 경로의 프로젝트·세션과 다르면 400. executor 입구에서는 그 호출자의 tenant가 우리면 멤버십을 확인하고, 다른 tenant면 형식만 봅니다 |
+
+관리자 API(`/admin/...`)는 key로 부를 수 없습니다(403). key 요청은 감사 로그(`api_service.audit`)에 남습니다. 로컬·dev의 `AUTH_MODE=header`에서는 key 없이 `X-User-Id`만으로 부를 수 있습니다.
+
+관리자용: `GET /api/v1/admin/api-clients`, `POST /api/v1/admin/api-clients` `{name, tenant?, description?}` → `{client, api_key}`(key 원문은 이때 한 번만), `POST /api/v1/admin/api-clients/{id}/activate`, `/revoke`. 우리 tenant 클라이언트는 바로 active, 다른 tenant는 executor·pr-batch의 `allowed_tenants`에 반영된 뒤 활성화합니다.
+
 **오류 응답:** 모든 오류는 `{"detail": "설명", "code": "기계가 읽는 코드", ...}`입니다. 요청 형식 오류는 `code: invalid_body`와 `errors: [{field, message}]`가 붙습니다.
 
 ## 2. 프로젝트·세션·메시지
@@ -133,9 +147,11 @@
 - 프론트가 다른 origin이면 `CORS_ORIGINS=["https://front.example"]`, 사이트가 다르면 `COOKIE_SAMESITE=none` + HTTPS(`COOKIE_SECURE=true`).
 - `FRONTEND_ORIGIN`: 로그인 후 돌아갈 프론트 주소, `SSO_ALLOWED_RETURN_ROOTS`: 허용할 경로.
 
-## executor 조회 (중계)
+## executor 조회 (중계)와 외부 호출자 입구
 
-`/api/v1/executor/<경로>` → executor `/api/v1/<경로>`. 응답 본문은 executor 것을 그대로 돌려줍니다(형식은 executor API 문서). 아래 경로만 열려 있고, 그 밖은 404입니다.
+`/api/v1/executor/<경로>` → executor `/api/v1/<경로>`. 응답 본문은 executor 것을 그대로 돌려줍니다(형식은 executor API 문서). 아래 경로만 열려 있고, 그 밖은 404입니다. 본문에 `context`·`tenant_id`, 목록에 `user_id`·`tenant_id`를 넣지 않습니다(범위는 헤더가 정함).
+
+**브라우저(SSO)**
 
 | Method | Path (`/api/v1/executor` 아래) | 권한 |
 | --- | --- | --- |
@@ -147,9 +163,21 @@
 | POST | `/runtime-targets/{id}/probe`, `/drain`, `/activate`, `/disable`, `/purge` | 관리자. 다시 점검 / 새 작업 배정 중지(진행 중은 마저) / 배정 복귀 / 사용 중지 / 사용 중지된 대상 제거 |
 | POST | `/maintenance/drain`, `/maintenance/activate`, `/maintenance/runs` | 관리자. executor 전체의 새 실행 접수 중지 / 재개 / 진행 중 실행을 멈추는 점검 작업 생성 |
 
-POST의 `actor`는 클라이언트 값 대신 서버가 요청한 관리자(`{"type": "USER", "id": <users.id>}`)로 채웁니다. executor·pr-batch에 넘기는 사용자 ID(`context.user_id`, actor, JWT `sub`)는 모두 사번이 아닌 `users.id`(UUID)입니다. 화면에 이름·사번이 필요하면 `/users`로 찾습니다. 나머지 본문(`idempotency_key` 등)은 executor 형식 그대로입니다.
+runtime·maintenance 경로는 executor 운영 key(`EXECUTOR_ADMIN_API_KEY`)가 없으면 503 `executor_admin_key_missing`입니다. POST의 `actor`는 클라이언트 값 대신 서버가 요청한 관리자(`{"type": "USER", "id": <users.id>}`)로 채웁니다. executor·pr-batch에 넘기는 사용자 ID(`X-User-Id`, `context.user_id`, actor)는 모두 사번이 아닌 `users.id`(UUID)입니다. 화면에 이름·사번이 필요하면 `/users`로 찾습니다. 나머지 본문(`idempotency_key` 등)은 executor 형식 그대로입니다.
 
-executor가 응답하지 않으면 502 `executor_unavailable`입니다.
+**API key 호출자** (executor를 직접 부르지 않고 여기로 부릅니다)
+
+| Method | Path (`/api/v1/executor` 아래) |
+| --- | --- |
+| GET·POST | `/executions` |
+| GET | `/executions/{id}`, `/result`, `/steps`, `/steps/{id}`, `/operations`, `/operations/{id}`, `/operations/{id}/result`, `/operations/{id}/steps`, `/attempts`, `/attempts/{id}`, `/attempts/{id}/steps`, `/events`, `/notebook`, `/notebook/cells/{n}` |
+| POST | `/executions/{id}/operations`, `/finalize`, `/cancel`, `/retry` |
+| GET·POST | `/executions/{id}/artifacts` |
+| GET | `/artifacts/{id}`, `/artifacts/{id}/content` |
+
+우리가 `X-Api-Key`(우리 executor key), `X-User-Id`, `X-Tenant-Id`(그 호출자의 tenant)를 다시 만들어 붙입니다. `X-User-Id` 없는 GET은 그 tenant 전체 조회, 없는 쓰기는 400입니다. 운영 경로와 diagnostics는 404. 이벤트는 중계하지 않습니다(`executor.events.<tenant>`를 읽거나 `/events`를 폴링).
+
+executor가 응답하지 않으면 502 `executor_unavailable`, 시간 초과는 504 `executor_timeout`입니다.
 
 ## 6. 프로젝트 공유 메모리
 
@@ -190,7 +218,9 @@ executor가 응답하지 않으면 502 `executor_unavailable`입니다.
 
 ## 8. 배치 (pr-batch 진입점)
 
-- `/api/v1/batch/{path}` → pr-batch `/api/v1/{path}`로 그대로 중계됩니다(`Idempotency-Key`, `If-Match` 헤더 전달). 사용자 인증은 이 서비스가 처리합니다.
+- `/api/v1/batch/{path}` → pr-batch `/api/v1/{path}`로 그대로 중계됩니다(`Idempotency-Key`, `If-Match` 헤더 전달). 사용자 인증은 이 서비스가 처리하고, pr-batch에는 우리 key와 `X-User-Id`를 붙입니다. API key 호출자도 같은 경로를 씁니다.
+- 배치 등록(`POST /batches`)에만 tenant(`X-Tenant-Id`: 브라우저는 우리, key 호출자는 그 tenant)와 프로젝트(요청의 `X-Project-Id`, 우리 tenant면 멤버만)가 붙습니다. 본문에 `tenant_id`를 넣으면 pr-batch가 422로 거부합니다. 배치의 프로젝트는 바꿀 수 없어서 옮기려면 새로 만듭니다.
+- 사용자가 비활성화되면 그 사람의 배치가 꺼집니다(`disabled_reason: USER_DEACTIVATED`). 그 배치의 수동 실행은 409 `OWNER_DEACTIVATED`입니다.
 - `POST /api/v1/batch/scripts/from-notebook` `{artifact_id, name?}`: 세션 노트북을 배치 스크립트로 등록합니다.
 - 배치 실행의 노트북·리포트 artifact는 `/api/v1/artifacts/{id}`로 볼 수 있습니다(배치 소유자 = 실행의 `context.user_id`만).
 

@@ -18,8 +18,6 @@ RUN uv sync --locked --no-dev --group phoenix --no-install-project
 ARG APP_ENV=
 ENV APP_ENV=${APP_ENV}
 COPY logger.yml config*.yml alembic.ini ./
-# pr-batch signing key placed at build time (keys/README.md).
-COPY keys ./keys
 COPY migrations ./migrations
 COPY assets ./assets
 COPY catalogs ./catalogs

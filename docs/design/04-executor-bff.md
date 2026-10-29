@@ -2,6 +2,10 @@
 
 상태: 구현됨 (`api_service/routers/executor.py`). 근거는 executor 레포의 `src/executor_service/interfaces/http/` 라우터입니다.
 
+> **2026-10-29 변경 (서비스 간 인증, [docs/specs/service-auth.md](../specs/service-auth.md))**
+> - executor는 이제 `X-Api-Key`와 신원 헤더(`X-User-Id` 등)로 범위를 정합니다. 우리는 목록에 `user_id` 파라미터를 넣지 않고, 일반 사용자의 목록은 `X-User-Id`로, 그 외 조회는 멤버십 확인 뒤 시스템 조회(우리 tenant)로 부릅니다. runtime·maintenance 경로는 운영 key(`EXECUTOR_ADMIN_API_KEY`)로 부르며 비어 있으면 503입니다.
+> - 같은 경로가 **우리 key를 가진 외부 서비스·에이전트의 executor 입구**이기도 합니다. 그들은 쓰기(`POST /executions`, operations, finalize, cancel, retry, artifacts)와 `/artifacts/{id}`, `/content`도 부를 수 있고, 그 호출자의 tenant(`X-Tenant-Id`)와 `X-User-Id`로 넘깁니다. 운영 경로와 diagnostics는 막습니다. 아래 1장의 "조회만" 원칙은 브라우저에 대한 것입니다.
+
 ## 1. 원칙
 
 - 프론트는 executor를 직접 부르지 않고 우리 API만 부릅니다. 우리는 **조회(GET)만** 그대로 건네고(바이패스), 응답 본문은 executor 것을 가공하지 않고 돌려줍니다.

@@ -209,7 +209,7 @@ analyst의 실행 계획 = **Workflow 1.0 문서 + 실행 바인딩**.
 
 pr-batch(`/Users/a10054/SKAX_PROJECT/pr-batch`, 개발 중)는 사용자 스크립트(노트북) 업로드·버전, 배치 등록(일정·정책), 수동 실행·이력을 담당한다. 이 서비스의 역할은 두 가지다 (pr-batch `docs/architecture.md` 10장, `docs/integrations.md`).
 
-1. **배치 진입 게이트웨이**: 프론트는 이 서비스의 `/api/v1/batch/...`를 호출하고, 이 서비스가 SSO로 확인한 사용자 ID로 pr-batch 전용 단기 JWT(RS256, 배치팀이 준 개인키로 서명, `iss=batch-client`, `aud=batch-service`, `scope=batch:manage`, 수명 5분 이하)를 발급해 pr-batch API(scripts, batches, runs)를 중계한다. 세션 노트북을 배치 스크립트로 등록하는 경로도 여기서 제공한다.
+1. **배치 진입 게이트웨이**: 프론트는 이 서비스의 `/api/v1/batch/...`를 호출하고, 이 서비스가 우리 key(`X-Api-Key`)와 SSO로 확인한 사용자 ID(`X-User-Id`)를 붙여 pr-batch API(scripts, batches, runs)를 중계한다(docs/specs/service-auth.md). 세션 노트북을 배치 스크립트로 등록하는 경로도 여기서 제공한다.
 2. **배치 리포트**: pr-batch가 요청하지 않는다. executor 이벤트 consumer가 `execution.completed`(status `SUCCEEDED`, trigger `BATCH`)를 받으면 `batch_report_jobs`에 `batch-report:{execution_id}` 키로 작업을 만든다(실패한 실행은 만들지 않음). 이벤트에 `execution{trigger, context}`가 없으면(executor 배포 전) `GET /executions/{id}`로 확인한다. 리포트 worker는 채팅 run 큐를 거치지 않고 배치 리포트 Agent 그래프(`agent/batch.py`, 세션·프로젝트 없음)를 직접 돌린다: COLLECTING(노트북 projection 완료까지 대기) → GENERATING(실행 결과 + 같은 배치의 이전 실행 요약을 읽고 리포트 작성, Store `("batch_memory", batch_id)`) → MATERIALIZING(리포트 Artifact 저장, 노트북에 추가, 이번 실행 요약 기록). 진행 이벤트는 채팅 SSE와 같은 형식으로 `batch_report_events`에 저장하고, 사용자는 `/api/v1/batch-reports`(목록·상세·이벤트·SSE·재시도)로 본다. 사용자 ID는 서비스 간 모두 `users.id`(UUID)다.
 
 ### 9.7 확정

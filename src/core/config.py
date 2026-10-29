@@ -154,13 +154,28 @@ class Settings(BaseSettings):
     embedding_model: str = ""
     embedding_dims: int = 1024
 
+    # Service-to-service auth (docs/specs/service-auth.md).
+    # api_key: callers other than the browser send X-Api-Key (a key of
+    # api_clients) and X-User-Id. header: X-User-Id is trusted without a
+    # key (local/dev only, for testers).
+    auth_mode: Literal["api_key", "header"] = "api_key"
+    # how long a verified caller key is cached (revocation delay)
+    api_client_cache_seconds: float = Field(60, ge=0, le=300)
+
     # Executor.
     executor_base_url: str = "http://localhost:8000"
-    # The system that receives this service's executor events: sent as
-    # tenant_id with every submission and with batches registered through
-    # pr-batch, so their events come to <executor_event_stream>.<tenant>.
-    # The same in every environment (config.yml); a local run against a
-    # shared executor can change it to keep its events apart.
+    # Our key at the executor (X-Api-Key, a relay key). Empty only against
+    # an executor in header mode (local/dev).
+    executor_api_key: str = ""
+    # The operator key of the executor's runtime and maintenance APIs, for
+    # the 시스템 page; empty = those pages answer 503.
+    executor_admin_api_key: str = ""
+    # The executor tenant of this service (the default tenant of our key):
+    # the events of our executions and of the batches registered through
+    # us come to <executor_event_stream>.<tenant>. The same in every
+    # environment (config.yml); a local run against a shared executor can
+    # change it to keep its events apart. Executor and pr-batch list it in
+    # our key's allowed_tenants.
     executor_tenant_id: str = Field(
         "pr-agentic", pattern=r"^[a-z][a-z0-9-]{1,62}[a-z0-9]$"
     )
@@ -291,12 +306,9 @@ class Settings(BaseSettings):
 
     # pr-batch.
     batch_base_url: str = "http://localhost:8100"
-    # PEM RSA private key the pr-batch team hands out (RS256; pr-batch
-    # verifies with the public half). Relative paths are under the repo
-    # root. Empty = the integration is off.
-    batch_jwt_private_key_file: str = ""
-    batch_jwt_issuer: str = "batch-client"
-    batch_jwt_audience: str = "batch-service"
+    # Our key at pr-batch (X-Api-Key; a relay key with admin, for
+    # disable-by-owner). Empty only against pr-batch in header mode.
+    batch_api_key: str = ""
     # Reports of successful BATCH executions (worker.batch_reports).
     # empty = the default model
     batch_report_model: str = ""
@@ -336,6 +348,14 @@ class Settings(BaseSettings):
         if self.session_max_seconds < self.session_ttl_seconds:
             raise ValueError(
                 "SESSION_MAX_SECONDS must be at least SESSION_TTL_SECONDS"
+            )
+        if self.auth_mode == "header" and self.env not in {"local", "dev"}:
+            raise ValueError("AUTH_MODE=header is only allowed in local/dev")
+        if self.env in {"stg", "prd"} and not (
+            self.executor_api_key and self.batch_api_key
+        ):
+            raise ValueError(
+                "EXECUTOR_API_KEY and BATCH_API_KEY are required in stg/prd"
             )
         if self.executor_tenant_id in RESERVED_TENANT_IDS:
             raise ValueError(

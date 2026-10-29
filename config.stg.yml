@@ -15,8 +15,14 @@ ADMIN_EMPLOYEE_IDS: []
 LLM_API_KEY: <llm-api-key>
 
 EXECUTOR_BASE_URL: http://<executor-host>:8000
+# Our keys at the executor (relay) and its operator key (시스템 page
+# runtime views; may stay empty). Secrets: better as Deployment env.
+EXECUTOR_API_KEY: <exe-key>
+EXECUTOR_ADMIN_API_KEY: ""
 
 BATCH_BASE_URL: http://<pr-batch-host>:8100
+# Our key at pr-batch (relay + admin). Secret: better as Deployment env.
+BATCH_API_KEY: <bat-key>
 
 # Models served in this environment (fill in): name = served model name,
 # input: [text] or [text, image] as the deployed model supports.

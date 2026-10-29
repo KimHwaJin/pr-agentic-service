@@ -34,6 +34,11 @@ class User(Timestamped, Base):
         String(16), default="user"
     )  # user | admin
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    # deactivated, pr-batch not yet told to turn off their batches
+    # (worker.user_deactivation retries)
+    batches_disable_pending: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="false"
+    )
 
 
 class Project(Timestamped, Base):
@@ -410,4 +415,31 @@ class RunRequest(Base):
     resumed: Mapped[bool] = mapped_column(Boolean)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, index=True
+    )
+
+
+class ApiClient(Timestamped, Base):
+    """A service or agent that calls this API with ``X-Api-Key``.
+
+    Only the SHA-256 of the key is kept; the key is shown once when issued.
+    ``tenant`` is the executor tenant its executions and batches go to
+    (executor and pr-batch list it in our key's allowed_tenants). A new
+    client stays ``pending`` until those lists are deployed.
+    """
+
+    __tablename__ = "api_clients"
+    id: Mapped[str] = mapped_column(ID, primary_key=True, default=new_id)
+    name: Mapped[str] = mapped_column(String(64), unique=True)
+    tenant: Mapped[str] = mapped_column(String(64))
+    key_prefix: Mapped[str] = mapped_column(String(32))
+    key_sha256: Mapped[str] = mapped_column(String(64), unique=True)
+    # pending | active | revoked
+    status: Mapped[str] = mapped_column(String(16), default="pending")
+    description: Mapped[str | None] = mapped_column(Text)
+    created_by: Mapped[str] = mapped_column(ID)
+    revoked_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True)
+    )
+    last_used_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True)
     )
