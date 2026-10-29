@@ -47,6 +47,7 @@ def mount_api(app: FastAPI, settings: Settings) -> None:
     app.include_router(artifacts.router)
     app.include_router(batch.router)
     errors.install(app)
+    _caller_headers_together(app)
 
     @app.middleware("http")
     async def audit_key_callers(request: Request, call_next):
@@ -80,6 +81,31 @@ def mount_api(app: FastAPI, settings: Settings) -> None:
             StaticFiles(directory=ROOT / "web/dev", html=True),
             name="dev",
         )
+
+
+def _caller_headers_together(app: FastAPI) -> None:
+    """OpenAPI: X-Api-Key and X-User-Id as one requirement (sent together).
+
+    FastAPI lists two security schemes as alternatives; Swagger would then
+    send only one of them.
+    """
+    build = app.openapi
+
+    def openapi() -> dict:
+        if app.openapi_schema:
+            return app.openapi_schema
+        schema = build()
+        for path in schema.get("paths", {}).values():
+            for operation in path.values():
+                if isinstance(operation, dict) and operation.get("security"):
+                    merged: dict = {}
+                    for requirement in operation["security"]:
+                        merged.update(requirement)
+                    operation["security"] = [merged]
+        app.openapi_schema = schema
+        return schema
+
+    app.openapi = openapi  # ty: ignore[invalid-assignment]
 
 
 def start_api(app: FastAPI, services: Services) -> None:

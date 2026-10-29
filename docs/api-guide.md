@@ -29,7 +29,7 @@
 | `X-User-Id` | 우리 `users.id`. 없거나 형식 오류 400 `INVALID_IDENTITY`, 미등록·비활성 사용자 403 |
 | `X-Project-Id`, `X-Session-Id` | 선택. 경로의 프로젝트·세션과 다르면 400. executor 입구에서는 그 호출자의 tenant가 우리면 멤버십을 확인하고, 다른 tenant면 형식만 봅니다 |
 
-관리자 API(`/admin/...`)는 key로 부를 수 없습니다(403). key 요청은 감사 로그(`api_service.audit`)에 남습니다. 로컬·dev의 `AUTH_MODE=header`에서는 key 없이 `X-User-Id`만으로 부를 수 있습니다.
+Swagger(`/docs`)에서는 Authorize 버튼에 `X-Api-Key`·`X-User-Id`가 있고, 각 API에 `X-Project-Id`·`X-Session-Id` 입력칸이 있습니다. 같은 브라우저에 SSO 로그인 쿠키가 있으면 쿠키가 우선이라 헤더는 무시됩니다. 관리자 API(`/admin/...`)는 key로 부를 수 없습니다(403). key 요청은 감사 로그(`api_service.audit`)에 남습니다. 로컬·dev의 `AUTH_MODE=header`에서는 key 없이 `X-User-Id`만으로 부를 수 있습니다.
 
 관리자용: `GET /api/v1/admin/api-clients`, `POST /api/v1/admin/api-clients` `{name, tenant?, description?}` → `{client, api_key}`(key 원문은 이때 한 번만), `POST /api/v1/admin/api-clients/{id}/activate`, `/revoke`. 우리 tenant 클라이언트는 바로 active, 다른 tenant는 executor·pr-batch의 `allowed_tenants`에 반영된 뒤 활성화합니다.
 
