@@ -113,7 +113,7 @@ stateDiagram-v2
 | --- | --- | --- |
 | 프롬프트 | `prompts/main.md` | `prompts/analyst.md` |
 | 읽는 skill | 도메인 지식(`assets/knowledge`) | 분석 skill(`assets/skills`) |
-| 도구 | `ask_user`, `read_knowledge`, `search_memory`, `save_memory`, `delete_memory`, `start_analysis` | `ask_user`, `read_skill`, `read_tool`, `search_tools`, `search_workflows`, `propose_plans`, `revise_call`, `run_plan`, `run_custom_code`(코드 레벨 2 이상), `write_report`, `save_workflow`, `finish_analysis` |
+| 도구 | `ask_user`, `read_knowledge`, `save_memory`, `delete_memory`, `start_analysis` | `ask_user`, `read_skill`, `read_tool`, `search_tools`, `search_workflows`, `propose_plans`, `revise_call`, `run_plan`, `run_custom_code`(코드 레벨 2 이상), `write_report`, `save_workflow`, `finish_analysis` |
 | 하는 일 | 대화, 도메인 질문 답변, 메모리 관리, 분석이 필요하면 넘기기 | 계획 세우기, 승인 받기, executor 실행, 결과 판단, 리포트, 워크플로우 저장 |
 
 - 두 담당자는 **같은 메시지 기록**을 봅니다. 다만 상대가 읽은 자료(지식 skill, 분석 skill, tool 설명, 워크플로우 검색 결과)는 "(다른 담당자가 참고한 자료라 생략)"으로 가려서, 필요 없는 skill 내용을 끌고 다니지 않게 합니다.
@@ -179,7 +179,7 @@ sequenceDiagram
 | `write_report` | 노트북 확정(finalize) → 근거 수집(`reporter.collect_evidence`) → 리포트 작성(별도 LLM 호출, `prompts/reporter.md`) → executor에 리포트 artifact 저장 |
 | `save_workflow` | 승인된 계획을 워크플로우 후보로 저장 제안(`workflow_save` interrupt) |
 | `ask_user` | 모호하거나 빠진 정보를 묻습니다(`question` interrupt). |
-| `save_memory` 등 | 프로젝트 메모리(LangGraph Store). 사용자가 쓴 항목을 바꿀 때는 `memory_change` interrupt |
+| `save_memory`, `delete_memory` | 프로젝트 메모리(LangGraph Store) 섹션의 한 줄을 더하거나 바꾸거나 지움. 사용자가 "기억해줘"처럼 명시적으로 요청한 때만. 대화에서 드러난 사실은 백그라운드 메모리 worker(`worker/memory.py`)가 정리 |
 
 ### 결과를 에이전트가 읽는 방법
 

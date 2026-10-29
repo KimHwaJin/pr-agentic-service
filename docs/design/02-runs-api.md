@@ -60,7 +60,6 @@ Idempotency-Key: 7f0c…            (선택, 권장)
 | | `{"action": "revise", "feedback": "..."}` | `feedback` 1자 이상 |
 | | `{"action": "cancel"}` | |
 | `code_approval` | `{"approve": true, "code": "수정한 코드(선택)"}` / `{"approve": false, "feedback": "..."}` | `approve` 불리언 필수 |
-| `memory_change` | `{"approve": true \| false}` | `approve` 불리언 필수 |
 | `workflow_save` | `{"approve": true, "name": "...", "user_queries": [...]}` / `{"approve": false}` | `approve` 필수, `user_queries` 1개 이상(승인 시) |
 
 지금은 "객체인지"만 보고 나머지는 에이전트 안에서 처리해서, 잘못된 답이 와도 202 후 에이전트가 다시 묻습니다(리뷰 H2). 이 표대로 API에서 먼저 검사합니다.
@@ -77,7 +76,7 @@ Idempotency-Key: 7f0c…            (선택, 권장)
 | `question` | 답 문자열 그대로 |
 | `plan_approval` | `{"action": "revise", "feedback": content}` |
 | `code_approval` | `{"approve": false, "feedback": content}` |
-| `memory_change`, `workflow_save` | `{"approve": false}`로 닫고, `content`는 에이전트에게 이어서 전달 |
+| `workflow_save` | `{"approve": false}`로 닫고, `content`는 에이전트에게 이어서 전달 |
 
 B안에서는 그 글도 대화 기록에 user 메시지로 남깁니다.
 
