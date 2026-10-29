@@ -4,6 +4,7 @@ Also runs schema setup once per deploy (advisory lock).
 """
 
 import asyncio
+import logging
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
@@ -11,7 +12,6 @@ from alembic import command
 from alembic.config import Config
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 from langgraph.store.postgres import AsyncPostgresStore
-from langgraph.store.postgres.base import PostgresIndexConfig
 from psycopg import AsyncConnection
 from psycopg.rows import DictRow, dict_row
 from psycopg_pool import AsyncConnectionPool
@@ -35,6 +35,7 @@ from src.dtest.core.workflows.service import WorkflowService
 PgPool = AsyncConnectionPool[AsyncConnection[DictRow]]
 
 MIGRATION_LOCK = 7_340_001
+log = logging.getLogger(__name__)
 
 
 def _alembic_upgrade(settings: Settings) -> None:
@@ -63,17 +64,9 @@ async def build_services(
         open=False,
     )
     await pool.open()
-    embedder = build_embedder(settings)
-    index: PostgresIndexConfig | None = (
-        {
-            "dims": settings.embedding_dims,
-            "embed": embedder,
-            "fields": ["title", "content"],
-        }
-        if embedder
-        else None
-    )
-    store = AsyncPostgresStore(pool, index=index)
+    embedder = build_embedder(settings)  # workflow search only
+    # no vector index: project memory is put in the prompt whole
+    store = AsyncPostgresStore(pool)
     workflows = WorkflowService(
         db,
         embedder,
@@ -89,6 +82,8 @@ async def build_services(
         executor = ExecutorClient(
             settings.executor_base_url,
             settings.executor_timeout_seconds,
+            settings.executor_api_key,
+            settings.executor_admin_api_key,
             settings.executor_tenant_id,
         )
         storage = SharedStorage(
@@ -105,12 +100,7 @@ async def build_services(
         storage=storage,
         code_sources=CodeSources(db, storage),
         images=Images(db, settings.storage_root),
-        memory=ProjectMemory(
-            store,
-            db,
-            settings.memory_item_max_chars,
-            settings.memory_total_max_chars,
-        ),
+        memory=ProjectMemory(store, db, settings.memory_total_max_chars),
         workflows=workflows,
         embedder=embedder,
         checkpointer=AsyncPostgresSaver(pool),
@@ -139,7 +129,8 @@ async def build_services(
 async def migrate(services: Services) -> None:
     """App tables (Alembic), LangGraph checkpointer/store tables.
 
-    Also the workflow vector index.
+    Also the workflow vector index and the move of the former project
+    memory entries into the default topics.
     """
     async with services.db.engine.connect() as conn:
         await conn.execute(
@@ -153,6 +144,10 @@ async def migrate(services: Services) -> None:
                 await services.checkpointer.setup()
             if isinstance(services.memory.store, AsyncPostgresStore):
                 await services.memory.store.setup()
+            # former item-per-entry memory -> default topics (idempotent)
+            moved = await services.memory.migrate_all_legacy()
+            if moved:
+                log.info("project_memory_migrated entries=%d", moved)
             await services.workflows.ensure_index()
         finally:
             await conn.execute(

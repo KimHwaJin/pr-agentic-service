@@ -39,7 +39,7 @@ from src.dtest.agent.context import AnalysisState, RunContext
 from src.dtest.agent.reporter import collect_evidence, generate_report
 from src.dtest.core.assets import SkillCatalog, ToolCatalog
 from src.dtest.core.db import new_id
-from src.dtest.core.executor.client import ExecutorError
+from src.dtest.core.executor.client import ExecutorError, Identity
 from src.dtest.core.executor.sources import SourceOwner, file_name
 from src.dtest.core.notebook_links import lab_url
 from src.dtest.core.services import TOOL_EFFECTS
@@ -78,6 +78,23 @@ def _owner(runtime: Runtime) -> SourceOwner:
     )
 
 
+def _who(
+    runtime: Runtime, execution: dict[str, Any] | None = None
+) -> Identity:
+    """The executor identity of this run's calls.
+
+    An execution answers only to the user who opened it, so calls on an
+    existing execution go as its opener (another member of a shared
+    project may continue the session).
+    """
+    ctx = runtime.context
+    return Identity(
+        user_id=(execution or {}).get("user_id") or ctx.user_id,
+        project_id=ctx.project_id,
+        session_id=ctx.session_id,
+    )
+
+
 def _source_folder(runtime: Runtime, tool: str) -> str:
     """This executor operation's folder: "<NN>-<tool>" by turn order.
 
@@ -113,26 +130,30 @@ def _key(runtime: Runtime, suffix: str) -> str:
 @tool
 async def read_skill(name: str, runtime: Runtime) -> str:
     """Read an analysis skill: what it is for, its tools and when each tool
-    runs (always/conditional)."""
+    runs (always/conditional), with one summary line per tool."""
     services = runtime.context.services
     skill = services.skills("analysis").skills.get(name)
     if skill is None:
         return f"'{name}' skill이 없습니다."
     tools = services.tool_catalog()
-    signatures = "\n\n".join(
-        tools.describe(t.tool) for t in skill.tools if t.tool in tools.tools
+    summaries = "\n".join(
+        tools.summary(t.tool) for t in skill.tools if t.tool in tools.tools
     )
-    return f"{skill.body}\n\n## Tool signatures\n\n{signatures}"
+    return (
+        f"{skill.body}\n\n## Tools\n\n{summaries}\n\n"
+        "계획에 쓸 tool은 read_tool로 파라미터와 설명을 확인하세요."
+    )
 
 
 @tool
-async def read_tool(name: str, runtime: Runtime) -> str:
-    """Read one tool's signature, outputs and docstring."""
+async def read_tool(names: list[str], runtime: Runtime) -> str:
+    """Read tools' signatures, outputs and docstrings (several at once)."""
     tools = runtime.context.services.tool_catalog()
-    return (
-        tools.describe(name)
+    return "\n\n".join(
+        f"### {name}\n{tools.describe(name)}"
         if name in tools.tools
-        else f"'{name}' tool이 없습니다."
+        else f"### {name}\n'{name}' tool이 없습니다."
+        for name in names
     )
 
 
@@ -639,6 +660,7 @@ async def _append(
         try:
             return await executor.append_operation(
                 execution["id"],
+                who=_who(runtime, execution),
                 idempotency_key=key,
                 expected_version=version,
                 steps=steps,
@@ -703,11 +725,7 @@ async def _submit_now(
             step["sequence"] = i
         receipt = await executor.submit(
             idempotency_key=_key(runtime, "submit"),
-            context={
-                "user_id": ctx.user_id,
-                "project_id": ctx.project_id,
-                "session_id": ctx.session_id,
-            },
+            who=_who(runtime),
             steps=steps,
             profile=settings.executor_runtime_profile,
             wait_seconds=settings.executor_operation_wait_seconds,
@@ -715,6 +733,7 @@ async def _submit_now(
         )
         execution = {
             "id": receipt["execution_id"],
+            "user_id": ctx.user_id,
             "version": receipt["state"]["version"],
             "next_sequence": len(steps),
             "alive": True,
@@ -1049,6 +1068,7 @@ async def write_report(title: str, focus: str, runtime: Runtime) -> Command:
                 "finalize",
                 lambda: executor.finalize(
                     execution["id"],
+                    who=_who(runtime, execution),
                     idempotency_key=_key(runtime, "finalize"),
                     expected_version=execution["version"],
                 ),
@@ -1097,6 +1117,7 @@ async def write_report(title: str, focus: str, runtime: Runtime) -> Command:
             )
         artifact = await executor.create_report(
             execution["id"],
+            who=_who(runtime, execution),
             idempotency_key=_key(runtime, "report"),
             markdown=markdown,
             name="final-report.md",

@@ -13,13 +13,15 @@ from src.dtest.worker.executor_events import (
     MissedEventRecovery,
 )
 from src.dtest.worker.maintenance import Retention
+from src.dtest.worker.memory import MemoryWorker
 from src.dtest.worker.scheduler import RunScheduler
+from src.dtest.worker.user_deactivation import BatchDisableRetry
 
 
 class Worker:
     """Background side of the service.
 
-    Agent runs, executor events, batch report jobs.
+    Agent runs, executor events, batch report jobs, project memory.
     """
 
     def __init__(self, services: Services):
@@ -40,6 +42,7 @@ class Worker:
             on_wake=self.scheduler.notify,
             on_progress=self.scheduler.progress,
             on_completed=self.reports.enqueue,
+            executor=services.executor,
         )
         self.recovery = MissedEventRecovery(
             services.db,
@@ -48,6 +51,12 @@ class Worker:
             after_seconds=settings.executor_event_recovery_seconds,
         )
         self.retention = Retention(services)
+        self.batch_disable = BatchDisableRetry(services)
+        self.memory = (
+            MemoryWorker(services, self.owner)
+            if settings.memory_worker_enabled
+            else None
+        )
         self.tasks: list[asyncio.Task] = []
 
     def start(self) -> None:
@@ -71,10 +80,21 @@ class Worker:
             asyncio.create_task(
                 self.retention.run_forever(), name="retention"
             ),
+            asyncio.create_task(
+                self.batch_disable.run_forever(), name="batch-disable-retry"
+            ),
         ]
+        if self.memory:
+            self.tasks.append(
+                asyncio.create_task(
+                    self.memory.run_forever(), name="memory-worker"
+                )
+            )
 
     async def stop(self, drain_seconds: float = 20) -> None:
         await self.scheduler.drain(drain_seconds)
+        if self.memory:
+            await self.memory.stop(drain_seconds)
         for task in self.tasks:
             task.cancel()
         await asyncio.gather(*self.tasks, return_exceptions=True)

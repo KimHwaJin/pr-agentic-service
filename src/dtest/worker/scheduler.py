@@ -33,6 +33,7 @@ from src.dtest.core.models import (
 )
 from src.dtest.core.services import Services
 from src.dtest.worker.executor_events import matches
+from src.dtest.worker.memory import mark_dirty
 
 log = logging.getLogger(__name__)
 _PAUSE: TypeAdapter = TypeAdapter(PauseRequest)
@@ -258,6 +259,7 @@ class RunScheduler:
         try:
             await self.services.executor.cancel(
                 execution_id,
+                who=await self.services.executor.opener(execution_id),
                 idempotency_key=f"cancel:{run_id}",
                 reason="사용자 취소",
             )
@@ -424,6 +426,9 @@ class RunScheduler:
                     )
                     .values(active_run_id=None)
                 )
+                if status == "succeeded" and answer:
+                    # always, so a worker turned on later catches up
+                    await mark_dirty(db, run.project_id, run.id)
             await db.commit()
         if not finished:
             log.warning("run_finish_skipped run_id=%s", run.id)

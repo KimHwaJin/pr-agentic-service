@@ -19,6 +19,20 @@
 
 `GET /api/v1/models` → `{items: [{name, label, default, input: ["text"] | ["text","image"], max_images}]}`: 고를 수 있는 모델(설정 파일 `config.{APP_ENV}.yml`의 `models`, 로컬은 compose `MODELS`). 요청의 `model`에는 `name`을 보내고, 화면에는 `label`(없으면 `name`)을 보여 줍니다. `input`에 `image`가 있는 모델만 이미지를 받습니다.
 
+### 다른 서비스·에이전트 (API key)
+
+브라우저가 아닌 호출자는 쿠키 없이 관리자가 발급한 key와 사용자를 헤더로 보냅니다. 쿠키가 있으면 SSO로만 판정합니다.
+
+| 헤더 | 규칙 |
+| --- | --- |
+| `X-Api-Key` | 시스템 화면 "API 키"에서 발급(`pas_live_…`, 로컬·dev `pas_dev_…`). 모르는·대기(pending)·폐기된 key는 401 `invalid_api_key` |
+| `X-User-Id` | 우리 사용자의 `users.id` 또는 사번(우리가 `users.id`로 바꿔 넘김). 없거나 형식 오류 400 `INVALID_IDENTITY`, 미등록·비활성 사용자 403. 단, 다른 tenant 키가 executor·배치 게이트웨이를 부를 때는 그 호출자의 사용자 ID를 형식만 보고 그대로 넘깁니다 |
+| `X-Project-Id`, `X-Session-Id` | 선택. 경로의 프로젝트·세션과 다르면 400. executor 입구에서는 그 호출자의 tenant가 우리면 멤버십을 확인하고, 다른 tenant면 형식만 봅니다 |
+
+Swagger(`/docs`)에서는 Authorize 버튼에 `X-Api-Key`·`X-User-Id`가 있고, 각 API에 `X-Project-Id`·`X-Session-Id` 입력칸이 있습니다. 같은 브라우저에 SSO 로그인 쿠키가 있으면 쿠키가 우선이라 헤더는 무시됩니다. 관리자 API(`/admin/...`)는 key로 부를 수 없습니다(403). key 요청은 감사 로그(`api_service.audit`)에 남습니다. 로컬·dev의 `AUTH_MODE=header`에서는 key 없이 `X-User-Id`만으로 부를 수 있습니다.
+
+관리자용: `GET /api/v1/admin/api-clients`, `POST /api/v1/admin/api-clients` `{name, tenant?, description?}` → `{client, api_key}`(key 원문은 이때 한 번만), `POST /api/v1/admin/api-clients/{id}/activate`, `/revoke`. 우리 tenant 클라이언트는 바로 active, 다른 tenant는 executor·pr-batch의 `allowed_tenants`에 반영된 뒤 활성화합니다.
+
 **오류 응답:** 모든 오류는 `{"detail": "설명", "code": "기계가 읽는 코드", ...}`입니다. 요청 형식 오류는 `code: invalid_body`와 `errors: [{field, message}]`가 붙습니다.
 
 ## 2. 프로젝트·세션·메시지
@@ -55,7 +69,7 @@
 
 - 응답 202 `{run, resumed}`. 새 턴이면 `resumed: false`와 새 run, 재개면 `resumed: true`와 기다리던 그 run(같은 id)입니다. 진행은 SSE로 받습니다.
 - **이미지:** `image/png`, `image/jpeg`, `image/webp`만, 장당 10MB, 합계 20MB, 장수는 모델의 `max_images`까지. 긴 변이 1568px를 넘으면 서버가 줄입니다. 대화 기록에서는 `GET /api/v1/images/{image_id}`로 보여 줍니다. 모델은 최근 3턴의 이미지까지 봅니다.
-- **확인 대기 중에 `input`을 보내면** 그 글이 기다리던 확인에 대한 답이 됩니다: `question`은 답, `plan_approval`은 수정 요청 피드백, `code_approval`·`memory_change`·`workflow_save`는 거절 + 그 글을 에이전트에게 전달. 응답은 `resumed: true`이고, 글은 대화 기록에 user 메시지로 남습니다.
+- **확인 대기 중에 `input`을 보내면** 그 글이 기다리던 확인에 대한 답이 됩니다: `question`은 답, `plan_approval`은 수정 요청 피드백, `code_approval`·`workflow_save`는 거절 + 그 글을 에이전트에게 전달. 응답은 `resumed: true`이고, 글은 대화 기록에 user 메시지로 남습니다.
 
 | 상태 | code | 언제 |
 | --- | --- | --- |
@@ -95,7 +109,7 @@
 | `hitl_request` | `{interrupt_id, type, ...}` | 사용자 입력 카드 (4장) |
 | `hitl_resolved` | `{interrupt_id}` | 카드 닫기 |
 | `artifact` | `{kind: report\|notebook, artifact_id, title, lab_url}` | 링크 `/view/artifacts/{artifact_id}`, 노트북은 `lab_url`로 JupyterLab에서 열기 (5장) |
-| `memory_updated` | `{action, item}` | 메모리 변경 알림 |
+| `memory_updated` | `{topic, title, content, version, updated_at, by: user\|agent}` | 프로젝트 메모리 주제의 본문이 바뀜(대화 중 저장 또는 백그라운드 정리). `topic`은 주제 id, `content`는 그 주제 본문 전체 |
 | `workflow_saved` | `{workflow_id, name}` | 저장 알림 |
 | `activity` | 시작: `{id, kind, state: "started", label, ...}` / 끝: `{id, kind, state: finished\|failed\|paused, elapsed_ms}` | 오래 걸리는 작업의 진행 표시. 시작 이벤트의 `label`(예: "이전 대화를 정리하는 중")을 상태 문구로 띄우고, 같은 `id`의 끝 이벤트가 오면 내립니다. `kind`: `answering`, `planning`(모델 호출), `summarizing`, `report_writing`, `workflow_saving`. 저장하지 않는 실시간 이벤트입니다. 코드 실행 대기는 `run_status`(waiting_executor)와 `execution_progress`로 옵니다 |
 | `context_summarized` | `{messages, summary_chars}` | 이전 대화가 요약으로 정리됨. 대화 중간에 구분선으로 표시합니다(저장됨) |
@@ -104,7 +118,7 @@
 
 ## 4. HITL (사용자 확인)
 
-`hitl_request.type`별 화면과 `POST /sessions/{id}/runs`의 `command.resume.value`입니다. 질문 종류마다 답(reply) 모델이 정해져 있고 OpenAPI(`Resume.value`)에 나옵니다: `PlanApproveReply`·`PlanReviseReply`·`PlanCancelReply`(`action`으로 구분), `CodeApprovalReply`, `MemoryChangeReply`, `WorkflowSaveReply`, question은 문자열 또는 객체(`QuestionReply`).
+`hitl_request.type`별 화면과 `POST /sessions/{id}/runs`의 `command.resume.value`입니다. 질문 종류마다 답(reply) 모델이 정해져 있고 OpenAPI(`Resume.value`)에 나옵니다: `PlanApproveReply`·`PlanReviseReply`·`PlanCancelReply`(`action`으로 구분), `CodeApprovalReply`, `WorkflowSaveReply`, question은 문자열 또는 객체(`QuestionReply`).
 
 서버는 run이 기다리는 질문 종류의 모델로 답을 검사합니다(모르는 항목, 틀린 타입은 거절). 그다음 질문 내용과 맞는지 검사합니다(후보 번호 범위, 필수 입력칸, 계획에 없는 파라미터). 맞지 않으면 422 `invalid_answer`와 `errors[]`(`field`, `message`)를 돌려줍니다. 문자열도 객체도 아닌 값(숫자, 목록 등)은 본문 검사에서 422 `invalid_body`가 됩니다.
 
@@ -113,7 +127,6 @@
 | `question` | `question`, `options[]`, `fields[]` | 문자열 답변, 또는 fields가 있으면 `{<key>: 값, ...}` |
 | `plan_approval` | `candidates[]`: `{title, rationale, source(워크플로우 출처 또는 null), document(Workflow 1.0), calls[], input_slots[]}`. `calls[]`: `{index, key, skill, skill_description, tool, summary, execution, condition, params[]}`, `params[]`: `{name, type, required, doc, key, source(literal\|input\|tool_output\|default), value, default, ref}` | `{"action": "approve", "index": 0, "input_values": {"0.0.lot_cd": "L1"}, "overrides": {"1.0.sample_size": 500}}` / `{"action": "revise", "feedback": "..."}` / `{"action": "cancel"}` |
 | `code_approval` | `purpose`, `code`, `code_level` | `{"approve": true, "code": "수정한 코드(선택)"}` / `{"approve": false, "feedback": "..."}` |
-| `memory_change` | `item`(현재), `proposed`, `reason` | `{"approve": true\|false}` |
 | `workflow_save` | `name`, `user_queries[]`, `tags[]`, `document`, `excluded_custom_steps` | `{"approve": true, "name": "...", "user_queries": [...]}` / `{"approve": false}` |
 
 `input_values`의 키는 `"<step_index>.<tool_index>.<파라미터>"`입니다. `required`가 true인 칸이 비어 있으면 승인되지 않습니다.
@@ -134,9 +147,11 @@
 - 프론트가 다른 origin이면 `CORS_ORIGINS=["https://front.example"]`, 사이트가 다르면 `COOKIE_SAMESITE=none` + HTTPS(`COOKIE_SECURE=true`).
 - `FRONTEND_ORIGIN`: 로그인 후 돌아갈 프론트 주소, `SSO_ALLOWED_RETURN_ROOTS`: 허용할 경로.
 
-## executor 조회 (중계)
+## executor 조회 (중계)와 외부 호출자 입구
 
-`/api/v1/executor/<경로>` → executor `/api/v1/<경로>`. 응답 본문은 executor 것을 그대로 돌려줍니다(형식은 executor API 문서). 아래 경로만 열려 있고, 그 밖은 404입니다.
+`/api/v1/executor/<경로>` → executor `/api/v1/<경로>`. 응답 본문은 executor 것을 그대로 돌려줍니다(형식은 executor API 문서). 아래 경로만 열려 있고, 그 밖은 404입니다. 본문에 `context`·`tenant_id`, 목록에 `user_id`·`tenant_id`를 넣지 않습니다(범위는 헤더가 정함).
+
+**브라우저(SSO)**
 
 | Method | Path (`/api/v1/executor` 아래) | 권한 |
 | --- | --- | --- |
@@ -148,21 +163,46 @@
 | POST | `/runtime-targets/{id}/probe`, `/drain`, `/activate`, `/disable`, `/purge` | 관리자. 다시 점검 / 새 작업 배정 중지(진행 중은 마저) / 배정 복귀 / 사용 중지 / 사용 중지된 대상 제거 |
 | POST | `/maintenance/drain`, `/maintenance/activate`, `/maintenance/runs` | 관리자. executor 전체의 새 실행 접수 중지 / 재개 / 진행 중 실행을 멈추는 점검 작업 생성 |
 
-POST의 `actor`는 클라이언트 값 대신 서버가 요청한 관리자(`{"type": "USER", "id": <users.id>}`)로 채웁니다. executor·pr-batch에 넘기는 사용자 ID(`context.user_id`, actor, JWT `sub`)는 모두 사번이 아닌 `users.id`(UUID)입니다. 화면에 이름·사번이 필요하면 `/users`로 찾습니다. 나머지 본문(`idempotency_key` 등)은 executor 형식 그대로입니다.
+runtime·maintenance 경로는 executor 운영 key(`EXECUTOR_ADMIN_API_KEY`)가 없으면 503 `executor_admin_key_missing`입니다. POST의 `actor`는 클라이언트 값 대신 서버가 요청한 관리자(`{"type": "USER", "id": <users.id>}`)로 채웁니다. executor·pr-batch에 넘기는 사용자 ID(`X-User-Id`, `context.user_id`, actor)는 모두 사번이 아닌 `users.id`(UUID)입니다. 화면에 이름·사번이 필요하면 `/users`로 찾습니다. 나머지 본문(`idempotency_key` 등)은 executor 형식 그대로입니다.
 
-executor가 응답하지 않으면 502 `executor_unavailable`입니다.
+**API key 호출자** (executor를 직접 부르지 않고 여기로 부릅니다)
+
+| Method | Path (`/api/v1/executor` 아래) |
+| --- | --- |
+| GET·POST | `/executions` |
+| GET | `/executions/{id}`, `/result`, `/steps`, `/steps/{id}`, `/operations`, `/operations/{id}`, `/operations/{id}/result`, `/operations/{id}/steps`, `/attempts`, `/attempts/{id}`, `/attempts/{id}/steps`, `/events`, `/notebook`, `/notebook/cells/{n}` |
+| POST | `/executions/{id}/operations`, `/finalize`, `/cancel`, `/retry` |
+| GET·POST | `/executions/{id}/artifacts` |
+| GET | `/artifacts/{id}`, `/artifacts/{id}/content` |
+
+우리가 `X-Api-Key`(우리 executor key), `X-User-Id`, `X-Tenant-Id`(그 호출자의 tenant)를 다시 만들어 붙입니다. `X-User-Id` 없는 GET은 그 tenant 전체 조회, 없는 쓰기는 400입니다. 운영 경로와 diagnostics는 404. 이벤트는 중계하지 않습니다(`executor.events.<tenant>`를 읽거나 `/events`를 폴링).
+
+executor가 응답하지 않으면 502 `executor_unavailable`, 시간 초과는 504 `executor_timeout`입니다.
 
 ## 6. 프로젝트 공유 메모리
 
+프로젝트 메모리는 주제(topic)마다 짧은 Markdown 본문입니다. 모든 대화의 프롬프트에 전부 들어갑니다(내용이 있는 주제마다 `## {title}`). 주제 목록은 프로젝트마다 고칠 수 있고, 고친 적 없는 프로젝트는 아래 기본 주제를 씁니다.
+
+| id | title | description (요약) | max_chars |
+| --- | --- | --- | --- |
+| `overview` | Overview | 프로젝트 배경·목적·분석 대상 | 500 |
+| `preferences` | Preferences | 분석 방식·보고서 형식·용어 선호 | 500 |
+| `core_interests` | Core Interests | 계속 관심 두는 제품·공정·설비·지표 | 500 |
+| `key_events` | Key Events | 날짜가 있는 사건·결정. 날짜(YYYY-MM-DD)로 시작, 최신이 위 | 700 |
+
+주제는 `{id, title, description, max_chars}`입니다. 백그라운드 정리와 Agent는 제목·설명에 맞는 주제에만 내용을 넣으므로, 형식 규칙(예: 날짜로 시작)도 설명에 씁니다. 제한: 주제 1–6개, 제목 1–40자(중복 불가), 설명 200자 이하(한 줄), 주제마다 `max_chars` 100 이상, 합계는 `MEMORY_TOTAL_MAX_CHARS`(기본 2200) 이하.
+
 | Method | Path | 설명 |
 | --- | --- | --- |
-| GET | `/projects/{id}/memory` | `{items[], total_chars, max_chars}`. item: `{id, category, title, content, author(user\|agent), version, source}` |
-| POST | `/projects/{id}/memory` | `{category, title, content}` (사용자가 쓴 항목은 Agent가 승인 없이 바꾸지 못함) |
-| PATCH | `/projects/{id}/memory/{item_id}` | `{expected_version, title?, content?, category?}` — 버전이 다르면 409 |
-| DELETE | `/projects/{id}/memory/{item_id}?expected_version=N` | |
-| GET | `/projects/{id}/memory/history?item_id=` | 변경 이력 |
+| GET | `/projects/{id}/memory` | `{topics: [{topic, title, description, max_chars, content, lines[], version, updated_at}], topics_version, total_max_chars}`. 주제 순서대로, 빈 주제 포함(`content: ""`, `version: 0`). `lines[]`: `{id, text, author(user\|agent), updated_at, source}` |
+| GET | `/projects/{id}/memory/topics` | `{topics: [{id, title, description, max_chars}], version, updated_at, total_max_chars}`. `version: 0`은 기본 주제(고친 적 없음) |
+| PUT | `/projects/{id}/memory/topics` | `{topics: [{id?, title, description?, max_chars, replace?}], expected_version}`. 목록 전체를 순서대로 보냅니다. **수정**: 기존 `id` 그대로 → 제목·설명·한도만 바뀌고 본문 유지(한도를 본문보다 낮춰도 됨: 그 뒤 줄이는 쓰기만 허용). **새 주제**: `id` 없음 → 새 id, 빈 본문(다음 대화부터 채워짐). **교체**: 기존 `id` + `replace: true` → 새 id·빈 본문. **삭제**: 목록에서 뺌. 교체·삭제된 본문은 이력(`topic_replaced`/`topic_removed`)에 남아 복원할 수 있습니다. 409 버전 불일치, 422 제한 위반·모르는 id |
+| PUT | `/projects/{id}/memory/{topic}` | `{content, expected_version}`. 주제 본문 전체를 바꿉니다. 바뀌지 않은 줄은 작성자를 유지하고, 새로 쓰거나 고친 줄은 `author=user`. 404 없는 주제, 409 버전 불일치, 422 한도 초과 또는 `# `·`## ` 제목 줄 |
+| GET | `/projects/{id}/memory/history?topic=&removed=&limit=` | 변경 이력(최신 먼저): `{id, topic, title, action(update\|delete\|revert\|migrate\|topic_removed\|topic_replaced\|topic_restored), before, after, version, replaced_by, actor{type,id}, session_id, run_id, created_at}`. `removed=true`면 교체·삭제된 주제만 |
+| POST | `/projects/{id}/memory/{topic}/revert` | `{history_id, expected_version?}`. 그 변경 직전 본문으로 되돌립니다(새 버전, 이력에 `revert`로 남음) |
+| POST | `/projects/{id}/memory/history/{history_id}/restore` | 교체·삭제된 주제를 그때의 제목·설명·한도·본문 그대로 목록 끝에 되살립니다(이력 `topic_restored`). 응답은 GET `/memory`와 같습니다. 개수·합계 제한을 넘으면 422(다른 주제를 줄이거나 지운 뒤 다시), 이미 있으면 409, 같은 제목이 있으면 제목 뒤에 " (복원)" |
 
-category: `background`(프로젝트 배경), `analysis_preferences`(분석 선호), `report_preferences`(보고서 선호), `shared_findings`(공유할 주요 발견)
+작성자(`author`)는 기록만 합니다. Agent와 백그라운드 메모리 정리도 사용자가 쓴 줄을 고칠 수 있고, 잘못 바뀌면 이력에서 되돌립니다. Agent가 대화 중 고치면 `actor.id`가 `main`, 백그라운드 정리는 `memory_worker`입니다.
 
 ## 7. 워크플로우 (Workflow 1.0)
 
@@ -178,7 +218,9 @@ category: `background`(프로젝트 배경), `analysis_preferences`(분석 선�
 
 ## 8. 배치 (pr-batch 진입점)
 
-- `/api/v1/batch/{path}` → pr-batch `/api/v1/{path}`로 그대로 중계됩니다(`Idempotency-Key`, `If-Match` 헤더 전달). 사용자 인증은 이 서비스가 처리합니다.
+- `/api/v1/batch/{path}` → pr-batch `/api/v1/{path}`로 그대로 중계됩니다(`Idempotency-Key`, `If-Match` 헤더 전달). 사용자 인증은 이 서비스가 처리하고, pr-batch에는 우리 key와 `X-User-Id`를 붙입니다. API key 호출자도 같은 경로를 씁니다.
+- 배치 등록(`POST /batches`)에만 tenant(`X-Tenant-Id`: 브라우저는 우리, key 호출자는 그 tenant)와 프로젝트(요청의 `X-Project-Id`, 우리 tenant면 멤버만)가 붙습니다. 본문에 `tenant_id`를 넣으면 pr-batch가 422로 거부합니다. 배치의 프로젝트는 바꿀 수 없어서 옮기려면 새로 만듭니다.
+- 사용자가 비활성화되면 그 사람의 배치가 꺼집니다(`disabled_reason: USER_DEACTIVATED`). 그 배치의 수동 실행은 409 `OWNER_DEACTIVATED`입니다.
 - `POST /api/v1/batch/scripts/from-notebook` `{artifact_id, name?}`: 세션 노트북을 배치 스크립트로 등록합니다.
 - 배치 실행의 노트북·리포트 artifact는 `/api/v1/artifacts/{id}`로 볼 수 있습니다(배치 소유자 = 실행의 `context.user_id`만).
 

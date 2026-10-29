@@ -339,6 +339,7 @@ async def cancel_run(run_id: str, services: ServicesDep, user: UserDep):
         try:
             await services.executor.cancel(
                 execution_id,
+                who=await services.executor.opener(execution_id),
                 idempotency_key=f"cancel:{run_id}",
                 reason="사용자 취소",
             )

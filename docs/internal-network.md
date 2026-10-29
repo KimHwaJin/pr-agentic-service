@@ -12,7 +12,7 @@
 | `src/server.py`, `src/config.py`, `src/gaia/`, `src/common/`, `src/lib/`, `src/routers/` | 손대지 않음 |
 | `config.yml`, `config.{dev,stg,prd}.yml`, `logger.yml` | 우리 설정 그대로. 템플릿 고정값 `PORT`, `PROJECT_NAME`, `SERVICE_NAME`만 추가 |
 
-서비스 코드는 전부 `src/dtest/`에 있습니다. 내부망 레포에는 `src/dtest/`, `src/workflows/dtest/`, `app.py`(또는 템플릿 `app.py`에 위 한 줄), `tests/`, `scripts/`, `deploy/`, `docs/`, `keys/`, `Dockerfile`, `pyproject.toml`, `uv.lock`, 설정 yml을 가져갑니다.
+서비스 코드는 전부 `src/dtest/`에 있습니다. 내부망 레포에는 `src/dtest/`, `src/workflows/dtest/`, `app.py`(또는 템플릿 `app.py`에 위 한 줄), `tests/`, `scripts/`, `deploy/`, `docs/`, `Dockerfile`, `pyproject.toml`, `uv.lock`, 설정 yml을 가져갑니다.
 
 ## 시작과 종료
 
@@ -36,7 +36,7 @@
 
 - gaia 메시지 하나가 우리 채팅의 한 턴입니다. `POST /sessions/{id}/runs`와 같은 `create_run`으로 run을 만들고 worker가 실행하며, 다리는 세션 이벤트를 따라가다 run이 끝나면 답을 돌려줍니다. 답 텍스트는 오는 대로 LangGraph custom stream(`str`)으로 흘려 gaia가 바로 보여 줍니다.
 - 사용자: gaia `user_id`(SSO 사번)로 우리 사용자를 찾고, 처음이면 SSO 첫 로그인처럼 만들어 기본 프로젝트를 줍니다.
-- 세션: gaia `session_id`마다 기본 프로젝트에 우리 세션 하나(`gaia_sessions` 테이블, migration 0002). 같은 대화가 우리 화면에도 보입니다. 우리 화면에서 지운 세션이면 새로 만듭니다.
+- 세션: gaia `session_id`마다 기본 프로젝트에 우리 세션 하나(`gaia_sessions` 테이블, migration 0004). 같은 대화가 우리 화면에도 보입니다. 우리 화면에서 지운 세션이면 새로 만듭니다.
 - 확인 질문(gaia HITL은 쓰지 않음): 계획 승인은 첫 후보로 자동 승인(필수 입력값이 비면 그 값을 물음), 코드 승인은 승인, 메모리 변경과 워크플로우 저장 제안은 거절합니다. Agent의 질문은 그 질문을 답으로 보내 턴을 끝내고, 다음 gaia 메시지가 그 질문의 답이 됩니다(우리 채팅에서 질문 중에 입력한 글과 같음).
 - 결과물: 리포트, 노트북 같은 artifact는 `urls`(`{"name", "url"}`)로 보냅니다. `docs`는 비어 있고 gaia가 주는 모델 이름과 세션 system prompt는 쓰지 않습니다.
 - gaia 연결이 끊겨도 run은 worker에서 끝까지 돕니다. 같은 세션에 다음 메시지가 오면, 아직 돌고 있는 run이 있을 때 그 run을 이어서 따라갑니다.

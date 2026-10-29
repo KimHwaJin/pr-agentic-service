@@ -37,7 +37,19 @@ def test_every_emitted_event_type_has_a_model():
 
 def test_check_refuses_unknown_types_and_wrong_shapes():
     events.check("run_status", {"status": "running"})
-    events.check("memory_updated", {"action": "deleted", "item": {"id": "m1"}})
+    events.check(
+        "memory_updated",
+        {
+            "topic": "preferences",
+            "title": "Preferences",
+            "content": "- 표 위주",
+            "version": 2,
+            "updated_at": None,
+            "by": "agent",
+        },
+    )
+    with pytest.raises(ValidationError):
+        events.check("memory_updated", {"action": "deleted", "item": {}})
     with pytest.raises(events.UnknownEventType):
         events.check("nope", {})
     with pytest.raises(ValidationError):

@@ -1,35 +1,44 @@
 """pr-batch integration.
 
-``/api/v1/batch/{path}`` relays to pr-batch ``/api/v1/{path}`` with a
-short-lived JWT for the SSO user (RS256 with the private key from the
-pr-batch team, iss/aud from settings, sub=users.id, scope=batch:manage,
-<= 300 s).
+``/api/v1/batch/{path}`` relays to pr-batch ``/api/v1/{path}`` with our key
+(``X-Api-Key: BATCH_API_KEY``) and the caller as ``X-User-Id``: the SSO user,
+or the user a key caller names. pr-batch shows each user only their own
+batches and scripts (404 otherwise).
 
 Reports of finished batch runs are not asked for by pr-batch: the worker
 starts one when the executor reports a successful BATCH execution (see
 ``worker.batch_reports``); users read them under ``/api/v1/batch-reports``.
-A batch registered through us carries our executor tenant_id, so pr-batch
-submits its runs with it and their events come to our stream. An edit that
-sends a tenant_id gets ours instead.
+A batch is registered (``POST /batches``) with the caller's tenant as
+``X-Tenant-Id`` (ours for the browser), so pr-batch submits its runs there
+and their events come to that tenant's stream; ``X-Project-Id`` is sent
+then too (pr-batch keeps it and never changes it). Other calls send no
+tenant: pr-batch keeps the one the batch was registered with.
 """
 
 import hashlib
-import json
-import time
-from functools import lru_cache
-from pathlib import Path
 from uuid import UUID
 
 import httpx
-import jwt
 from fastapi import APIRouter, HTTPException, Request, Response
 from fastapi.responses import HTMLResponse
 
-from src.dtest.api_service.deps import ServicesDep, UserDep
+from src.dtest.api_service.deps import (
+    PROJECT_ID,
+    IdentityHeaders,
+    ServicesDep,
+    UserDep,
+    caller_of,
+    current_user,
+    identity_header,
+    key_identity,
+    project_for,
+)
 from src.dtest.api_service.routers.artifacts import render_view
 from src.dtest.api_service.schemas.batch import BatchScriptFromNotebook
 from src.dtest.api_service.services.access import owned_artifact
-from src.dtest.core.config import ROOT
+from src.dtest.core.models import User
+from src.dtest.core.service_headers import Identity, with_key
+from src.dtest.core.services import Services
 
 router = APIRouter(tags=["batch"])
 FORWARD_HEADERS = ("content-type", "idempotency-key", "if-match", "accept")
@@ -43,35 +52,8 @@ def _client(services) -> httpx.AsyncClient:
     return _clients[base]
 
 
-@lru_cache
-def _private_key(path: str) -> bytes:
-    resolved = Path(path) if Path(path).is_absolute() else ROOT / path
-    return resolved.read_bytes()
-
-
-def _batch_token(services, user) -> str:
-    settings = services.settings
-    if not settings.batch_jwt_private_key_file:
-        raise HTTPException(503, "pr-batch integration is not configured.")
-    try:
-        key = _private_key(settings.batch_jwt_private_key_file)
-    except OSError as exc:
-        raise HTTPException(
-            503,
-            "pr-batch signing key is unreadable (batch_jwt_private_key_file).",
-        ) from exc
-    # pr-batch allows no clock skew: issue a few seconds early so a slightly
-    # fast clock here does not put iat in its future.
-    issued = int(time.time()) - 5
-    claims = {
-        "sub": user.id,
-        "iss": settings.batch_jwt_issuer,
-        "aud": settings.batch_jwt_audience,
-        "iat": issued,
-        "exp": issued + 300,
-        "scope": "batch:manage",
-    }
-    return jwt.encode(claims, key, algorithm="RS256")
+def batch_headers(services: Services, who: Identity) -> dict[str, str]:
+    return with_key(services.settings.batch_api_key, who)
 
 
 @router.post("/api/v1/batch/scripts/from-notebook", status_code=201)
@@ -96,7 +78,7 @@ async def notebook_to_batch_script(
     result = await _client(services).post(
         "/api/v1/scripts",
         headers={
-            "Authorization": f"Bearer {_batch_token(services, user)}",
+            **batch_headers(services, Identity(user_id=user.id)),
             "Idempotency-Key": f"nb-{body.artifact_id}-{digest}",
         },
         data={
@@ -126,7 +108,7 @@ async def batch_script_view(
     The page reads the uploaded file through the gateway; pr-batch answers
     only to the script's owner. Cells carry Step N / 건너뜀 marks.
     """
-    headers = {"Authorization": f"Bearer {_batch_token(services, user)}"}
+    headers = batch_headers(services, Identity(user_id=user.id))
     client = _client(services)
     script, version = (
         await client.get(f"/api/v1/scripts/{script_id}", headers=headers),
@@ -158,29 +140,40 @@ async def batch_script_view(
     )
 
 
-def sets_tenant(method: str, path: str) -> bool:
-    """Registration (POST batches) or edit (PATCH batches/{id})."""
-    parts = path.strip("/").split("/")
-    return (method == "POST" and parts == ["batches"]) or (
-        method == "PATCH" and len(parts) == 2 and parts[0] == "batches"
-    )
+def registers(method: str, path: str) -> bool:
+    """Batch registration (POST batches)."""
+    return method == "POST" and path.strip("/") == "batches"
 
 
-def with_tenant(body: bytes, tenant_id: str, edit: bool = False) -> bytes:
-    """A batch registration or edit body that names our tenant.
+# pr-batch admin API (our key's admin scope): not for callers
+_ADMIN_PATHS = {"batches:disable-by-owner"}
 
-    Set by us, not the caller: the tenant decides who gets the events.
-    An edit without tenant_id stays without it (pr-batch counts a sent
-    tenant_id as a new run configuration). A body that is not a JSON object
-    goes on as is for pr-batch to reject.
+
+async def gateway_identity(
+    services: Services,
+    request: Request,
+    path: str,
+    user_id: str | None,
+    user: User | None,
+) -> Identity:
+    """Who a gateway call is made for.
+
+    The tenant and the project only on registration: the browser's tenant
+    is ours and its project one the user belongs to; a key caller's project
+    in another tenant is its own and only checked for form. ``user`` None:
+    a key caller of another tenant, whose ``user_id`` is its own.
     """
-    try:
-        batch = json.loads(body)
-    except ValueError:
-        return body
-    if not isinstance(batch, dict) or (edit and "tenant_id" not in batch):
-        return body
-    return json.dumps({**batch, "tenant_id": tenant_id}).encode()
+    if path.strip("/") == "runtimes":  # pr-batch's own settings
+        return Identity()
+    if not registers(request.method, path):
+        return Identity(user_id=user_id)
+    caller = caller_of(request)
+    ours = services.settings.executor_tenant_id
+    tenant = caller.tenant if caller else ours
+    project = identity_header(request, "x-project-id", PROJECT_ID)
+    if project and tenant == ours and user is not None:
+        await project_for(services, user, project)
+    return Identity(user_id=user_id, project_id=project, tenant=tenant)
 
 
 @router.api_route(
@@ -188,21 +181,31 @@ def with_tenant(body: bytes, tenant_id: str, edit: bool = False) -> bytes:
     methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
 )
 async def batch_gateway(
-    path: str, request: Request, services: ServicesDep, user: UserDep
+    path: str,
+    request: Request,
+    services: ServicesDep,
+    _headers: IdentityHeaders = None,
 ):
+    if path.strip("/") in _ADMIN_PATHS:
+        raise HTTPException(404, "Not available through this service.")
+    if request.cookies.get(services.settings.session_cookie_name):
+        user: User | None = await current_user(request)
+        user_id = user.id if user else None
+    else:
+        _, user_id, user = await key_identity(
+            request,
+            services,
+            user_required=path.strip("/") != "runtimes",
+            any_user_outside=True,
+        )
     headers = {
         k: v
         for k, v in request.headers.items()
         if k.lower() in FORWARD_HEADERS
     }
-    headers["Authorization"] = f"Bearer {_batch_token(services, user)}"
+    who = await gateway_identity(services, request, path, user_id, user)
+    headers.update(batch_headers(services, who))
     body = await request.body()
-    if sets_tenant(request.method, path):
-        body = with_tenant(
-            body,
-            services.settings.executor_tenant_id,
-            edit=request.method == "PATCH",
-        )
     result = await _client(services).request(
         request.method,
         f"/api/v1/{path}",

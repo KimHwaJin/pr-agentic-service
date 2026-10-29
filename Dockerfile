@@ -22,8 +22,6 @@ RUN uv sync --locked --no-dev --group phoenix --no-install-project
 ARG APP_ENV=
 ENV APP_ENV=${APP_ENV}
 COPY logger.yml config*.yml ./
-# pr-batch signing key placed at build time (keys/README.md).
-COPY keys ./keys
 # src/: the gaia template's files and this service under src/dtest/
 # (assets, catalogs, migrations, web included). app.py is the template's.
 COPY app.py ./

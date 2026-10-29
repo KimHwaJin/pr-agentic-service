@@ -24,6 +24,51 @@ def test_skill_tool_table(skills):
     assert eda["boxplot_eda"].condition_tool == "compute_statistics"
 
 
+def test_skill_table_columns_by_header_name():
+    from src.dtest.core.assets import tool_table
+
+    rows, problems = tool_table(
+        "| 역할 | Tool | 입력 데이터 | 실행 방식 |\n"
+        "|---|---|---|---|\n"
+        "| 추출 | `extract_data` | NCE | 항상 실행 |\n"
+        "| 그림 | `boxplot_eda` |  | 조건부 실행 |\n"
+        "| 틀림 | extract | x | 항상 |\n"
+        "| 모자람 | `a` |\n"
+    )
+    assert [r.tool for r in rows] == ["extract_data", "boxplot_eda"]
+    assert rows[0].role == "추출"
+    assert rows[0].extra == (("입력 데이터", "NCE"),)
+    assert rows[1].execution == "conditional"
+    assert rows[1].extra == ()
+    assert len(problems) == 2
+
+
+def test_other_tables_are_not_tool_lists():
+    from src.dtest.core.assets import tool_table
+
+    rows, problems = tool_table("| 컬럼 | 뜻 |\n|---|---|\n| `LOT` | 로트 |\n")
+    assert rows == [] and problems == []
+
+
+def test_every_analysis_skill_table_reads_cleanly():
+    from pathlib import Path
+
+    from src.dtest.core.assets import SkillCatalog, ToolCatalog
+
+    root = Path(__file__).resolve().parents[1]
+    skills = SkillCatalog.load_many(
+        [root / "assets/skills", root / "catalogs/analysis_test/skills"]
+    )
+    tools = ToolCatalog.load_many(
+        [root / "assets/tools", root / "catalogs/analysis_test/tools"]
+    )
+    assert skills.errors == {}
+    for skill in skills.skills.values():
+        assert skill.tools, skill.name
+        missing = [t.tool for t in skill.tools if t.tool not in tools.tools]
+        assert not missing, (skill.name, missing)
+
+
 def test_tool_parameters_reach_the_model_under_their_own_names():
     # a parameter named "args" is renamed to "v__args" in the tool schema,
     # so the model's calls never match the function

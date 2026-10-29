@@ -1,13 +1,19 @@
 from fastapi import APIRouter, HTTPException
 from sqlalchemy import select
 
-from src.dtest.api_service.deps import AdminDep, ServicesDep, UserDep
+from src.dtest.api_service.deps import (
+    AdminDep,
+    ServicesDep,
+    UserDep,
+    forget_user,
+)
 from src.dtest.api_service.schemas.users import (
     Me,
     UserAdminUpdate,
     UserBrief,
     UserRead,
 )
+from src.dtest.core.batch_admin import tell_batch
 from src.dtest.core.models import Project, ProjectMember, User
 
 router = APIRouter(tags=["users"])
@@ -85,7 +91,17 @@ async def update_user(
         user = await db.get(User, user_id)
         if user is None:
             raise HTTPException(404, "User not found.")
-        for key, value in body.changes().items():
+        changes = body.changes()
+        deactivated = changes.get("is_active") is False
+        for key, value in changes.items():
             setattr(user, key, value)
+        if "is_active" in changes:
+            # pr-batch turns their batches off (idempotent, retried by the
+            # worker); reactivating does not turn them back on
+            user.batches_disable_pending = deactivated
         await db.commit()
-        return user
+    forget_user(user_id)
+    if deactivated:
+        await tell_batch(services, user_id)
+    async with services.db.sessions() as db:
+        return await db.get(User, user_id)

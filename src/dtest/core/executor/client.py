@@ -1,9 +1,12 @@
 import logging
 from collections.abc import AsyncIterator
+from dataclasses import replace
 from datetime import datetime
 from typing import Any
 
 import httpx
+
+from src.dtest.core.service_headers import SYSTEM, Identity, with_key
 
 log = logging.getLogger(__name__)
 
@@ -13,6 +16,9 @@ SERVICE_ACTOR = {"type": "AGENT", "id": "pr-agentic-service"}
 def trigger_type(execution: dict[str, Any]) -> str | None:
     """INTERACTIVE | BATCH of an execution or an event's ``execution``."""
     return (execution.get("trigger") or {}).get("type")
+
+
+__all__ = ["SYSTEM", "ExecutorClient", "ExecutorError", "Identity"]
 
 
 class ExecutorError(Exception):
@@ -30,22 +36,53 @@ class ExecutorError(Exception):
 class ExecutorClient:
     """Executor REST v1.
 
-    Every mutation carries a caller-derived idempotency key so a replayed
-    call (pod crash, graph replay) returns the original receipt.
+    Every request carries our API key (``X-Api-Key``) and the identity it
+    is made for (``Identity.headers``); the executor scopes executions to
+    that tenant and user. Every mutation carries a caller-derived
+    idempotency key so a replayed call (pod crash, graph replay) returns
+    the original receipt.
+
+    ``tenant`` (our ``EXECUTOR_TENANT_ID``) goes as ``X-Tenant-Id`` on every
+    call that names no other: an executor in header mode (local/dev) has no
+    key to take it from and would file our executions under its default.
     """
 
-    def __init__(self, base_url: str, timeout: float, tenant_id: str):
+    def __init__(
+        self,
+        base_url: str,
+        timeout: float,
+        api_key: str = "",
+        admin_api_key: str = "",
+        tenant: str = "",
+    ):
+        self.tenant = tenant
         self.http = httpx.AsyncClient(
             base_url=base_url.rstrip("/") + "/api/v1", timeout=timeout
         )
-        # decides the event stream of every execution submitted here
-        self.tenant_id = tenant_id
+        self.api_key, self.admin_api_key = api_key, admin_api_key
 
     async def close(self) -> None:
         await self.http.aclose()
 
-    async def _call(self, method: str, url: str, **kwargs: Any) -> Any:
-        response = await self.http.request(method, url, **kwargs)
+    def headers(
+        self, who: Identity = SYSTEM, admin: bool = False
+    ) -> dict[str, str]:
+        """Key and identity headers of one request.
+
+        ``admin``: the operator key of the runtime and maintenance APIs.
+        """
+        if admin:  # operator APIs act for no tenant
+            return with_key(self.admin_api_key, who)
+        if who.tenant is None and self.tenant:
+            who = replace(who, tenant=self.tenant)
+        return with_key(self.api_key, who)
+
+    async def _call(
+        self, method: str, url: str, who: Identity = SYSTEM, **kwargs: Any
+    ) -> Any:
+        response = await self.http.request(
+            method, url, headers=self.headers(who), **kwargs
+        )
         if response.status_code >= 400:
             try:
                 body = response.json()
@@ -65,7 +102,7 @@ class ExecutorClient:
         self,
         *,
         idempotency_key: str,
-        context: dict[str, str],
+        who: Identity,
         steps: list[dict[str, Any]],
         profile: str,
         wait_seconds: int | None,
@@ -79,20 +116,19 @@ class ExecutorClient:
             lifecycle["operation_wait_timeout_seconds"] = wait_seconds
         body = {
             "idempotency_key": idempotency_key,
-            "tenant_id": self.tenant_id,
             "lifecycle": lifecycle,
             "trigger": {"type": trigger, "actor": SERVICE_ACTOR},
             "runtime": {"type": "JUPYTER", "profile": profile},
-            "context": context,
             "operation": {"spec": {"schema_version": "1.0", "steps": steps}},
             "metadata": metadata or {},
         }
-        return await self._call("POST", "/executions", json=body)
+        return await self._call("POST", "/executions", who, json=body)
 
     async def append_operation(
         self,
         execution_id: str,
         *,
+        who: Identity,
         idempotency_key: str,
         expected_version: int,
         steps: list[dict[str, Any]],
@@ -104,11 +140,16 @@ class ExecutorClient:
             "actor": SERVICE_ACTOR,
         }
         return await self._call(
-            "POST", f"/executions/{execution_id}/operations", json=body
+            "POST", f"/executions/{execution_id}/operations", who, json=body
         )
 
     async def finalize(
-        self, execution_id: str, *, idempotency_key: str, expected_version: int
+        self,
+        execution_id: str,
+        *,
+        who: Identity,
+        idempotency_key: str,
+        expected_version: int,
     ) -> dict[str, Any]:
         body = {
             "idempotency_key": idempotency_key,
@@ -116,11 +157,16 @@ class ExecutorClient:
             "actor": SERVICE_ACTOR,
         }
         return await self._call(
-            "POST", f"/executions/{execution_id}/finalize", json=body
+            "POST", f"/executions/{execution_id}/finalize", who, json=body
         )
 
     async def cancel(
-        self, execution_id: str, *, idempotency_key: str, reason: str
+        self,
+        execution_id: str,
+        *,
+        who: Identity,
+        idempotency_key: str,
+        reason: str,
     ) -> dict[str, Any]:
         body = {
             "idempotency_key": idempotency_key,
@@ -128,11 +174,24 @@ class ExecutorClient:
             "actor": SERVICE_ACTOR,
         }
         return await self._call(
-            "POST", f"/executions/{execution_id}/cancel", json=body
+            "POST", f"/executions/{execution_id}/cancel", who, json=body
         )
 
     async def get(self, execution_id: str) -> dict[str, Any]:
         return await self._call("GET", f"/executions/{execution_id}")
+
+    async def opener(self, execution_id: str) -> Identity:
+        """The identity an execution answers to (its ``context``).
+
+        For mutations on an execution this service did not open in the same
+        call path (cancel from another member, a batch execution's report).
+        """
+        context = (await self.get(execution_id)).get("context") or {}
+        return Identity(
+            user_id=context.get("user_id"),
+            project_id=context.get("project_id"),
+            session_id=context.get("session_id"),
+        )
 
     async def events(self, execution_id: str) -> list[dict[str, Any]]:
         """The execution's durable event timeline, oldest first."""
@@ -157,9 +216,10 @@ class ExecutorClient:
     ) -> list[dict[str, Any]]:
         """Executions created after ``created_after``, newest first.
 
-        ``filters`` are the list's query parameters (``tenant_id``,
-        ``trigger_type``, ``status``, ...). The list has no time filter, so
-        pages are read until they pass ``created_after``.
+        A system read: the executions of our tenant, any user. ``filters``
+        are the list's query parameters (``trigger_type``, ``status``,
+        ``project_id``, ...). The list has no time filter, so pages are read
+        until they pass ``created_after``.
         """
         items: list[dict[str, Any]] = []
         cursor = None
@@ -207,6 +267,7 @@ class ExecutorClient:
         self,
         execution_id: str,
         *,
+        who: Identity,
         idempotency_key: str,
         markdown: str,
         name: str,
@@ -223,14 +284,14 @@ class ExecutorClient:
             "actor": SERVICE_ACTOR,
         }
         return await self._call(
-            "POST", f"/executions/{execution_id}/artifacts", json=body
+            "POST", f"/executions/{execution_id}/artifacts", who, json=body
         )
 
     async def stream_artifact(
         self, artifact_id: str
     ) -> tuple[httpx.Response, AsyncIterator[bytes]]:
         request = self.http.build_request(
-            "GET", f"/artifacts/{artifact_id}/content"
+            "GET", f"/artifacts/{artifact_id}/content", headers=self.headers()
         )
         response = await self.http.send(request, stream=True)
         if response.status_code >= 400:

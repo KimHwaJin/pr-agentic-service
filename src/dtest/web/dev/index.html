@@ -284,7 +284,30 @@
   .mem-edit .row2 { display: grid; grid-template-columns: 170px 1fr auto; gap: 8px; margin-bottom: 8px; }
   .mem-edit input, .mem-edit select, .mem-edit textarea { width: 100%; border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; background: var(--panel); font-size: 13px; }
   .mem-edit textarea { min-height: 60px; resize: vertical; }
-  .mem-edit .meta { font-size: 11.5px; color: var(--faint); margin-top: 6px; }
+  .mem-edit .meta { font-size: 11.5px; color: var(--faint); margin-top: 6px; display: flex; gap: 8px; align-items: center; }
+  .mem-edit .meta .ghost { margin-left: auto; font-size: 11.5px; }
+  .mem-edit h3 { font-size: 13px; margin: 0 0 6px; display: flex; gap: 8px; align-items: baseline; }
+  .mem-edit h3 .usage { margin: 0 0 0 auto; font-weight: 400; min-width: 140px; }
+  .mem-edit textarea.over { border-color: var(--bad); }
+  .mem-topics { border: 1px solid var(--line); border-radius: 12px; padding: 12px; margin-bottom: 12px; background: var(--bg); }
+  .mem-topics h3 { font-size: 13px; margin: 0 0 8px; display: flex; gap: 8px; align-items: baseline; }
+  .mem-topics h3 .usage { margin: 0 0 0 auto; font-weight: 400; min-width: 160px; }
+  .mem-topic { display: grid; grid-template-columns: 150px 1fr 76px auto; gap: 6px; align-items: center; margin-bottom: 6px; }
+  .mem-topic input { width: 100%; border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; background: var(--panel); font-size: 12.5px; }
+  .mem-topic input.bad { border-color: var(--bad); }
+  .mem-topic .acts { display: flex; gap: 2px; }
+  .mem-topic .acts .ghost { font-size: 11.5px; }
+  .mem-topic .tag { grid-column: 1 / -1; font-size: 11px; color: var(--bad); margin-top: -3px; }
+  .mem-topics .foot { display: flex; gap: 8px; align-items: center; margin-top: 8px; font-size: 12px; }
+  .mem-topics .foot .err { color: var(--bad); flex: 1; }
+  .mem-topics .foot .ok { color: var(--faint); flex: 1; }
+  .mem-removed { margin-top: 8px; border-top: 1px dashed var(--line); padding-top: 8px; font-size: 12px; }
+  .mem-removed .h { display: grid; grid-template-columns: 1fr auto; gap: 4px 8px; padding: 6px 0; border-bottom: 1px solid var(--line); }
+  .mem-removed pre { grid-column: 1 / -1; margin: 0; white-space: pre-wrap; font: 11.5px/1.45 'SF Mono', Menlo, monospace; color: var(--muted); max-height: 120px; overflow: auto; }
+  .mem-hist { margin-top: 8px; border-top: 1px dashed var(--line); padding-top: 8px; font-size: 12px; }
+  .mem-hist .h { display: grid; grid-template-columns: 1fr auto; gap: 4px 8px; padding: 6px 0; border-bottom: 1px solid var(--line); }
+  .mem-hist pre { grid-column: 1 / -1; margin: 0; white-space: pre-wrap; font: 11.5px/1.45 'SF Mono', Menlo, monospace; color: var(--muted); max-height: 160px; overflow: auto; }
+  .mem-hist pre del { color: var(--bad); } .mem-hist pre ins { color: var(--good, #2e7d32); text-decoration: none; }
   .usage { font-size: 12px; color: var(--muted); margin-bottom: 12px; }
   .usage .bar { height: 5px; background: var(--hover); border-radius: 99px; margin-top: 5px; overflow: hidden; }
   .usage .bar i { display: block; height: 100%; background: var(--accent); }
@@ -491,10 +514,12 @@
   <div id="scroll"><div id="log"></div></div>
   <div id="systemView" style="display:none;flex:1;overflow:auto">
     <div class="page">
-      <div class="page-head"><h1>시스템</h1><span class="muted" style="font-size:13px">executor 런타임·점검 (관리자)</span></div>
+      <div class="page-head"><h1>시스템</h1><span class="muted" style="font-size:13px">executor 런타임·점검, 사용자, 외부 호출 API 키 (관리자)</span></div>
       <div class="systabs">
         <button class="systab on" data-sys="runtimes" onclick="sysTab('runtimes')">런타임</button>
         <button class="systab" data-sys="maintenance" onclick="sysTab('maintenance')">점검</button>
+        <button class="systab" data-sys="users" onclick="sysTab('users')">사용자</button>
+        <button class="systab" data-sys="apiClients" onclick="sysTab('apiClients')">API 키</button>
       </div>
       <div id="sysBody"></div>
     </div>
@@ -600,6 +625,8 @@
     <div class="modal-head"><h2 id="bmTitle">새 배치</h2><button class="ghost" onclick="$('batchModal').classList.remove('open')">닫기</button></div>
     <div class="modal-body">
       <div class="field"><label>이름</label><input id="bmName" maxlength="200" placeholder="예: 주간 수율 점검"></div>
+      <div class="field"><label>프로젝트</label><select id="bmProject"></select>
+        <div class="muted" style="font-size:12px;margin-top:4px" id="bmProjectHint"></div></div>
       <div class="field"><label>스크립트</label><select id="bmScript" onchange="$('bmVersion').value = ''"></select></div>
       <div class="field"><label>버전</label><input id="bmVersion" inputmode="numeric" placeholder="비우면 최신 버전"></div>
       <div class="field"><label>런타임</label><select id="bmRuntime"></select></div>
@@ -657,10 +684,8 @@
           <select id="pmLevel"><option value="">서비스 기본값</option><option value="1">1 · 등록된 tool만</option><option value="2">2 · tool + 연결 코드</option><option value="3">3 · tool 우선, 필요 시 새 함수</option><option value="4">4 · 자유 코드</option></select></div>
       </div>
       <div data-pane="memory" style="display:none">
-        <div class="usage" id="pmUsage"></div>
         <div id="pmMemory"></div>
-        <button class="btn" onclick="addMemoryRow()">+ 메모리 항목 추가</button>
-        <div class="help" style="font-size:12px;color:var(--faint);margin-top:8px">직접 작성한 항목은 Agent가 승인 없이 바꾸지 못합니다. Agent가 대화 중에 저장한 항목도 여기서 고치거나 지울 수 있습니다.</div>
+        <div class="help" style="font-size:12px;color:var(--faint);margin-top:8px">주제마다 모든 대화의 프롬프트에 <code>## 제목</code> 아래 그대로 들어가는 Markdown입니다(본문에 <code>#</code>, <code>##</code> 제목은 쓸 수 없습니다). 주제의 설명은 Agent가 어떤 내용을 어디에 넣을지 정하는 기준입니다. 대화가 끝나면 Agent가 사용자가 말한 사실·선호를 자동으로 정리해 넣고, "기억해줘"라고 하면 바로 저장합니다. 바뀐 내용은 기록에서 되돌릴 수 있습니다.</div>
       </div>
     </div>
     <div class="modal-foot"><button class="btn" id="pmDelete" style="margin-right:auto;color:var(--bad)" onclick="deleteProject()">프로젝트 삭제</button><button class="btn" onclick="closeProjectModal()">취소</button><button class="btn primary" id="pmSave" onclick="saveProject()">만들기</button></div>
@@ -761,15 +786,19 @@ const S = { projects: [], models: [], images: [], waiting: false, csrf: null, pr
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const md = s => marked.parse(esc(s));
-const CAT = { background: '프로젝트 배경', analysis_preferences: '분석 선호', report_preferences: '보고서 선호', shared_findings: '공유할 주요 발견' };
 const TOOL_TEXT = {
-  read_knowledge: a => `도메인 지식 확인 · ${a.name}`, search_memory: () => '프로젝트 메모리 검색', save_memory: a => `메모리 저장 · ${a.title || ''}`,
+  read_knowledge: a => `도메인 지식 확인 · ${a.name}`, save_memory: a => `메모리 저장 · ${a.topic || ''}`,
   delete_memory: () => '메모리 삭제', start_analysis: () => '분석 담당에게 전달', read_skill: a => `분석 skill 확인 · ${a.name}`,
-  read_tool: a => `도구 확인 · ${a.name}`, search_tools: () => '도구 검색', search_workflows: () => '등록된 워크플로우 검색',
+  read_tool: a => `도구 확인 · ${(a.names || [a.name]).join(', ')}`, search_tools: () => '도구 검색', search_workflows: () => '등록된 워크플로우 검색',
   propose_plans: () => '실행 계획 작성', revise_call: a => `파라미터 수정 · #${a.call}`, run_plan: a => a.decisions ? '조건 판단 후 이어서 실행' : '코드 실행 요청',
   run_custom_code: a => `직접 작성한 코드 실행 · ${a.purpose || ''}`, write_report: () => '리포트·노트북 확정', save_workflow: () => '워크플로우 저장 제안', finish_analysis: () => '분석 정리',
 };
 
+// codes with a plainer message than the service's own
+const CODE_TEXT = {
+  OWNER_DEACTIVATED: '사용자가 비활성화되어 꺼진 배치입니다. 배치를 다시 켠 뒤 실행하세요.',
+  executor_admin_key_missing: 'executor 운영 key(EXECUTOR_ADMIN_API_KEY)가 설정되지 않아 런타임·점검 화면을 쓸 수 없습니다.',
+};
 async function api(path, opts = {}) {
   const headers = { 'Content-Type': 'application/json', ...(S.csrf ? { 'X-CSRF-Token': S.csrf } : {}), ...(opts.headers || {}) };
   const r = await fetch(API + path, { credentials: 'include', ...opts, headers, body: opts.body && JSON.stringify(opts.body) });
@@ -777,7 +806,8 @@ async function api(path, opts = {}) {
   const data = r.status === 204 ? null : await r.json();
   if (!r.ok) {
     const fields = (data?.errors || []).map(e => `${e.field}: ${e.message}`).join(', ');
-    showError(`${typeof data?.detail === 'string' ? data.detail : data?.message || JSON.stringify(data?.detail ?? data)}${data?.code ? ` (${data.code})` : ''}${fields ? ` · ${fields}` : ''}`);
+    const text = CODE_TEXT[data?.code] || (typeof data?.detail === 'string' ? data.detail : data?.message || JSON.stringify(data?.detail ?? data));
+    showError(`${text}${data?.code ? ` (${data.code})` : ''}${fields ? ` · ${fields}` : ''}`);
     throw new Error(r.status);
   }
   return data;
@@ -861,52 +891,193 @@ $('projectSearch').addEventListener('input', renderProjects);
 $('projectSort').addEventListener('change', renderProjects);
 
 /* project modal: create / edit + shared memory ------------------------------- */
-const PM = { id: null, memory: [], removed: [] };
+const PM = { id: null, sections: [], open: {}, topics: [], topicsOrig: '[]', topicsVersion: 0, total: 0, removed: null };
 document.querySelectorAll('.tab').forEach(t => t.onclick = () => {
   document.querySelectorAll('.tab').forEach(x => x.classList.toggle('on', x === t));
   document.querySelectorAll('[data-pane]').forEach(p => p.style.display = p.dataset.pane === t.dataset.tab ? '' : 'none');
 });
 async function openProjectModal(id) {
-  PM.id = id || null; PM.removed = [];
+  PM.id = id || null; PM.open = {}; PM.removed = null; PM.sections = [];
   const p = id ? S.projects.find(x => x.id === id) : null;
   $('pmTitle').textContent = p ? '프로젝트 설정' : '새 프로젝트';
   $('pmSave').textContent = p ? '저장' : '만들기';
   $('pmDelete').style.display = p && !p.is_default ? '' : 'none';
   $('pmName').value = p?.name || ''; $('pmDesc').value = p?.description || '';
   $('pmPrompt').value = p?.system_prompt || ''; $('pmLevel').value = p?.code_level ?? '';
-  PM.memory = id ? (await api(`/projects/${id}/memory`)).items.map(m => ({ ...m, orig: { ...m } })) : [];
-  renderMemoryRows();
+  await loadMemory();
   document.querySelector('.tab[data-tab="general"]').click();
   $('projectModal').classList.add('open'); $('pmName').focus();
 }
 function closeProjectModal() { $('projectModal').classList.remove('open'); }
-function renderMemoryRows() {
-  const used = PM.memory.reduce((n, m) => n + (m.content || '').length, 0), max = 30000;
-  $('pmUsage').innerHTML = `메모리 사용량 ${used.toLocaleString()} / ${max.toLocaleString()}자<div class="bar"><i style="width:${Math.min(100, used / max * 100)}%"></i></div>`;
-  $('pmMemory').innerHTML = PM.memory.map((m, i) => `
-    <div class="mem-edit">
-      <div class="row2">
-        <select onchange="PM.memory[${i}].category=this.value">${Object.entries(CAT).map(([k, v]) => `<option value="${k}" ${m.category === k ? 'selected' : ''}>${v}</option>`).join('')}</select>
-        <input value="${esc(m.title)}" placeholder="제목" oninput="PM.memory[${i}].title=this.value">
-        <button class="icon-btn" title="삭제" onclick="removeMemoryRow(${i})"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
-      </div>
-      <textarea placeholder="내용 (최대 1,000자)" maxlength="1000" oninput="PM.memory[${i}].content=this.value; renderUsageOnly()">${esc(m.content)}</textarea>
-      ${m.id ? `<div class="meta">${m.author === 'user' ? '🔒 직접 작성' : '✦ Agent가 저장'} · v${m.version} · ${ago(m.updated_at)}</div>` : '<div class="meta">새 항목</div>'}
-    </div>`).join('') || '<div style="color:var(--faint);font-size:13px;margin-bottom:12px">아직 메모리가 없습니다. 프로젝트 배경이나 보고서 선호처럼 모든 대화에서 기억할 내용을 추가해 보세요.</div>';
+/* memory topics: the headings of the project memory, editable per project */
+const TOPIC = { max: 6, min: 100, title: 40, desc: 200 };
+let topicKey = 0;
+async function loadMemory(keepDrafts) {
+  if (!PM.id) { PM.sections = []; PM.topics = []; renderMemory(); return; }
+  const drafts = keepDrafts ? Object.fromEntries(PM.sections.filter(m => m.draft !== m.content).map(m => [m.topic, m.draft])) : {};
+  const mem = await api(`/projects/${PM.id}/memory`);
+  PM.sections = mem.topics.map(m => ({ ...m, draft: drafts[m.topic] ?? m.content }));
+  PM.topicsVersion = mem.topics_version; PM.total = mem.total_max_chars;
+  PM.topics = mem.topics.map(t => ({ id: t.topic, title: t.title, description: t.description, max_chars: t.max_chars, replace: false, key: ++topicKey }));
+  PM.topicsOrig = topicsJson();
+  if (PM.removed) PM.removed = (await api(`/projects/${PM.id}/memory/history?removed=true&limit=30`)).items;
+  renderMemory();
 }
-function renderUsageOnly() { const used = PM.memory.reduce((n, m) => n + (m.content || '').length, 0); $('pmUsage').firstChild.textContent = `메모리 사용량 ${used.toLocaleString()} / 30,000자`; }
-function addMemoryRow() { PM.memory.push({ category: 'background', title: '', content: '' }); renderMemoryRows(); }
-function removeMemoryRow(i) { const [m] = PM.memory.splice(i, 1); if (m.id) PM.removed.push(m); renderMemoryRows(); }
+function topicsJson() { return JSON.stringify(PM.topics.map(({ id, title, description, max_chars, replace }) => ({ id, title, description, max_chars, replace }))); }
+function topicsDirty() { return PM.id && topicsJson() !== PM.topicsOrig; }
+function topicProblems() {
+  const out = {}, all = [], titles = {};
+  const ts = PM.topics;
+  if (!ts.length) all.push('주제가 하나는 있어야 합니다.');
+  if (ts.length > TOPIC.max) all.push(`주제는 ${TOPIC.max}개까지입니다.`);
+  ts.forEach(t => {
+    const p = [], title = t.title.trim();
+    if (!title) p.push('제목을 입력하세요');
+    else if (title.length > TOPIC.title) p.push(`제목은 ${TOPIC.title}자까지`);
+    if (title && titles[title.toLowerCase()]) p.push('같은 제목이 있습니다');
+    titles[title.toLowerCase()] = true;
+    if (t.description.trim().length > TOPIC.desc) p.push(`설명은 ${TOPIC.desc}자까지`);
+    if (!Number.isInteger(t.max_chars) || t.max_chars < TOPIC.min) p.push(`한도는 ${TOPIC.min}자 이상`);
+    if (p.length) out[t.key] = p;
+  });
+  const sum = ts.reduce((n, t) => n + (Number.isInteger(t.max_chars) ? t.max_chars : 0), 0);
+  if (sum > PM.total) all.push(`한도 합계 ${sum.toLocaleString()}자가 전체 한도 ${PM.total.toLocaleString()}자를 넘습니다.`);
+  return { out, all, sum, ok: !all.length && !Object.keys(out).length };
+}
+function renderTopics() {
+  const el = $('pmTopics'); if (!el) return;
+  const pr = topicProblems(), dirty = topicsDirty();
+  el.innerHTML = `
+    <h3>주제 <span style="font-weight:400;color:var(--faint);font-size:12px">메모리의 제목입니다. 제목·설명·한도를 고쳐도 내용은 그대로 남습니다.</span>
+      <span class="usage">한도 합계 ${pr.sum.toLocaleString()} / ${PM.total.toLocaleString()}자<div class="bar"><i style="width:${Math.min(100, pr.sum / PM.total * 100)}%;${pr.sum > PM.total ? 'background:var(--bad)' : ''}"></i></div></span></h3>
+    ${PM.topics.map((t, i) => `
+      <div class="mem-topic">
+        <input value="${esc(t.title)}" maxlength="60" placeholder="제목" class="${(pr.out[t.key] || []).some(x => x.includes('제목')) ? 'bad' : ''}" oninput="PM.topics[${i}].title=this.value; renderTopicsSoon()">
+        <input value="${esc(t.description)}" placeholder="설명 (한 줄, 어떤 내용을 넣을지 Agent가 따릅니다)" class="${(pr.out[t.key] || []).some(x => x.includes('설명')) ? 'bad' : ''}" oninput="PM.topics[${i}].description=this.value; renderTopicsSoon()">
+        <input type="number" min="${TOPIC.min}" step="50" value="${Number.isInteger(t.max_chars) ? t.max_chars : ''}" title="이 주제의 글자 수 한도" class="${(pr.out[t.key] || []).some(x => x.includes('한도')) ? 'bad' : ''}" oninput="PM.topics[${i}].max_chars=this.value === '' ? null : +this.value; renderTopicsSoon()">
+        <span class="acts">
+          <button class="ghost" title="위로" ${i ? '' : 'disabled'} onclick="moveTopic(${i}, -1)">↑</button>
+          <button class="ghost" title="새 주제로 바꿉니다 (지금 내용은 비워집니다)" ${t.id && !t.replace ? '' : 'disabled'} onclick="replaceTopic(${i})">교체</button>
+          <button class="ghost" style="color:var(--bad)" title="주제를 지웁니다 (내용은 비워집니다)" onclick="removeTopic(${i})">삭제</button></span>
+        ${!t.id ? '<div class="tag" style="color:var(--accent)">새 주제 · 저장 후 다음 대화부터 채워집니다</div>' : t.replace ? '<div class="tag">교체 예정 · 저장하면 지금 내용이 비워집니다 (기록에서 복원 가능)</div>' : ''}
+        ${(pr.out[t.key] || []).length ? `<div class="tag">${esc(pr.out[t.key].join(' · '))}</div>` : ''}
+      </div>`).join('')}
+    <div class="foot">
+      <button class="ghost" ${PM.topics.length >= TOPIC.max ? `disabled title="주제는 ${TOPIC.max}개까지입니다"` : ''} onclick="addTopic()">+ 주제 추가</button>
+      <span class="${pr.all.length ? 'err' : 'ok'}">${esc(pr.all.join(' ')) || (dirty ? '저장하지 않은 주제 변경이 있습니다.' : `최대 ${TOPIC.max}개, 주제마다 ${TOPIC.min}자 이상`)}</span>
+      ${dirty ? '<button class="ghost" onclick="resetTopics()">변경 취소</button>' : ''}
+      <button class="ghost" ${dirty && pr.ok ? '' : 'disabled'} onclick="saveTopics()">주제 저장</button>
+      <button class="ghost" onclick="toggleRemovedTopics()">${PM.removed ? '지운 주제 닫기' : '지운 주제'}</button></div>
+    ${PM.removed ? `<div class="mem-removed">${PM.removed.filter(h => !PM.topics.some(t => t.id === h.topic)).map(h => `
+      <div class="h"><span><b>${esc(h.title || h.topic)}</b> · ${h.action === 'topic_replaced' ? '교체됨' : '삭제됨'} · ${ago(h.created_at)}</span>
+        <button class="ghost" title="주제와 내용을 목록 끝에 다시 넣습니다" onclick="restoreTopic(${h.id})">복원</button>
+        <pre>${esc(h.before) || '(내용 없음)'}</pre></div>`).join('') || '<div class="muted">지운 주제가 없습니다.</div>'}</div>` : ''}`;
+}
+let topicsTimer = null;
+function renderTopicsSoon() {
+  // keep focus while typing: re-render the problems only, after a pause
+  clearTimeout(topicsTimer);
+  topicsTimer = setTimeout(() => { const f = document.activeElement, idx = [...$('pmTopics').querySelectorAll('input')].indexOf(f), pos = f?.selectionStart; renderTopics(); const again = $('pmTopics').querySelectorAll('input')[idx]; if (again) { again.focus(); try { again.setSelectionRange(pos, pos); } catch {} } }, 250);
+}
+function addTopic() { PM.topics.push({ id: null, title: '', description: '', max_chars: Math.max(TOPIC.min, Math.min(300, PM.total - topicProblems().sum)), replace: false, key: ++topicKey }); renderTopics(); }
+function moveTopic(i, d) { const [t] = PM.topics.splice(i, 1); PM.topics.splice(i + d, 0, t); renderTopics(); }
+function hasContent(t) { const m = PM.sections.find(x => x.topic === t.id); return m && m.content.trim(); }
+function replaceTopic(i) {
+  const t = PM.topics[i];
+  if (hasContent(t) && !confirm(`'${t.title}'을(를) 새 주제로 교체하면 내용이 비워집니다.\n지운 내용은 '지운 주제'에서 복원할 수 있습니다. 계속할까요?`)) return;
+  t.replace = true; renderTopics();
+}
+function removeTopic(i) {
+  const t = PM.topics[i];
+  if (t.id && hasContent(t) && !confirm(`'${t.title}'을(를) 지우면 내용이 비워집니다.\n지운 내용은 '지운 주제'에서 복원할 수 있습니다. 계속할까요?`)) return;
+  PM.topics.splice(i, 1); renderTopics();
+}
+function resetTopics() { PM.topics = JSON.parse(PM.topicsOrig).map(t => ({ ...t, key: ++topicKey })); renderTopics(); }
+async function saveTopics() {
+  if (!topicsDirty()) return true;
+  if (!topicProblems().ok) { renderTopics(); return false; }
+  const ids = new Set(PM.topics.map(t => t.id)), cleared = PM.sections.filter(m => m.content.trim() && (!ids.has(m.topic) || PM.topics.some(t => t.id === m.topic && t.replace)));
+  if (cleared.length && !confirm(`${cleared.map(m => m.title).join(', ')}의 내용이 비워집니다.\n지운 내용은 '지운 주제'에서 복원할 수 있습니다. 저장할까요?`)) return false;
+  try {
+    await api(`/projects/${PM.id}/memory/topics`, { method: 'PUT', body: { topics: PM.topics.map(t => ({ id: t.id, title: t.title.trim(), description: t.description.trim(), max_chars: t.max_chars, replace: t.replace })), expected_version: PM.topicsVersion } });
+  } catch (e) {
+    if (e.message === '409' && confirm('주제가 그동안 바뀌었습니다. 최신 주제를 불러올까요? (지금 바꾼 주제는 사라집니다)')) await loadMemory(true);
+    return false;
+  }
+  await loadMemory(true);
+  return true;
+}
+async function toggleRemovedTopics() {
+  PM.removed = PM.removed ? null : (await api(`/projects/${PM.id}/memory/history?removed=true&limit=30`)).items;
+  renderTopics();
+}
+async function restoreTopic(historyId) {
+  if (topicsDirty() && !confirm('저장하지 않은 주제 변경이 사라집니다. 복원할까요?')) return;
+  try { await api(`/projects/${PM.id}/memory/history/${historyId}/restore`, { method: 'POST' }); } catch { return; }
+  await loadMemory(true);
+}
+function renderMemory() {
+  $('pmMemory').innerHTML = PM.sections.length ? '<div class="mem-topics" id="pmTopics"></div>' + PM.sections.map((m, i) => {
+    const authors = m.lines.reduce((n, l) => (n[l.author] = (n[l.author] || 0) + 1, n), {});
+    return `
+    <div class="mem-edit">
+      <h3>${esc(m.title)} <span style="font-weight:400;color:var(--faint);font-size:12px">${esc(m.description || '')}</span>
+        <span class="usage" id="memUse${i}"></span></h3>
+      <textarea id="memText${i}" rows="4" placeholder="- 한 줄에 하나씩" oninput="PM.sections[${i}].draft=this.value; renderMemoryUsage(${i})">${esc(m.draft)}</textarea>
+      <div class="meta">${m.version ? `v${m.version} · ${ago(m.updated_at)}` : '아직 없음'}${m.lines.length ? ` · 직접 작성 ${authors.user || 0}줄 · Agent ${authors.agent || 0}줄` : ''}
+        <button class="ghost" onclick="toggleMemoryHistory(${i})">${PM.open[m.topic] ? '기록 닫기' : '기록'}</button></div>
+      <div id="memHist${i}"></div>
+    </div>`;
+  }).join('') : '<div style="color:var(--faint);font-size:13px;margin-bottom:12px">프로젝트를 만든 뒤 공유 메모리를 쓸 수 있습니다.</div>';
+  renderTopics();
+  PM.sections.forEach((m, i) => { renderMemoryUsage(i); if (PM.open[m.topic]) renderMemoryHistory(i); });
+}
+function renderMemoryUsage(i) {
+  const m = PM.sections[i], used = m.draft.length;
+  $(`memUse${i}`).innerHTML = `${used.toLocaleString()} / ${m.max_chars.toLocaleString()}자<div class="bar"><i style="width:${Math.min(100, used / m.max_chars * 100)}%;${used > m.max_chars ? 'background:var(--bad)' : ''}"></i></div>`;
+  $(`memText${i}`).classList.toggle('over', used > m.max_chars);
+}
+async function toggleMemoryHistory(i) {
+  const m = PM.sections[i];
+  PM.open[m.topic] = PM.open[m.topic] ? null : (await api(`/projects/${PM.id}/memory/history?topic=${encodeURIComponent(m.topic)}&limit=30`)).items;
+  renderMemory();
+}
+function lineDiff(before, after) {
+  const a = before ? before.split('\n') : [], b = after ? after.split('\n') : [];
+  return [...a.filter(l => !b.includes(l)).map(l => `<del>- ${esc(l)}</del>`), ...b.filter(l => !a.includes(l)).map(l => `<ins>+ ${esc(l)}</ins>`)].join('\n') || '(내용 변화 없음)';
+}
+const MEM_ACTION = { update: '수정', delete: '줄 삭제', revert: '되돌림', migrate: '이전 메모리 이관', topic_restored: '주제 복원' };
+function renderMemoryHistory(i) {
+  const m = PM.sections[i], items = PM.open[m.topic] || [];
+  const who = h => h.actor.type === 'user' ? '사용자' : h.actor.id === 'memory_worker' ? 'Agent(자동 정리)' : h.actor.id === 'memory_migration' ? '이관' : 'Agent';
+  $(`memHist${i}`).innerHTML = `<div class="mem-hist">${items.map(h => `
+    <div class="h"><span><b>${esc(MEM_ACTION[h.action] || h.action)}</b> · ${who(h)} · v${h.version ?? '?'} · ${ago(h.created_at)}</span>
+      <button class="ghost" title="이 변경 전 내용으로 되돌립니다 (새 버전)" onclick="revertMemory(${i}, ${h.id})">되돌리기</button>
+      <pre>${lineDiff(h.before, h.after)}</pre></div>`).join('') || '<div class="muted">기록이 없습니다.</div>'}</div>`;
+}
+async function revertMemory(i, historyId) {
+  const m = PM.sections[i];
+  if (m.draft !== m.content && !confirm('저장하지 않은 수정이 사라집니다. 되돌릴까요?')) return;
+  const saved = await api(`/projects/${PM.id}/memory/${encodeURIComponent(m.topic)}/revert`, { method: 'POST', body: { history_id: historyId, expected_version: m.version } });
+  PM.sections[i] = { ...saved, draft: saved.content };
+  PM.open[m.topic] = (await api(`/projects/${PM.id}/memory/history?topic=${encodeURIComponent(m.topic)}&limit=30`)).items;
+  renderMemory();
+}
 async function saveProject() {
   const body = { name: $('pmName').value.trim(), description: $('pmDesc').value.trim(), system_prompt: $('pmPrompt').value, code_level: $('pmLevel').value ? +$('pmLevel').value : null };
   if (!body.name) { $('pmName').focus(); return; }
+  if (topicsDirty() && !(await saveTopics())) { document.querySelector('.tab[data-tab="memory"]').click(); return; }
   const project = PM.id ? await api(`/projects/${PM.id}`, { method: 'PATCH', body }) : await api('/projects', { method: 'POST', body });
-  for (const m of PM.removed) await api(`/projects/${project.id}/memory/${m.id}?expected_version=${m.version}`, { method: 'DELETE' });
-  for (const m of PM.memory) {
-    if (!m.title.trim() || !m.content.trim()) continue;
-    if (!m.id) await api(`/projects/${project.id}/memory`, { method: 'POST', body: { category: m.category, title: m.title, content: m.content } });
-    else if (m.title !== m.orig.title || m.content !== m.orig.content || m.category !== m.orig.category)
-      await api(`/projects/${project.id}/memory/${m.id}`, { method: 'PATCH', body: { expected_version: m.version, category: m.category, title: m.title, content: m.content } });
+  for (const m of PM.sections) {
+    if (m.draft === m.content) continue;
+    try {
+      await api(`/projects/${project.id}/memory/${encodeURIComponent(m.topic)}`, { method: 'PUT', body: { content: m.draft, expected_version: m.version } });
+    } catch (e) {
+      // 409: changed meanwhile (e.g. the memory worker); 422: too long or a heading
+      document.querySelector('.tab[data-tab="memory"]').click();
+      if (e.message === '409' && confirm(`${m.title}이(가) 그동안 바뀌었습니다. 최신 내용을 불러올까요? (지금 수정한 내용은 사라집니다)`)) await loadMemory();
+      return;
+    }
   }
   closeProjectModal(); await loadProjects();
   if (!PM.id || project.id === S.project) await selectProject(project.id); else renderProjects();
@@ -1084,7 +1255,7 @@ function openStream() {
   on('hitl_request', e => renderHitl(e.run_id, e.data));
   on('hitl_resolved', e => closeHitl(e.data.interrupt_id));
   on('artifact', e => addFiles([e.data]));
-  on('memory_updated', e => { step('ok', `메모리 ${e.data.action === 'deleted' ? '삭제' : '업데이트'} · ${e.data.item.title || ''}`); });
+  on('memory_updated', e => { step('ok', `프로젝트 메모리 업데이트 · ${e.data.title || e.data.topic}`); });
   on('workflow_saved', e => { step('ok', `워크플로우 저장 · ${e.data.name}`); loadWorkflows(); });
   on('activity', e => { if (e.data.state === 'started') { S.activityId = e.data.id; setActivityTitle(e.data.label); } else if (S.activityId === e.data.id) { S.activityId = null; setActivityTitle('생각하는 중'); } });
   on('context_summarized', e => step('ok', `이전 대화 정리 · 메시지 ${e.data.messages}개를 요약`));
@@ -1221,12 +1392,6 @@ function renderHitl(runId, w) {
     foot.innerHTML = `<div class="row"><input id="fb" placeholder="거절 사유 (선택)"><button class="btn" id="no">거절</button><button class="btn primary" id="ok">실행</button></div>`;
     foot.querySelector('#ok').onclick = () => resume({ approve: true, code: body.querySelector('#code').value });
     foot.querySelector('#no').onclick = () => resume({ approve: false, feedback: foot.querySelector('#fb').value });
-  } else if (w.type === 'memory_change') {
-    openHitlPanel(w, '메모리 변경', '직접 작성하신 메모리를 바꿀까요?', w.reason);
-    body.innerHTML = `<div class="tool-card"><div class="tsum">현재</div><b>${esc(w.item.title)}</b><p>${esc(w.item.content)}</p></div><div class="tool-card"><div class="tsum">제안</div><b>${esc(w.proposed.title)}</b><p>${esc(w.proposed.content)}</p></div>`;
-    foot.innerHTML = `<div class="row" style="justify-content:flex-end"><button class="btn" id="no">유지</button><button class="btn primary" id="ok">변경</button></div>`;
-    foot.querySelector('#ok').onclick = () => resume({ approve: true });
-    foot.querySelector('#no').onclick = () => resume({ approve: false });
   } else if (w.type === 'workflow_save') {
     openHitlPanel(w, '워크플로우 저장', '이 분석을 워크플로우로 저장할까요?', `저장하면 비슷한 요청에서 추천됩니다.${w.excluded_custom_steps ? ` Agent가 작성한 코드 ${w.excluded_custom_steps}개는 제외됩니다.` : ''}`);
     body.innerHTML = `<div class="form-row"><label>이름</label><input id="name" value="${esc(w.name)}"></div>
@@ -1417,14 +1582,21 @@ async function loadBatchLists() {
 async function renderBatches() {
   await loadBatchLists();
   const scriptName = id => (BT.scripts.find(x => x.id === id) || {}).name || id.slice(0, 8);
-  $('batchBody').innerHTML = BT.batches.length ? `<table class="tbl"><thead><tr><th>이름</th><th>스크립트</th><th>일정</th><th>다음 실행</th><th>상태</th><th></th></tr></thead><tbody>${BT.batches.map(b => `
-    <tr class="click" title="눌러서 실행 이력 보기" onclick="openRuns('${b.id}')"><td><b>${esc(b.name)}</b></td><td>${esc(scriptName(b.script_id))} <span class="muted">v${b.script_version_number}</span></td>
+  $('batchBody').innerHTML = BT.batches.length ? `<table class="tbl"><thead><tr><th>이름</th><th>프로젝트</th><th>스크립트</th><th>일정</th><th>다음 실행</th><th>상태</th><th></th></tr></thead><tbody>${BT.batches.map(b => `
+    <tr class="click" title="눌러서 실행 이력 보기" onclick="openRuns('${b.id}')"><td><b>${esc(b.name)}</b></td>
+      <td>${b.project_id ? esc(projectName(b.project_id) || b.project_id) : '<span class="muted">-</span>'}</td><td>${esc(scriptName(b.script_id))} <span class="muted">v${b.script_version_number}</span></td>
       <td>${esc(scheduleText(b.schedule))}</td><td>${b.next_run_at ? fmtTime(b.next_run_at) : '<span class="muted">-</span>'}</td>
-      <td>${b.enabled ? statusBadge('ACTIVE').replace('ACTIVE', '켜짐') : '<span class="badge">꺼짐</span>'}</td>
+      <td>${batchState(b)}</td>
       <td style="white-space:nowrap" onclick="event.stopPropagation()"><button class="btn" onclick="runBatch('${b.id}', this)">지금 실행</button>
         ${b.schedule || b.enabled ? `<button class="ghost" onclick="toggleBatch('${b.id}', ${b.enabled}, ${b.revision})">${b.enabled ? '끄기' : '켜기'}</button>` : '<span class="muted" style="font-size:12.5px;padding:0 8px" title="일정이 있어야 켤 수 있습니다. 지금 실행은 언제든 됩니다.">일정 없음</span>'}
         <button class="ghost" onclick="openBatchModal('${b.id}')">수정</button><button class="ghost" style="color:var(--bad)" onclick="deleteBatch('${b.id}')">삭제</button></td></tr>`).join('')}</tbody></table>`
     : '<div class="muted">배치가 없습니다. 먼저 스크립트를 등록하고 새 배치를 만드세요.</div>';
+}
+// off by its owner, or because the owner was deactivated (pr-batch disabled_reason)
+function batchState(b) {
+  if (b.enabled) return statusBadge('ACTIVE').replace('ACTIVE', '켜짐');
+  if (b.disabled_reason === 'USER_DEACTIVATED') return '<span class="badge bad" title="소유자가 비활성화되어 꺼졌습니다. 다시 활성화돼도 자동으로 켜지지 않습니다.">꺼짐 · 사용자 비활성화</span>';
+  return '<span class="badge">꺼짐</span>';
 }
 /* why a batch run did not complete, from pr-batch's run fields */
 const SKIP_TEXT = { OVERLAP: '앞 실행이 진행 중이라 건너뜀 (겹침 정책)', SKIPPED_CAPACITY: '대기열이 가득 차 건너뜀' };
@@ -1510,6 +1682,12 @@ async function openBatchModal(editId = null) {
   BT.editing = b;
   $('bmTitle').textContent = b ? `배치 수정 · ${b.name}` : '새 배치'; $('bmSave').textContent = b ? '저장' : '만들기';
   $('bmName').value = b?.name || ''; $('bmVersion').value = b ? b.script_version_number : '';
+  // pr-batch keeps the project a batch was made in (X-Project-Id on registration only)
+  const project = b ? b.project_id : S.project;
+  $('bmProject').innerHTML = `<option value="">(프로젝트 없음)</option>${S.projects.map(p => `<option value="${esc(p.id)}">${esc(p.name)}</option>`).join('')}`
+    + (project && !S.projects.some(p => p.id === project) ? `<option value="${esc(project)}">${esc(project)}</option>` : '');
+  $('bmProject').value = project || ''; $('bmProject').disabled = !!b;
+  $('bmProjectHint').textContent = b ? '배치의 프로젝트는 바꿀 수 없습니다. 다른 프로젝트로 옮기려면 새 배치를 만드세요.' : '배치 실행이 이 프로젝트에 묶입니다. 만든 뒤에는 바꿀 수 없습니다.';
   $('bmScript').innerHTML = BT.scripts.map(x => `<option value="${x.id}">${esc(x.name)} (최신 v${x.latest_version.version_number})</option>`).join('');
   if (b) $('bmScript').value = b.script_id;
   // pr-batch offers the enabled targets of the executor's BATCH pool only
@@ -1566,7 +1744,7 @@ async function saveBatch() {
   $('bmSave').disabled = true;
   try {
     if (b) await api(`/batch/batches/${b.id}`, { method: 'PATCH', headers: { ...idemKey(), 'If-Match': `"${b.revision}"` }, body });
-    else await api('/batch/batches', { method: 'POST', headers: idemKey(), body });
+    else await api('/batch/batches', { method: 'POST', headers: { ...idemKey(), ...($('bmProject').value ? { 'X-Project-Id': $('bmProject').value } : {}) }, body });
     $('batchModal').classList.remove('open'); batchTab('batches');
   } catch { alert(b ? '저장하지 못했습니다. 다른 곳에서 바뀌었다면 새로 고침 후 다시 시도하세요.' : '만들지 못했습니다. 화면의 오류 메시지를 확인하세요.'); }
   finally { $('bmSave').disabled = false; }
@@ -1877,7 +2055,8 @@ function showSystem() {
 function sysTab(name) {
   SYS.tab = name;
   document.querySelectorAll('.systab[data-sys]').forEach(t => t.classList.toggle('on', t.dataset.sys === name));
-  ({ runtimes: renderRuntimes, maintenance: renderMaintenance })[name]();
+  ({ runtimes: renderRuntimes, maintenance: renderMaintenance, users: renderUsers, apiClients: renderApiClients })[name]()
+    .catch(() => { $('sysBody').innerHTML = '<div class="muted">불러오지 못했습니다. 화면 위쪽 오류 메시지를 확인하세요.</div>'; });
 }
 
 /* executions (own nav; the relay shows a user their own, an admin everyone's) */
@@ -2126,6 +2305,87 @@ async function maintenanceAction(action) {
   await api(`/executor/maintenance/${action}`, { method: 'POST', body });
   renderMaintenance();
 }
+
+/* users: role and deactivation (a deactivated user's batches are turned off at pr-batch) */
+async function renderUsers() {
+  $('sysBody').innerHTML = `<div class="toolbar"><input id="uqText" placeholder="이름·사번" style="width:220px" onkeydown="if (event.key === 'Enter') loadUsers()">
+      <button class="btn" onclick="loadUsers()">조회</button></div>
+    <div class="muted" style="font-size:12.5px;margin:-4px 0 12px">비활성화하면 로그인과 API 호출이 막히고, 그 사람의 배치가 pr-batch에서 꺼집니다(다시 활성화해도 배치는 자동으로 켜지지 않음).</div>
+    <div id="userRows"><div class="muted">불러오는 중…</div></div>`;
+  await loadUsers();
+}
+async function loadUsers() {
+  const q = $('uqText').value.trim();
+  const users = await api(`/admin/users${q ? `?q=${encodeURIComponent(q)}` : ''}`);
+  $('userRows').innerHTML = users.length ? `<table class="tbl"><thead><tr><th>이름</th><th>사번</th><th>부서</th><th>ID</th><th>권한</th><th>상태</th><th></th></tr></thead><tbody>${users.map(u => `
+    <tr><td><b>${esc(u.name)}</b></td><td>${esc(u.employee_id)}</td><td>${esc(u.department || '')}</td><td>${short(u.id)}</td>
+      <td>${u.role === 'admin' ? '관리자' : '일반'}</td><td>${u.is_active ? statusBadge('ACTIVE').replace('ACTIVE', '활성') : '<span class="badge bad">비활성</span>'}</td>
+      <td style="white-space:nowrap">${u.id === S.me.user.id ? '<span class="muted">본인</span>' : `<button class="ghost" onclick="setUser('${u.id}', { role: '${u.role === 'admin' ? 'user' : 'admin'}' })">${u.role === 'admin' ? '일반으로' : '관리자로'}</button>
+        <button class="ghost" style="${u.is_active ? 'color:var(--bad)' : ''}" onclick="setUser('${u.id}', { is_active: ${!u.is_active} }, '${esc(u.name)}')">${u.is_active ? '비활성화' : '활성화'}</button>`}</td></tr>`).join('')}</tbody></table>`
+    : '<div class="muted">사용자가 없습니다.</div>';
+}
+async function setUser(id, change, name = '') {
+  if (change.is_active === false && !confirm(`${name} 사용자를 비활성화할까요? 그 사람의 배치도 모두 꺼집니다.`)) return;
+  await api(`/admin/users/${id}`, { method: 'PATCH', body: change });
+  loadUsers();
+}
+
+/* API keys of other services and agents (X-Api-Key + X-User-Id) */
+const CLIENT_STATE = { pending: '대기', active: '사용 중', revoked: '폐기' };
+async function renderApiClients() {
+  const clients = await api('/admin/api-clients');
+  $('sysBody').innerHTML = `<div class="toolbar"><button class="btn primary" onclick="openClientModal()">새 키 발급</button></div>
+    <div class="muted" style="font-size:12.5px;margin:-4px 0 12px;line-height:1.6">다른 서비스·에이전트가 이 서비스(채팅·배치·executor 입구)를 부를 때 쓰는 키입니다. 호출자는 <span class="mono">X-Api-Key</span>와 <span class="mono">X-User-Id</span>(우리 사용자 ID)를 보냅니다.
+      우리 tenant 키는 바로 사용 중이 되고, 다른 tenant 키는 executor·pr-batch의 허용 tenant에 반영된 뒤 활성화하세요. 폐기는 최대 1분 안에 모든 서버에 반영됩니다.</div>
+    ${clients.length ? `<table class="tbl"><thead><tr><th>이름</th><th>tenant</th><th>키</th><th>상태</th><th>마지막 사용</th><th>발급</th><th></th></tr></thead><tbody>${clients.map(c => `
+      <tr><td><b>${esc(c.name)}</b>${c.description ? `<br><span class="muted">${esc(c.description)}</span>` : ''}</td><td class="mono">${esc(c.tenant)}</td><td class="mono">${esc(c.key_prefix)}…</td>
+        <td>${c.status === 'active' ? statusBadge('ACTIVE').replace('ACTIVE', CLIENT_STATE.active) : `<span class="badge ${c.status === 'revoked' ? 'bad' : ''}">${CLIENT_STATE[c.status] || esc(c.status)}</span>`}</td>
+        <td>${c.last_used_at ? fmtTime(c.last_used_at) : '<span class="muted">-</span>'}</td><td>${fmtTime(c.created_at)}</td>
+        <td style="white-space:nowrap">${c.status === 'pending' ? `<button class="ghost" onclick="clientAction('${c.id}', 'activate')">활성화</button>` : ''}
+          ${c.status !== 'revoked' ? `<button class="ghost" style="color:var(--bad)" onclick="clientAction('${c.id}', 'revoke', '${esc(c.name)}')">폐기</button>` : ''}</td></tr>`).join('')}</tbody></table>`
+      : '<div class="muted">발급한 키가 없습니다.</div>'}`;
+}
+function openClientModal() {
+  $('acName').value = ''; $('acTenant').value = ''; $('acDesc').value = '';
+  $('acForm').hidden = false; $('acIssued').hidden = true; $('acSave').hidden = false;
+  $('clientModal').classList.add('open'); $('acName').focus();
+}
+async function issueClient() {
+  const name = $('acName').value.trim(), tenant = $('acTenant').value.trim(), description = $('acDesc').value.trim();
+  if (!name) return $('acName').focus();
+  $('acSave').disabled = true;
+  try {
+    const issued = await api('/admin/api-clients', { method: 'POST', body: { name, ...(tenant ? { tenant } : {}), ...(description ? { description } : {}) } });
+    $('acKey').value = issued.api_key;
+    $('acState').textContent = issued.client.status === 'active' ? '바로 쓸 수 있습니다.' : `tenant ${issued.client.tenant}가 executor·pr-batch에 반영된 뒤 목록에서 활성화하세요.`;
+    $('acForm').hidden = true; $('acIssued').hidden = false; $('acSave').hidden = true;
+    renderApiClients();
+  } finally { $('acSave').disabled = false; }
+}
+async function clientAction(id, action, name = '') {
+  if (action === 'revoke' && !confirm(`${name} 키를 폐기할까요? 되돌릴 수 없고, 그 키로 오는 호출은 모두 거부됩니다.`)) return;
+  await api(`/admin/api-clients/${id}/${action}`, { method: 'POST' });
+  renderApiClients();
+}
 </script>
+<div class="modal-back" id="clientModal" onclick="if (event.target === this) this.classList.remove('open')">
+  <div class="modal" style="width:min(560px,100%)">
+    <div class="modal-head"><h2>API 키 발급</h2><button class="ghost" onclick="$('clientModal').classList.remove('open')">닫기</button></div>
+    <div class="modal-body">
+      <div id="acForm">
+        <div class="field"><label>이름</label><input id="acName" maxlength="64" placeholder="호출하는 서비스·에이전트 (예: report-agent)"></div>
+        <div class="field"><label>tenant (선택)</label><input id="acTenant" maxlength="64" placeholder="비우면 이 서비스의 tenant · 소문자·숫자·- (예: report-agent)"></div>
+        <div class="field"><label>설명 (선택)</label><input id="acDesc" maxlength="2000"></div>
+        <div class="muted" style="font-size:12px;line-height:1.6">tenant는 그 호출자의 executor 실행·배치가 속하는 공간입니다. 다른 tenant의 실행·이벤트는 서로 보이지 않습니다.</div>
+      </div>
+      <div id="acIssued" hidden>
+        <div class="field"><label>발급된 키 (지금 한 번만 보입니다)</label><input id="acKey" class="mono" readonly onclick="this.select()"></div>
+        <div class="toolbar"><button class="btn" onclick="navigator.clipboard.writeText($('acKey').value)">복사</button></div>
+        <div class="muted" style="font-size:12.5px" id="acState"></div>
+      </div>
+    </div>
+    <div class="modal-foot"><button class="btn" onclick="$('clientModal').classList.remove('open')">닫기</button><button class="btn primary" id="acSave" onclick="issueClient()">발급</button></div>
+  </div>
+</div>
 </body>
 </html>

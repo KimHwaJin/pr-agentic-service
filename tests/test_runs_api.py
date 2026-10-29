@@ -199,8 +199,6 @@ def test_reply_shapes_follow_the_question_type():
     assert fields(code, {"approve": True, "code": "x = 1"}) == set()
     assert fields(code, {"approve": "y"}) == {"value.approve"}
     assert fields(code, {"approve": True, "tags": []}) == {"value.tags"}
-    memory = {"type": "memory_change"}
-    assert fields(memory, {"approve": False, "feedback": "아니"}) == set()
     save = {"type": "workflow_save"}
     assert (
         fields(save, {"approve": True, "name": "n", "user_queries": ["q"]})
@@ -246,7 +244,6 @@ def test_openapi_documents_the_reply_models():
         "PlanReviseReply",
         "PlanCancelReply",
         "CodeApprovalReply",
-        "MemoryChangeReply",
         "WorkflowSaveReply",
     ]:
         assert name in spec, name

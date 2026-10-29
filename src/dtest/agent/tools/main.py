@@ -5,10 +5,15 @@ Domain knowledge, project memory, hand-off to analysis.
 
 from langchain.tools import ToolRuntime, tool
 from langchain_core.messages import ToolMessage
-from langgraph.types import Command, interrupt
+from langgraph.types import Command
 
 from src.dtest.agent.context import AnalysisState, RunContext
-from src.dtest.core.memory.service import Actor, Category, MemoryItemError
+from src.dtest.core.memory.service import (
+    Actor,
+    MemoryEditError,
+    render_topic_index,
+    updated_event,
+)
 
 
 @tool
@@ -20,144 +25,131 @@ async def read_knowledge(
     return skill.body if skill else f"'{name}' 지식 skill이 없습니다."
 
 
-@tool
-async def search_memory(
-    query: str, runtime: ToolRuntime[RunContext, AnalysisState]
-) -> str:
-    """Search project shared memory for entries related to the query
-    (beyond those already in your prompt)."""
-    ctx = runtime.context
-    items = await ctx.services.memory.search(ctx.project_id, query, limit=8)
-    if not items:
-        return "관련 메모리가 없습니다."
-    return "\n".join(
-        f"- id={m['id']} v{m['version']} [{m['category']}] "
-        f"{m['title']}: {m['content']}"
-        for m in items
+def _lines(content: dict) -> str:
+    rows = [
+        f"- line_id={line['id']}: {line['text']}" for line in content["lines"]
+    ]
+    return "\n".join(rows) or "(비어 있음)"
+
+
+async def _topics(ctx: RunContext) -> str:
+    topics = await ctx.services.memory.topics(ctx.project_id)
+    return (
+        f"메모리 주제 (topic id: 제목 — 설명):\n{render_topic_index(topics)}"
     )
+
+
+async def _resolve(ctx: RunContext, topic: str) -> str | None:
+    """A topic id, also accepting the title the model saw in the prompt."""
+    topics = await ctx.services.memory.topics(ctx.project_id)
+    wanted = topic.strip().casefold()
+    for t in topics:
+        if wanted in (t["id"].casefold(), t["title"].casefold()):
+            return t["id"]
+    return None
+
+
+async def _listing(ctx: RunContext, topic_id: str) -> str:
+    current = await ctx.services.memory.content(ctx.project_id, topic_id)
+    return (
+        f"[{current['title']}] (topic={topic_id}) "
+        f"{len(current['content'])}/{current['max_chars']}자\n"
+        f"{_lines(current)}"
+    )
+
+
+async def _memory_failed(
+    ctx: RunContext, topic_id: str, exc: MemoryEditError
+) -> str:
+    message = f"메모리 저장 실패: {exc}"
+    if exc.status == 404 and "topic" in str(exc):
+        return f"{message}.\n{await _topics(ctx)}"
+    hint = (
+        " 한도를 넘습니다. 기존 줄을 line_id로 바꾸거나(save_memory) "
+        "지운 뒤(delete_memory) 다시 저장하세요."
+        if exc.status == 422 and "exceeds" in str(exc)
+        else ""
+    )
+    return f"{message}.{hint}\n{await _listing(ctx, topic_id)}"
 
 
 @tool
 async def save_memory(
-    category: Category,
-    title: str,
-    content: str,
+    topic: str,
     runtime: ToolRuntime[RunContext, AnalysisState],
-    item_id: str | None = None,
-    expected_version: int | None = None,
+    text: str = "",
+    line_id: str | None = None,
     reason: str = "",
 ) -> str:
-    """Create or update a project memory entry shared by every session of
-    this project.
+    """Save one line to the project memory shared by every session of this
+    project. Only when the user explicitly asks to remember something.
 
-    Update an existing entry (item_id + expected_version) instead of
-    creating a near-duplicate.
-    Entries written by the user (author=user) are changed only after the
-    user approves.
+    topic: a memory topic id. "?" changes nothing and lists the project's
+    topics (id, title, description, limit); put the line only where it
+    fits a topic's title and description.
+    text: one Markdown line, following the topic's description.
+    line_id: replace that line instead of adding one. "?" changes nothing
+    and lists the topic's lines with their ids.
     """
     ctx = runtime.context
-    memory = ctx.services.memory
-    actor = Actor("agent", "main", ctx.session_id, ctx.run_id)
-    source = {
-        "session_id": ctx.session_id,
-        "run_id": ctx.run_id,
-        "reason": reason,
-    }
+    topic_id = None if topic.strip() == "?" else await _resolve(ctx, topic)
+    if topic_id is None:
+        prefix = (
+            "" if topic.strip() == "?" else f"'{topic}' 주제가 없습니다.\n"
+        )
+        return prefix + await _topics(ctx)
+    if line_id == "?":
+        return await _listing(ctx, topic_id)
+    actor = Actor(
+        "agent",
+        "main",
+        ctx.session_id,
+        ctx.run_id,
+        {"session_id": ctx.session_id, "run_id": ctx.run_id, "reason": reason},
+    )
     try:
-        if item_id is None:
-            similar = [
-                m
-                for m in await memory.search(
-                    ctx.project_id, f"{title} {content}", 1
-                )
-                if (m["score"] or 0) >= 0.9
-            ]
-            if similar:
-                m = similar[0]
-                return (
-                    "비슷한 항목이 이미 있습니다. 이 항목을 갱신하세요: "
-                    f"id={m['id']} v{m['version']} "
-                    f"{m['title']}: {m['content']}"
-                )
-            item = await memory.create(
-                ctx.project_id,
-                category=category,
-                title=title,
-                content=content,
-                actor=actor,
-                source=source,
-            )
-            action = "created"
-        else:
-            current = await memory.get(ctx.project_id, item_id)
-            if current is None:
-                return f"메모리 항목 {item_id}가 없습니다."
-            approved = False
-            if current["author"] == "user":
-                answer = interrupt(
-                    {
-                        "type": "memory_change",
-                        "item": current,
-                        "proposed": {
-                            "category": category,
-                            "title": title,
-                            "content": content,
-                        },
-                        "reason": reason,
-                    }
-                )
-                if not (isinstance(answer, dict) and answer.get("approve")):
-                    feedback = (
-                        answer.get("feedback")
-                        if isinstance(answer, dict)
-                        else None
-                    )
-                    return (
-                        "사용자가 메모리 변경을 거절했습니다. "
-                        "이번 요청에만 반영하세요."
-                        + (f" 사용자 메시지: {feedback}" if feedback else "")
-                    )
-                approved = True
-            item = await memory.update(
-                ctx.project_id,
-                item_id,
-                expected_version=expected_version
-                if expected_version is not None
-                else current["version"],
-                actor=actor,
-                title=title,
-                content=content,
-                category=category,
-                approved_by_user=approved,
-            )
-            action = "updated"
-    except MemoryItemError as exc:
-        return f"메모리 저장 실패: {exc}"
-    await ctx.emit("memory_updated", {"action": action, "item": item})
-    return f"메모리 {action}: id={item['id']} v{item['version']}"
+        saved = await ctx.services.memory.save_line(
+            ctx.project_id, topic_id, text, actor=actor, line_id=line_id
+        )
+    except MemoryEditError as exc:
+        return await _memory_failed(ctx, topic_id, exc)
+    if saved is None:
+        return "이미 같은 내용이 저장되어 있습니다."
+    await ctx.emit("memory_updated", updated_event(saved, "agent"))
+    return f"메모리 저장: [{saved['title']}] v{saved['version']}"
 
 
 @tool
 async def delete_memory(
-    item_id: str,
-    expected_version: int,
+    topic: str,
+    line_id: str,
     runtime: ToolRuntime[RunContext, AnalysisState],
 ) -> str:
-    """Delete an agent-written project memory entry that became wrong or
-    obsolete."""
+    """Delete one line of project memory when the user asks for it.
+
+    topic "?" lists the project's topics with ids; line_id "?" changes
+    nothing and lists the topic's lines with ids.
+    """
     ctx = runtime.context
+    topic_id = None if topic.strip() == "?" else await _resolve(ctx, topic)
+    if topic_id is None:
+        prefix = (
+            "" if topic.strip() == "?" else f"'{topic}' 주제가 없습니다.\n"
+        )
+        return prefix + await _topics(ctx)
+    if line_id == "?":
+        return await _listing(ctx, topic_id)
     try:
-        await ctx.services.memory.delete(
+        saved = await ctx.services.memory.delete_line(
             ctx.project_id,
-            item_id,
-            expected_version=expected_version,
+            topic_id,
+            line_id,
             actor=Actor("agent", "main", ctx.session_id, ctx.run_id),
         )
-    except MemoryItemError as exc:
-        return f"메모리 삭제 실패: {exc}"
-    await ctx.emit(
-        "memory_updated", {"action": "deleted", "item": {"id": item_id}}
-    )
+    except MemoryEditError as exc:
+        return await _memory_failed(ctx, topic_id, exc)
+    if saved is not None:
+        await ctx.emit("memory_updated", updated_event(saved, "agent"))
     return "삭제했습니다."
 
 

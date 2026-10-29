@@ -1,14 +1,17 @@
 """Skill (.md) and Tool (.py) catalogs read from configurable directories.
 
 Skills: ``<root>/<category>/<name>.md`` with ``name``/``description``
-frontmatter. Analysis skills carry a ``## Tool list`` table
-(Tool | 실행 방식 | 실행 조건 | condition_tool | 역할).
+frontmatter. Analysis skills carry a ``## Tool list`` table whose columns
+are found by header name, in any order: Tool (`name` in backticks),
+실행 방식, 실행 조건, condition_tool, 역할 (or execution, condition, role).
+Any other column is kept per tool in ``SkillTool.extra``.
 Tools: ``<root>/<category>/<tool>.py`` holding one top-level function named
 like the file. Imports live inside the function; the executor receives the
 function without its docstring.
 """
 
 import ast
+import logging
 import re
 import time
 from collections.abc import Sequence
@@ -18,9 +21,20 @@ from pathlib import Path
 import yaml
 
 _FRONTMATTER = re.compile(r"^---\n(.*?)\n---\n?(.*)$", re.S)
-_TABLE_ROW = re.compile(
-    r"^\|\s*`([^`]+)`\s*\|([^|]*)\|([^|]*)\|([^|]*)\|([^|]*)\|\s*$"
-)
+_SEPARATOR = re.compile(r"^\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)*\|?$")
+_TOOL_NAME = re.compile(r"^`([^`]+)`$")
+# header name -> SkillTool field; other headers go to SkillTool.extra
+_COLUMNS = {
+    "tool": "tool",
+    "실행 방식": "execution",
+    "execution": "execution",
+    "실행 조건": "condition",
+    "condition": "condition",
+    "condition_tool": "condition_tool",
+    "역할": "role",
+    "role": "role",
+}
+log = logging.getLogger(__name__)
 
 
 def split_frontmatter(text: str) -> tuple[dict, str]:
@@ -37,6 +51,7 @@ class SkillTool:
     condition: str
     condition_tool: str | None
     role: str
+    extra: tuple[tuple[str, str], ...] = ()  # other columns, in table order
 
 
 @dataclass(frozen=True)
@@ -84,6 +99,7 @@ class Tool:
 @dataclass
 class SkillCatalog:
     skills: dict[str, Skill] = field(default_factory=dict)
+    errors: dict[str, str] = field(default_factory=dict)
 
     @classmethod
     def load(cls, root: Path) -> "SkillCatalog":
@@ -91,25 +107,10 @@ class SkillCatalog:
         for path in sorted(root.rglob("*.md")):
             meta, body = split_frontmatter(path.read_text("utf-8"))
             name = meta.get("name") or path.stem
-            rows = []
-            for line in body.splitlines():
-                if match := _TABLE_ROW.match(line.strip()):
-                    tool, mode, condition, cond_tool, role = (
-                        g.strip() for g in match.groups()
-                    )
-                    rows.append(
-                        SkillTool(
-                            tool=tool,
-                            execution="conditional"
-                            if "조건" in mode or "conditional" in mode
-                            else "always",
-                            condition=condition,
-                            condition_tool=cond_tool.strip("`")
-                            if cond_tool not in {"", "없음", "-"}
-                            else None,
-                            role=role,
-                        )
-                    )
+            rows, problems = tool_table(body)
+            if problems:
+                catalog.errors[str(path)] = "; ".join(problems)
+                log.warning("skill %s: %s", path, "; ".join(problems))
             catalog.skills[name] = Skill(
                 name,
                 meta.get("description", ""),
@@ -126,13 +127,77 @@ class SkillCatalog:
         catalog = cls()
         for root in roots:
             if root.exists():
-                catalog.skills.update(cls.load(root).skills)
+                part = cls.load(root)
+                catalog.skills.update(part.skills)
+                catalog.errors.update(part.errors)
         return catalog
 
     def index(self) -> str:
         return "\n".join(
             f"- `{s.name}`: {s.description}" for s in self.skills.values()
         )
+
+
+def _cells(line: str) -> list[str]:
+    return [c.strip() for c in line.strip().strip("|").split("|")]
+
+
+def tool_table(body: str) -> tuple[list[SkillTool], list[str]]:
+    """Rows of the tables whose header has a Tool column, and what could
+    not be read (rows without a backticked tool name, missing cells)."""
+    rows: list[SkillTool] = []
+    problems: list[str] = []
+    lines = body.splitlines()
+    i = 0
+    while i < len(lines) - 1:
+        header = lines[i].strip()
+        if not (
+            header.startswith("|") and _SEPARATOR.match(lines[i + 1].strip())
+        ):
+            i += 1
+            continue
+        names = _cells(header)
+        fields = [_COLUMNS.get(n.lower(), _COLUMNS.get(n)) for n in names]
+        i += 2
+        if "tool" not in fields:
+            continue
+        while i < len(lines) and lines[i].strip().startswith("|"):
+            cells = _cells(lines[i])
+            i += 1
+            if len(cells) != len(names):
+                problems.append(
+                    f"칸 수가 헤더({len(names)})와 다른 행: {cells[0]}"
+                )
+                continue
+            values: dict[str, str] = {}
+            extra = []
+            for name, key, cell in zip(names, fields, cells, strict=True):
+                if key:
+                    values[key] = cell
+                elif cell:
+                    extra.append((name, cell))
+            if not (match := _TOOL_NAME.match(values["tool"])):
+                problems.append(
+                    f"tool 이름에 백틱이 없는 행: {values['tool']}"
+                )
+                continue
+            mode = values.get("execution", "")
+            cond_tool = values.get("condition_tool", "")
+            rows.append(
+                SkillTool(
+                    tool=match.group(1),
+                    execution="conditional"
+                    if "조건" in mode or "conditional" in mode
+                    else "always",
+                    condition=values.get("condition", ""),
+                    condition_tool=cond_tool.strip("`")
+                    if cond_tool not in {"", "없음", "-"}
+                    else None,
+                    role=values.get("role", ""),
+                    extra=tuple(extra),
+                )
+            )
+    return rows, problems
 
 
 def _parse_tool(path: Path) -> Tool:
@@ -265,6 +330,12 @@ class ToolCatalog:
         tool = self.tools[name]
         outputs = list(tool.outputs)
         return f"{tool.signature}\noutputs: {outputs}\n\n{tool.docstring}"
+
+    def summary(self, name: str) -> str:
+        """One line: name, first docstring line, outputs."""
+        tool = self.tools[name]
+        first = tool.docstring.splitlines()[0] if tool.docstring else ""
+        return f"- `{name}`: {first} (outputs: {list(tool.outputs)})"
 
 
 class AssetLoader:

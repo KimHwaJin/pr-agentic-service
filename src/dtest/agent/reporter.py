@@ -115,17 +115,18 @@ async def generate_report(
     """
     services = ctx.services
     prompt = load_prompt("reporter")
-    preferences = [
-        m
-        for m in await services.memory.entries(ctx.project_id)
-        if m["category"] == "report_preferences"
-    ]
+    # the default Preferences topic, while the project keeps it
+    preferences = next(
+        (
+            t["content"]
+            for t in await services.memory.contents(ctx.project_id)
+            if t["topic"] == "preferences"
+        ),
+        "",
+    )
     system = prompt.render(
         project_prompt=ctx.project_prompt or "없음",
-        report_preferences="\n".join(
-            f"- {m['title']}: {m['content']}" for m in preferences
-        )
-        or "없음",
+        report_preferences=preferences or "없음",
     )
     request = (
         f"# 제목\n{title}\n\n"

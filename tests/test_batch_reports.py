@@ -25,7 +25,7 @@ from src.dtest.api_service.schemas.batch import BatchReportDetail
 from src.dtest.core.config import Settings
 from src.dtest.core.contracts import events as contracts
 from src.dtest.core.db import utcnow
-from src.dtest.core.executor.client import trigger_type
+from src.dtest.core.executor.client import ExecutorError, trigger_type
 from src.dtest.worker import batch_reports
 from src.dtest.worker.batch_reports import BatchReportWorker, NotReady, enqueue
 
@@ -111,26 +111,32 @@ def _inserted(db: _Db) -> dict[str, Any]:
 # --- enqueue -------------------------------------------------------------
 
 
-def test_failed_runs_get_no_report():
-    services = _services()
-    payload = {"status": "FAILED", "execution": {"trigger": {"type": "BATCH"}}}
-    assert asyncio.run(enqueue(services, EXECUTION, payload)) is None
-    assert services.executor.gets == 0
-
-
-def test_event_trigger_decides_without_asking_the_executor():
-    db = _Db(["job-1"])
-    services = _services(db)
-    payload = {
-        "status": "SUCCEEDED",
-        "execution": {
-            "trigger": {"type": "BATCH", "actor": {"type": "USER"}},
-            "context": {"user_id": OWNER},
-            "metadata": {"batch_id": "batch-3", "run_id": "run-7"},
-        },
+def _batch_execution(status="SUCCEEDED", trigger="BATCH", owner=OWNER):
+    return {
+        "state": {"status": status},
+        "trigger": {"type": trigger, "actor": {"type": "USER"}},
+        "context": {"user_id": owner} if owner else {},
+        "metadata": {"batch_id": "batch-3", "run_id": "run-7"},
     }
-    assert asyncio.run(enqueue(services, EXECUTION, payload)) == "job-1"
-    assert services.executor.gets == 0
+
+
+class _Unknown(_Executor):
+    async def get(self, execution_id):
+        self.gets += 1
+        raise ExecutorError(404, {"error": {"code": "EXECUTION_NOT_FOUND"}})
+
+
+def test_failed_runs_get_no_report():
+    services = _services(executor=_Executor(_batch_execution("FAILED")))
+    assert asyncio.run(enqueue(services, EXECUTION)) is None
+
+
+def test_the_executor_decides_not_the_event():
+    """Events can be forged: owner and trigger come from the executor."""
+    db = _Db(["job-1"])
+    services = _services(db, _Executor(_batch_execution()))
+    assert asyncio.run(enqueue(services, EXECUTION)) == "job-1"
+    assert services.executor.gets == 1
     params = _inserted(db)
     assert params["idempotency_key"] == f"batch-report:{EXECUTION}"
     assert params["owner_id"] == OWNER and params["batch_run_id"] == "run-7"
@@ -139,33 +145,32 @@ def test_event_trigger_decides_without_asking_the_executor():
         ("job-1", "run_status", {"status": "queued"})
     ]
 
-    interactive = {
-        "status": "SUCCEEDED",
-        "execution": {"trigger": {"type": "INTERACTIVE"}, "context": {}},
-    }
-    assert asyncio.run(enqueue(services, EXECUTION, interactive)) is None
+    interactive = _services(executor=_Executor(_batch_execution(trigger="X")))
+    assert asyncio.run(enqueue(interactive, EXECUTION)) is None
 
 
-def test_events_without_an_execution_get_no_report():
-    services = _services()
-    assert (
-        asyncio.run(enqueue(services, EXECUTION, {"status": "SUCCEEDED"}))
-        is None
-    )
-    assert services.executor.gets == 0
+def test_executions_outside_our_tenant_get_no_report():
+    services = _services(executor=_Unknown())
+    assert asyncio.run(enqueue(services, EXECUTION)) is None
+    assert services.executor.gets == 1
+
+
+def test_executions_without_an_owner_get_no_report():
+    services = _services(executor=_Executor(_batch_execution(owner=None)))
+    assert asyncio.run(enqueue(services, EXECUTION)) is None
 
 
 def test_a_job_that_exists_is_not_announced_again():
-    services = _services(_Db([None]))  # ON CONFLICT DO NOTHING
-    payload = {
-        "status": "SUCCEEDED",
-        "execution": {
-            "trigger": {"type": "BATCH"},
-            "context": {"user_id": OWNER},
-        },
-    }
-    assert asyncio.run(enqueue(services, EXECUTION, payload)) is None
+    services = _services(_Db([None]), _Executor(_batch_execution()))
+    assert asyncio.run(enqueue(services, EXECUTION)) is None
     assert services.events.sent == []
+
+
+def test_worker_skips_events_of_runs_that_did_not_succeed():
+    services = _services(executor=_Executor(_batch_execution()))
+    worker = BatchReportWorker(services, "me")
+    asyncio.run(worker.enqueue(EXECUTION, {"status": "FAILED"}))
+    assert services.executor.gets == 0
 
 
 def test_trigger_type_reads_the_trigger():
@@ -522,8 +527,8 @@ def _finished(execution_id, minutes_ago):
 def _recovery(monkeypatch, executor, db=None):
     queued = []
 
-    async def fake_enqueue(services, execution_id, payload):
-        queued.append((execution_id, payload))
+    async def fake_enqueue(services, execution_id):
+        queued.append(execution_id)
         return f"job-{execution_id}"
 
     monkeypatch.setattr(batch_reports, "enqueue", fake_enqueue)
@@ -550,11 +555,9 @@ def test_recovery_queues_missed_executions_only(monkeypatch):
         monkeypatch, executor, _RecoveryDb(known=["reported"])
     )
     assert asyncio.run(recovery.sweep()) == ["job-missed"]
-    assert [(e, p["status"]) for e, p in queued] == [("missed", "SUCCEEDED")]
-    assert queued[0][1]["execution"]["metadata"]["run_id"] == "run-missed"
+    assert queued == ["missed"]
     created_after, filters = executor.asked[0]
-    assert filters == {
-        "tenant_id": "pr-agentic",
+    assert filters == {  # the tenant is our key's
         "trigger_type": "BATCH",
         "status": "SUCCEEDED",
     }

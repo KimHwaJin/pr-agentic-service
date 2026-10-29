@@ -34,6 +34,11 @@ class User(Timestamped, Base):
         String(16), default="user"
     )  # user | admin
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    # deactivated, pr-batch not yet told to turn off their batches
+    # (worker.user_deactivation retries)
+    batches_disable_pending: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="false"
+    )
 
 
 class Project(Timestamped, Base):
@@ -192,6 +197,37 @@ class MemoryHistory(Base):
     )
 
 
+class MemoryExtractionState(Base):
+    """Where the memory worker (worker.memory) is in a project's chats.
+
+    ``processed_until_*`` is a cursor over ``messages`` ordered by
+    (created_at, id). A finished turn marks the project dirty and counts
+    a pending turn; the worker claims it with a lease (also the "not
+    before" of a retry).
+    """
+
+    __tablename__ = "memory_extraction_state"
+    project_id: Mapped[str] = mapped_column(ID, primary_key=True)
+    processed_until_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True)
+    )
+    processed_until_id: Mapped[str] = mapped_column(ID, default="")
+    dirty: Mapped[bool] = mapped_column(Boolean, default=False)
+    last_activity_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow
+    )
+    pending_turns: Mapped[int] = mapped_column(Integer, default=0)
+    lease_owner: Mapped[str | None] = mapped_column(String(128))
+    lease_expires_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True)
+    )
+    attempts: Mapped[int] = mapped_column(Integer, default=0)
+    last_error: Mapped[str | None] = mapped_column(Text)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow
+    )
+
+
 class Workflow(Timestamped, Base):
     __tablename__ = "workflows"
     id: Mapped[str] = mapped_column(ID, primary_key=True, default=new_id)
@@ -302,6 +338,11 @@ Index(
 # SSE replay reads a session's events after a cursor
 Index("ix_run_events_session_id_id", RunEvent.session_id, RunEvent.id)
 Index("ix_messages_session_created", Message.session_id, Message.created_at)
+Index(
+    "ix_memory_extraction_claim",
+    MemoryExtractionState.last_activity_at,
+    postgresql_where=MemoryExtractionState.dirty,
+)
 
 
 class CodeSource(Base):
@@ -374,4 +415,31 @@ class RunRequest(Base):
     resumed: Mapped[bool] = mapped_column(Boolean)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, index=True
+    )
+
+
+class ApiClient(Timestamped, Base):
+    """A service or agent that calls this API with ``X-Api-Key``.
+
+    Only the SHA-256 of the key is kept; the key is shown once when issued.
+    ``tenant`` is the executor tenant its executions and batches go to
+    (executor and pr-batch list it in our key's allowed_tenants). A new
+    client stays ``pending`` until those lists are deployed.
+    """
+
+    __tablename__ = "api_clients"
+    id: Mapped[str] = mapped_column(ID, primary_key=True, default=new_id)
+    name: Mapped[str] = mapped_column(String(64), unique=True)
+    tenant: Mapped[str] = mapped_column(String(64))
+    key_prefix: Mapped[str] = mapped_column(String(32))
+    key_sha256: Mapped[str] = mapped_column(String(64), unique=True)
+    # pending | active | revoked
+    status: Mapped[str] = mapped_column(String(16), default="pending")
+    description: Mapped[str | None] = mapped_column(Text)
+    created_by: Mapped[str] = mapped_column(ID)
+    revoked_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True)
+    )
+    last_used_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True)
     )

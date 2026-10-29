@@ -278,6 +278,5 @@ REPLY_RULES: dict[str, ReplyRules] = {
     ),
     "plan_approval": ReplyRules(check=_plan, from_text=_plan_text),
     "code_approval": ReplyRules(),
-    "memory_change": ReplyRules(),
     "workflow_save": ReplyRules(check=_workflow),
 }

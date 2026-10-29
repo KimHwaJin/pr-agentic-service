@@ -9,6 +9,7 @@ import httpx
 import pytest
 
 from src.dtest.core.config import Settings
+from src.dtest.core.executor.client import Identity
 from src.dtest.core.executor.storage import SharedStorage
 from src.dtest.core.executor.testmode import (
     InlineExecutorClient,
@@ -58,7 +59,7 @@ def test_path_steps_are_sent_inline_and_the_originals_kept(tmp_path):
     asyncio.run(
         client.submit(
             idempotency_key="k",
-            context={},
+            who=Identity(user_id="u-1"),
             steps=steps,
             profile="default",
             wait_seconds=600,
@@ -66,7 +67,11 @@ def test_path_steps_are_sent_inline_and_the_originals_kept(tmp_path):
     )
     asyncio.run(
         client.append_operation(
-            EXECUTION, idempotency_key="k2", expected_version=1, steps=steps
+            EXECUTION,
+            who=Identity(user_id="u-1"),
+            idempotency_key="k2",
+            expected_version=1,
+            steps=steps,
         )
     )
 

@@ -63,13 +63,6 @@ class CodeApprovalReply(Model):
     feedback: str | None = Field(None, description="거절 사유 (선택)")
 
 
-class MemoryChangeReply(Model):
-    """memory_change: apply the proposed project memory change or not."""
-
-    approve: bool
-    feedback: str | None = None
-
-
 class WorkflowSaveReply(Model):
     """workflow_save: save the plan as a workflow (values may be edited)."""
 
@@ -96,7 +89,6 @@ REPLIES: dict[str, Any] = {
     "question": QuestionReply,
     "plan_approval": PlanReply,
     "code_approval": CodeApprovalReply,
-    "memory_change": MemoryChangeReply,
     "workflow_save": WorkflowSaveReply,
 }
 

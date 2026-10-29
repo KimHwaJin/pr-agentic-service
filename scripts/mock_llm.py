@@ -43,6 +43,9 @@ def _decide(body: dict) -> tuple[str, list[dict]]:
                 if call["id"] == call_id:
                     tool_name = call["function"]["name"]
 
+    system = str(messages[0].get("content", "")) if messages else ""
+    if not tools and "프로젝트 메모리 관리자" in system:  # memory worker
+        return '{"ops": []}', []
     if not tools:  # reporter
         return (
             "# 분석 리포트\n\n## 요약\n표본 통계와 분포를 확인했습니다.\n\n"
@@ -56,9 +59,8 @@ def _decide(body: dict) -> tuple[str, list[dict]]:
                 _call(
                     "save_memory",
                     {
-                        "category": "report_preferences",
-                        "title": "보고서 형식",
-                        "content": content,
+                        "topic": "preferences",
+                        "text": f"- {content}",
                         "reason": "사용자 요청",
                     },
                 )

@@ -1,8 +1,9 @@
 """Who may see an execution or an artifact.
 
-The executor has no user authentication, so every route that reaches an
-execution or artifact through this service checks access here: by project
-membership (via the session or our code-source index), else by the
+The executor scopes calls to our tenant and to the user of ``X-User-Id``,
+but a project is shared by its members, so the browser's routes read
+executions as system calls (our tenant) after checking access here: by
+project membership (via the session or our code-source index), else by the
 execution's own context. User ids are our ``users.id`` (UUID) everywhere:
 executor ``context.user_id``, pr-batch owners and actors.
 """
@@ -26,13 +27,16 @@ _owners: dict[str, tuple[float, str | None, str]] = {}
 async def scope_execution_list(
     services: Services, user: User, params: dict[str, str]
 ) -> None:
-    """Only the caller's executions, inside projects they belong to."""
+    """Checks the project or session a user's list is filtered by.
+
+    The list is sent with the user's ``X-User-Id``, so the executor returns
+    only their executions.
+    """
     if session_id := params.get("session_id"):
         session = await session_for(services, user, session_id)
         params["project_id"] = session.project_id
     elif project_id := params.get("project_id"):
         await project_for(services, user, project_id)
-    params["user_id"] = user.id
 
 
 async def check_execution(

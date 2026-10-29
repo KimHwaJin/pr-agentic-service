@@ -1,16 +1,21 @@
-from fastapi import APIRouter, HTTPException, Response
+from fastapi import APIRouter, HTTPException, Query, Response
 from sqlalchemy import select
 
 from src.dtest.api_service.deps import ServicesDep, UserDep, project_for
 from src.dtest.api_service.schemas.projects import (
-    MemoryCreate,
-    MemoryUpdate,
+    MemoryContentWrite,
+    MemoryHistoryRead,
+    MemoryRead,
+    MemoryRevert,
+    MemoryTopicContent,
+    MemoryTopicsRead,
+    MemoryTopicsWrite,
     ProjectCreate,
     ProjectRead,
     ProjectUpdate,
 )
 from src.dtest.core.db import get_row, utcnow
-from src.dtest.core.memory.service import Actor, MemoryItemError
+from src.dtest.core.memory.service import Actor, MemoryEditError
 from src.dtest.core.models import Project, ProjectMember
 
 router = APIRouter(prefix="/projects", tags=["projects"])
@@ -79,81 +84,128 @@ async def delete_project(
 # --- project shared memory -------------------------------------------------
 
 
-def _memory_error(exc: MemoryItemError) -> HTTPException:
+def _memory_error(exc: MemoryEditError) -> HTTPException:
     return HTTPException(exc.status, str(exc))
 
 
-@router.get("/{project_id}/memory")
-async def list_memory(project_id: str, services: ServicesDep, user: UserDep):
+@router.get("/{project_id}/memory", response_model=MemoryRead)
+async def get_memory(project_id: str, services: ServicesDep, user: UserDep):
+    """Every topic in order with its body, empty ones included."""
     await project_for(services, user, project_id)
-    items = await services.memory.entries(project_id)
-    return {
-        "items": items,
-        "total_chars": sum(len(i["content"]) for i in items),
-        "max_chars": services.settings.memory_total_max_chars,
-    }
+    return await services.memory.memory(project_id)
 
 
-@router.post("/{project_id}/memory", status_code=201)
-async def create_memory(
-    project_id: str, body: MemoryCreate, services: ServicesDep, user: UserDep
+@router.get("/{project_id}/memory/topics", response_model=MemoryTopicsRead)
+async def get_memory_topics(
+    project_id: str, services: ServicesDep, user: UserDep
 ):
-    await project_for(services, user, project_id, write=True)
-    try:
-        return await services.memory.create(
-            project_id, **body.model_dump(), actor=Actor("user", user.id)
-        )
-    except MemoryItemError as exc:
-        raise _memory_error(exc) from None
+    await project_for(services, user, project_id)
+    return await services.memory.topic_list(project_id)
 
 
-@router.patch("/{project_id}/memory/{item_id}")
-async def update_memory(
+@router.put("/{project_id}/memory/topics", response_model=MemoryTopicsRead)
+async def put_memory_topics(
     project_id: str,
-    item_id: str,
-    body: MemoryUpdate,
+    body: MemoryTopicsWrite,
     services: ServicesDep,
     user: UserDep,
 ):
+    """Replace the topic list. Same id = edit (body kept); no id or
+    ``replace`` = a new, empty topic; a dropped topic's body is cleared
+    and can be restored from history."""
     await project_for(services, user, project_id, write=True)
     try:
-        return await services.memory.update(
+        return await services.memory.put_topics(
             project_id,
-            item_id,
+            [t.model_dump() for t in body.topics],
+            expected_version=body.expected_version,
             actor=Actor("user", user.id),
-            **body.model_dump(),
         )
-    except MemoryItemError as exc:
+    except MemoryEditError as exc:
         raise _memory_error(exc) from None
 
 
-@router.delete("/{project_id}/memory/{item_id}", status_code=204)
-async def delete_memory(
-    project_id: str,
-    item_id: str,
-    expected_version: int,
-    services: ServicesDep,
-    user: UserDep,
-):
-    await project_for(services, user, project_id, write=True)
-    try:
-        await services.memory.delete(
-            project_id,
-            item_id,
-            expected_version=expected_version,
-            actor=Actor("user", user.id),
-        )
-    except MemoryItemError as exc:
-        raise _memory_error(exc) from None
-    return Response(status_code=204)
-
-
-@router.get("/{project_id}/memory/history")
+@router.get("/{project_id}/memory/history", response_model=MemoryHistoryRead)
 async def memory_history(
     project_id: str,
     services: ServicesDep,
     user: UserDep,
-    item_id: str | None = None,
+    topic: str | None = None,
+    removed: bool = Query(
+        False, description="only replaced/removed topics (restorable)"
+    ),
+    limit: int = Query(100, ge=1, le=500),
 ):
     await project_for(services, user, project_id)
-    return {"items": await services.memory.history(project_id, item_id)}
+    return {
+        "items": await services.memory.history(
+            project_id, topic, limit, removed=removed
+        )
+    }
+
+
+@router.post(
+    "/{project_id}/memory/history/{history_id}/restore",
+    response_model=MemoryRead,
+)
+async def restore_memory_topic(
+    project_id: str, history_id: int, services: ServicesDep, user: UserDep
+):
+    """Bring back a replaced or removed topic with its body (added at the
+    end of the list)."""
+    await project_for(services, user, project_id, write=True)
+    try:
+        return await services.memory.restore(
+            project_id, history_id, actor=Actor("user", user.id)
+        )
+    except MemoryEditError as exc:
+        raise _memory_error(exc) from None
+
+
+@router.put(
+    "/{project_id}/memory/{topic_id}", response_model=MemoryTopicContent
+)
+async def put_memory_content(
+    project_id: str,
+    topic_id: str,
+    body: MemoryContentWrite,
+    services: ServicesDep,
+    user: UserDep,
+):
+    """Replace a topic's body; unchanged lines keep their author."""
+    await project_for(services, user, project_id, write=True)
+    try:
+        return await services.memory.put_content(
+            project_id,
+            topic_id,
+            body.content,
+            expected_version=body.expected_version,
+            actor=Actor("user", user.id),
+        )
+    except MemoryEditError as exc:
+        raise _memory_error(exc) from None
+
+
+@router.post(
+    "/{project_id}/memory/{topic_id}/revert",
+    response_model=MemoryTopicContent,
+)
+async def revert_memory_content(
+    project_id: str,
+    topic_id: str,
+    body: MemoryRevert,
+    services: ServicesDep,
+    user: UserDep,
+):
+    """Undo one history entry of the topic (a new version)."""
+    await project_for(services, user, project_id, write=True)
+    try:
+        return await services.memory.revert(
+            project_id,
+            topic_id,
+            body.history_id,
+            actor=Actor("user", user.id),
+            expected_version=body.expected_version,
+        )
+    except MemoryEditError as exc:
+        raise _memory_error(exc) from None

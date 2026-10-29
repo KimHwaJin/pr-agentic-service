@@ -81,4 +81,4 @@ def test_executions_without_a_project_belong_to_their_user(monkeypatch):
             services, cast(Any, SimpleNamespace(id=OWNER)), params
         )
     )
-    assert params == {"user_id": OWNER}
+    assert params == {}  # the executor scopes it by X-User-Id

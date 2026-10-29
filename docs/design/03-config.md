@@ -36,7 +36,9 @@ STORAGE_EXECUTOR_PATH: pr-agentic-service
 EXECUTOR_RESULT_ROOT: /mnt/data/executor
 NOTEBOOK_LAB_BASE_URL: https://executor-jupyter-lab.frodo.com
 BATCH_BASE_URL: http://pr-batch.prd.internal:8100
-BATCH_JWT_PRIVATE_KEY_FILE: /path/to/auth_private.pem
+EXECUTOR_API_KEY: exe_live_…
+EXECUTOR_ADMIN_API_KEY: exe_live_…   # 운영 key (선택)
+BATCH_API_KEY: bat_live_…
 CORS_ORIGINS: ["https://front.frodo.com"]
 COOKIE_SECURE: true
 

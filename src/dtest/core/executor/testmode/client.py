@@ -17,10 +17,11 @@ class InlineExecutorClient(ExecutorClient):
         self,
         base_url: str,
         timeout: float,
-        tenant_id: str,
+        api_key: str,
         storage: SharedStorage,
+        tenant: str = "",
     ):
-        super().__init__(base_url, timeout, tenant_id)
+        super().__init__(base_url, timeout, api_key, tenant=tenant)
         self.storage = storage
 
     async def submit(
