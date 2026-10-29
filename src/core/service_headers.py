@@ -13,8 +13,8 @@ class Identity:
     """Who a call to the executor or pr-batch is made for.
 
     Sent as headers, never in bodies. ``user_id`` None is a system call:
-    reads only, over the executions of the tenant. ``tenant`` None is the
-    tenant of our key; as a relay we name another one (``X-Tenant-Id``).
+    reads only, over the executions of the tenant. ``tenant`` None is ours
+    (``ExecutorClient.tenant``); as a relay we name another one.
     pr-batch ignores ``X-Session-Id``.
     """
 

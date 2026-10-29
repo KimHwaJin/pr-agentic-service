@@ -1,5 +1,6 @@
 import logging
 from collections.abc import AsyncIterator
+from dataclasses import replace
 from datetime import datetime
 from typing import Any
 
@@ -40,6 +41,10 @@ class ExecutorClient:
     that tenant and user. Every mutation carries a caller-derived
     idempotency key so a replayed call (pod crash, graph replay) returns
     the original receipt.
+
+    ``tenant`` (our ``EXECUTOR_TENANT_ID``) goes as ``X-Tenant-Id`` on every
+    call that names no other: an executor in header mode (local/dev) has no
+    key to take it from and would file our executions under its default.
     """
 
     def __init__(
@@ -48,7 +53,9 @@ class ExecutorClient:
         timeout: float,
         api_key: str = "",
         admin_api_key: str = "",
+        tenant: str = "",
     ):
+        self.tenant = tenant
         self.http = httpx.AsyncClient(
             base_url=base_url.rstrip("/") + "/api/v1", timeout=timeout
         )
@@ -64,7 +71,11 @@ class ExecutorClient:
 
         ``admin``: the operator key of the runtime and maintenance APIs.
         """
-        return with_key(self.admin_api_key if admin else self.api_key, who)
+        if admin:  # operator APIs act for no tenant
+            return with_key(self.admin_api_key, who)
+        if who.tenant is None and self.tenant:
+            who = replace(who, tenant=self.tenant)
+        return with_key(self.api_key, who)
 
     async def _call(
         self, method: str, url: str, who: Identity = SYSTEM, **kwargs: Any

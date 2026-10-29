@@ -36,7 +36,9 @@ def _client(sent: list[httpx.Request], status=202, body=None):
         sent.append(request)
         return httpx.Response(status, json=body or {"execution_id": "x-1"})
 
-    client = ExecutorClient("http://executor", 5, "exe_test_k", "exe_test_op")
+    client = ExecutorClient(
+        "http://executor", 5, "exe_test_k", "exe_test_op", "pr-agentic"
+    )
     client.http = httpx.AsyncClient(
         base_url="http://executor/api/v1",
         transport=httpx.MockTransport(handle),
@@ -63,7 +65,7 @@ def test_submission_names_its_user_in_headers_not_the_body():
     assert headers["x-user-id"] == "u-1"
     assert headers["x-project-id"] == "p-1"
     assert headers["x-session-id"] == "s-1"
-    assert "x-tenant-id" not in headers  # our key's own tenant
+    assert headers["x-tenant-id"] == "pr-agentic"  # ours, named
 
 
 def test_reads_are_system_calls():
@@ -87,7 +89,9 @@ def test_identity_headers():
 def test_operator_key_is_used_only_when_asked():
     client = _client([])
     assert client.headers()["X-Api-Key"] == "exe_test_k"
-    assert client.headers(admin=True)["X-Api-Key"] == "exe_test_op"
+    assert client.headers(admin=True) == {"X-Api-Key": "exe_test_op"}
+    relayed = client.headers(Identity(tenant="partner"))
+    assert relayed["X-Tenant-Id"] == "partner"
 
 
 def test_opener_is_the_execution_context():

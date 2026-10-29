@@ -135,10 +135,13 @@ async def _for_user(
     params = {
         k: v for k, v in request.query_params.items() if k not in SCOPE_PARAMS
     }
-    who = SYSTEM
+    # operator calls name the admin (the executor matches a USER actor)
+    who = Identity(user_id=user.id) if access == "ops" else SYSTEM
     if access in {"admin", "ops"} and user.role != "admin":
         raise HTTPException(403, "Administrator only.")
-    if access == "ops" and not services.executor.admin_api_key:
+    executor = services.executor
+    # no key at all: an executor in header mode, where that is an operator
+    if access == "ops" and executor.api_key and not executor.admin_api_key:
         raise ApiError(
             503,
             "executor_admin_key_missing",
