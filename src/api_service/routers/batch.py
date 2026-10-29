@@ -24,10 +24,13 @@ from fastapi.responses import HTMLResponse
 
 from api_service.deps import (
     PROJECT_ID,
+    IdentityHeaders,
     ServicesDep,
     UserDep,
     caller_of,
+    current_user,
     identity_header,
+    key_identity,
     project_for,
 )
 from api_service.routers.artifacts import render_view
@@ -147,25 +150,30 @@ _ADMIN_PATHS = {"batches:disable-by-owner"}
 
 
 async def gateway_identity(
-    services: Services, request: Request, path: str, user: User
+    services: Services,
+    request: Request,
+    path: str,
+    user_id: str | None,
+    user: User | None,
 ) -> Identity:
     """Who a gateway call is made for.
 
     The tenant and the project only on registration: the browser's tenant
     is ours and its project one the user belongs to; a key caller's project
-    in another tenant is its own and only checked for form.
+    in another tenant is its own and only checked for form. ``user`` None:
+    a key caller of another tenant, whose ``user_id`` is its own.
     """
     if path.strip("/") == "runtimes":  # pr-batch's own settings
         return Identity()
     if not registers(request.method, path):
-        return Identity(user_id=user.id)
+        return Identity(user_id=user_id)
     caller = caller_of(request)
     ours = services.settings.executor_tenant_id
     tenant = caller.tenant if caller else ours
     project = identity_header(request, "x-project-id", PROJECT_ID)
-    if project and tenant == ours:
+    if project and tenant == ours and user is not None:
         await project_for(services, user, project)
-    return Identity(user_id=user.id, project_id=project, tenant=tenant)
+    return Identity(user_id=user_id, project_id=project, tenant=tenant)
 
 
 @router.api_route(
@@ -173,16 +181,29 @@ async def gateway_identity(
     methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
 )
 async def batch_gateway(
-    path: str, request: Request, services: ServicesDep, user: UserDep
+    path: str,
+    request: Request,
+    services: ServicesDep,
+    _headers: IdentityHeaders = None,
 ):
     if path.strip("/") in _ADMIN_PATHS:
         raise HTTPException(404, "Not available through this service.")
+    if request.cookies.get(services.settings.session_cookie_name):
+        user: User | None = await current_user(request)
+        user_id = user.id if user else None
+    else:
+        _, user_id, user = await key_identity(
+            request,
+            services,
+            user_required=path.strip("/") != "runtimes",
+            any_user_outside=True,
+        )
     headers = {
         k: v
         for k, v in request.headers.items()
         if k.lower() in FORWARD_HEADERS
     }
-    who = await gateway_identity(services, request, path, user)
+    who = await gateway_identity(services, request, path, user_id, user)
     headers.update(batch_headers(services, who))
     body = await request.body()
     result = await _client(services).request(

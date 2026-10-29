@@ -122,12 +122,15 @@ async def relay(
         if route is None or route[1] is None:
             raise HTTPException(404, "Not available through this service.")
         return await _for_user(services, request, path, route, user)
-    caller, user = await key_identity(
-        request, services, user_required=request.method != "GET"
+    caller, user_id, user = await key_identity(
+        request,
+        services,
+        user_required=request.method != "GET",
+        any_user_outside=True,
     )
     if route is None or not route[2]:
         raise HTTPException(404, "Not available through this service.")
-    return await _for_caller(services, request, path, caller, user)
+    return await _for_caller(services, request, path, caller, user_id, user)
 
 
 async def _for_user(
@@ -177,6 +180,7 @@ async def _for_caller(
     request: Request,
     path: str,
     caller: Caller,
+    user_id: str | None,
     user: User | None,
 ):
     project = identity_header(request, "x-project-id", PROJECT_ID)
@@ -193,7 +197,7 @@ async def _for_caller(
             if found.project_id != project:
                 raise HTTPException(404, "Session not found.")
     who = Identity(
-        user_id=user.id if user else None,
+        user_id=user_id,
         project_id=project,
         session_id=session if project else None,
         tenant=caller.tenant,
@@ -216,7 +220,7 @@ async def _for_caller(
             "path=/%s status=%s",
             caller.name,
             caller.tenant,
-            user.id if user else "",
+            user_id or "",
             request.method,
             path.strip("/"),
             response.status_code,

@@ -41,8 +41,18 @@ class _Db:
                 return False
 
             async def scalar(self, statement):
-                hashed = statement.compile().params["key_sha256_1"]
-                return db.clients.get(hashed)
+                params = statement.compile().params
+                if "key_sha256_1" in params:
+                    return db.clients.get(params["key_sha256_1"])
+                wanted = params["lower_1"]  # employee id
+                return next(
+                    (
+                        u
+                        for u in db.users.values()
+                        if u.employee_id.lower() == wanted
+                    ),
+                    None,
+                )
 
             async def get(self, model, key):
                 assert model is User
@@ -159,6 +169,40 @@ def test_unknown_or_inactive_users_are_forbidden(users):
     assert err.value.status_code == 403
 
 
+def test_employee_id_names_the_same_user():
+    _, user = _authenticate(
+        _Db([_client(tenant="pr-agentic")], [_user()]),
+        {"X-Api-Key": KEY, "X-User-Id": "E1"},
+    )
+    assert user.id == USER
+
+
+def test_outside_tenants_bring_their_own_user_ids():
+    _REQUEST_DB[0] = _Db([_client(tenant="partner")], [])
+    request = _request({"X-Api-Key": KEY, "X-User-Id": "Their.User-7"})
+    services = request.app.state.services
+    caller, user_id, user = asyncio.run(
+        deps.key_identity(request, services, any_user_outside=True)
+    )
+    assert (caller.tenant, user_id, user) == ("partner", "their.user-7", None)
+    # our own APIs still need one of our users
+    with pytest.raises(HTTPException) as err:
+        asyncio.run(deps.key_identity(request, services))
+    assert err.value.status_code == 403
+
+
+def test_our_tenant_needs_our_users_on_gateways_too():
+    _REQUEST_DB[0] = _Db([_client(tenant="pr-agentic")], [])
+    request = _request({"X-Api-Key": KEY, "X-User-Id": "someone"})
+    with pytest.raises(HTTPException) as err:
+        asyncio.run(
+            deps.key_identity(
+                request, request.app.state.services, any_user_outside=True
+            )
+        )
+    assert err.value.status_code == 403
+
+
 def test_project_header_must_match_the_path():
     headers = {"X-Api-Key": KEY, "X-User-Id": USER, "X-Project-Id": "p-2"}
     with pytest.raises(ApiError) as err:
@@ -256,7 +300,7 @@ def _gateway(method, path, headers, caller=None, member=True):
     user = SimpleNamespace(id=USER)
     return asyncio.run(
         batch.gateway_identity(
-            cast(Any, services), request, path, cast(Any, user)
+            cast(Any, services), request, path, USER, cast(Any, user)
         )
     )
 
