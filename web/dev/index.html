@@ -284,7 +284,15 @@
   .mem-edit .row2 { display: grid; grid-template-columns: 170px 1fr auto; gap: 8px; margin-bottom: 8px; }
   .mem-edit input, .mem-edit select, .mem-edit textarea { width: 100%; border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; background: var(--panel); font-size: 13px; }
   .mem-edit textarea { min-height: 60px; resize: vertical; }
-  .mem-edit .meta { font-size: 11.5px; color: var(--faint); margin-top: 6px; }
+  .mem-edit .meta { font-size: 11.5px; color: var(--faint); margin-top: 6px; display: flex; gap: 8px; align-items: center; }
+  .mem-edit .meta .ghost { margin-left: auto; font-size: 11.5px; }
+  .mem-edit h3 { font-size: 13px; margin: 0 0 6px; display: flex; gap: 8px; align-items: baseline; }
+  .mem-edit h3 .usage { margin: 0 0 0 auto; font-weight: 400; min-width: 140px; }
+  .mem-edit textarea.over { border-color: var(--bad); }
+  .mem-hist { margin-top: 8px; border-top: 1px dashed var(--line); padding-top: 8px; font-size: 12px; }
+  .mem-hist .h { display: grid; grid-template-columns: 1fr auto; gap: 4px 8px; padding: 6px 0; border-bottom: 1px solid var(--line); }
+  .mem-hist pre { grid-column: 1 / -1; margin: 0; white-space: pre-wrap; font: 11.5px/1.45 'SF Mono', Menlo, monospace; color: var(--muted); max-height: 160px; overflow: auto; }
+  .mem-hist pre del { color: var(--bad); } .mem-hist pre ins { color: var(--good, #2e7d32); text-decoration: none; }
   .usage { font-size: 12px; color: var(--muted); margin-bottom: 12px; }
   .usage .bar { height: 5px; background: var(--hover); border-radius: 99px; margin-top: 5px; overflow: hidden; }
   .usage .bar i { display: block; height: 100%; background: var(--accent); }
@@ -657,10 +665,8 @@
           <select id="pmLevel"><option value="">서비스 기본값</option><option value="1">1 · 등록된 tool만</option><option value="2">2 · tool + 연결 코드</option><option value="3">3 · tool 우선, 필요 시 새 함수</option><option value="4">4 · 자유 코드</option></select></div>
       </div>
       <div data-pane="memory" style="display:none">
-        <div class="usage" id="pmUsage"></div>
         <div id="pmMemory"></div>
-        <button class="btn" onclick="addMemoryRow()">+ 메모리 항목 추가</button>
-        <div class="help" style="font-size:12px;color:var(--faint);margin-top:8px">직접 작성한 항목은 Agent가 승인 없이 바꾸지 못합니다. Agent가 대화 중에 저장한 항목도 여기서 고치거나 지울 수 있습니다.</div>
+        <div class="help" style="font-size:12px;color:var(--faint);margin-top:8px">모든 대화의 프롬프트에 그대로 들어가는 Markdown입니다(<code>#</code>, <code>##</code> 제목은 쓸 수 없습니다). 대화가 끝나면 Agent가 사용자가 말한 사실·선호를 자동으로 정리해 넣고, "기억해줘"라고 하면 바로 저장합니다. 바뀐 내용은 기록에서 되돌릴 수 있습니다.</div>
       </div>
     </div>
     <div class="modal-foot"><button class="btn" id="pmDelete" style="margin-right:auto;color:var(--bad)" onclick="deleteProject()">프로젝트 삭제</button><button class="btn" onclick="closeProjectModal()">취소</button><button class="btn primary" id="pmSave" onclick="saveProject()">만들기</button></div>
@@ -761,9 +767,8 @@ const S = { projects: [], models: [], images: [], waiting: false, csrf: null, pr
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const md = s => marked.parse(esc(s));
-const CAT = { background: '프로젝트 배경', analysis_preferences: '분석 선호', report_preferences: '보고서 선호', shared_findings: '공유할 주요 발견' };
 const TOOL_TEXT = {
-  read_knowledge: a => `도메인 지식 확인 · ${a.name}`, search_memory: () => '프로젝트 메모리 검색', save_memory: a => `메모리 저장 · ${a.title || ''}`,
+  read_knowledge: a => `도메인 지식 확인 · ${a.name}`, save_memory: a => `메모리 저장 · ${a.section || ''}`,
   delete_memory: () => '메모리 삭제', start_analysis: () => '분석 담당에게 전달', read_skill: a => `분석 skill 확인 · ${a.name}`,
   read_tool: a => `도구 확인 · ${(a.names || [a.name]).join(', ')}`, search_tools: () => '도구 검색', search_workflows: () => '등록된 워크플로우 검색',
   propose_plans: () => '실행 계획 작성', revise_call: a => `파라미터 수정 · #${a.call}`, run_plan: a => a.decisions ? '조건 판단 후 이어서 실행' : '코드 실행 요청',
@@ -861,52 +866,94 @@ $('projectSearch').addEventListener('input', renderProjects);
 $('projectSort').addEventListener('change', renderProjects);
 
 /* project modal: create / edit + shared memory ------------------------------- */
-const PM = { id: null, memory: [], removed: [] };
+const PM = { id: null, sections: [], open: {} };
 document.querySelectorAll('.tab').forEach(t => t.onclick = () => {
   document.querySelectorAll('.tab').forEach(x => x.classList.toggle('on', x === t));
   document.querySelectorAll('[data-pane]').forEach(p => p.style.display = p.dataset.pane === t.dataset.tab ? '' : 'none');
 });
 async function openProjectModal(id) {
-  PM.id = id || null; PM.removed = [];
+  PM.id = id || null; PM.open = {};
   const p = id ? S.projects.find(x => x.id === id) : null;
   $('pmTitle').textContent = p ? '프로젝트 설정' : '새 프로젝트';
   $('pmSave').textContent = p ? '저장' : '만들기';
   $('pmDelete').style.display = p && !p.is_default ? '' : 'none';
   $('pmName').value = p?.name || ''; $('pmDesc').value = p?.description || '';
   $('pmPrompt').value = p?.system_prompt || ''; $('pmLevel').value = p?.code_level ?? '';
-  PM.memory = id ? (await api(`/projects/${id}/memory`)).items.map(m => ({ ...m, orig: { ...m } })) : [];
-  renderMemoryRows();
+  await loadMemory();
   document.querySelector('.tab[data-tab="general"]').click();
   $('projectModal').classList.add('open'); $('pmName').focus();
 }
 function closeProjectModal() { $('projectModal').classList.remove('open'); }
-function renderMemoryRows() {
-  const used = PM.memory.reduce((n, m) => n + (m.content || '').length, 0), max = 30000;
-  $('pmUsage').innerHTML = `메모리 사용량 ${used.toLocaleString()} / ${max.toLocaleString()}자<div class="bar"><i style="width:${Math.min(100, used / max * 100)}%"></i></div>`;
-  $('pmMemory').innerHTML = PM.memory.map((m, i) => `
-    <div class="mem-edit">
-      <div class="row2">
-        <select onchange="PM.memory[${i}].category=this.value">${Object.entries(CAT).map(([k, v]) => `<option value="${k}" ${m.category === k ? 'selected' : ''}>${v}</option>`).join('')}</select>
-        <input value="${esc(m.title)}" placeholder="제목" oninput="PM.memory[${i}].title=this.value">
-        <button class="icon-btn" title="삭제" onclick="removeMemoryRow(${i})"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
-      </div>
-      <textarea placeholder="내용 (최대 1,000자)" maxlength="1000" oninput="PM.memory[${i}].content=this.value; renderUsageOnly()">${esc(m.content)}</textarea>
-      ${m.id ? `<div class="meta">${m.author === 'user' ? '🔒 직접 작성' : '✦ Agent가 저장'} · v${m.version} · ${ago(m.updated_at)}</div>` : '<div class="meta">새 항목</div>'}
-    </div>`).join('') || '<div style="color:var(--faint);font-size:13px;margin-bottom:12px">아직 메모리가 없습니다. 프로젝트 배경이나 보고서 선호처럼 모든 대화에서 기억할 내용을 추가해 보세요.</div>';
+const MEM_HINT = {
+  overview: '프로젝트 배경·목적·분석 대상',
+  preferences: '분석 방식·보고서 형식 선호',
+  core_interests: '계속 관심 두는 제품·공정·지표',
+  key_events: '날짜가 있는 사건·결정 (YYYY-MM-DD로 시작, 최신이 위)',
+};
+async function loadMemory() {
+  PM.sections = PM.id ? (await api(`/projects/${PM.id}/memory`)).sections.map(m => ({ ...m, draft: m.content })) : [];
+  renderMemory();
 }
-function renderUsageOnly() { const used = PM.memory.reduce((n, m) => n + (m.content || '').length, 0); $('pmUsage').firstChild.textContent = `메모리 사용량 ${used.toLocaleString()} / 30,000자`; }
-function addMemoryRow() { PM.memory.push({ category: 'background', title: '', content: '' }); renderMemoryRows(); }
-function removeMemoryRow(i) { const [m] = PM.memory.splice(i, 1); if (m.id) PM.removed.push(m); renderMemoryRows(); }
+function renderMemory() {
+  $('pmMemory').innerHTML = PM.sections.length ? PM.sections.map((m, i) => {
+    const authors = m.lines.reduce((n, l) => (n[l.author] = (n[l.author] || 0) + 1, n), {});
+    return `
+    <div class="mem-edit">
+      <h3>${esc(m.title)} <span style="font-weight:400;color:var(--faint);font-size:12px">${esc(MEM_HINT[m.section] || '')}</span>
+        <span class="usage" id="memUse${i}"></span></h3>
+      <textarea id="memText${i}" rows="4" placeholder="- 한 줄에 하나씩" oninput="PM.sections[${i}].draft=this.value; renderMemoryUsage(${i})">${esc(m.draft)}</textarea>
+      <div class="meta">${m.version ? `v${m.version} · ${ago(m.updated_at)}` : '아직 없음'}${m.lines.length ? ` · 직접 작성 ${authors.user || 0}줄 · Agent ${authors.agent || 0}줄` : ''}
+        <button class="ghost" onclick="toggleMemoryHistory(${i})">${PM.open[m.section] ? '기록 닫기' : '기록'}</button></div>
+      <div id="memHist${i}"></div>
+    </div>`;
+  }).join('') : '<div style="color:var(--faint);font-size:13px;margin-bottom:12px">프로젝트를 만든 뒤 공유 메모리를 쓸 수 있습니다.</div>';
+  PM.sections.forEach((m, i) => { renderMemoryUsage(i); if (PM.open[m.section]) renderMemoryHistory(i); });
+}
+function renderMemoryUsage(i) {
+  const m = PM.sections[i], used = m.draft.length;
+  $(`memUse${i}`).innerHTML = `${used.toLocaleString()} / ${m.max_chars.toLocaleString()}자<div class="bar"><i style="width:${Math.min(100, used / m.max_chars * 100)}%;${used > m.max_chars ? 'background:var(--bad)' : ''}"></i></div>`;
+  $(`memText${i}`).classList.toggle('over', used > m.max_chars);
+}
+async function toggleMemoryHistory(i) {
+  const m = PM.sections[i];
+  PM.open[m.section] = PM.open[m.section] ? null : (await api(`/projects/${PM.id}/memory/history?section=${m.section}&limit=30`)).items;
+  renderMemory();
+}
+function lineDiff(before, after) {
+  const a = before ? before.split('\n') : [], b = after ? after.split('\n') : [];
+  return [...a.filter(l => !b.includes(l)).map(l => `<del>- ${esc(l)}</del>`), ...b.filter(l => !a.includes(l)).map(l => `<ins>+ ${esc(l)}</ins>`)].join('\n') || '(내용 변화 없음)';
+}
+const MEM_ACTION = { update: '수정', delete: '줄 삭제', revert: '되돌림', migrate: '이전 메모리 이관' };
+function renderMemoryHistory(i) {
+  const m = PM.sections[i], items = PM.open[m.section] || [];
+  const who = h => h.actor.type === 'user' ? '사용자' : h.actor.id === 'memory_worker' ? 'Agent(자동 정리)' : h.actor.id === 'memory_migration' ? '이관' : 'Agent';
+  $(`memHist${i}`).innerHTML = `<div class="mem-hist">${items.map(h => `
+    <div class="h"><span><b>${esc(MEM_ACTION[h.action] || h.action)}</b> · ${who(h)} · v${h.version ?? '?'} · ${ago(h.created_at)}</span>
+      <button class="ghost" title="이 변경 전 내용으로 되돌립니다 (새 버전)" onclick="revertMemory(${i}, ${h.id})">되돌리기</button>
+      <pre>${lineDiff(h.before, h.after)}</pre></div>`).join('') || '<div class="muted">기록이 없습니다.</div>'}</div>`;
+}
+async function revertMemory(i, historyId) {
+  const m = PM.sections[i];
+  if (m.draft !== m.content && !confirm('저장하지 않은 수정이 사라집니다. 되돌릴까요?')) return;
+  const saved = await api(`/projects/${PM.id}/memory/${m.section}/revert`, { method: 'POST', body: { history_id: historyId, expected_version: m.version } });
+  PM.sections[i] = { ...saved, draft: saved.content };
+  PM.open[m.section] = (await api(`/projects/${PM.id}/memory/history?section=${m.section}&limit=30`)).items;
+  renderMemory();
+}
 async function saveProject() {
   const body = { name: $('pmName').value.trim(), description: $('pmDesc').value.trim(), system_prompt: $('pmPrompt').value, code_level: $('pmLevel').value ? +$('pmLevel').value : null };
   if (!body.name) { $('pmName').focus(); return; }
   const project = PM.id ? await api(`/projects/${PM.id}`, { method: 'PATCH', body }) : await api('/projects', { method: 'POST', body });
-  for (const m of PM.removed) await api(`/projects/${project.id}/memory/${m.id}?expected_version=${m.version}`, { method: 'DELETE' });
-  for (const m of PM.memory) {
-    if (!m.title.trim() || !m.content.trim()) continue;
-    if (!m.id) await api(`/projects/${project.id}/memory`, { method: 'POST', body: { category: m.category, title: m.title, content: m.content } });
-    else if (m.title !== m.orig.title || m.content !== m.orig.content || m.category !== m.orig.category)
-      await api(`/projects/${project.id}/memory/${m.id}`, { method: 'PATCH', body: { expected_version: m.version, category: m.category, title: m.title, content: m.content } });
+  for (const m of PM.sections) {
+    if (m.draft === m.content) continue;
+    try {
+      await api(`/projects/${project.id}/memory/${m.section}`, { method: 'PUT', body: { content: m.draft, expected_version: m.version } });
+    } catch (e) {
+      // 409: changed meanwhile (e.g. the memory worker); 422: too long or a heading
+      document.querySelector('.tab[data-tab="memory"]').click();
+      if (e.message === '409' && confirm(`${m.title}이(가) 그동안 바뀌었습니다. 최신 내용을 불러올까요? (지금 수정한 내용은 사라집니다)`)) await loadMemory();
+      return;
+    }
   }
   closeProjectModal(); await loadProjects();
   if (!PM.id || project.id === S.project) await selectProject(project.id); else renderProjects();
@@ -1084,7 +1131,7 @@ function openStream() {
   on('hitl_request', e => renderHitl(e.run_id, e.data));
   on('hitl_resolved', e => closeHitl(e.data.interrupt_id));
   on('artifact', e => addFiles([e.data]));
-  on('memory_updated', e => { step('ok', `메모리 ${e.data.action === 'deleted' ? '삭제' : '업데이트'} · ${e.data.item.title || ''}`); });
+  on('memory_updated', e => { step('ok', `프로젝트 메모리 업데이트 · ${e.data.title || e.data.section}`); });
   on('workflow_saved', e => { step('ok', `워크플로우 저장 · ${e.data.name}`); loadWorkflows(); });
   on('activity', e => { if (e.data.state === 'started') { S.activityId = e.data.id; setActivityTitle(e.data.label); } else if (S.activityId === e.data.id) { S.activityId = null; setActivityTitle('생각하는 중'); } });
   on('context_summarized', e => step('ok', `이전 대화 정리 · 메시지 ${e.data.messages}개를 요약`));
@@ -1221,12 +1268,6 @@ function renderHitl(runId, w) {
     foot.innerHTML = `<div class="row"><input id="fb" placeholder="거절 사유 (선택)"><button class="btn" id="no">거절</button><button class="btn primary" id="ok">실행</button></div>`;
     foot.querySelector('#ok').onclick = () => resume({ approve: true, code: body.querySelector('#code').value });
     foot.querySelector('#no').onclick = () => resume({ approve: false, feedback: foot.querySelector('#fb').value });
-  } else if (w.type === 'memory_change') {
-    openHitlPanel(w, '메모리 변경', '직접 작성하신 메모리를 바꿀까요?', w.reason);
-    body.innerHTML = `<div class="tool-card"><div class="tsum">현재</div><b>${esc(w.item.title)}</b><p>${esc(w.item.content)}</p></div><div class="tool-card"><div class="tsum">제안</div><b>${esc(w.proposed.title)}</b><p>${esc(w.proposed.content)}</p></div>`;
-    foot.innerHTML = `<div class="row" style="justify-content:flex-end"><button class="btn" id="no">유지</button><button class="btn primary" id="ok">변경</button></div>`;
-    foot.querySelector('#ok').onclick = () => resume({ approve: true });
-    foot.querySelector('#no').onclick = () => resume({ approve: false });
   } else if (w.type === 'workflow_save') {
     openHitlPanel(w, '워크플로우 저장', '이 분석을 워크플로우로 저장할까요?', `저장하면 비슷한 요청에서 추천됩니다.${w.excluded_custom_steps ? ` Agent가 작성한 코드 ${w.excluded_custom_steps}개는 제외됩니다.` : ''}`);
     body.innerHTML = `<div class="form-row"><label>이름</label><input id="name" value="${esc(w.name)}"></div>
