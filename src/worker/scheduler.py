@@ -33,6 +33,7 @@ from core.models import (
 )
 from core.services import Services
 from worker.executor_events import matches
+from worker.memory import mark_dirty
 
 log = logging.getLogger(__name__)
 _PAUSE: TypeAdapter = TypeAdapter(PauseRequest)
@@ -424,6 +425,9 @@ class RunScheduler:
                     )
                     .values(active_run_id=None)
                 )
+                if status == "succeeded" and answer:
+                    # always, so a worker turned on later catches up
+                    await mark_dirty(db, run.project_id, run.id)
             await db.commit()
         if not finished:
             log.warning("run_finish_skipped run_id=%s", run.id)

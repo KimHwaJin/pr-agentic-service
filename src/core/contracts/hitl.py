@@ -136,31 +136,6 @@ class CodeApprovalRequest(Pause):
     code_level: int
 
 
-class MemoryItem(View):
-    id: str
-    category: str
-    title: str
-    content: str
-    author: Literal["user", "agent"]
-    version: int
-    created_at: str
-    updated_at: str
-    source: dict[str, Any] = Field(default_factory=dict)
-
-
-class MemoryProposal(View):
-    category: str | None = None
-    title: str | None = None
-    content: str | None = None
-
-
-class MemoryChangeRequest(Pause):
-    type: Literal["memory_change"]
-    item: MemoryItem = Field(description="지금 내용")
-    proposed: MemoryProposal = Field(description="바꿀 내용 (바뀌는 항목만)")
-    reason: str | None = None
-
-
 class WorkflowSaveRequest(Pause):
     type: Literal["workflow_save"]
     name: str
@@ -188,7 +163,6 @@ REQUESTS: dict[str, Any] = {
     "question": QuestionRequest,
     "plan_approval": PlanApprovalRequest,
     "code_approval": CodeApprovalRequest,
-    "memory_change": MemoryChangeRequest,
     "workflow_save": WorkflowSaveRequest,
     "executor_wait": ExecutorWait,
 }

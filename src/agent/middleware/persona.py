@@ -42,7 +42,6 @@ PERSONA_TOOLS = {
     "main": {
         "ask_user",
         "read_knowledge",
-        "search_memory",
         "save_memory",
         "delete_memory",
         "start_analysis",
@@ -94,18 +93,8 @@ class PersonaMiddleware(AgentMiddleware[AnalysisState, RunContext]):
         self, state: AnalysisState, runtime
     ) -> dict[str, Any] | None:
         ctx: RunContext = runtime.context
-        memory = ctx.services.memory
-        settings = ctx.services.settings
-        index = await memory.entries(ctx.project_id)
-        relevant = (
-            await memory.search(
-                ctx.project_id, ctx.user_text, settings.memory_prompt_items
-            )
-            if index
-            else []
-        )
         ctx.cache["memory"] = render_for_prompt(
-            index, relevant, settings.memory_prompt_max_chars
+            await ctx.services.memory.sections(ctx.project_id)
         )
         return {
             "active_agent": state.get("active_agent") or "main",

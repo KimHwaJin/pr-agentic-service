@@ -33,6 +33,12 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 APP_ENVS = ("dev", "stg", "prd")
+MEMORY_SECTION_DEFAULTS = {
+    "overview": 500,
+    "preferences": 500,
+    "core_interests": 500,
+    "key_events": 700,
+}
 # executor stream names a tenant_id may not take
 RESERVED_TENANT_IDS = frozenset({"dlq", "work"})
 
@@ -249,11 +255,20 @@ class Settings(BaseSettings):
     agent_summary_trigger_tokens: int = 30000
     agent_summary_max_chars: int = 6000  # length asked of the summary
 
-    # Project memory.
-    memory_item_max_chars: int = 1000
-    memory_total_max_chars: int = 30000
-    memory_prompt_max_chars: int = 12000
-    memory_prompt_items: int = 8
+    # Project memory: four sections, each a short Markdown body, all of
+    # it in every prompt. Writes past a section's limit are refused.
+    memory_section_max_chars: dict[str, int] = Field(
+        default_factory=lambda: dict(MEMORY_SECTION_DEFAULTS)
+    )
+    # Background extraction of what the user said (worker.memory): a
+    # project is processed once its chats are quiet this long or after
+    # this many finished turns. Turns are counted even while disabled.
+    memory_worker_enabled: bool = True
+    memory_worker_quiet_seconds: float = Field(180, ge=0)
+    memory_worker_max_turns: int = Field(5, ge=1)
+    # chat text per LLM call (chars / 4); the rest waits for the next call
+    memory_worker_max_input_tokens: int = Field(8000, ge=500)
+    memory_worker_concurrency: int = Field(1, ge=1)
 
     # Run scheduler.
     run_concurrency: int = Field(
@@ -331,6 +346,14 @@ class Settings(BaseSettings):
         if self.executor_tenant_id in RESERVED_TENANT_IDS:
             raise ValueError(
                 f"EXECUTOR_TENANT_ID {self.executor_tenant_id!r} is reserved"
+            )
+        if (
+            set(self.memory_section_max_chars) != set(MEMORY_SECTION_DEFAULTS)
+            or min(self.memory_section_max_chars.values()) < 1
+        ):
+            raise ValueError(
+                "MEMORY_SECTION_MAX_CHARS needs a positive limit for each of "
+                + ", ".join(MEMORY_SECTION_DEFAULTS)
             )
         names = [m.name for m in self.models]
         if len(set(names)) != len(names):

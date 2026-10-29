@@ -55,7 +55,7 @@
 
 - 응답 202 `{run, resumed}`. 새 턴이면 `resumed: false`와 새 run, 재개면 `resumed: true`와 기다리던 그 run(같은 id)입니다. 진행은 SSE로 받습니다.
 - **이미지:** `image/png`, `image/jpeg`, `image/webp`만, 장당 10MB, 합계 20MB, 장수는 모델의 `max_images`까지. 긴 변이 1568px를 넘으면 서버가 줄입니다. 대화 기록에서는 `GET /api/v1/images/{image_id}`로 보여 줍니다. 모델은 최근 3턴의 이미지까지 봅니다.
-- **확인 대기 중에 `input`을 보내면** 그 글이 기다리던 확인에 대한 답이 됩니다: `question`은 답, `plan_approval`은 수정 요청 피드백, `code_approval`·`memory_change`·`workflow_save`는 거절 + 그 글을 에이전트에게 전달. 응답은 `resumed: true`이고, 글은 대화 기록에 user 메시지로 남습니다.
+- **확인 대기 중에 `input`을 보내면** 그 글이 기다리던 확인에 대한 답이 됩니다: `question`은 답, `plan_approval`은 수정 요청 피드백, `code_approval`·`workflow_save`는 거절 + 그 글을 에이전트에게 전달. 응답은 `resumed: true`이고, 글은 대화 기록에 user 메시지로 남습니다.
 
 | 상태 | code | 언제 |
 | --- | --- | --- |
@@ -95,7 +95,7 @@
 | `hitl_request` | `{interrupt_id, type, ...}` | 사용자 입력 카드 (4장) |
 | `hitl_resolved` | `{interrupt_id}` | 카드 닫기 |
 | `artifact` | `{kind: report\|notebook, artifact_id, title, lab_url}` | 링크 `/view/artifacts/{artifact_id}`, 노트북은 `lab_url`로 JupyterLab에서 열기 (5장) |
-| `memory_updated` | `{action, item}` | 메모리 변경 알림 |
+| `memory_updated` | `{section, title, content, version, updated_at, by: user\|agent}` | 프로젝트 메모리 섹션이 바뀜(대화 중 저장 또는 백그라운드 정리). `content`는 그 섹션 본문 전체 |
 | `workflow_saved` | `{workflow_id, name}` | 저장 알림 |
 | `activity` | 시작: `{id, kind, state: "started", label, ...}` / 끝: `{id, kind, state: finished\|failed\|paused, elapsed_ms}` | 오래 걸리는 작업의 진행 표시. 시작 이벤트의 `label`(예: "이전 대화를 정리하는 중")을 상태 문구로 띄우고, 같은 `id`의 끝 이벤트가 오면 내립니다. `kind`: `answering`, `planning`(모델 호출), `summarizing`, `report_writing`, `workflow_saving`. 저장하지 않는 실시간 이벤트입니다. 코드 실행 대기는 `run_status`(waiting_executor)와 `execution_progress`로 옵니다 |
 | `context_summarized` | `{messages, summary_chars}` | 이전 대화가 요약으로 정리됨. 대화 중간에 구분선으로 표시합니다(저장됨) |
@@ -104,7 +104,7 @@
 
 ## 4. HITL (사용자 확인)
 
-`hitl_request.type`별 화면과 `POST /sessions/{id}/runs`의 `command.resume.value`입니다. 질문 종류마다 답(reply) 모델이 정해져 있고 OpenAPI(`Resume.value`)에 나옵니다: `PlanApproveReply`·`PlanReviseReply`·`PlanCancelReply`(`action`으로 구분), `CodeApprovalReply`, `MemoryChangeReply`, `WorkflowSaveReply`, question은 문자열 또는 객체(`QuestionReply`).
+`hitl_request.type`별 화면과 `POST /sessions/{id}/runs`의 `command.resume.value`입니다. 질문 종류마다 답(reply) 모델이 정해져 있고 OpenAPI(`Resume.value`)에 나옵니다: `PlanApproveReply`·`PlanReviseReply`·`PlanCancelReply`(`action`으로 구분), `CodeApprovalReply`, `WorkflowSaveReply`, question은 문자열 또는 객체(`QuestionReply`).
 
 서버는 run이 기다리는 질문 종류의 모델로 답을 검사합니다(모르는 항목, 틀린 타입은 거절). 그다음 질문 내용과 맞는지 검사합니다(후보 번호 범위, 필수 입력칸, 계획에 없는 파라미터). 맞지 않으면 422 `invalid_answer`와 `errors[]`(`field`, `message`)를 돌려줍니다. 문자열도 객체도 아닌 값(숫자, 목록 등)은 본문 검사에서 422 `invalid_body`가 됩니다.
 
@@ -113,7 +113,6 @@
 | `question` | `question`, `options[]`, `fields[]` | 문자열 답변, 또는 fields가 있으면 `{<key>: 값, ...}` |
 | `plan_approval` | `candidates[]`: `{title, rationale, source(워크플로우 출처 또는 null), document(Workflow 1.0), calls[], input_slots[]}`. `calls[]`: `{index, key, skill, skill_description, tool, summary, execution, condition, params[]}`, `params[]`: `{name, type, required, doc, key, source(literal\|input\|tool_output\|default), value, default, ref}` | `{"action": "approve", "index": 0, "input_values": {"0.0.lot_cd": "L1"}, "overrides": {"1.0.sample_size": 500}}` / `{"action": "revise", "feedback": "..."}` / `{"action": "cancel"}` |
 | `code_approval` | `purpose`, `code`, `code_level` | `{"approve": true, "code": "수정한 코드(선택)"}` / `{"approve": false, "feedback": "..."}` |
-| `memory_change` | `item`(현재), `proposed`, `reason` | `{"approve": true\|false}` |
 | `workflow_save` | `name`, `user_queries[]`, `tags[]`, `document`, `excluded_custom_steps` | `{"approve": true, "name": "...", "user_queries": [...]}` / `{"approve": false}` |
 
 `input_values`의 키는 `"<step_index>.<tool_index>.<파라미터>"`입니다. `required`가 true인 칸이 비어 있으면 승인되지 않습니다.
@@ -156,13 +155,23 @@ executor가 응답하지 않으면 502 `executor_unavailable`입니다.
 
 | Method | Path | 설명 |
 | --- | --- | --- |
-| GET | `/projects/{id}/memory` | `{items[], total_chars, max_chars}`. item: `{id, category, title, content, author(user\|agent), version, source}` |
-| POST | `/projects/{id}/memory` | `{category, title, content}` (사용자가 쓴 항목은 Agent가 승인 없이 바꾸지 못함) |
-| PATCH | `/projects/{id}/memory/{item_id}` | `{expected_version, title?, content?, category?}` — 버전이 다르면 409 |
-| DELETE | `/projects/{id}/memory/{item_id}?expected_version=N` | |
-| GET | `/projects/{id}/memory/history?item_id=` | 변경 이력 |
+프로젝트 메모리는 네 섹션의 Markdown 본문입니다. 모든 대화의 프롬프트에 전부 들어갑니다.
 
-category: `background`(프로젝트 배경), `analysis_preferences`(분석 선호), `report_preferences`(보고서 선호), `shared_findings`(공유할 주요 발견)
+| section | title | 내용 | 기본 한도 |
+| --- | --- | --- | --- |
+| `overview` | Overview | 프로젝트 배경·목적·분석 대상 | 500자 |
+| `preferences` | Preferences | 분석 방식·보고서 형식 선호 | 500자 |
+| `core_interests` | Core Interests | 계속 관심 두는 제품·공정·지표 | 500자 |
+| `key_events` | Key Events | 날짜가 있는 사건·결정 (`YYYY-MM-DD`로 시작, 최신이 위) | 700자 |
+
+| Method | Path | 설명 |
+| --- | --- | --- |
+| GET | `/projects/{id}/memory` | `{sections: [{section, title, content, lines[], version, updated_at, max_chars}]}`. 항상 네 섹션(없으면 `content: ""`, `version: 0`). `lines[]`: `{id, text, author(user\|agent), updated_at, source}` |
+| PUT | `/projects/{id}/memory/{section}` | `{content, expected_version}`. 본문 전체를 바꿉니다. 바뀌지 않은 줄은 작성자를 유지하고, 새로 쓰거나 고친 줄은 `author=user`. 404 없는 섹션, 409 버전 불일치, 422 한도 초과 또는 `# `·`## ` 제목 줄 |
+| GET | `/projects/{id}/memory/history?section=&limit=` | 변경 이력(최신 먼저): `{id, section, action(update\|delete\|revert\|migrate), before, after, version, actor{type,id}, session_id, run_id, created_at}` |
+| POST | `/projects/{id}/memory/{section}/revert` | `{history_id, expected_version?}`. 그 변경 직전 본문으로 되돌립니다(새 버전, 이력에 `revert`로 남음) |
+
+작성자(`author`)는 기록만 합니다. Agent와 백그라운드 메모리 정리도 사용자가 쓴 줄을 고칠 수 있고, 잘못 바뀌면 이력에서 되돌립니다. Agent가 대화 중 고치면 `actor.id`가 `main`, 백그라운드 정리는 `memory_worker`입니다.
 
 ## 7. 워크플로우 (Workflow 1.0)
 

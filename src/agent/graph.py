@@ -46,7 +46,6 @@ from agent.tools.main import (
     delete_memory,
     read_knowledge,
     save_memory,
-    search_memory,
     start_analysis,
 )
 from core.config import Settings
@@ -56,7 +55,6 @@ from core.executor.client import ExecutorError
 TOOLS = [
     ask_user,
     read_knowledge,
-    search_memory,
     save_memory,
     delete_memory,
     start_analysis,

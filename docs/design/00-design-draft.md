@@ -21,7 +21,7 @@
 | HITL | 코드 실행 전 승인 필수. 파라미터 부족·추가 정보 필요 시 수시로 질문 |
 | 실패 대응 | 승인된 계획은 끝까지 실행. 중간 실패 시 Agent가 파라미터 수정·보완 코드로 유동 대응 |
 | 결과 | SSE로 진행 상황 + 최종 답변. 리포트는 executor Artifact POST. `.md`/`.ipynb` 랜딩 페이지 |
-| 메모리 | LangGraph Store. Agent 자동 갱신 + 채팅 알림 + 수동 CRUD API |
+| 메모리 | LangGraph Store, 네 섹션 Markdown. 명시 요청 시 Agent 저장 + 백그라운드 worker 정리 + 채팅 알림 + 섹션 편집·이력·되돌리기 API |
 
 ## 2. 런타임 구조
 
@@ -118,59 +118,45 @@ migrations/  web/dev/  scripts/  tests/  deploy/kubernetes/
 - reporter는 도구 없는 단일 LLM 호출(대화형 리포트와 pr-batch 리포트 공용).
 - 프로젝트 지침과 메모리는 매 모델 호출 시 시스템 프롬프트에 넣고 메시지 이력에는 남기지 않는다.
 
-## 8. Project memory (인터뷰 반영안)
+## 8. Project memory
 
-### 8.1 확정·제안
+2026-10-29 개편: 항목(item) 단위 + 임베딩 검색 + 사용자 항목 잠금을 버리고, 네 섹션의 짧은 Markdown + 백그라운드 정리 worker로 바꿨다.
+
+### 8.1 모델
 
 | 항목 | 내용 |
 | --- | --- |
-| 저장 | LangGraph `AsyncPostgresStore` (같은 PG). namespace `("project_memory", project_id)` |
-| 소유 | 지금은 Project 1인 소유. 권한은 `project_members(role)` 테이블로 판단해 다인 공유로 확장 가능. namespace에 user_id를 넣지 않음 |
-| 개인 메모리 | 없음 |
-| 분류 | prj_re 인터뷰 결과를 따름: `background`(프로젝트 배경), `analysis_preferences`(분석 선호), `report_preferences`(보고서 선호), `shared_findings`(공유할 주요 발견) |
-| 단위 | 항목(item) 단위. 항목 = 분류 + 제목 + 본문(≤ 1,000자) + version + author(user/agent) + 출처 세션 |
-| 읽기 | run 시작 시 항목 목록(분류·제목)은 항상 주입, 본문은 현재 요청과 관련도 높은 상위 항목만 주입. 더 필요하면 `search_memory` 도구 |
-| 쓰기 | 별도 후처리 단계 없이, 대화 중 필요할 때 main Agent가 `save_memory` 도구로 갱신. 갱신 시 채팅에 `memory_updated` 이벤트 |
-| 동시 수정 | 항목별 version CAS. 충돌 시 최신본을 다시 읽어 병합 |
-| 사용자 작성 항목 | Agent가 직접 수정 불가 (8.3 참고) |
-| 이력 | 항목별 변경 이력(이전 본문, 변경자, 출처 세션·run, 시각) 보관 |
-| 총량 | 프로젝트당 본문 합계 30,000자 (약 100개 항목 수준). 모델 주입 예산은 4,000 토큰 |
-| 멀티턴 | 세션 = LangGraph thread. 대화 이력은 checkpointer 메시지로 항상 이어짐. 메모리는 메시지에 누적하지 않고 매 run 시작 시 최신본을 주입(오래된 메모리가 이력에 남아 혼동하는 것 방지). 이력이 길어지면 요약 middleware로 압축 |
+| 저장 | LangGraph `AsyncPostgresStore` (같은 PG). namespace `("project_memory", project_id)`, 섹션마다 Store item 하나(key = 섹션). 임베딩 인덱스 없음 |
+| 소유 | 지금은 Project 1인 소유. 권한은 `project_members(role)`. namespace에 user_id를 넣지 않음 |
+| 섹션 | `overview`(Overview), `preferences`(Preferences), `core_interests`(Core Interests), `key_events`(Key Events). 고정 |
+| 값 | `{section, lines: [{id, text, author: user\|agent, updated_at, source}], version, updated_at}`. 본문 = lines를 줄바꿈으로 이은 Markdown |
+| 한도 | 섹션별 글자 수 `MEMORY_SECTION_MAX_CHARS` (기본 500/500/500/700). 넘는 쓰기는 422. 단, 이미 한도를 넘은 섹션(이관 데이터)을 줄이는 쓰기는 허용 |
+| 형식 | `# `, `## `로 시작하는 줄은 422 (프롬프트가 그 수준을 씀). `###`, 목록, 일반 줄은 허용 |
+| 작성자 | 줄마다 user/agent를 기록만 한다. 잠금 없음: Agent·worker도 사용자 줄을 고칠 수 있다(나중에 승인 흐름을 붙일 수 있게 기록은 남김). 사용자의 전체 본문 PUT은 difflib으로 줄을 비교해 바뀌지 않은 줄의 id·작성자를 유지 |
+| 동시 수정 | 섹션별 version CAS(409). 같은 섹션 쓰기는 Postgres advisory lock으로 직렬화 |
+| 이력 | `memory_history`(item_id = 섹션, before/after 본문·lines, actor, 세션·run). 이력 한 건을 되돌리면(revert) 그 직전 본문이 새 버전이 된다 |
+| 이관 | 예전 항목은 기동 시(`AUTO_MIGRATE`) 또는 `scripts/migrate_project_memory.py`로 섹션에 옮긴다: background→overview, analysis/report_preferences→preferences, shared_findings→key_events, 각 항목은 `- {title}: {content}` 한 줄(작성자 유지). 줄 id = 예전 항목 id라 반복 실행해도 중복이 없고, 옮긴 항목은 지운다. 한도는 적용하지 않음 |
 
-### 8.2 임베딩 사용 방식
+### 8.2 읽기
 
-- 항목 저장 시 `제목 + 본문`을 게이트웨이 임베딩 모델로 벡터화해 Store 인덱스(pgvector)에 넣는다. LangGraph Store의 `index={"embed": ..., "dims": ..., "fields": ["title", "content"]}` 설정만으로 동작한다.
-- **읽기**: run 시작 시 사용자 메시지로 `store.asearch(namespace, query=메시지, limit=k)` → 관련 항목 본문만 주입. 메모리가 커져도 프롬프트 크기가 일정하다.
-- **쓰기 중복 방지**: `save_memory` 호출 시 유사도가 높은 기존 항목이 있으면 새 항목을 만들지 않고 그 항목 갱신으로 유도한다 ("보고서는 짧게"가 여러 개 쌓이는 문제 방지).
-- 총량이 작아 전부 넣어도 되는 동안에는 검색 효과가 크지 않다. 그래서 핵심 가치는 "중복 방지"와 "커졌을 때 선택"이다.
-- 전제: PostgreSQL에 `pgvector` 확장 설치 가능해야 함. 불가하면 키워드 검색으로 대체.
+매 run 시작 시 `PersonaMiddleware`가 메모리 전체를 시스템 프롬프트 끝에 넣는다(`# Project memory` 아래 비어 있지 않은 섹션마다 `## Overview` 등). 메시지 이력에는 남기지 않는다. 전체가 2,200자 남짓이라 관련도 검색이 필요 없다. 리포트 작성자는 Preferences 섹션을 받는다.
 
-### 8.3 "사용자 작성 항목은 Agent가 수정 제안만" 의 의미
+### 8.3 쓰기
 
-사용자가 API/화면에서 직접 쓴 항목은 `author=user`로 잠근다. Agent가 대화 중 그 항목이 현재 요청과 충돌하거나 낡았다고 판단하면:
+1. **명시 저장 (대화 중)**: 사용자가 "기억해줘", "앞으로는 …"이라고 할 때만 main Agent가 `save_memory(section, text, line_id?, reason)` / `delete_memory(section, line_id)`로 바로 반영(author=agent)하고 `memory_updated`를 보낸다. 한도를 넘으면 도구가 섹션의 줄 목록(id 포함)과 함께 실패를 돌려주고, 모델은 다른 줄을 바꾸거나 지운 뒤 다시 저장한다. `line_id="?"`는 아무것도 바꾸지 않고 줄 목록만 돌려준다.
+2. **백그라운드 정리 (`worker/memory.py`)**: 대화에서 사용자가 말한 지속적인 사실·선호·관심·사건을 대화가 끝난 뒤 정리한다.
+   - 트리거: 성공한 run이 답을 남기면 scheduler `_finish`의 같은 트랜잭션에서 `memory_extraction_state`(project_id, 커서, dirty, last_activity_at, pending_turns, lease, attempts, last_error)를 upsert한다. worker가 꺼져 있어도 기록하므로 다시 켜면 이어서 처리한다. 처음 보는 프로젝트의 커서는 그 run의 첫 메시지에서 시작한다(켜자마자 예전 대화 전체를 읽지 않음).
+   - 선점: dirty이고 `MEMORY_WORKER_QUIET_SECONDS`(180초) 동안 조용하거나 `MEMORY_WORKER_MAX_TURNS`(5턴)이 쌓인 프로젝트를 `FOR UPDATE SKIP LOCKED` + lease로 가져간다. 동시 처리 `MEMORY_WORKER_CONCURRENCY`(1), 채팅 run 슬롯과 별개.
+   - 입력: 커서 이후 그 프로젝트(삭제되지 않은 세션)의 user/assistant 메시지를 시간순으로, `MEMORY_WORKER_MAX_INPUT_TOKENS`(8000, 글자 수/4) 안에서 가장 오래된 묶음만. 남으면 dirty를 유지해 다음에 이어 간다. 현재 섹션 본문은 줄 id와 함께 준다.
+   - 사용자 메시지가 인사·짧은 맞장구뿐이면 LLM 없이 커서만 넘긴다.
+   - LLM 호출 1회(`prompts/memory_worker.md`). 프로젝트에는 모델 설정이 없으므로 묶음의 마지막 run 모델, 없거나 목록에 없으면 기본 모델. 출력 `{"ops": [{op: add|replace|delete, section, line_id?, text?, quote}]}`.
+   - 코드 검증(어긴 op만 버리고 나머지는 적용): 섹션 유효, add/replace는 입력 USER 메시지에 (공백 정규화 후) 그대로 있는 quote 필수, 일회성 표현(이번만·이번 세션·이 보고서만·오늘만 …) 거절, URL·파일 경로 거절, `#`/`##` 거절, line_id 존재, 바뀌지 않는 replace·중복 add 거절, key_events는 날짜로 시작하고 최신순 정렬. 적용 후 한도를 넘으면 늘리는 op를 뒤에서부터 버린다.
+   - 적용: 섹션별 version CAS, 충돌 시 다시 읽어 한 번 더. actor = agent `memory_worker`, source = `{session_ids, run_ids}`. 바뀌면 관련 세션에 `memory_updated`.
+   - 실패: backoff(30초부터 두 배)로 최대 3번, 그래도 실패하면 `last_error`를 남기고 그 묶음을 건너뛴다(프로젝트가 막히지 않게).
 
-1. 직접 고치지 않고 `ask_user` HITL로 "프로젝트 메모리의 '보고서 선호: 결론 먼저' 항목을 '표 위주로'로 바꿀까요?"를 묻는다.
-2. 사용자가 승인하면 그때 수정하고, 항목은 계속 `author=user` 잠금 상태를 유지한다. 거절하면 이번 세션 요청으로만 반영한다.
+### 8.4 무엇을 저장하지 않나
 
-Agent가 만든 항목(`author=agent`)은 승인 없이 수정·삭제할 수 있다.
-
-### 8.4 shared_findings 자동 식별
-
-- 사용자가 "기억해줘"라고 하면 즉시 저장한다.
-- 명시하지 않아도 main Agent가 다음 조건을 모두 만족하는 결론을 식별해 저장한다.
-  1. 성공한 executor 실행 결과에 근거한다 (추측·일반론 제외).
-  2. 이번 세션을 넘어 프로젝트에 계속 유효한 사실이다 (예: "A라인 불량의 주 요인은 챔버 온도"). 일회성 수치 나열은 제외.
-  3. 사용자가 반박하지 않았다.
-- 저장 항목에는 근거 출처(세션, run, 리포트 artifact 링크)를 남긴다. 상세 수치는 리포트에 두고 메모리에는 결론 문장만 둔다.
-- 저장되면 채팅에 `memory_updated` 알림이 뜨고, 사용자는 화면에서 바로 삭제할 수 있다.
-- 판단 기준은 `prompts/main.md`에 있어 운영 중 조정 가능하다.
-
-### 8.5 임베딩 설정
-
-- 모델과 차원은 설정값(`EMBEDDING_MODEL`, `EMBEDDING_DIMS`)이며 지금 확정할 필요 없다. 기동 시 Store 인덱스가 설정 차원으로 생성된다.
-- 참고: Qwen3-Embedding 0.6B = 1024, 4B = 2560, 8B = 4096차원. pgvector HNSW 인덱스는 `vector` 타입 2,000차원까지라 4B/8B는 출력 차원을 1024 등으로 줄여 쓰는 것을 권장한다 (Qwen3-Embedding은 차원 축소 지원).
-- 배포 후 모델이나 차원을 바꾸면 재색인이 필요하다. `scripts/reindex_memory.py`를 함께 제공한다.
-- 로컬 개발은 게이트웨이 없이 동작하도록 임베딩 비활성 시 키워드 검색으로 대체한다.
+Agent의 분석 결론·추측, 일회성 요청, 특정 분석에만 쓴 조건·수치, URL·파일 경로. 분석 결과는 리포트와 노트북에 남는다.
 
 ## 9. Workflow
 

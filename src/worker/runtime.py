@@ -7,13 +7,14 @@ from core.services import Services
 from worker.batch_reports import BatchReportRecovery, BatchReportWorker
 from worker.executor_events import ExecutorEventConsumer, MissedEventRecovery
 from worker.maintenance import Retention
+from worker.memory import MemoryWorker
 from worker.scheduler import RunScheduler
 
 
 class Worker:
     """Background side of the service.
 
-    Agent runs, executor events, batch report jobs.
+    Agent runs, executor events, batch report jobs, project memory.
     """
 
     def __init__(self, services: Services):
@@ -42,6 +43,11 @@ class Worker:
             after_seconds=settings.executor_event_recovery_seconds,
         )
         self.retention = Retention(services)
+        self.memory = (
+            MemoryWorker(services, self.owner)
+            if settings.memory_worker_enabled
+            else None
+        )
         self.tasks: list[asyncio.Task] = []
 
     def start(self) -> None:
@@ -66,9 +72,17 @@ class Worker:
                 self.retention.run_forever(), name="retention"
             ),
         ]
+        if self.memory:
+            self.tasks.append(
+                asyncio.create_task(
+                    self.memory.run_forever(), name="memory-worker"
+                )
+            )
 
     async def stop(self, drain_seconds: float = 20) -> None:
         await self.scheduler.drain(drain_seconds)
+        if self.memory:
+            await self.memory.stop(drain_seconds)
         for task in self.tasks:
             task.cancel()
         await asyncio.gather(*self.tasks, return_exceptions=True)

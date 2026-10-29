@@ -16,7 +16,7 @@ from typing import TYPE_CHECKING, Annotated, Any, Literal, Union, cast
 from pydantic import Discriminator, Field, Tag, TypeAdapter, create_model
 
 from core.contracts.attachments import ArtifactAttachment
-from core.contracts.hitl import MemoryItem, PauseRequest, View, WorkflowSource
+from core.contracts.hitl import PauseRequest, View, WorkflowSource
 
 RunStatus = Literal[
     "queued",  # waiting for a worker
@@ -115,13 +115,15 @@ class HitlResolvedData(View):
     interrupt_id: str | None
 
 
-class MemoryRef(View):
-    id: str
-
-
 class MemoryUpdatedData(View):
-    action: Literal["created", "updated", "deleted"]
-    item: MemoryItem | MemoryRef = Field(description="deleted이면 id만")
+    """A project memory section changed (agent tool or memory worker)."""
+
+    section: Literal["overview", "preferences", "core_interests", "key_events"]
+    title: str
+    content: str = Field(description="섹션 본문 전체 (Markdown)")
+    version: int
+    updated_at: str | None
+    by: Literal["user", "agent"]
 
 
 class WorkflowSavedData(View):
