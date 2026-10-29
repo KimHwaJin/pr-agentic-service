@@ -120,6 +120,7 @@ def _as_caller(services, method, path, headers, body=b"", tenant="partner"):
             _request(method, path, headers, body),
             path,
             caller,
+            user.id,
             cast(Any, user),
         )
     )

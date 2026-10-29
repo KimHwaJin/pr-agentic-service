@@ -221,4 +221,5 @@ REDIS_URL: "redis://…"              # 지금과 같음 (세션·큐·executor 
 - **관리자 실행 목록의 사용자 필터**: executor가 `user_id` 파라미터를 받지 않으므로 그 값을 `X-User-Id`로 바꿔 보냅니다.
 - **비활성화 재시도**: 사용자 비활성화 때 바로 `disable-by-owner`를 부르고, 실패하면 `users.batches_disable_pending`이 남아 워커가 5분마다 다시 부릅니다.
 - **key 발급 상태**: 우리 tenant 키는 바로 `active`, 다른 tenant 키는 `pending`으로 만들어 관리자가 활성화합니다. 접두어는 `pas_live_`(stg·prd)·`pas_dev_`(local·dev).
+- **X-User-Id 범위** (2026-10-29 결정): 우리 API와 우리 tenant 키는 우리 활성 사용자만 받고, `users.id` 또는 사번을 받아 `users.id`로 바꿔 넘깁니다. 다른 tenant 키가 executor·배치 게이트웨이를 부를 때는 형식만 확인하고 받은 값을 그대로 넘깁니다(그 tenant 공간 안의 사용자).
 - **이벤트 확인**: wake 이벤트(`operation_completed`, `completed`)는 executor 타임라인에서 같은 `event_id`를 찾아 그 값으로 씁니다. 못 찾으면 버립니다. 배치 리포트는 `GET /executions/{id}`(시스템 조회)로 상태·trigger·owner를 정합니다.

@@ -4,7 +4,7 @@ from typing import Annotated
 
 from fastapi import Depends, Header, HTTPException, Request, Security
 from fastapi.security import APIKeyHeader
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from api_service.errors import ApiError
 from api_service.services import api_clients
@@ -13,6 +13,9 @@ from core.models import ChatSession, Project, ProjectMember, User
 from core.services import Services
 
 USER_ID = re.compile(r"^[a-z0-9][a-z0-9._-]{0,63}$")
+UUID = re.compile(
+    r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+)
 PROJECT_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,254}$")
 
 
@@ -74,7 +77,8 @@ async def current_user(
 
     A request with the session cookie is decided by SSO alone (CSRF
     included). Without it, ``X-Api-Key`` names an active api client and
-    ``X-User-Id`` one of our active users; ``AUTH_MODE=header`` (local/dev)
+    ``X-User-Id`` one of our active users (``users.id`` or employee id);
+    ``AUTH_MODE=header`` (local/dev)
     trusts ``X-User-Id`` without a key. The caller is kept on
     ``request.state.api_client`` (None for SSO).
     """
@@ -87,18 +91,25 @@ async def current_user(
         if user is None or not user.is_active:
             raise HTTPException(401, "Login required.")
         return user
-    caller, user = await key_identity(request, services)
+    _, _, user = await key_identity(request, services)
     assert user is not None
     return user
 
 
 async def key_identity(
-    request: Request, services: Services, user_required: bool = True
-) -> tuple[Caller, User | None]:
-    """The api client and the user of a request without the cookie.
+    request: Request,
+    services: Services,
+    user_required: bool = True,
+    any_user_outside: bool = False,
+) -> tuple[Caller, str | None, User | None]:
+    """(api client, user id to send on, our user) of a keyed request.
 
-    ``user_required`` False (gateway reads): without ``X-User-Id`` the
-    request is a system read over the client's tenant.
+    ``X-User-Id`` names one of our active users (``users.id`` or employee
+    id, sent on as ``users.id``). ``any_user_outside`` (the executor and
+    batch gateways): a client of another tenant works in that tenant's own
+    space, so its user ids are its own and only checked for form (no user
+    of ours). ``user_required`` False (gateway reads): without
+    ``X-User-Id`` the request is a system read over the client's tenant.
     """
     caller = await _caller(request, services)
     request.state.api_client = caller
@@ -107,12 +118,18 @@ async def key_identity(
     if user_id is None:
         if user_required:
             raise invalid_identity("X-User-Id is required.")
-        return caller, None
+        return caller, None, None
+    if (
+        any_user_outside
+        and caller.tenant != services.settings.executor_tenant_id
+    ):
+        request.state.caller_user_id = user_id
+        return caller, user_id, None
     user = await _user(services, user_id)
     if user is None or not user.is_active:
         raise HTTPException(403, "Unknown or inactive user.")
     request.state.caller_user_id = user.id
-    return caller, user
+    return caller, user.id, user
 
 
 async def _caller(request: Request, services: Services) -> Caller:
@@ -160,11 +177,16 @@ def _same_as_path(request: Request) -> None:
 
 
 async def _user(services: Services, user_id: str) -> User | None:
+    """Our user by ``users.id``, else by employee id (key callers)."""
     cached = _USER_CACHE.get(user_id)
     if cached and cached[0] > time.monotonic():
         return cached[1]
     async with services.db.sessions() as db:
-        user = await db.get(User, user_id)
+        user = await db.get(User, user_id) if UUID.fullmatch(user_id) else None
+        if user is None:
+            user = await db.scalar(
+                select(User).where(func.lower(User.employee_id) == user_id)
+            )
     if len(_USER_CACHE) > 10000:
         _USER_CACHE.clear()
     if user is not None:
