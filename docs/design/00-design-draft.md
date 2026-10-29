@@ -21,7 +21,7 @@
 | HITL | 코드 실행 전 승인 필수. 파라미터 부족·추가 정보 필요 시 수시로 질문 |
 | 실패 대응 | 승인된 계획은 끝까지 실행. 중간 실패 시 Agent가 파라미터 수정·보완 코드로 유동 대응 |
 | 결과 | SSE로 진행 상황 + 최종 답변. 리포트는 executor Artifact POST. `.md`/`.ipynb` 랜딩 페이지 |
-| 메모리 | LangGraph Store, 네 섹션 Markdown. 명시 요청 시 Agent 저장 + 백그라운드 worker 정리 + 채팅 알림 + 섹션 편집·이력·되돌리기 API |
+| 메모리 | LangGraph Store, 프로젝트별 주제(기본 네 개, 편집 가능) Markdown. 명시 요청 시 Agent 저장 + 백그라운드 worker 정리 + 채팅 알림 + 주제·본문 편집·이력·되돌리기·복원 API |
 
 ## 2. 런타임 구조
 
@@ -120,38 +120,39 @@ migrations/  web/dev/  scripts/  tests/  deploy/kubernetes/
 
 ## 8. Project memory
 
-2026-10-29 개편: 항목(item) 단위 + 임베딩 검색 + 사용자 항목 잠금을 버리고, 네 섹션의 짧은 Markdown + 백그라운드 정리 worker로 바꿨다.
+2026-10-29 개편: 항목(item) 단위 + 임베딩 검색 + 사용자 항목 잠금을 버리고, 네 섹션의 짧은 Markdown + 백그라운드 정리 worker로 바꿨다. 같은 날 후속: 섹션을 프로젝트마다 고칠 수 있는 주제(topic)로 바꿨다(기본값 = 예전 네 섹션, 같은 id).
 
 ### 8.1 모델
 
 | 항목 | 내용 |
 | --- | --- |
-| 저장 | LangGraph `AsyncPostgresStore` (같은 PG). namespace `("project_memory", project_id)`, 섹션마다 Store item 하나(key = 섹션). 임베딩 인덱스 없음 |
+| 저장 | LangGraph `AsyncPostgresStore` (같은 PG). 본문: namespace `("project_memory", project_id)`, 주제마다 Store item 하나(key = 주제 id). 주제 목록: namespace `("project_memory_topics", project_id)`, key `topics`, `{topics: [{id, title, description, max_chars}], version, updated_at}`. 목록 item이 없으면 기본 주제(version 0)라 기존 데이터는 이관 없이 그대로 붙는다. 임베딩 인덱스 없음 |
 | 소유 | 지금은 Project 1인 소유. 권한은 `project_members(role)`. namespace에 user_id를 넣지 않음 |
-| 섹션 | `overview`(Overview), `preferences`(Preferences), `core_interests`(Core Interests), `key_events`(Key Events). 고정 |
-| 값 | `{section, lines: [{id, text, author: user\|agent, updated_at, source}], version, updated_at}`. 본문 = lines를 줄바꿈으로 이은 Markdown |
-| 한도 | 섹션별 글자 수 `MEMORY_SECTION_MAX_CHARS` (기본 500/500/500/700). 넘는 쓰기는 422. 단, 이미 한도를 넘은 섹션(이관 데이터)을 줄이는 쓰기는 허용 |
+| 주제 | 기본 `overview`(Overview), `preferences`(Preferences), `core_interests`(Core Interests), `key_events`(Key Events), 한도 500/500/500/700, 설명은 예전 worker 프롬프트의 섹션 설명. Key Events의 "날짜(YYYY-MM-DD)로 시작, 최신이 위"도 코드가 아닌 설명에 있어 사용자가 고칠 수 있다. 프로젝트마다 1–6개, 제목 ≤40자(중복 불가), 설명 ≤200자 한 줄, 주제별 한도 ≥100, 합계 ≤ `MEMORY_TOTAL_MAX_CHARS`(2200). 새 주제 id는 서버가 만든다(`t` + hex 7자) |
+| 주제 편집 | 목록 전체를 PUT(version CAS, 409). 같은 id = 수정(본문 유지, 한도를 낮추면 기존 초과 규칙: 줄이는 쓰기만 허용, worker는 늘리는 op를 버림). id 없음 = 새 빈 주제(즉시 채우지 않고 이후 대화부터). `replace: true` = 새 id·빈 본문. 목록에서 빠진 주제 = 삭제. 교체·삭제된 본문은 Store에서 지우고 `memory_history`에 `topic_replaced`/`topic_removed`(before에 lines와 주제 정보)로 남긴다. restore가 그 이력으로 주제를 목록 끝에 되살린다(`topic_restored`, 제한 안에서만) |
+| 값 | `{topic, lines: [{id, text, author: user\|agent, updated_at, source}], version, updated_at}`. 본문 = lines를 줄바꿈으로 이은 Markdown. 예전 item의 `section` 키는 읽을 때 무시 |
+| 한도 | 주제별 `max_chars`. 넘는 쓰기는 422. 단, 이미 한도를 넘은 주제(이관 데이터, 낮춘 한도)를 줄이는 쓰기는 허용 |
 | 형식 | `# `, `## `로 시작하는 줄은 422 (프롬프트가 그 수준을 씀). `###`, 목록, 일반 줄은 허용 |
 | 작성자 | 줄마다 user/agent를 기록만 한다. 잠금 없음: Agent·worker도 사용자 줄을 고칠 수 있다(나중에 승인 흐름을 붙일 수 있게 기록은 남김). 사용자의 전체 본문 PUT은 difflib으로 줄을 비교해 바뀌지 않은 줄의 id·작성자를 유지 |
-| 동시 수정 | 섹션별 version CAS(409). 같은 섹션 쓰기는 Postgres advisory lock으로 직렬화 |
-| 이력 | `memory_history`(item_id = 섹션, before/after 본문·lines, actor, 세션·run). 이력 한 건을 되돌리면(revert) 그 직전 본문이 새 버전이 된다 |
-| 이관 | 예전 항목은 기동 시(`AUTO_MIGRATE`) 또는 `scripts/migrate_project_memory.py`로 섹션에 옮긴다: background→overview, analysis/report_preferences→preferences, shared_findings→key_events, 각 항목은 `- {title}: {content}` 한 줄(작성자 유지). 줄 id = 예전 항목 id라 반복 실행해도 중복이 없고, 옮긴 항목은 지운다. 한도는 적용하지 않음 |
+| 동시 수정 | 주제 본문별 version CAS(409). 같은 주제 쓰기는 Postgres advisory lock으로 직렬화하고, 쓰기는 lock을 잡은 뒤 주제 목록을 다시 읽는다(그사이 교체·삭제된 주제면 404). 목록 PUT은 목록 lock을 잡고, 지우는 주제의 lock도 잡는다 |
+| 이력 | `memory_history`(item_id = 주제 id, before/after 본문·lines·그때의 주제 정보, actor, 세션·run). 이력 한 건을 되돌리면(revert) 그 직전 본문이 새 버전이 된다. 예전 항목형 메모리의 이력 행(lines 없음)은 목록에서 뺀다 |
+| 이관 | 예전 항목은 기동 시(`AUTO_MIGRATE`) 또는 `scripts/migrate_project_memory.py`로 기본 주제에 옮긴다: background→overview, analysis/report_preferences→preferences, shared_findings→key_events, 각 항목은 `- {title}: {content}` 한 줄(작성자 유지). 줄 id = 예전 항목 id라 반복 실행해도 중복이 없고, 옮긴 항목은 지운다. 한도는 적용하지 않음 |
 
 ### 8.2 읽기
 
-매 run 시작 시 `PersonaMiddleware`가 메모리 전체를 시스템 프롬프트 끝에 넣는다(`# Project memory` 아래 비어 있지 않은 섹션마다 `## Overview` 등). 메시지 이력에는 남기지 않는다. 전체가 2,200자 남짓이라 관련도 검색이 필요 없다. 리포트 작성자는 Preferences 섹션을 받는다.
+매 run 시작 시 `PersonaMiddleware`가 메모리 전체를 시스템 프롬프트 끝에 넣는다(`# Project memory` 아래 비어 있지 않은 주제마다 `## {title}`). 메시지 이력에는 남기지 않는다. 전체가 2,200자 남짓이라 관련도 검색이 필요 없다. 리포트 작성자는 id가 `preferences`인 주제를 받는다(프로젝트가 그 주제를 교체·삭제했으면 없음).
 
 ### 8.3 쓰기
 
-1. **명시 저장 (대화 중)**: 사용자가 "기억해줘", "앞으로는 …"이라고 할 때만 main Agent가 `save_memory(section, text, line_id?, reason)` / `delete_memory(section, line_id)`로 바로 반영(author=agent)하고 `memory_updated`를 보낸다. 한도를 넘으면 도구가 섹션의 줄 목록(id 포함)과 함께 실패를 돌려주고, 모델은 다른 줄을 바꾸거나 지운 뒤 다시 저장한다. `line_id="?"`는 아무것도 바꾸지 않고 줄 목록만 돌려준다.
+1. **명시 저장 (대화 중)**: 사용자가 "기억해줘", "앞으로는 …"이라고 할 때만 main Agent가 `save_memory(topic, text, line_id?, reason)` / `delete_memory(topic, line_id)`로 바로 반영(author=agent)하고 `memory_updated`를 보낸다. `topic`은 주제 id(프롬프트에 보이는 제목도 받음). `topic="?"`나 없는 주제는 아무것도 바꾸지 않고 주제 목록(id·제목·설명·한도)을 돌려준다. 한도를 넘으면 도구가 주제의 줄 목록(id 포함)과 함께 실패를 돌려주고, 모델은 다른 줄을 바꾸거나 지운 뒤 다시 저장한다. `line_id="?"`는 아무것도 바꾸지 않고 줄 목록만 돌려준다.
 2. **백그라운드 정리 (`worker/memory.py`)**: 대화에서 사용자가 말한 지속적인 사실·선호·관심·사건을 대화가 끝난 뒤 정리한다.
    - 트리거: 성공한 run이 답을 남기면 scheduler `_finish`의 같은 트랜잭션에서 `memory_extraction_state`(project_id, 커서, dirty, last_activity_at, pending_turns, lease, attempts, last_error)를 upsert한다. worker가 꺼져 있어도 기록하므로 다시 켜면 이어서 처리한다. 처음 보는 프로젝트의 커서는 그 run의 첫 메시지에서 시작한다(켜자마자 예전 대화 전체를 읽지 않음).
    - 선점: dirty이고 `MEMORY_WORKER_QUIET_SECONDS`(180초) 동안 조용하거나 `MEMORY_WORKER_MAX_TURNS`(5턴)이 쌓인 프로젝트를 `FOR UPDATE SKIP LOCKED` + lease로 가져간다. 동시 처리 `MEMORY_WORKER_CONCURRENCY`(1), 채팅 run 슬롯과 별개.
-   - 입력: 커서 이후 그 프로젝트(삭제되지 않은 세션)의 user/assistant 메시지를 시간순으로, `MEMORY_WORKER_MAX_INPUT_TOKENS`(8000, 글자 수/4) 안에서 가장 오래된 묶음만. 남으면 dirty를 유지해 다음에 이어 간다. 현재 섹션 본문은 줄 id와 함께 준다.
+   - 입력: 커서 이후 그 프로젝트(삭제되지 않은 세션)의 user/assistant 메시지를 시간순으로, `MEMORY_WORKER_MAX_INPUT_TOKENS`(8000, 글자 수/4) 안에서 가장 오래된 묶음만. 남으면 dirty를 유지해 다음에 이어 간다. 현재 주제 본문은 주제 id·제목·사용량, 줄 id와 함께 준다.
    - 사용자 메시지가 인사·짧은 맞장구뿐이면 LLM 없이 커서만 넘긴다.
-   - LLM 호출 1회(`prompts/memory_worker.md`). 프로젝트에는 모델 설정이 없으므로 묶음의 마지막 run 모델, 없거나 목록에 없으면 기본 모델. 출력 `{"ops": [{op: add|replace|delete, section, line_id?, text?, quote}]}`.
-   - 코드 검증(어긴 op만 버리고 나머지는 적용): 섹션 유효, add/replace는 입력 USER 메시지에 (공백 정규화 후) 그대로 있는 quote 필수, 일회성 표현(이번만·이번 세션·이 보고서만·오늘만 …) 거절, URL·파일 경로 거절, `#`/`##` 거절, line_id 존재, 바뀌지 않는 replace·중복 add 거절, key_events는 날짜로 시작하고 최신순 정렬. 적용 후 한도를 넘으면 늘리는 op를 뒤에서부터 버린다.
-   - 적용: 섹션별 version CAS, 충돌 시 다시 읽어 한 번 더. actor = agent `memory_worker`, source = `{session_ids, run_ids}`. 바뀌면 관련 세션에 `memory_updated`.
+   - LLM 호출 1회(`prompts/memory_worker.md`; 주제 목록 "id: 제목 — 설명 (한도 N자)"을 프로젝트 주제로 만들어 넣고, 제목·설명에 맞는 주제에만 넣고 맞는 주제가 없으면 저장하지 말라고 지시). 프로젝트에는 모델 설정이 없으므로 묶음의 마지막 run 모델, 없거나 목록에 없으면 기본 모델. 출력 `{"ops": [{op: add|replace|delete, topic, line_id?, text?, quote}]}` (예전 이름 `section`도 받음).
+   - 코드 검증(어긴 op만 버리고 나머지는 적용): 주제 id 유효, add/replace는 입력 USER 메시지에 (공백 정규화 후) 그대로 있는 quote 필수, 일회성 표현(이번만·이번 세션·이 보고서만·오늘만 …) 거절, URL·파일 경로 거절, `#`/`##` 거절, line_id 존재, 바뀌지 않는 replace·중복 add 거절. 날짜·정렬 같은 형식 규칙은 코드에 두지 않고 주제 설명으로 모델에 맡긴다. 적용 후 주제 한도를 넘으면 늘리는 op를 뒤에서부터 버린다.
+   - 적용: 주제별 version CAS, 충돌 시 다시 읽어 한 번 더. actor = agent `memory_worker`, source = `{session_ids, run_ids}`. 바뀌면 관련 세션에 `memory_updated`.
    - 실패: backoff(30초부터 두 배)로 최대 3번, 그래도 실패하면 `last_error`를 남기고 그 묶음을 건너뛴다(프로젝트가 막히지 않게).
 
 ### 8.4 무엇을 저장하지 않나

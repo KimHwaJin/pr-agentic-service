@@ -179,7 +179,7 @@ sequenceDiagram
 | `write_report` | 노트북 확정(finalize) → 근거 수집(`reporter.collect_evidence`) → 리포트 작성(별도 LLM 호출, `prompts/reporter.md`) → executor에 리포트 artifact 저장 |
 | `save_workflow` | 승인된 계획을 워크플로우 후보로 저장 제안(`workflow_save` interrupt) |
 | `ask_user` | 모호하거나 빠진 정보를 묻습니다(`question` interrupt). |
-| `save_memory`, `delete_memory` | 프로젝트 메모리(LangGraph Store) 섹션의 한 줄을 더하거나 바꾸거나 지움. 사용자가 "기억해줘"처럼 명시적으로 요청한 때만. 대화에서 드러난 사실은 백그라운드 메모리 worker(`worker/memory.py`)가 정리 |
+| `save_memory`, `delete_memory` | 프로젝트 메모리(LangGraph Store) 주제(topic id)의 한 줄을 더하거나 바꾸거나 지움. 사용자가 "기억해줘"처럼 명시적으로 요청한 때만. 대화에서 드러난 사실은 백그라운드 메모리 worker(`worker/memory.py`)가 정리 |
 
 ### 결과를 에이전트가 읽는 방법
 

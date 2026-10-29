@@ -95,7 +95,7 @@
 | `hitl_request` | `{interrupt_id, type, ...}` | 사용자 입력 카드 (4장) |
 | `hitl_resolved` | `{interrupt_id}` | 카드 닫기 |
 | `artifact` | `{kind: report\|notebook, artifact_id, title, lab_url}` | 링크 `/view/artifacts/{artifact_id}`, 노트북은 `lab_url`로 JupyterLab에서 열기 (5장) |
-| `memory_updated` | `{section, title, content, version, updated_at, by: user\|agent}` | 프로젝트 메모리 섹션이 바뀜(대화 중 저장 또는 백그라운드 정리). `content`는 그 섹션 본문 전체 |
+| `memory_updated` | `{topic, title, content, version, updated_at, by: user\|agent}` | 프로젝트 메모리 주제의 본문이 바뀜(대화 중 저장 또는 백그라운드 정리). `topic`은 주제 id, `content`는 그 주제 본문 전체 |
 | `workflow_saved` | `{workflow_id, name}` | 저장 알림 |
 | `activity` | 시작: `{id, kind, state: "started", label, ...}` / 끝: `{id, kind, state: finished\|failed\|paused, elapsed_ms}` | 오래 걸리는 작업의 진행 표시. 시작 이벤트의 `label`(예: "이전 대화를 정리하는 중")을 상태 문구로 띄우고, 같은 `id`의 끝 이벤트가 오면 내립니다. `kind`: `answering`, `planning`(모델 호출), `summarizing`, `report_writing`, `workflow_saving`. 저장하지 않는 실시간 이벤트입니다. 코드 실행 대기는 `run_status`(waiting_executor)와 `execution_progress`로 옵니다 |
 | `context_summarized` | `{messages, summary_chars}` | 이전 대화가 요약으로 정리됨. 대화 중간에 구분선으로 표시합니다(저장됨) |
@@ -153,23 +153,26 @@ executor가 응답하지 않으면 502 `executor_unavailable`입니다.
 
 ## 6. 프로젝트 공유 메모리
 
-| Method | Path | 설명 |
-| --- | --- | --- |
-프로젝트 메모리는 네 섹션의 Markdown 본문입니다. 모든 대화의 프롬프트에 전부 들어갑니다.
+프로젝트 메모리는 주제(topic)마다 짧은 Markdown 본문입니다. 모든 대화의 프롬프트에 전부 들어갑니다(내용이 있는 주제마다 `## {title}`). 주제 목록은 프로젝트마다 고칠 수 있고, 고친 적 없는 프로젝트는 아래 기본 주제를 씁니다.
 
-| section | title | 내용 | 기본 한도 |
+| id | title | description (요약) | max_chars |
 | --- | --- | --- | --- |
-| `overview` | Overview | 프로젝트 배경·목적·분석 대상 | 500자 |
-| `preferences` | Preferences | 분석 방식·보고서 형식 선호 | 500자 |
-| `core_interests` | Core Interests | 계속 관심 두는 제품·공정·지표 | 500자 |
-| `key_events` | Key Events | 날짜가 있는 사건·결정 (`YYYY-MM-DD`로 시작, 최신이 위) | 700자 |
+| `overview` | Overview | 프로젝트 배경·목적·분석 대상 | 500 |
+| `preferences` | Preferences | 분석 방식·보고서 형식·용어 선호 | 500 |
+| `core_interests` | Core Interests | 계속 관심 두는 제품·공정·설비·지표 | 500 |
+| `key_events` | Key Events | 날짜가 있는 사건·결정. 날짜(YYYY-MM-DD)로 시작, 최신이 위 | 700 |
+
+주제는 `{id, title, description, max_chars}`입니다. 백그라운드 정리와 Agent는 제목·설명에 맞는 주제에만 내용을 넣으므로, 형식 규칙(예: 날짜로 시작)도 설명에 씁니다. 제한: 주제 1–6개, 제목 1–40자(중복 불가), 설명 200자 이하(한 줄), 주제마다 `max_chars` 100 이상, 합계는 `MEMORY_TOTAL_MAX_CHARS`(기본 2200) 이하.
 
 | Method | Path | 설명 |
 | --- | --- | --- |
-| GET | `/projects/{id}/memory` | `{sections: [{section, title, content, lines[], version, updated_at, max_chars}]}`. 항상 네 섹션(없으면 `content: ""`, `version: 0`). `lines[]`: `{id, text, author(user\|agent), updated_at, source}` |
-| PUT | `/projects/{id}/memory/{section}` | `{content, expected_version}`. 본문 전체를 바꿉니다. 바뀌지 않은 줄은 작성자를 유지하고, 새로 쓰거나 고친 줄은 `author=user`. 404 없는 섹션, 409 버전 불일치, 422 한도 초과 또는 `# `·`## ` 제목 줄 |
-| GET | `/projects/{id}/memory/history?section=&limit=` | 변경 이력(최신 먼저): `{id, section, action(update\|delete\|revert\|migrate), before, after, version, actor{type,id}, session_id, run_id, created_at}` |
-| POST | `/projects/{id}/memory/{section}/revert` | `{history_id, expected_version?}`. 그 변경 직전 본문으로 되돌립니다(새 버전, 이력에 `revert`로 남음) |
+| GET | `/projects/{id}/memory` | `{topics: [{topic, title, description, max_chars, content, lines[], version, updated_at}], topics_version, total_max_chars}`. 주제 순서대로, 빈 주제 포함(`content: ""`, `version: 0`). `lines[]`: `{id, text, author(user\|agent), updated_at, source}` |
+| GET | `/projects/{id}/memory/topics` | `{topics: [{id, title, description, max_chars}], version, updated_at, total_max_chars}`. `version: 0`은 기본 주제(고친 적 없음) |
+| PUT | `/projects/{id}/memory/topics` | `{topics: [{id?, title, description?, max_chars, replace?}], expected_version}`. 목록 전체를 순서대로 보냅니다. **수정**: 기존 `id` 그대로 → 제목·설명·한도만 바뀌고 본문 유지(한도를 본문보다 낮춰도 됨: 그 뒤 줄이는 쓰기만 허용). **새 주제**: `id` 없음 → 새 id, 빈 본문(다음 대화부터 채워짐). **교체**: 기존 `id` + `replace: true` → 새 id·빈 본문. **삭제**: 목록에서 뺌. 교체·삭제된 본문은 이력(`topic_replaced`/`topic_removed`)에 남아 복원할 수 있습니다. 409 버전 불일치, 422 제한 위반·모르는 id |
+| PUT | `/projects/{id}/memory/{topic}` | `{content, expected_version}`. 주제 본문 전체를 바꿉니다. 바뀌지 않은 줄은 작성자를 유지하고, 새로 쓰거나 고친 줄은 `author=user`. 404 없는 주제, 409 버전 불일치, 422 한도 초과 또는 `# `·`## ` 제목 줄 |
+| GET | `/projects/{id}/memory/history?topic=&removed=&limit=` | 변경 이력(최신 먼저): `{id, topic, title, action(update\|delete\|revert\|migrate\|topic_removed\|topic_replaced\|topic_restored), before, after, version, replaced_by, actor{type,id}, session_id, run_id, created_at}`. `removed=true`면 교체·삭제된 주제만 |
+| POST | `/projects/{id}/memory/{topic}/revert` | `{history_id, expected_version?}`. 그 변경 직전 본문으로 되돌립니다(새 버전, 이력에 `revert`로 남음) |
+| POST | `/projects/{id}/memory/history/{history_id}/restore` | 교체·삭제된 주제를 그때의 제목·설명·한도·본문 그대로 목록 끝에 되살립니다(이력 `topic_restored`). 응답은 GET `/memory`와 같습니다. 개수·합계 제한을 넘으면 422(다른 주제를 줄이거나 지운 뒤 다시), 이미 있으면 409, 같은 제목이 있으면 제목 뒤에 " (복원)" |
 
 작성자(`author`)는 기록만 합니다. Agent와 백그라운드 메모리 정리도 사용자가 쓴 줄을 고칠 수 있고, 잘못 바뀌면 이력에서 되돌립니다. Agent가 대화 중 고치면 `actor.id`가 `main`, 백그라운드 정리는 `memory_worker`입니다.
 

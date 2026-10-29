@@ -80,7 +80,7 @@ uv run uvicorn main:app --app-dir src --port 8080
   ```
 - **LLM**: `llm_base_url`, `llm_api_key`, `llm_enable_thinking`, 그리고 사용자에게 보여 줄 모델 목록 `models`(게이트웨이 모델 이름, 표시 이름, `default: true` 하나, 이미지 입력 가능 여부, 모델별 요청 파라미터 `params` 예: `reasoning_effort`). 목록에 적힌 모델만 씁니다.
 - **임베딩**(워크플로우 검색용): `EMBEDDING_BASE_URL`, `EMBEDDING_MODEL`, `EMBEDDING_DIMS`(HNSW 인덱스는 2,000차원 이하).
-- **프로젝트 메모리**: 섹션별 한도 `MEMORY_SECTION_MAX_CHARS`, 백그라운드 정리 `MEMORY_WORKER_ENABLED`, `MEMORY_WORKER_QUIET_SECONDS`, `MEMORY_WORKER_MAX_TURNS`, `MEMORY_WORKER_MAX_INPUT_TOKENS`, `MEMORY_WORKER_CONCURRENCY`. 예전 항목형 메모리는 기동 시(`AUTO_MIGRATE`) 섹션으로 옮겨지며, 끈 환경에서는 `uv run python scripts/migrate_project_memory.py`.
+- **프로젝트 메모리**: 프로젝트마다 주제(최대 6개, 콘솔에서 편집) 한도 합계 `MEMORY_TOTAL_MAX_CHARS`(기본 2200, 주제별 한도는 주제에 저장), 백그라운드 정리 `MEMORY_WORKER_ENABLED`, `MEMORY_WORKER_QUIET_SECONDS`, `MEMORY_WORKER_MAX_TURNS`, `MEMORY_WORKER_MAX_INPUT_TOKENS`, `MEMORY_WORKER_CONCURRENCY`. 예전 항목형 메모리는 기동 시(`AUTO_MIGRATE`) 기본 주제로 옮겨지며, 끈 환경에서는 `uv run python scripts/migrate_project_memory.py`.
 - **skill/tool**: `SKILLS_ROOT`, `TOOLS_ROOT`, `KNOWLEDGE_ROOT`(기본은 레포의 `assets/`). 파일이 바뀌면 다음 run부터 반영됩니다.
 - **executor**: `EXECUTOR_BASE_URL`, 결과 PVC 마운트 경로 `EXECUTOR_RESULT_ROOT`(executor의 SHARED_STORAGE_ROOT).
 - **설정 파일**: 배포는 `APP_ENV`(dev, stg, prd)로 `config.{APP_ENV}.yml`을 고릅니다(이미지에 포함). `config.yml`은 모든 환경의 공통값(이미지에 포함)이고, 로컬은 `APP_ENV`를 비워 두고 `config.yml` 위에 compose 환경변수나 `.env`로 로컬 값을 덮습니다. 우선순위는 환경변수 > `.env` > `config.{APP_ENV}.yml` > `config.yml`입니다. 환경마다 다른 값(DB·Redis·executor·pr-batch 주소, 프론트 주소와 CORS, `COOKIE_SECURE`, 관리자 ID, LLM 키, 모델 목록)만 `config.{APP_ENV}.yml`에 있고, 나머지 설정 키는 모두 `config.yml`에 기본값과 함께 적혀 있습니다. 상대 경로(`SKILLS_ROOT` 등)는 레포 루트 기준입니다. 자세한 규칙은 [docs/design/03-config.md](docs/design/03-config.md).
