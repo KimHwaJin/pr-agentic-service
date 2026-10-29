@@ -84,6 +84,7 @@ async def build_services(
             settings.executor_timeout_seconds,
             settings.executor_api_key,
             settings.executor_admin_api_key,
+            settings.executor_tenant_id,
         )
         storage = SharedStorage(
             settings.storage_root,

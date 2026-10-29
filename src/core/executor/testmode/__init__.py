@@ -45,5 +45,6 @@ def build(
         settings.executor_timeout_seconds,
         settings.executor_api_key,
         storage,
+        settings.executor_tenant_id,
     )
     return client, storage
