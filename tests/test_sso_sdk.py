@@ -150,7 +150,7 @@ def test_company_sso_sdk_mode_gives_origin_when_verifying(monkeypatch):
     import sys
     import types
 
-    import company_sso
+    from src.dtest import company_sso
 
     seen = {}
 
