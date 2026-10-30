@@ -42,7 +42,12 @@ if (Test-Path (Join-Path $root "src\dtest\local.py")) {
     $app = @("main:app", "--app-dir", "src")
 }
 
+# Same interpreter as `uv run python`: print it so a wrong environment
+# shows up before the app fails on an import.
+uv run python -c "import sys, pgvector; print('python:', sys.executable)"
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
 # psycopg async needs the selector loop on Windows.
-uv run uvicorn @app --host 0.0.0.0 --port $Port `
+uv run python -m uvicorn @app --host 0.0.0.0 --port $Port `
     --loop asyncio:SelectorEventLoop `
     --ssl-keyfile $key --ssl-certfile $cert
