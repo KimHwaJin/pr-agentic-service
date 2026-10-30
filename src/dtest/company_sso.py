@@ -31,8 +31,9 @@ USERINFO_URL = "http://workplace.company.com/api/common/v1/auth/userInfo"
 USERINFO_TIMEOUT_SECONDS = 5.0
 
 # Where the employee fields are in the userinfo JSON, as dotted paths
-# (e.g. "data.empNo"). Placeholders until the real keys are known: the app
-# logs the JSON's key names (not values) when a field is missing.
+# (e.g. "data.empNo"). Change only the right side; drop a line the JSON
+# does not have (employee_id and name are required). When a required field
+# is missing the app logs the JSON's key names (not values).
 FIELDS = {
     "employee_id": "empNo",
     "name": "empName",
@@ -97,9 +98,14 @@ class UserinfoCheck:
         except ValueError:
             log.warning("sso_userinfo result=not_json")
             return False
+        unknown = set(FIELDS) - set(_OUR_FIELDS)
+        if unknown:
+            # only the paths (right side) change; the names stay ours
+            log.warning("sso_userinfo bad_fields names=%s", sorted(unknown))
+            return False
         info = {key: _pick(data, path) for key, path in FIELDS.items()}
-        if not isinstance(info["employee_id"], str) or not isinstance(
-            info["name"], str
+        if not isinstance(info.get("employee_id"), str) or not isinstance(
+            info.get("name"), str
         ):
             # key names only, to fill FIELDS
             log.warning("sso_userinfo result=no_employee keys=%s", _keys(data))
@@ -111,14 +117,11 @@ class UserinfoCheck:
         info = self._info or {}
         return tuple(
             None if info.get(key) is None else str(info[key])
-            for key in (
-                "employee_id",
-                "name",
-                "english_name",
-                "department",
-                "email",
-            )
+            for key in _OUR_FIELDS
         )
+
+
+_OUR_FIELDS = ("employee_id", "name", "english_name", "department", "email")
 
 
 def _pick(data, path):
