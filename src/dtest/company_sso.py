@@ -54,6 +54,13 @@ def create_sdk(request, callback_url):
         # the private SDK, as in the Flask sample
         from your_private_module import SSO  # ty: ignore[unresolved-import]
 
+        if callback_url is None and "ORIGIN" not in request.args:
+            # The Flask sample checks the cookie inside /login?ORIGIN=...,
+            # and the SDK may need ORIGIN when it is built; give it the page
+            # being verified (the callback, no query).
+            request.args = type(request.args)(
+                [*request.args.to_dict().items(), ("ORIGIN", request.url)]
+            )
         sso = SSO(request)
     else:
         sso = UserinfoCheck(request)
