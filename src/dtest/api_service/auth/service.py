@@ -73,7 +73,14 @@ class SsoService:
             in self.settings.sso_allowed_origins
         ):
             return url
-        log.warning("sso_login_url_rejected")
+        # origin only (no path or query): it is what SSO_ALLOWED_ORIGINS
+        # needs, and it carries no ticket or return URL
+        log.warning(
+            "sso_login_url_rejected origin=%s://%s allowed=%s",
+            parsed.scheme,
+            parsed.netloc,
+            self.settings.sso_allowed_origins,
+        )
         raise HTTPException(
             502, "Corporate SSO returned an invalid login URL."
         )

@@ -35,7 +35,7 @@
 | 증상 | 뜻 | 먼저 볼 것 |
 | --- | --- | --- |
 | 기동 시 `ModuleNotFoundError` | SDK import 경로가 틀림 | `company_sso.py`의 import |
-| 502 `invalid login URL` | SDK가 준 로그인 주소의 origin이 허용 목록에 없음 | `SSO_ALLOWED_ORIGINS` |
+| 502 `invalid login URL` | SDK가 준 로그인 주소의 origin이 허용 목록에 없음 | `sso_login_url_rejected origin=…`의 값을 `SSO_ALLOWED_ORIGINS`에 추가 |
 | 503 `Corporate SSO is unavailable` | SDK 호출이 예외를 냄 | `sso_verify_failed error_type=…`, `sso_verify_bad_check`, `sso_verify_bad_info` 로그 |
 | 콜백에서 401 `could not verify` | SSO에서 돌아왔지만 회사 쿠키가 안 오거나 검증 실패 | `sso_verify result=rejected cookies=…`에 나온 쿠키 이름(회사 쿠키가 빠졌으면 도메인 문제) |
 | 콜백에서 400 `Login flow expired` | 5분이 지났거나 같은 콜백을 다시 엶 | 처음부터 다시 로그인 |
