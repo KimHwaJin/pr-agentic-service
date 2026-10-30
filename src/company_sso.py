@@ -27,7 +27,7 @@ log = logging.getLogger(__name__)
 VERIFY_WITH = "userinfo"  # or "sdk"
 
 SSO_LOGIN_PAGE = "https://company.com/sso/am/login.jsp"
-USERINFO_URL = "http://workplace.company.com/api/common/v1/auth/userinfo"
+USERINFO_URL = "http://workplace.company.com/api/common/v1/auth/userInfo"
 USERINFO_TIMEOUT_SECONDS = 5.0
 
 # Where the employee fields are in the userinfo JSON, as dotted paths
