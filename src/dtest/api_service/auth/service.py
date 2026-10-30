@@ -95,6 +95,7 @@ class SsoService:
     async def callback(self, request: Request, flow_id: str) -> Response:
         flow = await self.store.consume_flow(flow_id)
         if flow is None:
+            log.info("sso_callback_flow_missing")
             raise HTTPException(
                 400, "Login flow expired or already used. Start login again."
             )
@@ -113,6 +114,9 @@ class SsoService:
         employee = await self._verify(request)
         if employee is None:
             if from_callback:
+                # the SSO sent the browser back without a cookie we accept;
+                # stop here instead of looping through the SSO again
+                log.warning("sso_callback_unverified")
                 raise HTTPException(
                     401,
                     "Corporate SSO could not verify the employee.",
@@ -131,17 +135,26 @@ class SsoService:
                 LoginFlow(return_to, target),
                 self.settings.login_flow_ttl_seconds,
             )
+            log.info(
+                "sso_login_redirect target=%s to=%s",
+                target,
+                "callback" if url == callback else urlsplit(url).netloc,
+            )
             return RedirectResponse(url, 302, headers=NO_STORE)
         async with self.db.sessions() as db:
             user = await bind_employee(
                 db, employee, self.settings.admin_employee_ids
             )
         if not user.is_active:
+            log.info("sso_login_disabled user_id=%s", user.id)
             raise HTTPException(403, "This account is disabled.")
         ttl = self.settings.session_ttl_seconds
         sid, _ = await self.store.create_session(user.id, ttl)
         await self.store.revoke_session(
             request.cookies.get(self.settings.session_cookie_name, "")
+        )
+        log.info(
+            "sso_login_ok user_id=%s from_callback=%s", user.id, from_callback
         )
         response = RedirectResponse(destination, 302, headers=NO_STORE)
         response.set_cookie(
