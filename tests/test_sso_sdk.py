@@ -145,3 +145,27 @@ def test_company_sso_userinfo_check(monkeypatch):
 
     url = login_url(company_sso.create_sdk, _request(), "https://api/cb/1")
     assert url == company_sso.SSO_LOGIN_PAGE + "?TARGET=https://api/cb/1"
+
+
+def test_company_sso_sdk_mode_gives_origin_when_verifying(monkeypatch):
+    import sys
+    import types
+
+    import company_sso
+
+    seen = {}
+
+    class SSO:
+        def __init__(self, request):
+            seen["origin"] = request.args.to_dict().get("ORIGIN")
+            self.redirect_url = ""
+
+        def check_day_cookie(self, cookie):
+            return False
+
+    monkeypatch.setitem(
+        sys.modules, "your_private_module", types.SimpleNamespace(SSO=SSO)
+    )
+    monkeypatch.setattr(company_sso, "VERIFY_WITH", "sdk")
+    assert verify_employee(company_sso.create_sdk, _request("a=1")) is None
+    assert seen["origin"] == "https://api/login"
