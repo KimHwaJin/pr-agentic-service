@@ -47,7 +47,7 @@
 - `pyproject.toml`: HCP 라이브러리와 gaia 기본 requirements를 dependencies에 추가하고 `uv lock`. fastapi, pydantic, uvicorn 버전이 부딪치면 우리 쪽 하한을 낮춥니다. FastAPI는 0.137 미만으로 묶여 있습니다: 0.137부터 include한 라우터가 `.path` 없는 `_IncludedRouter`가 되어 gaia의 Instrumentor(prometheus-fastapi-instrumentator)가 요청마다 `AttributeError`를 냅니다.
 - `config.yml`: `PORT`(8080, Dockerfile EXPOSE와 deployment의 containerPort와 같게), `PROJECT_NAME`, `SERVICE_NAME`.
 - 이미지 빌드: `docker build --build-arg BASE_IMAGE=<사내 uv + Python 3.11 이미지> --build-arg APP_ENV=prd .`
-- 사내 SSO: `src/dtest/company_sso.py`(초안)의 SDK import. 확인 순서는 `docs/specs/sso-check.md`.
+- SSO: `src/dtest/idp_login.py`의 로그인 페이지·userinfo 주소와 `FIELDS`. 확인 순서는 `docs/specs/sso-check.md`.
 
 ## 실행
 

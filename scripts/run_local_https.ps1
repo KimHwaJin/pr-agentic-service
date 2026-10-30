@@ -1,17 +1,17 @@
-# Run the service over https on a dev PC to try the corporate SSO.
+# Run the service over https on a dev PC to try the SSO login.
 #
-# The corporate SSO cookie only reaches hosts under the company domain, and
+# The SSO cookie only reaches hosts under the IdP domain, and
 # that domain forces https (HSTS). So:
-#   1. hosts file (as admin): 127.0.0.1  dtest-local.<company domain>
+#   1. hosts file (as admin): 127.0.0.1  dtest-local.<idp domain>
 #   2. .env:
-#        SSO_ADAPTER=company
-#        PUBLIC_API_ORIGIN=https://dtest-local.<company domain>:5000
-#        FRONTEND_ORIGIN=https://dtest-local.<company domain>:5000
+#        SSO_ADAPTER=idp
+#        PUBLIC_API_ORIGIN=https://dtest-local.<idp domain>:5000
+#        FRONTEND_ORIGIN=https://dtest-local.<idp domain>:5000
 #        SSO_ALLOWED_RETURN_ROOTS=["/", "/dev"]
 #        SSO_ALLOWED_ORIGINS=["<origin from the sso_login_url_rejected log>"]
 #        COOKIE_SECURE=true
 #   3. From the repo root:
-#        .\scripts\run_local_https.ps1 -HostName dtest-local.<company domain>
+#        .\scripts\run_local_https.ps1 -HostName dtest-local.<idp domain>
 #   4. Open https://<HostName>:<Port>/api/v1/auth/login/sso?return_to=/dev/
 #      and accept the certificate warning once.
 #

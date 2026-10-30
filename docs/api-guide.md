@@ -2,14 +2,14 @@
 
 기준 경로는 `/api/v1`입니다. 전체 스키마는 서비스의 `/docs`(Swagger)와 `/openapi.json`에서 확인할 수 있습니다. 동작하는 참고 구현은 `src/dtest/web/dev/index.html`(로컬·dev 환경의 `/dev/`)입니다.
 
-## 1. 인증 (사내 SSO)
+## 1. 인증 (SSO)
 
 | 순서 | 호출 | 설명 |
 | --- | --- | --- |
-| 1 | 브라우저 이동 `GET /api/v1/auth/login/sso?return_to=/` | XHR이 아니라 페이지 이동으로 호출합니다. 사내 SSO를 거쳐 `FRONTEND_ORIGIN + return_to`로 돌아옵니다. 최초 로그인이면 User와 기본 Project가 생성됩니다. |
+| 1 | 브라우저 이동 `GET /api/v1/auth/login/sso?return_to=/` | XHR이 아니라 페이지 이동으로 호출합니다. SSO를 거쳐 `FRONTEND_ORIGIN + return_to`로 돌아옵니다. 최초 로그인이면 User와 기본 Project가 생성됩니다. |
 | 2 | `GET /api/v1/auth/session` | `{user_id, csrf_token, expires_at}`. 401이면 1번으로 이동합니다. |
 | 3 | 이후 모든 호출 | `credentials: "include"`로 쿠키를 보냅니다. GET 외 요청에는 `X-CSRF-Token: <csrf_token>` 헤더가 필요합니다. |
-| - | `POST /api/v1/auth/logout` | 서비스 세션만 종료합니다(사내 SSO 전체 로그아웃 아님). |
+| - | `POST /api/v1/auth/logout` | 서비스 세션만 종료합니다(SSO 전체 로그아웃 아님). |
 
 `GET /api/v1/users/me` → `{user, default_project_id, can_switch_role}`
 

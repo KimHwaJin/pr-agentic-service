@@ -1,7 +1,7 @@
-"""Self-signed certificate for trying the corporate SSO on a dev PC.
+"""Self-signed certificate for trying the SSO login on a dev PC.
 
-The corporate domain forces https (HSTS), so a hosts entry such as
-``127.0.0.1 dtest-local.<company domain>`` must be served over TLS:
+The IdP domain forces https (HSTS), so a hosts entry such as
+``127.0.0.1 dtest-local.<idp domain>`` must be served over TLS:
 
     uv run --with cryptography python scripts/make_local_cert.py HOST
 
