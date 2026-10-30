@@ -25,7 +25,7 @@ class LoginSessionRead(BaseModel):
 
 
 class SsoService:
-    """Service login on top of corporate SSO.
+    """Service login on top of the IdP (SSO).
 
     Login flow, Redis session cookie, CSRF.
     """
@@ -81,16 +81,14 @@ class SsoService:
             parsed.netloc,
             self.settings.sso_allowed_origins,
         )
-        raise HTTPException(
-            502, "Corporate SSO returned an invalid login URL."
-        )
+        raise HTTPException(502, "SSO returned an invalid login URL.")
 
     async def _verify(self, request: Request) -> Employee | None:
         try:
             return await self.adapter.verify(request)
         except Exception as exc:  # noqa: BLE001 - never leak SDK internals
             log.warning("sso_verify_failed error_type=%s", type(exc).__name__)
-            raise HTTPException(503, "Corporate SSO is unavailable.") from None
+            raise HTTPException(503, "SSO is unavailable.") from None
 
     async def login(
         self, request: Request, return_to: str = "/", target: str = "app"
@@ -126,7 +124,7 @@ class SsoService:
                 log.warning("sso_callback_unverified")
                 raise HTTPException(
                     401,
-                    "Corporate SSO could not verify the employee.",
+                    "SSO could not verify the user.",
                     headers=NO_STORE,
                 )
             flow_id = secrets.token_urlsafe(32)

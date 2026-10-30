@@ -20,8 +20,8 @@ class SsoAdapter(Protocol):
     async def login_url(self, request: Request, callback_url: str) -> str: ...
 
 
-class CompanyAdapter:
-    """Runs the synchronous corporate SDK in a thread pool."""
+class IdpAdapter:
+    """Runs the synchronous IdP SDK in a thread pool."""
 
     def __init__(self, sdk_factory: SdkFactory):
         self._verify = partial(verify_employee, sdk_factory)
@@ -58,8 +58,8 @@ def load_adapter(settings: Settings) -> SsoAdapter:
     if not settings.sso_adapter_factory:
         raise ValueError(
             "SSO_ADAPTER_FACTORY (module:function) is required for "
-            "SSO_ADAPTER=company"
+            "SSO_ADAPTER=idp"
         )
     module, name = settings.sso_adapter_factory.split(":", 1)
     sdk_factory: SdkFactory = getattr(importlib.import_module(module), name)
-    return CompanyAdapter(sdk_factory)
+    return IdpAdapter(sdk_factory)

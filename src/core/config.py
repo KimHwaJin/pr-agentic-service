@@ -121,7 +121,7 @@ class Settings(BaseSettings):
     auto_migrate: bool = True
 
     # SSO. "dev" returns a fixed employee and is refused outside env=local.
-    sso_adapter: Literal["dev", "company"] = "dev"
+    sso_adapter: Literal["dev", "idp"] = "dev"
     sso_adapter_factory: str = ""  # module:factory returning a SyncSdk factory
     public_api_origin: str = "http://localhost:8080"
     frontend_origin: str = "http://localhost:8080"

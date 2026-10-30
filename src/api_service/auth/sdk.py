@@ -1,4 +1,4 @@
-"""Boundary to the corporate SSO SDK.
+"""Boundary to the IdP (SSO) SDK.
 
 Closed network only, synchronous, Flask style.
 
@@ -31,7 +31,7 @@ class Employee:
     email: str | None = None
 
 
-class CompanySdk(Protocol):
+class IdpSdk(Protocol):
     redirect_url: str
 
     def check_day_cookie(self, cookie: str) -> bool: ...
@@ -41,7 +41,7 @@ class CompanySdk(Protocol):
 
 # factory(request_view, callback_url | None) -> SDK instance,
 # e.g. ``lambda r, _: SSO(r)``
-SdkFactory = Callable[[Any, str | None], CompanySdk]
+SdkFactory = Callable[[Any, str | None], IdpSdk]
 
 
 class _Values(Mapping[str, str]):

@@ -1,7 +1,7 @@
-"""Corporate SSO hookup (draft; fill in inside the closed network).
+"""IdP (SSO) hookup (fill in inside the closed network).
 
-Loaded by ``SSO_ADAPTER=company`` through
-``SSO_ADAPTER_FACTORY=company_sso:create_sdk``. ``create_sdk`` returns an
+Loaded by ``SSO_ADAPTER=idp`` through
+``SSO_ADAPTER_FACTORY=idp_login:create_sdk``. ``create_sdk`` returns an
 object with ``redirect_url``, ``check_day_cookie(cookie)`` and
 ``get_sso_info(cookie)``; see ``api_service/auth/sdk.py``.
 
@@ -26,8 +26,8 @@ log = logging.getLogger(__name__)
 
 VERIFY_WITH = "userinfo"  # or "sdk"
 
-SSO_LOGIN_PAGE = "https://company.com/sso/am/login.jsp"
-USERINFO_URL = "http://workplace.company.com/api/common/v1/auth/userInfo"
+SSO_LOGIN_PAGE = "https://idp.example.com/sso/am/login.jsp"
+USERINFO_URL = "http://workplace.example.com/api/common/v1/auth/userInfo"
 USERINFO_TIMEOUT_SECONDS = 5.0
 
 # Where the employee fields are in the userinfo JSON, as dotted paths

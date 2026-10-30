@@ -25,7 +25,7 @@ def test_without_app_env_only_config_yml_is_read(root):
 
 def test_app_env_file_wins_over_config_yml(root, monkeypatch):
     (root / "config.stg.yml").write_text(
-        "batch_base_url: http://stg:8100\nsso_adapter: company\n"
+        "batch_base_url: http://stg:8100\nsso_adapter: idp\n"
         "cookie_secure: true\nexecutor_api_key: exe\nbatch_api_key: bat\n"
     )
     monkeypatch.setenv("APP_ENV", "stg")
@@ -160,7 +160,7 @@ def test_settings_load_under_a_cp949_locale(root):
 
 def test_stg_needs_our_service_keys(root, monkeypatch):
     (root / "config.stg.yml").write_text(
-        "sso_adapter: company\ncookie_secure: true\n"
+        "sso_adapter: idp\ncookie_secure: true\n"
     )
     monkeypatch.setenv("APP_ENV", "stg")
     with pytest.raises(ValueError, match="EXECUTOR_API_KEY and BATCH_API_KEY"):
@@ -170,7 +170,7 @@ def test_stg_needs_our_service_keys(root, monkeypatch):
 def test_header_mode_only_in_local_and_dev(root, monkeypatch):
     assert Settings(auth_mode="header").auth_mode == "header"  # local
     (root / "config.prd.yml").write_text(
-        "sso_adapter: company\ncookie_secure: true\n"
+        "sso_adapter: idp\ncookie_secure: true\n"
         "executor_api_key: exe\nbatch_api_key: bat\nauth_mode: header\n"
     )
     monkeypatch.setenv("APP_ENV", "prd")
