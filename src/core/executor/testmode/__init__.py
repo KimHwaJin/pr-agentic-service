@@ -39,6 +39,8 @@ def build(
         settings.executor_result_root,
         base_url=settings.executor_base_url,
         timeout=settings.executor_timeout_seconds,
+        api_key=settings.executor_api_key,
+        tenant=settings.executor_tenant_id,
     )
     client = InlineExecutorClient(
         settings.executor_base_url,
