@@ -112,3 +112,35 @@ def test_company_sso_draft_names_the_factory():
     tree = ast.parse(path.read_text("utf-8"))
     names = {n.name for n in tree.body if isinstance(n, ast.FunctionDef)}
     assert "create_sdk" in names
+
+
+def test_company_sso_userinfo_check(monkeypatch):
+    import httpx
+
+    from src.dtest import company_sso
+
+    sent = {}
+
+    def fake_get(url, cookies, timeout):
+        sent.update(cookies)
+        return httpx.Response(
+            200, json={"empNo": 123, "empName": "홍길동", "email": None}
+        )
+
+    monkeypatch.setattr(company_sso.httpx, "get", fake_get)
+    cookie = "SMSESSION=s; AMTOKEN=a; GWP_LANGUAGE_ID=ko"
+    employee = verify_employee(company_sso.create_sdk, _request(cookie))
+    assert employee is not None
+    assert (employee.employee_id, employee.name) == ("123", "홍길동")
+    assert sent == {"SMSESSION": "s", "AMTOKEN": "a"}
+
+    assert (
+        verify_employee(company_sso.create_sdk, _request("AMTOKEN=a")) is None
+    )
+    logged_out = "SMOFC=logout; SMSESSION=s; AMTOKEN=a"
+    assert (
+        verify_employee(company_sso.create_sdk, _request(logged_out)) is None
+    )
+
+    url = login_url(company_sso.create_sdk, _request(), "https://api/cb/1")
+    assert url == company_sso.SSO_LOGIN_PAGE + "?TARGET=https://api/cb/1"
