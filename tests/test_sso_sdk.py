@@ -71,3 +71,45 @@ def test_lab_url_uses_a_workspace_per_employee():
         == "https://lab.example/lab/workspaces/agentic-00123/tree/pv/users/u1/a%20b/execution.ipynb"
     )
     assert lab_url(Settings(notebook_lab_base_url=""), "x.ipynb", "1") is None
+
+
+def test_sdk_request_has_flask_attributes():
+    from api_service.auth.sdk import SdkRequest
+
+    request = Request(
+        {
+            "type": "http",
+            "method": "GET",
+            "path": "/svc/api/v1/auth/login/sso",
+            "root_path": "/svc",
+            "query_string": b"return_to=/",
+            "headers": [(b"host", b"api.corp"), (b"cookie", b"a=1; b=2")],
+            "server": ("api", 443),
+            "client": ("10.0.0.1", 5000),
+            "scheme": "https",
+        }
+    )
+    view = SdkRequest(request, "https://api.corp/cb/1")
+    assert view.host == "api.corp"
+    assert view.host_url == "https://api.corp/"
+    assert view.full_path == "/svc/api/v1/auth/login/sso?return_to=/"
+    assert view.remote_addr == "10.0.0.1"
+    assert view.environ["PATH_INFO"] == "/api/v1/auth/login/sso"
+    assert view.environ["SCRIPT_NAME"] == "/svc"
+    assert view.environ["HTTP_HOST"] == "api.corp"
+    assert view.environ["REMOTE_ADDR"] == "10.0.0.1"
+    assert view.cookies.to_dict() == {"a": "1", "b": "2"}
+    assert view.args.to_dict()["ORIGIN"] == "https://api.corp/cb/1"
+    # anything else falls through to the ASGI request
+    assert view.query_params["return_to"] == "/"
+
+
+def test_company_sso_draft_names_the_factory():
+    import ast
+    from pathlib import Path
+
+    tree = ast.parse(
+        (Path(__file__).parents[1] / "src/company_sso.py").read_text("utf-8")
+    )
+    names = {n.name for n in tree.body if isinstance(n, ast.FunctionDef)}
+    assert "create_sdk" in names

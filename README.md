@@ -70,14 +70,7 @@ uv run uvicorn main:app --app-dir src --port 8080
 
 ## 운영 연결 지점
 
-- **사내 SSO**: `SSO_ADAPTER=company`, `SSO_ADAPTER_FACTORY=company_sso:create_sdk`. 폐쇄망에서 `src/company_sso.py`를 아래처럼 추가합니다.
-  ```python
-  from your_private_module import SSO
-
-
-  def create_sdk(request, callback_url):
-      return SSO(request)  # request는 Flask 호환 뷰(args, cookies, environ, url)
-  ```
+- **사내 SSO**: `SSO_ADAPTER=company`, `SSO_ADAPTER_FACTORY=company_sso:create_sdk`. 초안 `src/company_sso.py`의 SDK import만 폐쇄망에서 실제 경로로 바꿉니다. 연결 확인 순서와 실패 시 볼 로그는 [docs/specs/sso-check.md](docs/specs/sso-check.md).
 - **LLM**: `llm_base_url`, `llm_api_key`, `llm_enable_thinking`, 그리고 사용자에게 보여 줄 모델 목록 `models`(게이트웨이 모델 이름, 표시 이름, `default: true` 하나, 이미지 입력 가능 여부, 모델별 요청 파라미터 `params` 예: `reasoning_effort`). 목록에 적힌 모델만 씁니다.
 - **임베딩**(워크플로우 검색용): `EMBEDDING_BASE_URL`, `EMBEDDING_MODEL`, `EMBEDDING_DIMS`(HNSW 인덱스는 2,000차원 이하).
 - **프로젝트 메모리**: 프로젝트마다 주제(최대 6개, 콘솔에서 편집) 한도 합계 `MEMORY_TOTAL_MAX_CHARS`(기본 2200, 주제별 한도는 주제에 저장), 백그라운드 정리 `MEMORY_WORKER_ENABLED`, `MEMORY_WORKER_QUIET_SECONDS`, `MEMORY_WORKER_MAX_TURNS`, `MEMORY_WORKER_MAX_INPUT_TOKENS`, `MEMORY_WORKER_CONCURRENCY`. 예전 항목형 메모리는 기동 시(`AUTO_MIGRATE`) 기본 주제로 옮겨지며, 끈 환경에서는 `uv run python scripts/migrate_project_memory.py`.
