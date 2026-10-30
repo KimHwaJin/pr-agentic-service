@@ -18,6 +18,13 @@ Do not log or print cookies, SDK URLs or employee data here.
 # want with SSO_ADAPTER=company.
 from your_private_module import SSO  # ty: ignore[unresolved-import]
 
+# Corporate login page, as in the Streamlit sample
+# (``.../sso/am/login.jsp?TARGET=<page url>``). When set, the login redirect
+# goes here with our callback as TARGET instead of the SDK's redirect_url,
+# which led to a 404. Leave empty to use the SDK's redirect_url. Its origin
+# must be in SSO_ALLOWED_ORIGINS.
+SSO_LOGIN_PAGE = "https://company.com/sso/am/login.jsp"
+
 
 def create_sdk(request, callback_url):
     """Return a fresh SDK instance for one request.
@@ -27,4 +34,8 @@ def create_sdk(request, callback_url):
     ``callback_url`` is set only when building the login URL; it is already
     in ``request.args["ORIGIN"]``. ``None`` when verifying a cookie.
     """
-    return SSO(request)
+    sso = SSO(request)
+    if callback_url is not None and SSO_LOGIN_PAGE:
+        # the callback has no query, so it goes in as is, like the sample
+        sso.redirect_url = f"{SSO_LOGIN_PAGE}?TARGET={callback_url}"
+    return sso
