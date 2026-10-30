@@ -43,3 +43,16 @@
 | 로그인 후 403 `disabled` | 비활성 사용자 | `users.is_active` |
 
 prj_re에서는 SDK가 복귀 주소의 query를 잘라 먹어 왕복이 생겼고, 그래서 콜백 주소에 query 없이 `flow_id`만 경로로 넣습니다.
+
+## 4. 개발 PC에서 https로 띄우기
+
+회사 SSO 쿠키는 회사 도메인 아래 주소에만 오고, 회사 도메인은 https만 허용(HSTS)합니다. `localhost`로 열면 콜백에서 쿠키가 없어 401이 나고, http로 띄우면 브라우저가 https로 바꿔 보내서 `Invalid HTTP request received`가 납니다.
+
+1. hosts 파일(관리자 권한): `127.0.0.1  dtest-local.<회사도메인>`
+2. `.env`: 두 주소를 `https://dtest-local.<회사도메인>:5000`으로, `COOKIE_SECURE=true`
+3. 레포 루트에서
+   ```powershell
+   powershell -ExecutionPolicy Bypass -File scripts\run_local_https.ps1 -HostName dtest-local.<회사도메인>
+   ```
+   처음 한 번 `.local/tls/`에 자체 서명 인증서를 만들고(`scripts/make_local_cert.py`), gaia 없이 uvicorn을 TLS로 띄웁니다. 포트는 `-Port`, 인증서 다시 만들기는 `-NewCert`.
+4. 브라우저 인증서 경고는 한 번 "고급 → 계속"으로 넘깁니다.
