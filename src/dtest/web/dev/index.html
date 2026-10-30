@@ -802,7 +802,7 @@ const CODE_TEXT = {
 async function api(path, opts = {}) {
   const headers = { 'Content-Type': 'application/json', ...(S.csrf ? { 'X-CSRF-Token': S.csrf } : {}), ...(opts.headers || {}) };
   const r = await fetch(API + path, { credentials: 'include', ...opts, headers, body: opts.body && JSON.stringify(opts.body) });
-  if (r.status === 401) { location.href = `${API}/auth/login/sso?return_to=/dev/`; throw new Error('login'); }
+  if (r.status === 401) { toLogin(); throw new Error('login'); }
   const data = r.status === 204 ? null : await r.json();
   if (!r.ok) {
     const fields = (data?.errors || []).map(e => `${e.field}: ${e.message}`).join(', ');
@@ -813,8 +813,26 @@ async function api(path, opts = {}) {
   return data;
 }
 
+// A 401 sends the page to the SSO login. If it comes back and is still
+// logged out within a minute (our session cookie was not kept, e.g. http
+// with COOKIE_SECURE), stop there instead of going round forever.
+const LOGIN_TRY = 'agentic.loginTry';
+function toLogin() {
+  let last = 0; try { last = Number(sessionStorage.getItem(LOGIN_TRY)) || 0; } catch {}
+  if (Date.now() - last < 60000) {
+    try { sessionStorage.removeItem(LOGIN_TRY); } catch {}
+    document.body.innerHTML = `<div style="margin:auto;text-align:center;font-family:inherit;max-width:520px"><h2 style="font-weight:500">로그인하지 못했습니다</h2>
+      <p class="muted">SSO에서 돌아왔지만 로그인 상태가 유지되지 않았습니다. 주소가 https인지, COOKIE_SECURE와 PUBLIC_API_ORIGIN 설정을 확인하세요.</p>
+      <a class="btn primary" style="display:inline-block;text-decoration:none" href="${API}/auth/login/sso?return_to=/dev/">다시 로그인</a></div>`;
+    return;
+  }
+  try { sessionStorage.setItem(LOGIN_TRY, String(Date.now())); } catch {}
+  location.href = `${API}/auth/login/sso?return_to=/dev/`;
+}
+
 async function boot() {
   S.csrf = (await api('/auth/session')).csrf_token;
+  try { sessionStorage.removeItem(LOGIN_TRY); } catch {}
   const me = await api('/users/me');
   S.me = me; renderMe();
   S.models = (await api('/models')).items;
