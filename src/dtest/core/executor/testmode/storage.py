@@ -23,6 +23,7 @@ from typing import Any
 import httpx
 
 from src.dtest.core.executor.storage import TEXT_TYPES, SharedStorage
+from src.dtest.core.service_headers import Identity, with_key
 
 _RESULT_PATH = re.compile(
     r"executions/(?P<execution>[^/]+)/operations/[^/]+/steps/(?P<step>[^/]+)/"
@@ -83,18 +84,26 @@ def cell_outputs(cell: dict[str, Any], max_chars: int) -> dict[str, Any]:
 
 
 class NotebookResultStorage(SharedStorage):
-    """SharedStorage reading results through the executor notebook API."""
+    """SharedStorage reading results through the executor notebook API.
+
+    The reads are system reads of our tenant, with the key and tenant of
+    ``ExecutorClient``: without them an API-key executor answers 401 and a
+    header-mode one looks in its default tenant (404).
+    """
 
     def __init__(
         self,
         *args: Any,
         base_url: str,
         timeout: float,
+        api_key: str = "",
+        tenant: str = "",
         transport: httpx.BaseTransport | None = None,  # tests
     ):
         super().__init__(*args)
         self.api_url = base_url.rstrip("/") + "/api/v1"
         self.timeout = timeout
+        self.headers = with_key(api_key, Identity(tenant=tenant or None))
         self.transport = transport
 
     def source_file(self, relative: str) -> Path:
@@ -140,6 +149,7 @@ class NotebookResultStorage(SharedStorage):
         with httpx.Client(
             base_url=self.api_url,
             timeout=self.timeout,
+            headers=self.headers,
             transport=self.transport,
         ) as http:
             step = _get(http, f"{base}/steps/{step_id}")

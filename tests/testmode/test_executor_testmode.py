@@ -129,10 +129,17 @@ def test_cell_outputs_read_like_a_manifest():
     assert short["text"] == "a\n" and short["truncated"]
 
 
-def _storage(tmp_path, cells: list[dict[str, Any]], seen: list[str]):
+def _storage(
+    tmp_path,
+    cells: list[dict[str, Any]],
+    seen: list[str],
+    headers: list[httpx.Headers] | None = None,
+):
     def handle(request: httpx.Request) -> httpx.Response:
         path = request.url.path.removeprefix("/api/v1")
         seen.append(path)
+        if headers is not None:
+            headers.append(request.headers)
         base = f"/executions/{EXECUTION}"
         if path == f"{base}/steps/{STEP}":
             return httpx.Response(200, json={"sequence": 1})
@@ -153,6 +160,8 @@ def _storage(tmp_path, cells: list[dict[str, Any]], seen: list[str]):
         tmp_path / "results",
         base_url="http://executor",
         timeout=5,
+        api_key="k-1",
+        tenant="pr-agentic",
         transport=httpx.MockTransport(handle),
     )
 
@@ -171,6 +180,18 @@ def test_a_step_reads_the_cell_at_its_sequence(tmp_path):
     assert storage.read_step_outputs(REF)["text"] == "one"
     assert storage.step_source(REF) == "print('one')"
     assert f"/executions/{EXECUTION}/notebook/cells/1" in seen
+
+
+def test_notebook_reads_carry_our_key_and_tenant(tmp_path):
+    # without them the executor answered 404 (header mode: wrong tenant)
+    headers: list[httpx.Headers] = []
+    storage = _storage(tmp_path, [_cell("setup"), _cell("one")], [], headers)
+    storage.read_step_outputs(REF)
+    assert headers
+    for sent in headers:
+        assert sent["X-Api-Key"] == "k-1"
+        assert sent["X-Tenant-Id"] == "pr-agentic"
+        assert "X-User-Id" not in sent
 
 
 def test_cell_metadata_wins_over_the_sequence(tmp_path):
