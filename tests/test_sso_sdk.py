@@ -122,7 +122,7 @@ def test_company_sso_userinfo_check(monkeypatch):
 
     sent = {}
 
-    def fake_get(url, cookies, timeout):
+    def fake_get(url, cookies, timeout, follow_redirects):
         sent.update(cookies)
         return httpx.Response(
             200, json={"empNo": 123, "empName": "홍길동", "email": None}

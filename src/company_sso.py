@@ -83,7 +83,11 @@ class UserinfoCheck:
             log.info("sso_userinfo result=missing cookies=%s", sorted(sent))
             return False
         response = httpx.get(
-            USERINFO_URL, cookies=sent, timeout=USERINFO_TIMEOUT_SECONDS
+            USERINFO_URL,
+            cookies=sent,
+            timeout=USERINFO_TIMEOUT_SECONDS,
+            # requests (the sample) follows redirects; httpx does not
+            follow_redirects=True,
         )
         if response.status_code != 200:
             log.info("sso_userinfo result=http_%s", response.status_code)
