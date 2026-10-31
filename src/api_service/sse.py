@@ -8,7 +8,7 @@ from typing import Any
 from fastapi import HTTPException, Request
 from fastapi.responses import StreamingResponse
 
-from core.events import EventBus
+from core.events import EVENTS_LOST, EventBus
 
 HEARTBEAT = ": keep-alive\n\n"
 History = Callable[[int], Awaitable[list[dict[str, Any]]]]
@@ -44,6 +44,10 @@ def event_stream(
                 except TimeoutError:
                     yield HEARTBEAT
                     continue
+                if raw == EVENTS_LOST:
+                    # live events were dropped: end here, the browser
+                    # reconnects with Last-Event-ID and replays them
+                    return
                 event = json.loads(raw)
                 if "id" in event:
                     if event["id"] <= last:
