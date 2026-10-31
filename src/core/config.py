@@ -305,6 +305,9 @@ class Settings(BaseSettings):
     # Images sent with a turn (vision models only).
     image_max_bytes: int = 10 * 1024 * 1024
     image_max_total_bytes: int = 20 * 1024 * 1024
+    # request bodies larger than this (Content-Length) are refused with 413
+    # before they are read; the ingress should have its own limit too
+    request_max_bytes: int = 32 * 1024 * 1024
     image_context_turns: int = (
         3  # images of the last N user turns reach the model
     )
