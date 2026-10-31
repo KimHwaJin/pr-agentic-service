@@ -3,6 +3,7 @@ import os
 import socket
 
 from src.dtest.agent.graph import AgentGraphs
+from src.dtest.core.executor.cancels import ExecutionCancelRetry
 from src.dtest.core.services import Services
 from src.dtest.worker.batch_reports import (
     BatchReportRecovery,
@@ -52,6 +53,7 @@ class Worker:
         )
         self.retention = Retention(services)
         self.batch_disable = BatchDisableRetry(services)
+        self.cancel_retry = ExecutionCancelRetry(services)
         self.memory = (
             MemoryWorker(services, self.owner)
             if settings.memory_worker_enabled
@@ -84,6 +86,9 @@ class Worker:
             asyncio.create_task(
                 self.batch_disable.run_forever(), name="batch-disable-retry"
             ),
+            asyncio.create_task(
+                self.cancel_retry.run_forever(), name="executor-cancel-retry"
+            ),
         ]
         if self.memory:
             self.tasks.append(
@@ -99,10 +104,17 @@ class Worker:
         return [t.get_name() for t in self.tasks if t.done()]
 
     async def stop(self, drain_seconds: float = 20) -> None:
+        """Drains the run and memory workers together, in ``drain_seconds``.
+
+        Shutdown budget against terminationGracePeriodSeconds 60: preStop
+        5 s + uvicorn --timeout-graceful-shutdown 20 s (SSE streams hold it
+        to the end) + this 20 s + lease release.
+        """
         self.stopping = True
-        await self.scheduler.drain(drain_seconds)
+        drains = [self.scheduler.drain(drain_seconds)]
         if self.memory:
-            await self.memory.stop(drain_seconds)
+            drains.append(self.memory.stop(drain_seconds))
+        await asyncio.gather(*drains)
         for task in self.tasks:
             task.cancel()
         await asyncio.gather(*self.tasks, return_exceptions=True)

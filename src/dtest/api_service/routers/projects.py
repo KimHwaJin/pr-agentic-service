@@ -15,8 +15,9 @@ from src.dtest.api_service.schemas.projects import (
     ProjectUpdate,
 )
 from src.dtest.core.db import get_row, utcnow
+from src.dtest.core.executor.cancels import cancel_idle_executions
 from src.dtest.core.memory.service import Actor, MemoryEditError
-from src.dtest.core.models import Project, ProjectMember
+from src.dtest.core.models import ChatSession, Project, ProjectMember
 
 router = APIRouter(prefix="/projects", tags=["projects"])
 
@@ -76,8 +77,21 @@ async def delete_project(
     if project.is_default:
         raise HTTPException(409, "The default project cannot be deleted.")
     async with services.db.sessions() as db:
+        sessions = (
+            await db.execute(
+                select(ChatSession.id, ChatSession.active_run_id).where(
+                    ChatSession.project_id == project_id,
+                    ChatSession.deleted_at.is_(None),
+                )
+            )
+        ).all()
+        if any(s.active_run_id for s in sessions):
+            raise HTTPException(409, "Cancel the running turns first.")
         (await get_row(db, Project, project_id)).deleted_at = utcnow()
         await db.commit()
+    await cancel_idle_executions(
+        services, [s.id for s in sessions], reason="프로젝트 삭제"
+    )
     return Response(status_code=204)
 
 

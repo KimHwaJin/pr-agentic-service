@@ -41,6 +41,8 @@
 | 설정 | 기본 | 조정 기준 |
 | --- | --- | --- |
 | `RUN_CONCURRENCY` | 32 | `waiting`이 아닌 `queued` run이 계속 쌓이면 올린다. LLM 게이트웨이의 동시 처리 한도를 넘지 않게 Pod 수 × 값으로 맞춘다 |
-| `DB_POOL_SIZE` | 10 (+overflow 10, store/checkpointer 풀 5) | Pod당 최대 약 25 연결. `maxReplicas × 25`가 PG `max_connections`보다 충분히 작아야 한다 |
+| `DB_POOL_SIZE` | 10 (+overflow 10) | SQLAlchemy 풀. Pod당 최대 `DB_POOL_SIZE × 2` 연결 |
+| `CHECKPOINT_POOL_SIZE` | 16 | LangGraph checkpointer/store 풀. 실행 중인 turn의 graph step마다 체크포인트를 쓰므로 `RUN_CONCURRENCY`의 절반 이상으로 둔다. 연결을 30초(`CHECKPOINT_POOL_TIMEOUT_SECONDS`) 안에 못 얻으면 turn이 실패한다 |
+| PG `max_connections` | — | Pod당 최대 연결 = `DB_POOL_SIZE × 2 + CHECKPOINT_POOL_SIZE` (기본 36). `maxReplicas × 36 + 여유(마이그레이션, 운영 접속 등 20)`보다 커야 한다. 기본값(max 6)이면 236 이상 |
 | HPA | CPU 60%, min 2 / max 6 | CPU가 LLM 대기를 반영하지 않으므로 min 2를 유지한다. 큐 적체는 `RUN_CONCURRENCY`로 흡수 |
-| `terminationGracePeriodSeconds` | 60 | 종료 시 새 run 수락 중단 → 진행 중 turn 마무리(최대 20초) → 남은 run은 lease 반납 후 다른 Pod가 이어감 |
+| `terminationGracePeriodSeconds` | 60 | preStop 5초 → uvicorn 연결 종료 대기(`--timeout-graceful-shutdown 20`, SSE가 있으면 끝까지 기다림) → 새 run 수락 중단, 진행 중 turn과 메모리 작업을 함께 마무리(최대 20초) → 남은 run은 lease 반납 후 다른 Pod가 이어감. 합계 약 45~50초 |

@@ -6,6 +6,7 @@ evidence (call lines, observations, text output, errors); numbers must come
 from that evidence.
 """
 
+import asyncio
 import json
 from typing import Any
 
@@ -44,8 +45,10 @@ async def collect_evidence(
             if lineage.get("tool_name") == SETUP_TOOL:
                 continue
             step_result = step.get("result") or {}
-            view = services.storage.read_step_outputs(
-                step_result.get("result_ref"), max_chars=3000
+            view = await asyncio.to_thread(
+                services.storage.read_step_outputs,
+                step_result.get("result_ref"),
+                max_chars=3000,
             )
             observations, text = parse_observations(view.get("text", ""))
             label = (
@@ -60,7 +63,9 @@ async def collect_evidence(
             )
             if written and view.get("available"):
                 # code the agent or the batch author wrote: show it
-                source = source_preview(services, step_result["result_ref"])
+                source = await asyncio.to_thread(
+                    source_preview, services, step_result["result_ref"]
+                )
             status = step_result.get("status")
             error = step_result.get("error_message")
             images = view.get("images")

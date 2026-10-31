@@ -2,6 +2,7 @@ import asyncio
 from datetime import timedelta
 from types import SimpleNamespace
 from typing import Any, cast
+from unittest.mock import ANY
 
 import pytest
 from langchain_core.language_models.fake_chat_models import (
@@ -27,7 +28,12 @@ from src.dtest.core.contracts import events as contracts
 from src.dtest.core.db import utcnow
 from src.dtest.core.executor.client import ExecutorError, trigger_type
 from src.dtest.worker import batch_reports
-from src.dtest.worker.batch_reports import BatchReportWorker, NotReady, enqueue
+from src.dtest.worker.batch_reports import (
+    BatchReportWorker,
+    LeaseLost,
+    NotReady,
+    enqueue,
+)
 
 EXECUTION = "674ff370-c4c6-42c4-a423-eba72d18352b"
 OWNER = "0c8a2f86-5d0e-4e55-9a3c-6f2f0f6a1b11"
@@ -592,3 +598,47 @@ def test_recovery_keeps_going_after_an_executor_error(monkeypatch):
     with pytest.raises(asyncio.CancelledError):
         asyncio.run(recovery.run_forever())
     assert len(executor.asked) == 2
+
+
+def test_a_lost_lease_stops_the_job_without_marking_it_failed():
+    job = _job()
+    worker = _worker(_services(executor=_Executor(_execution())), job)
+    writes: list[dict] = []
+
+    async def _set(job_id, **values):
+        writes.append(values)
+        raise LeaseLost(job_id)  # another pod claimed it meanwhile
+
+    async def renew(job_id):
+        return True
+
+    cast(Any, worker)._set = _set
+    cast(Any, worker)._renew = renew
+    asyncio.run(worker._process(cast(Any, job)))
+    assert writes == [{"state": "COLLECTING", "collecting_since": ANY}]
+
+
+def test_heartbeat_stops_the_work_when_the_lease_is_gone(monkeypatch):
+    worker = _worker(_services(), _job())
+    worker.lease_seconds = 3
+    beats: list[bool] = [True, False]
+
+    async def renew(job_id):
+        return beats.pop(0)
+
+    real_sleep = asyncio.sleep
+
+    async def tick(seconds):
+        await real_sleep(0)
+
+    async def main():
+        monkeypatch.setattr(
+            "src.dtest.worker.batch_reports.asyncio.sleep", tick
+        )
+        cast(Any, worker)._renew = renew
+        work = asyncio.get_running_loop().create_future()
+        await asyncio.wait_for(worker._heartbeat("job-1", cast(Any, work)), 2)
+        return work
+
+    work = asyncio.run(main())
+    assert beats == [] and work.cancelled()

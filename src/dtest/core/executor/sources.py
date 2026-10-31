@@ -12,6 +12,7 @@ failover writes nothing new and resends the same code (see
 period; the executor's own snapshot and the notebook keep the code.
 """
 
+import asyncio
 from dataclasses import dataclass
 from datetime import timedelta
 from typing import Any
@@ -71,7 +72,9 @@ class CodeSources:
         **meta: Any,
     ) -> dict[str, str]:
         """Write the file (once) and index it; returns the PATH source."""
-        source, size = self.storage.write_source(code, relative)
+        source, size = await asyncio.to_thread(
+            self.storage.write_source, code, relative
+        )
         async with self.db.sessions() as db:
             await db.execute(
                 insert(CodeSource)
@@ -119,6 +122,10 @@ class CodeSources:
                 )
             await db.commit()
 
+    def _delete_files(self, paths: list[str]) -> None:
+        for path in paths:
+            self.storage.delete_source(path)
+
     async def purge(self, days: int) -> int:
         """Delete files older than ``days``; the index rows stay."""
         cutoff = utcnow() - timedelta(days=days)
@@ -136,8 +143,8 @@ class CodeSources:
                         .with_for_update(skip_locked=True)
                     )
                 ).all()
-                for row in rows:
-                    self.storage.delete_source(row.path)
+                paths = [r.path for r in rows]
+                await asyncio.to_thread(self._delete_files, paths)
                 if rows:
                     await db.execute(
                         update(CodeSource)

@@ -64,7 +64,9 @@ async def test_heartbeat_retries_then_stops_an_unrenewed_turn(monkeypatch):
         raise ConnectionError("db down")
 
     monkeypatch.setattr("src.dtest.worker.scheduler.asyncio.sleep", tick)
-    monkeypatch.setattr("src.dtest.worker.scheduler.monotonic", lambda: clock[0])
+    monkeypatch.setattr(
+        "src.dtest.worker.scheduler.monotonic", lambda: clock[0]
+    )
     scheduler._renew = renew  # type: ignore[method-assign]
     turn = asyncio.get_running_loop().create_future()
     await asyncio.wait_for(scheduler._heartbeat("r1", cast(Any, turn)), 2)
@@ -115,3 +117,21 @@ async def test_dead_loops_are_reported_until_shutdown():
     for task in worker.tasks:
         task.cancel()
     await asyncio.gather(*worker.tasks, return_exceptions=True)
+
+
+async def test_stop_drains_runs_and_memory_together():
+    worker = cast(Any, Worker.__new__(Worker))
+    worker.stopping, worker.tasks = False, []
+    started: list[str] = []
+
+    async def drain(name, seconds):
+        started.append(name)
+        await asyncio.sleep(0.2)
+
+    worker.scheduler = SimpleNamespace(drain=lambda s: drain("runs", s))
+    worker.memory = SimpleNamespace(stop=lambda s: drain("memory", s))
+    loop = asyncio.get_running_loop()
+    begin = loop.time()
+    await worker.stop(drain_seconds=1)
+    assert sorted(started) == ["memory", "runs"]
+    assert loop.time() - begin < 0.35

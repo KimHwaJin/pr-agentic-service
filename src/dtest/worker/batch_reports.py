@@ -25,6 +25,7 @@ import asyncio
 import contextlib
 import logging
 from datetime import datetime, timedelta
+from time import monotonic
 from typing import Any
 
 from sqlalchemy import or_, select, text, update
@@ -32,7 +33,7 @@ from sqlalchemy.dialects.postgresql import insert
 
 from src.dtest.agent.batch import BatchReportAgent, previous_runs, remember_run
 from src.dtest.agent.context import BatchReportContext
-from src.dtest.core.db import new_id, utcnow
+from src.dtest.core.db import affected, new_id, utcnow
 from src.dtest.core.executor.client import (
     ExecutorError,
     Identity,
@@ -49,6 +50,10 @@ RECOVERY_LOCK = 7_202_510  # pg advisory lock: one pod sweeps at a time
 
 class NotReady(Exception):
     """The executor has not projected the notebook yet."""
+
+
+class LeaseLost(Exception):
+    """Another pod holds the job now (this lease expired): stop writing."""
 
 
 async def enqueue(services: Services, execution_id: str) -> str | None:
@@ -246,37 +251,74 @@ class BatchReportWorker:
             return job
 
     async def _set(self, job_id: str, **values) -> None:
+        """Writes the job only while this worker holds its lease."""
         async with self.services.db.sessions() as db:
-            job = await db.get(BatchReportJob, job_id)
-            for key, value in values.items():
-                setattr(job, key, value)
+            result = await db.execute(
+                update(BatchReportJob)
+                .where(
+                    BatchReportJob.id == job_id,
+                    BatchReportJob.lease_owner == self.owner,
+                )
+                .values(**values)
+            )
             await db.commit()
+        if not affected(result):
+            raise LeaseLost(job_id)
 
-    async def _heartbeat(self, job_id: str) -> None:
-        """Keeps the lease while the agent works (minutes, not seconds)."""
+    async def _renew(self, job_id: str) -> bool:
+        async with self.services.db.sessions() as db:
+            result = await db.execute(
+                update(BatchReportJob)
+                .where(
+                    BatchReportJob.id == job_id,
+                    BatchReportJob.lease_owner == self.owner,
+                )
+                .values(
+                    lease_expires_at=utcnow()
+                    + timedelta(seconds=self.lease_seconds)
+                )
+            )
+            await db.commit()
+        return bool(affected(result))
+
+    async def _heartbeat(self, job_id: str, work: asyncio.Task) -> None:
+        """Keeps the lease while the agent works (minutes, not seconds).
+
+        Stops the work once the lease is someone else's, or could not be
+        renewed for 2/3 of it (the database is unreachable): another pod
+        may claim the job when it expires.
+        """
+        renewed = monotonic()
         while True:
             await asyncio.sleep(self.lease_seconds / 3)
-            async with self.services.db.sessions() as db:
-                await db.execute(
-                    update(BatchReportJob)
-                    .where(
-                        BatchReportJob.id == job_id,
-                        BatchReportJob.lease_owner == self.owner,
-                    )
-                    .values(
-                        lease_expires_at=utcnow()
-                        + timedelta(seconds=self.lease_seconds)
-                    )
-                )
-                await db.commit()
+            try:
+                held = await self._renew(job_id)
+            except Exception:  # noqa: BLE001 - retried on the next beat
+                log.warning("batch_report_heartbeat_failed job=%s", job_id)
+                if monotonic() - renewed < self.lease_seconds * 2 / 3:
+                    continue
+                held = False
+            if not held:
+                log.warning("batch_report_lease_lost job=%s", job_id)
+                work.cancel()
+                return
+            renewed = monotonic()
 
     async def _emit(self, job_id: str, type: str, data: dict) -> None:
         await self.services.events.emit_report(job_id, type, data)
 
     async def _process(self, job: BatchReportJob) -> None:
-        heartbeat = asyncio.create_task(self._heartbeat(job.id))
+        work = asyncio.create_task(self._run(job))
+        heartbeat = asyncio.create_task(self._heartbeat(job.id, work))
         try:
-            await self._run(job)
+            await work
+        except asyncio.CancelledError:
+            current = asyncio.current_task()
+            if current is not None and current.cancelling():
+                raise  # shutdown: the lease runs out, another pod resumes
+            log.warning("batch_report_stopped job=%s (lease lost)", job.id)
+        except LeaseLost:
+            log.warning("batch_report_stopped job=%s (lease lost)", job.id)
         finally:
             heartbeat.cancel()
             with contextlib.suppress(asyncio.CancelledError):
@@ -323,6 +365,8 @@ class BatchReportWorker:
                         "steps": ["notebook"],
                     },
                 )
+        except LeaseLost:
+            raise
         except Exception as exc:  # noqa: BLE001
             log.warning("batch_report_failed job=%s stage=%s", job.id, stage)
             error = f"{type(exc).__name__}: {exc}"[:2000]

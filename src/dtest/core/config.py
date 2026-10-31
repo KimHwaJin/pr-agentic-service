@@ -121,6 +121,11 @@ class Settings(BaseSettings):
     redis_url: str = "redis://localhost:6379/0"
     redis_namespace: str = "agentic"
     db_pool_size: int = 10
+    # psycopg pool of the LangGraph checkpointer and store: every graph
+    # step of every running turn (RUN_CONCURRENCY) writes through it
+    checkpoint_pool_size: int = Field(16, ge=2)
+    # how long a checkpoint write waits for a free connection
+    checkpoint_pool_timeout_seconds: float = Field(30.0, gt=0)
     auto_migrate: bool = True
 
     # SSO. "dev" returns a fixed employee and is refused outside env=local.
