@@ -10,6 +10,8 @@ import asyncio
 import hashlib
 import json
 
+from sqlalchemy import update
+
 from api_service.errors import ApiError
 from api_service.schemas.sessions import (
     Resume,
@@ -21,7 +23,8 @@ from api_service.schemas.sessions import (
 )
 from api_service.services import hitl
 from core import images as image_store
-from core.db import get_row
+from core.db import get_row, utcnow
+from core.executor.cancels import cancel_execution
 from core.models import ChatSession, Image, Message, Run, RunRequest, User
 from core.services import Services
 
@@ -285,3 +288,40 @@ def _attachment(image: Image) -> dict:
 def _request_hash(body: RunCreate) -> str:
     raw = json.dumps(body.model_dump(mode="json"), sort_keys=True)
     return hashlib.sha256(raw.encode()).hexdigest()
+
+
+async def request_cancel(services: Services, run_id: str, reason: str) -> Run:
+    """Cancel a run: finished here when nobody executes it, else its
+    worker stops it at the next heartbeat (cancel_requested)."""
+    execution_id = None
+    async with services.db.sessions() as db:
+        run = await get_row(db, Run, run_id, lock=True)
+        if run.status in {"succeeded", "failed", "cancelled"}:
+            return run
+        run.cancel_requested = True
+        if run.status != "running":  # nobody is executing it: finish here
+            execution_id = (run.waiting or {}).get("execution_id")
+            run.status, run.waiting, run.finished_at = (
+                "cancelled",
+                None,
+                utcnow(),
+            )
+            await db.execute(
+                update(ChatSession)
+                .where(
+                    ChatSession.id == run.session_id,
+                    ChatSession.active_run_id == run.id,
+                )
+                .values(active_run_id=None)
+            )
+        await db.commit()
+    if run.status == "cancelled":
+        await services.forget_tool_effects(run_id)
+    if execution_id:  # retried by the worker if the executor is down
+        await cancel_execution(
+            services, execution_id, key=f"cancel:{run_id}", reason=reason
+        )
+    await services.events.emit(
+        run.session_id, run.id, "run_status", {"status": run.status}
+    )
+    return run
