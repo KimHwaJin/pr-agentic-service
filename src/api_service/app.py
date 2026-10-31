@@ -1,4 +1,5 @@
 import logging
+from pathlib import Path
 
 from fastapi import APIRouter, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -46,6 +47,12 @@ def mount_api(app: FastAPI, settings: Settings) -> None:
     app.include_router(api)
     app.include_router(artifacts.router)
     app.include_router(batch.router)
+    # the view pages' libraries, served here: no CDN in the closed network
+    app.mount(
+        "/view/assets",
+        StaticFiles(directory=Path(__file__).parent / "static/vendor"),
+        name="view-assets",
+    )
     errors.install(app)
     _caller_headers_together(app)
 
