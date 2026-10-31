@@ -82,7 +82,7 @@ B안에서는 그 글도 대화 기록에 user 메시지로 남깁니다.
 
 ### 1.4 `Idempotency-Key`
 
-- 같은 세션에서 같은 키로 다시 오면 처음 만든(또는 재개한) run을 그대로 돌려주고 아무것도 새로 하지 않습니다. 본문이 다르면 409 `idempotency_conflict`.
+- 같은 세션에서 같은 키로 다시 오면 처음 만든(또는 재개한) run을 그대로 돌려주고 아무것도 새로 하지 않습니다. 본문이 다르면 409 `IDEMPOTENCY_CONFLICT`.
 - 24시간 보관. 네트워크 재시도로 같은 질문이 두 번 도는 것을 막습니다(리뷰 M2).
 
 ### 1.5 모델 지정: `model_alias` → `model` (결정)
@@ -153,7 +153,7 @@ models:
 | `image` | `base64`, `mime_type`, `name?` | `image/png`, `image/jpeg`, `image/webp`만. `url` 블록은 받지 않음(서버가 외부 URL을 가져오지 않도록) |
 
 - 한도(제안): 장당 10MB(디코딩 후), 요청당 최대 `max_images`장(모델 카탈로그, 기본 8), 합계 20MB.
-- 텍스트 전용 모델에 이미지가 있으면 422 `model_not_multimodal`.
+- 텍스트 전용 모델에 이미지가 있으면 422 `MODEL_NOT_MULTIMODAL`.
 - 문자열 `content`는 지금처럼 그대로 받습니다.
 
 **서버 처리**
@@ -188,20 +188,20 @@ models:
 
 | 상태 | code | 언제 | 추가 정보 |
 | --- | --- | --- | --- |
-| 409 | `session_busy` | 새 턴인데 다른 run이 돌고 있음 (A안이면 확인 대기 중일 때도) | `run` (진행 중인 run) |
-| 409 | `not_waiting` | 재개인데 run이 확인을 기다리지 않음 (이미 답해서 진행 중이거나 끝남) | `run` |
-| 409 | `stale_interrupt` | 재개인데 `interrupt_id`가 지금 기다리는 질문이 아님 (오래된 화면) | `run` (현재 `waiting` 포함) |
-| 409 | `idempotency_conflict` | 같은 키, 다른 본문 | |
-| 422 | `invalid_body` | `input`과 `command`가 둘 다 있거나 둘 다 없음, 형식 오류 | `details` |
-| 422 | `invalid_answer` | 확인 종류별 검사 실패 | `details`: `[{"location": ["body","command","resume","value","input_values","0.0.lot_cd"], "type": "invalid_answer", "message": "필수 입력입니다"}]` |
-| 422 | `unknown_model` | `model`이 카탈로그에 없음 | `models` |
-| 422 | `model_not_multimodal` | 텍스트 전용 모델에 이미지 첨부 | `models` (이미지 가능한 모델) |
-| 422 | `invalid_image` | 이미지가 아니거나 형식·개수 초과 | `details` (`context`: `limit`, `requested`) |
-| 413 | `image_too_large` | 이미지 크기 한도 초과 | `details` (`context`: `limit`, `requested`) |
-| 404 | `not_found` | 세션이 없거나 접근 권한 없음 | |
+| 409 | `SESSION_BUSY` | 새 턴인데 다른 run이 돌고 있음 (A안이면 확인 대기 중일 때도) | `run` (진행 중인 run) |
+| 409 | `NOT_WAITING` | 재개인데 run이 확인을 기다리지 않음 (이미 답해서 진행 중이거나 끝남) | `run` |
+| 409 | `STALE_INTERRUPT` | 재개인데 `interrupt_id`가 지금 기다리는 질문이 아님 (오래된 화면) | `run` (현재 `waiting` 포함) |
+| 409 | `IDEMPOTENCY_CONFLICT` | 같은 키, 다른 본문 | |
+| 422 | `INVALID_BODY` | `input`과 `command`가 둘 다 있거나 둘 다 없음, 형식 오류 | `details` |
+| 422 | `INVALID_ANSWER` | 확인 종류별 검사 실패 | `details`: `[{"location": ["body","command","resume","value","input_values","0.0.lot_cd"], "type": "invalid_answer", "message": "필수 입력입니다"}]` |
+| 422 | `UNKNOWN_MODEL` | `model`이 카탈로그에 없음 | `models` |
+| 422 | `MODEL_NOT_MULTIMODAL` | 텍스트 전용 모델에 이미지 첨부 | `models` (이미지 가능한 모델) |
+| 422 | `INVALID_IMAGE` | 이미지가 아니거나 형식·개수 초과 | `details` (`context`: `limit`, `requested`) |
+| 413 | `IMAGE_TOO_LARGE` | 이미지 크기 한도 초과 | `details` (`context`: `limit`, `requested`) |
+| 404 | `NOT_FOUND` | 세션이 없거나 접근 권한 없음 | |
 | 403 | `read_only` | 읽기 전용 멤버 | |
 
-`not_waiting`과 `stale_interrupt`에 현재 run을 담아서, 프론트가 더블 클릭은 무시하고 오래된 화면은 새로 그릴 수 있게 합니다(리뷰 M3).
+`NOT_WAITING`과 `STALE_INTERRUPT`에 현재 run을 담아서, 프론트가 더블 클릭은 무시하고 오래된 화면은 새로 그릴 수 있게 합니다(리뷰 M3).
 
 ## 4. 함께 바뀌는 것
 
