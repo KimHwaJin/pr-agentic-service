@@ -160,7 +160,7 @@ sequenceDiagram
   E-->>G: (대기·재개 동일)
   L-->>G: write_report
   G->>E: finalize (노트북 확정)
-  Note over G: 근거 모으기 → reporter.md로 리포트 작성(LLM)<br/>executor에 리포트 artifact 저장
+  Note over G: 근거 모으기 → 리포트 에이전트(reporter.md)가 필요한 Step을 다시 읽고 작성<br/>executor에 리포트 artifact 저장
   L-->>G: save_workflow → interrupt(workflow_save) → 승인
   L-->>G: finish_analysis(summary)
   G->>L: main: 요약 받아 사용자 답변
@@ -176,7 +176,7 @@ sequenceDiagram
 | `run_plan` | 승인된 계획에서 아직 안 한 호출을 조건부 호출 앞까지 묶어(segment) executor에 한 operation으로 보냅니다. 조건부 호출은 모델이 `decisions`로 실행 여부를 정해 다시 부릅니다. |
 | `run_custom_code` | 코드 레벨이 허락하면 모델이 쓴 코드를 `code_approval` interrupt로 승인받고 실행합니다. |
 | `revise_call` | 실행 중 실패한 호출의 인자만 고칩니다. |
-| `write_report` | 노트북 확정(finalize) → 근거 수집(`reporter.collect_evidence`) → 리포트 작성(별도 LLM 호출, `prompts/reporter.md`) → executor에 리포트 artifact 저장 |
+| `write_report` | 노트북 확정(finalize) → 근거 수집(`reporter.collect_evidence`, 최대 4만 자 개요) → 리포트 에이전트(`agent/report_agent.py`, `prompts/reporter.md`)가 잘렸거나 정확한 수치가 필요한 Step을 `read_step`으로 다시 읽고 `submit_report`로 제출(모델 호출 최대 `REPORT_MODEL_CALL_LIMIT` 8번) → executor에 리포트 artifact 저장. 배치 리포트도 같은 에이전트를 `prompts/batch_analyst.md`로 씁니다. 작성 중 `read_step` 호출은 채팅에 `tool_call`("Step N 결과 확인")로 보이고, 에이전트의 글은 채팅에 흐르지 않습니다(리포트는 `artifact`로 전달) |
 | `save_workflow` | 승인된 계획을 워크플로우 후보로 저장 제안(`workflow_save` interrupt) |
 | `ask_user` | 모호하거나 빠진 정보를 묻습니다(`question` interrupt). |
 | `save_memory`, `delete_memory` | 프로젝트 메모리(LangGraph Store) 주제(topic id)의 한 줄을 더하거나 바꾸거나 지움. 사용자가 "기억해줘"처럼 명시적으로 요청한 때만. 대화에서 드러난 사실은 백그라운드 메모리 worker(`worker/memory.py`)가 정리 |
@@ -229,7 +229,8 @@ stateDiagram-v2
 | `agent/tools/main.py`, `common.py`, `analysis.py` | 도구들 |
 | `agent/plan_format.py` | 모델이 쓰는 호출 목록 ↔ Workflow 1.0 문서 |
 | `agent/codegen.py` | executor로 보낼 코드(준비 셀, tool 셀, 사용자 코드), 관측값 파싱 |
-| `agent/reporter.py` | 리포트 근거 수집과 작성 |
+| `agent/reporter.py` | 리포트 근거 수집, 분석 리포트 요청 조립 |
+| `agent/report_agent.py` | 리포트 에이전트(분석·배치 공통, `read_step`·`submit_report`) |
 | `agent/titles.py` | 첫 답변 뒤 세션 제목 생성 |
 | `agent/llm.py` | 게이트웨이 클라이언트(모델 이름별 캐시) |
 | `agent/prompts/*.md` | main, analyst, reporter, summary(대화 요약 틀) 프롬프트와 멈춤 방지 알림 |

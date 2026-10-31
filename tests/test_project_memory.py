@@ -921,17 +921,10 @@ def test_tool_over_the_limit_shows_the_lines():
     assert "한도를 넘습니다" in reply and "[Preferences]" in reply
 
 
-def test_reporter_reads_the_preferences_topic(monkeypatch):
+def test_reporter_reads_the_preferences_topic():
     from agent import reporter
 
     memory = _memory()
-    seen = {}
-
-    async def write(services, model, system, request):
-        seen["system"] = system
-        return "# 리포트"
-
-    monkeypatch.setattr(reporter, "write_markdown", write)
     ctx = SimpleNamespace(
         services=SimpleNamespace(memory=memory),
         project_id="p",
@@ -944,8 +937,12 @@ def test_reporter_reads_the_preferences_topic(monkeypatch):
             "p", "preferences", "- 표 위주", expected_version=0, actor=USER
         )
     )
-    run(reporter.generate_report(ctx, title="t", focus="f", evidence="e"))
-    assert "- 표 위주" in seen["system"]
+
+    def request():
+        return run(
+            reporter.analysis_request(ctx, title="t", focus="f", evidence="e")
+        )
+
+    assert "- 표 위주" in request()
     _put_topics(memory, [DEFAULT_TOPICS[0]], version=0)
-    run(reporter.generate_report(ctx, title="t", focus="f", evidence="e"))
-    assert "- 표 위주" not in seen["system"]
+    assert "- 표 위주" not in request()

@@ -96,6 +96,9 @@ AGENT_RECURSION_LIMIT: 200
 AGENT_MODEL_CALL_LIMIT: 40
 # same tool, same error, this many times in a row in one turn: not run again
 AGENT_TOOL_FAILURE_LIMIT: 3
+# model calls of the report agent for an analysis report (read_step rounds
+# plus submit_report); the user waits for it inside the turn
+REPORT_MODEL_CALL_LIMIT: 8
 AGENT_COMPACT_FINISHED_ANALYSIS: true
 AGENT_SUMMARY_TRIGGER_TOKENS: 30000
 AGENT_SUMMARY_MAX_CHARS: 6000

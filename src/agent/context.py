@@ -1,3 +1,4 @@
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import Any, NotRequired
 
@@ -85,7 +86,32 @@ class BatchReportContext:
         return activity(self.emit, kind, label, **detail)
 
 
-class BatchReportState(AgentState):
+@dataclass
+class ReportContext:
+    """Runtime context of the report agent inside a chat turn.
+
+    Writes the analysis report of ``write_report``. Its tool calls
+    (read_step) reach the chat as progress; its text does not, since the
+    report arrives as an artifact.
+    """
+
+    services: Services
+    execution_id: str
+    model: str
+    send: Callable[..., Awaitable[None]]
+    cache: dict[str, Any] = field(default_factory=dict)
+
+    async def emit(
+        self, type: str, data: dict[str, Any], durable: bool = True
+    ) -> None:
+        if type != "token":
+            await self.send(type, data, durable)
+
+
+class ReportState(AgentState):
     """report: what submit_report handed in ({title, markdown, summary})."""
 
     report: NotRequired[dict[str, Any] | None]
+
+
+BatchReportState = ReportState

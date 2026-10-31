@@ -1,7 +1,8 @@
-"""Tools of the batch report agent (agent.batch).
+"""Tools of the report agent (agent.report_agent).
 
-The batch already ran on the executor; the agent only reads its results
-and hands in the report. Nothing here sends code to the executor.
+Used for analysis and batch reports. The execution already ran on the
+executor; the agent only reads its results and hands in the report.
+Nothing here sends code to the executor.
 """
 
 import asyncio
@@ -13,17 +14,18 @@ from langchain_core.messages import ToolMessage
 from langgraph.types import Command
 
 from agent.codegen import parse_observations
-from agent.context import BatchReportContext, BatchReportState
+from agent.context import ReportState
 from agent.reporter import source_preview
 
-Runtime = ToolRuntime[BatchReportContext, BatchReportState]
+# context: agent.context.ReportContext (analysis) or BatchReportContext
+Runtime = ToolRuntime[Any, ReportState]
 STEP_MAX_CHARS = 12000
 SUMMARY_MAX_CHARS = 2000
 
 
 @tool
 async def read_step(sequence: int, runtime: Runtime) -> str:
-    """Everything one step of the batch run left: its code, text output
+    """Everything one step of the execution left: its code, text output
     (up to 12,000 chars), observations and error.
 
     Use it when the overview cut a step short or you need its exact
@@ -72,13 +74,13 @@ async def submit_report(
 ) -> Command:
     """Hand in the finished report. Call exactly once, at the end.
 
-    title: one line naming the batch and what this run found.
+    title: one line naming what was analysed and what it found.
     markdown: the full report (Korean Markdown).
-    summary: what the next run of this batch should compare against: the
-    key numbers and findings of this run, plain text, at most 2,000 chars.
+    summary: the key numbers and findings, plain text, at most 2,000
+    chars (a batch's next run compares against it).
     """
     report: dict[str, Any] = {
-        "title": title.strip()[:200] or "배치 실행 리포트",
+        "title": title.strip()[:200],  # empty: the caller's default
         "markdown": markdown,
         "summary": summary.strip()[:SUMMARY_MAX_CHARS],
     }

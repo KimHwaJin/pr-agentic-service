@@ -149,7 +149,7 @@ Swagger(`/docs`)에서는 Authorize 버튼에 `X-Api-Key`·`X-User-Id`가 있고
 | `run_status` | `{status, execution_id?, operation_id?, steps?}` | 상태 표시. `waiting_executor`면 실행 중 단계 표시, `waiting_input`이면 확인 카드(입력창 글도 답으로 받음) |
 | `token` | `{text}` | 답변 스트리밍. 뒤이어 `tool_call`이 오면 중간 출력으로 옮김 |
 | `message_final` | `{content}` | 확정 답변 (Markdown) |
-| `tool_call` | `{name, args, label}` | 백그라운드 메시지 (Agent가 하는 일). 화면에는 `label`(예: "실행 계획 작성", "분석 skill 확인 · eda")을 그대로 보여 줍니다. 도구 이름별 문구 표를 프론트가 따로 둘 필요가 없습니다 |
+| `tool_call` | `{name, args, label}` | 백그라운드 메시지 (Agent가 하는 일). 화면에는 `label`(예: "실행 계획 작성", "분석 skill 확인 · eda")을 그대로 보여 줍니다. 도구 이름별 문구 표를 프론트가 따로 둘 필요가 없습니다. 리포트를 쓰는 동안에는 리포트 에이전트가 Step 결과를 다시 읽는 `read_step`("Step 3 결과 확인")이 올 수 있습니다 |
 | `agent_switched` | `{agent: main\|analyst, task?}` | 담당 전환 표시 |
 | `plan_approved`, `plan_auto_approved`, `plan_revised` | 계획 정보 | 백그라운드 메시지 |
 | `execution_progress` | `{event_type, status, step, error, reason?, paused_seconds?, finished_during_handover?}` | executor 단계별 진행. `event_type`이 `execution.step_handover_started`면 실행 중인 단계를 다른 executor 워커가 넘겨받는 중(`reason`: `EXECUTOR_SHUTDOWN`\|`EXECUTOR_UNRESPONSIVE`, 커널은 계속 실행되고 코드가 다시 돌지 않음), `execution.step_handover_completed`면 넘겨받기 완료(`paused_seconds`: 멈춰 있던 초). 둘 다 정보 표시용이며 이어서 같은 단계의 `execution.step_completed`가 옵니다 |

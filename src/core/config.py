@@ -268,6 +268,9 @@ class Settings(BaseSettings):
     # a tool failing with the same error this many times in a row in one
     # turn is not run again; the model explains the error instead
     agent_tool_failure_limit: int = Field(3, ge=1)
+    # model calls of the report agent writing an analysis report inside a
+    # chat turn (the user waits; batch reports have their own limit)
+    report_model_call_limit: int = Field(8, ge=2)
     # Shrink tool results of an analysis once finish_analysis closes it.
     agent_compact_finished_analysis: bool = True
     # Conversation summarization starts past this many estimated tokens
