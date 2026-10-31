@@ -21,7 +21,7 @@ from uuid import UUID
 
 import httpx
 from fastapi import APIRouter, HTTPException, Request, Response
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, StreamingResponse
 
 from api_service.deps import (
     PROJECT_ID,
@@ -51,6 +51,13 @@ def _client(services) -> httpx.AsyncClient:
     if base not in _clients:
         _clients[base] = httpx.AsyncClient(base_url=base, timeout=60)
     return _clients[base]
+
+
+async def close_clients() -> None:
+    """On shutdown (``api_service.app.stop_api``)."""
+    while _clients:
+        _, client = _clients.popitem()
+        await client.aclose()
 
 
 def batch_headers(services: Services, who: Identity) -> dict[str, str]:
@@ -244,16 +251,34 @@ async def batch_gateway(
     who = await gateway_identity(services, request, path, user_id, user)
     headers.update(batch_headers(services, who))
     body = await request.body()
-    result = await _client(services).request(
+    client = _client(services)
+    outgoing = client.build_request(
         request.method,
         f"/api/v1/{path}",
         params=request.query_params,
         headers=headers,
         content=body,
     )
+    try:
+        # streamed: script contents and run lists can be large
+        result = await client.send(outgoing, stream=True)
+    except httpx.TimeoutException:
+        raise HTTPException(504, "pr-batch did not answer in time.") from None
+    except httpx.HTTPError:
+        raise HTTPException(502, "pr-batch is not reachable.") from None
     passthrough = {
         k: v
         for k, v in result.headers.items()
         if k.lower() in {"etag", "location", "content-type"}
     }
-    return Response(result.content, result.status_code, headers=passthrough)
+
+    async def chunks():
+        try:
+            async for chunk in result.aiter_bytes():
+                yield chunk
+        finally:
+            await result.aclose()
+
+    return StreamingResponse(
+        chunks(), status_code=result.status_code, headers=passthrough
+    )

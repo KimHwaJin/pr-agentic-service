@@ -13,7 +13,7 @@ from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 
 import tracing_phoenix  # optional; removable (docs/phoenix-tracing.md)
-from api_service.app import mount_api, start_api
+from api_service.app import mount_api, start_api, stop_api
 from core.bootstrap import build_services
 from core.config import get_settings
 from core.logging_setup import configure_logging
@@ -44,6 +44,8 @@ async def lifespan(app: FastAPI):
             app.state.ready = False
             if worker:
                 await worker.stop()
+            if api_enabled:
+                await stop_api()
 
 
 app = FastAPI(title="pr-agentic-service", version="0.1.0", lifespan=lifespan)

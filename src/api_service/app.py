@@ -115,6 +115,11 @@ def _caller_headers_together(app: FastAPI) -> None:
     app.openapi = openapi  # ty: ignore[invalid-assignment]
 
 
+async def stop_api() -> None:
+    """Closes the API's own HTTP clients (pr-batch gateway)."""
+    await batch.close_clients()
+
+
 def start_api(app: FastAPI, services: Services) -> None:
     settings = services.settings
     store = AuthStore(services.redis, f"{settings.redis_namespace}:auth")
