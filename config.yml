@@ -12,7 +12,7 @@
 
 # Database / Redis.
 REDIS_NAMESPACE: agentic
-DB_POOL_SIZE: 10
+DB_POOL_SIZE: 5
 # checkpointer/store pool; per pod PG connections = DB_POOL_SIZE * 2 +
 # CHECKPOINT_POOL_SIZE (docs/load-design.md)
 CHECKPOINT_POOL_SIZE: 16

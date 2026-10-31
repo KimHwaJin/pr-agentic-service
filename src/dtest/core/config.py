@@ -120,7 +120,9 @@ class Settings(BaseSettings):
     )
     redis_url: str = "redis://localhost:6379/0"
     redis_namespace: str = "agentic"
-    db_pool_size: int = 10
+    # app-table pool (+ the same overflow); measured peak use is the burst
+    # of run creation, idle while turns run (docs/load-design.md)
+    db_pool_size: int = 5
     # psycopg pool of the LangGraph checkpointer and store: every graph
     # step of every running turn (RUN_CONCURRENCY) writes through it
     checkpoint_pool_size: int = Field(16, ge=2)

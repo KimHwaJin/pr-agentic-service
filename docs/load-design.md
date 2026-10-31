@@ -42,9 +42,9 @@
 | --- | --- | --- |
 | `RUN_CONCURRENCY` | 32 | `waiting`이 아닌 `queued` run이 계속 쌓이면 올린다. LLM 게이트웨이의 동시 처리 한도를 넘지 않게 Pod 수 × 값으로 맞춘다 |
 | `RUN_USER_CONCURRENCY` | 4 | 한 사용자가 여러 Pod에 걸쳐 동시에 돌릴 수 있는 turn 수. 한 사용자가 세션을 여러 개 열어 슬롯을 독차지하지 못하게 한다. 0이면 제한 없음 |
-| `DB_POOL_SIZE` | 10 (+overflow 10) | SQLAlchemy 풀. Pod당 최대 `DB_POOL_SIZE × 2` 연결 |
+| `DB_POOL_SIZE` | 5 (+overflow 5) | SQLAlchemy 풀(앱 테이블). Pod당 최대 `DB_POOL_SIZE × 2` 연결. 턴이 도는 동안에는 거의 쓰지 않고, 많은 턴이 한꺼번에 시작될 때만 몰린다(아래 측정). 로그에 `QueuePool limit`이 보이면 올린다 |
 | `CHECKPOINT_POOL_SIZE` | 16 | LangGraph checkpointer/store 풀. 실행 중인 turn의 graph step마다 체크포인트를 쓰므로 `RUN_CONCURRENCY`의 절반 이상으로 둔다. 연결을 30초(`CHECKPOINT_POOL_TIMEOUT_SECONDS`) 안에 못 얻으면 turn이 실패한다 |
-| PG `max_connections` | — | Pod당 최대 연결 = `DB_POOL_SIZE × 2 + CHECKPOINT_POOL_SIZE` (기본 36). `maxReplicas × 36 + 여유(마이그레이션, 운영 접속 등 20)`보다 커야 한다. 기본값(max 6)이면 236 이상 |
+| PG `max_connections` | — | 우리 Pod당 최대 연결 = `DB_POOL_SIZE × 2 + CHECKPOINT_POOL_SIZE` (기본 26). 같은 DB를 executor·pr-batch도 쓰므로 아래 "공용 DB 연결 예산"의 합계보다 커야 한다 |
 | HPA | CPU 60%, min 2 / max 6 | CPU가 LLM 대기를 반영하지 않으므로 min 2를 유지한다. 큐 적체는 `RUN_CONCURRENCY`로 흡수 |
 | `terminationGracePeriodSeconds` | 60 | preStop 5초 → uvicorn 연결 종료 대기(`--timeout-graceful-shutdown 20`, SSE가 있으면 끝까지 기다림) → 새 run 수락 중단, 진행 중 turn과 메모리 작업을 함께 마무리(최대 20초) → 남은 run은 lease 반납 후 다른 Pod가 이어감. 합계 약 45~50초 |
 
@@ -60,3 +60,32 @@ LangGraph `AsyncPostgresSaver`는 연결 풀을 받아도 saver 하나에 락을
 | PooledPostgresSaver | 0.70~0.73초 | 20~21ms | 32~34ms | 16 |
 
 DB가 같은 기계에 있어 쿼리가 빠른 조건입니다. DB가 네트워크 너머라 쿼리가 느릴수록 기존 방식의 대기는 동시 턴 수만큼 곱해져 차이가 더 커집니다. 라이브러리 버전은 고정했고(`langgraph-checkpoint-postgres==3.1.3`), 락 위치가 바뀌면 `tests/test_checkpoint_saver.py`가 실패합니다.
+
+## 공용 DB 연결 예산 (2026-10-31)
+
+pr-agentic-service, executor, pr-batch가 같은 PostgreSQL을 씁니다. 모든 풀이 꽉 찼을 때의 최대 연결 수입니다.
+
+| 서비스 | Pod당 최대 | 구성 | 평소 Pod | 최대 Pod |
+| --- | --- | --- | --- | --- |
+| pr-agentic-service | 26 | 앱 풀 5 + overflow 5, checkpoint/store 16 | 2 | 6 (HPA) |
+| executor | 16 | `DATABASE_POOL_SIZE` 10 + `DATABASE_MAX_OVERFLOW` 5, readiness 1 | 1 | 1 |
+| pr-batch | 10 | `DB_POOL_SIZE` 5 + `DB_MAX_OVERFLOW` 5 | 1 | 4 (HPA) |
+
+| 상황 | 합계 |
+| --- | --- |
+| 평소 (2 + 1 + 1) | 78 |
+| 우리 배포 중 (maxSurge로 Pod 1개씩 더) | 104 |
+| 모두 최대 스케일 (6 + 1 + 4) | 212 |
+| 최대 스케일 + 배포 여유 + 운영 접속 20 | 약 260 |
+
+- PostgreSQL 기본값은 `max_connections` 100이고 superuser 예약 3을 빼면 97입니다. 평소 운영은 들어가지만, 배포나 스케일아웃이 겹치면 넘습니다. 운영 DB는 **`max_connections` 260 이상**으로 두거나, 늘릴 수 없으면 앞단에 PgBouncer(transaction 모드)를 둡니다. 우리 연결은 `prepare_threshold 0`이라 그대로 붙습니다.
+- `pg_stat_activity.application_name`으로 우리 풀을 구분합니다. 앱 풀은 `pr-agentic-app`, checkpoint/store 풀은 `pr-agentic-graph`입니다([operations.md](operations.md) 8절).
+
+측정(로컬, 실제 LLM, 턴 32개를 동시에 시작, 턴마다 도구 호출 4~5회, 200ms마다 `pg_stat_activity` 샘플링):
+
+| `DB_POOL_SIZE` | 성공 | 턴 시간 중간값 / p95 | 앱 풀 연 연결 / 동시 사용 최대 / p95 | graph 풀 연 연결 / 동시 사용 최대 | 풀 대기 오류 |
+| --- | --- | --- | --- | --- | --- |
+| 10 | 32/32 | 124.6초 / 163.9초 | 20 / 12 / 0 | 16 / 3 | 없음 |
+| 5 | 32/32 | 121.2초 / 159.8초 | 10 / 10 / 0 | 16 / 9 | 없음 |
+
+앱 풀이 꽉 찬 것은 32개 턴의 세션·run을 한꺼번에 만든 첫 1초뿐이었고, 턴이 도는 2~3분 동안은 평균 0.03~0.04개였습니다. 5로 줄여도 턴 시간과 성공률은 그대로여서 기본값을 5로 내렸습니다.
