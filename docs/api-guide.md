@@ -33,7 +33,22 @@ Swagger(`/docs`)에서는 Authorize 버튼에 `X-Api-Key`·`X-User-Id`가 있고
 
 관리자용: `GET /api/v1/admin/api-clients`, `POST /api/v1/admin/api-clients` `{name, tenant?, description?}` → `{client, api_key}`(key 원문은 이때 한 번만), `POST /api/v1/admin/api-clients/{id}/activate`, `/revoke`. 우리 tenant 클라이언트는 바로 active, 다른 tenant는 executor·pr-batch의 `allowed_tenants`에 반영된 뒤 활성화합니다.
 
-**오류 응답:** 모든 오류는 `{"detail": "설명", "code": "기계가 읽는 코드", ...}`입니다. 요청 형식 오류는 `code: invalid_body`와 `errors: [{field, message}]`가 붙습니다.
+**오류 응답:** 모든 오류는 executor와 같은 모양입니다. executor·배치 게이트웨이로 받은 오류도 이 모양으로 옵니다.
+
+```json
+{"error": {
+  "code": "invalid_body",
+  "message": "Invalid request.",
+  "details": [{"location": ["body", "input", "content"], "type": "too_long",
+               "message": "List should have at most 50 items",
+               "context": {"max_length": 50}}],
+  "context": {"run": {"id": "..."}}
+}}
+```
+
+- `code`: 기계가 읽는 코드(우리 서비스는 소문자 snake_case, executor·pr-batch 코드는 그대로). `message`: 사람이 읽는 설명.
+- `details[]`: 잘못된 값마다 하나씩. `location`(요청 안의 위치, 워크플로 검증 오류는 Workflow 1.0 문서 안의 위치), `type`(이유), `message`, `context`(판단 근거 값, 예: `{"limit": 20, "requested": 23}`). 요청 값 자체는 넣지 않습니다. 요청 전체에 대한 오류면 빈 목록입니다.
+- `context`: 특정 값에 묶이지 않는 정보(예: `session_busy`의 진행 중인 `run`, `unknown_model`의 `models`). 없으면 빠집니다.
 
 ## 2. 프로젝트·세션·메시지
 
@@ -73,14 +88,14 @@ Swagger(`/docs`)에서는 Authorize 버튼에 `X-Api-Key`·`X-User-Id`가 있고
 
 | 상태 | code | 언제 |
 | --- | --- | --- |
-| 409 | `session_busy` | 다른 턴이 돌고 있음 (`run`에 진행 중인 run) |
-| 409 | `not_waiting` | 재개인데 기다리는 질문이 없음 (이미 답했거나 끝남, `run` 포함) |
-| 409 | `stale_interrupt` | `interrupt_id`가 지금 질문이 아님 (오래된 화면, `run.waiting`에 현재 질문) |
+| 409 | `session_busy` | 다른 턴이 돌고 있음 (`error.context.run`에 진행 중인 run) |
+| 409 | `not_waiting` | 재개인데 기다리는 질문이 없음 (이미 답했거나 끝남, `error.context.run`) |
+| 409 | `stale_interrupt` | `interrupt_id`가 지금 질문이 아님 (오래된 화면, `error.context.run.waiting`에 현재 질문) |
 | 409 | `idempotency_conflict` | 같은 키, 다른 본문 |
-| 422 | `invalid_body` | `input`/`command` 둘 다 또는 둘 다 없음, 형식 오류 (`errors`) |
-| 422 | `invalid_answer` | 답이 질문과 맞지 않음, 예: 후보 번호 범위 밖, 필수 입력 빈칸 (`errors`) |
-| 422 | `unknown_model` | `model`이 목록에 없음 (`models`) |
-| 422 | `model_not_multimodal` | 텍스트 전용 모델에 이미지 (`models`: 이미지 가능한 모델) |
+| 422 | `invalid_body` | `input`/`command` 둘 다 또는 둘 다 없음, 형식 오류 (`details`) |
+| 422 | `invalid_answer` | 답이 질문과 맞지 않음, 예: 후보 번호 범위 밖, 필수 입력 빈칸 (`details`) |
+| 422 | `unknown_model` | `model`이 목록에 없음 (`error.context.models`) |
+| 422 | `model_not_multimodal` | 텍스트 전용 모델에 이미지 (`error.context.models`: 이미지 가능한 모델) |
 | 422 / 413 | `invalid_image` / `image_too_large` | 이미지가 아니거나 형식·장수·크기 초과 |
 
 ## 목록 페이지네이션
@@ -124,7 +139,7 @@ Swagger(`/docs`)에서는 Authorize 버튼에 `X-Api-Key`·`X-User-Id`가 있고
 
 `hitl_request.type`별 화면과 `POST /sessions/{id}/runs`의 `command.resume.value`입니다. 질문 종류마다 답(reply) 모델이 정해져 있고 OpenAPI(`Resume.value`)에 나옵니다: `PlanApproveReply`·`PlanReviseReply`·`PlanCancelReply`(`action`으로 구분), `CodeApprovalReply`, `WorkflowSaveReply`, question은 문자열 또는 객체(`QuestionReply`).
 
-서버는 run이 기다리는 질문 종류의 모델로 답을 검사합니다(모르는 항목, 틀린 타입은 거절). 그다음 질문 내용과 맞는지 검사합니다(후보 번호 범위, 필수 입력칸, 계획에 없는 파라미터). 맞지 않으면 422 `invalid_answer`와 `errors[]`(`field`, `message`)를 돌려줍니다. 문자열도 객체도 아닌 값(숫자, 목록 등)은 본문 검사에서 422 `invalid_body`가 됩니다.
+서버는 run이 기다리는 질문 종류의 모델로 답을 검사합니다(모르는 항목, 틀린 타입은 거절). 그다음 질문 내용과 맞는지 검사합니다(후보 번호 범위, 필수 입력칸, 계획에 없는 파라미터). 맞지 않으면 422 `invalid_answer`와 `details[]`(`location`, `message`)를 돌려줍니다. `location`은 `["body", "command", "resume", "value", ...]`이고, 입력칸 키(`0.1.lot_cd`)는 한 칸으로 들어갑니다. 문자열도 객체도 아닌 값(숫자, 목록 등)은 본문 검사에서 422 `invalid_body`가 됩니다.
 
 | type | 받는 데이터 | value |
 | --- | --- | --- |

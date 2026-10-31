@@ -17,7 +17,7 @@ def test_unreachable_upstream_is_a_bad_gateway():
 
     response = TestClient(app).get("/api/v1/x")
     assert response.status_code == 502
-    assert response.json()["code"] == "bad_gateway"
+    assert response.json()["error"]["code"] == "bad_gateway"
 
 
 def test_other_apis_on_the_app_keep_their_error_handlers():
@@ -45,10 +45,10 @@ def test_other_apis_on_the_app_keep_their_error_handlers():
         return n
 
     client = TestClient(app)
-    assert client.get("/api/v1/mine").json()["code"] == "not_found"
+    assert client.get("/api/v1/mine").json()["error"]["code"] == "not_found"
     assert client.get("/workflows").json() == {"theirs": "gone"}
     invalid = client.post("/api/common/body")
-    assert invalid.status_code == 422 and "code" not in invalid.json()
+    assert invalid.status_code == 422 and "error" not in invalid.json()
 
 
 def test_patch_null_clears_only_nullable_fields():

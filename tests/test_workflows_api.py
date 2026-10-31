@@ -3,8 +3,8 @@ from types import SimpleNamespace
 from typing import Any, cast
 
 import pytest
-from fastapi import HTTPException
 
+from src.dtest.api_service.errors import ApiError
 from src.dtest.api_service.routers import workflows
 from src.dtest.api_service.schemas.workflows import WorkflowUpdate
 from src.dtest.core.workflows.service import WorkflowError
@@ -60,15 +60,34 @@ def test_a_new_document_is_validated_first(monkeypatch):
 
 @pytest.mark.parametrize("status", [403, 404, 409])
 def test_service_refusals_keep_their_status(monkeypatch, status):
-    with pytest.raises(HTTPException) as refused:
+    with pytest.raises(ApiError) as refused:
         _update(
             monkeypatch,
             {"expected_revision": 1, "tags": []},
             WorkflowError(status, "no"),
         )
-    assert refused.value.status_code == status
+    assert refused.value.status == status
 
 
 def test_validation_errors_are_listed():
-    error = workflows._error(WorkflowError(422, "invalid", ["a", "b"]))
-    assert error.detail == {"message": "invalid", "errors": ["a", "b"]}
+    error = workflows._error(
+        WorkflowError(
+            422,
+            "invalid",
+            [
+                "steps[0].tools[1]: unknown tool 'x'",
+                "workflow/steps/2: 'tools' is a required property",
+                "plain",
+            ],
+        )
+    )
+    assert (error.status, error.code, error.message) == (
+        422,
+        "invalid_workflow",
+        "invalid",
+    )
+    assert [(d["location"], d["message"]) for d in error.details] == [
+        (["workflow", "steps", 0, "tools", 1], "unknown tool 'x'"),
+        (["workflow", "steps", 2], "'tools' is a required property"),
+        (["workflow"], "plain"),
+    ]

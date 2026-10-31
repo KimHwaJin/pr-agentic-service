@@ -184,7 +184,7 @@ models:
 
 ## 3. 오류
 
-본문은 `{"detail": "사람이 읽는 설명", "code": "기계가 읽는 코드", ...추가 정보}` 형태로 통일합니다(리뷰 L3).
+본문은 executor와 같은 `{"error": {"code", "message", "details": [{location, type, message, context}], "context"?}}`로 통일합니다(2026-10-31, docs/api-guide.md "오류 응답"). 아래 "추가 정보"의 `run`, `models`는 `error.context`에, 값별 오류는 `error.details`에 들어갑니다.
 
 | 상태 | code | 언제 | 추가 정보 |
 | --- | --- | --- | --- |
@@ -192,12 +192,12 @@ models:
 | 409 | `not_waiting` | 재개인데 run이 확인을 기다리지 않음 (이미 답해서 진행 중이거나 끝남) | `run` |
 | 409 | `stale_interrupt` | 재개인데 `interrupt_id`가 지금 기다리는 질문이 아님 (오래된 화면) | `run` (현재 `waiting` 포함) |
 | 409 | `idempotency_conflict` | 같은 키, 다른 본문 | |
-| 422 | `invalid_body` | `input`과 `command`가 둘 다 있거나 둘 다 없음, 형식 오류 | `errors` |
-| 422 | `invalid_answer` | 확인 종류별 검사 실패 | `errors`: `[{"field": "input_values.0.0.lot_cd", "message": "필수 입력입니다"}]` |
+| 422 | `invalid_body` | `input`과 `command`가 둘 다 있거나 둘 다 없음, 형식 오류 | `details` |
+| 422 | `invalid_answer` | 확인 종류별 검사 실패 | `details`: `[{"location": ["body","command","resume","value","input_values","0.0.lot_cd"], "type": "invalid_answer", "message": "필수 입력입니다"}]` |
 | 422 | `unknown_model` | `model`이 카탈로그에 없음 | `models` |
 | 422 | `model_not_multimodal` | 텍스트 전용 모델에 이미지 첨부 | `models` (이미지 가능한 모델) |
-| 422 | `invalid_image` | 이미지가 아니거나 형식·개수 초과 | `errors` |
-| 413 | `image_too_large` | 이미지 크기 한도 초과 | `max_bytes` |
+| 422 | `invalid_image` | 이미지가 아니거나 형식·개수 초과 | `details` (`context`: `limit`, `requested`) |
+| 413 | `image_too_large` | 이미지 크기 한도 초과 | `details` (`context`: `limit`, `requested`) |
 | 404 | `not_found` | 세션이 없거나 접근 권한 없음 | |
 | 403 | `read_only` | 읽기 전용 멤버 | |
 

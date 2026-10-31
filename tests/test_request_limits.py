@@ -17,7 +17,7 @@ def test_a_body_over_the_limit_is_refused():
         headers={"content-type": "application/json"},
     )
     assert response.status_code == 413
-    assert response.json()["code"] == "too_large"
+    assert response.json()["error"]["code"] == "too_large"
 
 
 def test_a_chunked_body_over_the_limit_is_stopped():
