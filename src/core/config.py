@@ -362,6 +362,8 @@ class Settings(BaseSettings):
             raise ValueError(
                 "SESSION_MAX_SECONDS must be at least SESSION_TTL_SECONDS"
             )
+        if self.executor_io_mode == "api" and self.env in {"stg", "prd"}:
+            raise ValueError("EXECUTOR_IO_MODE=api is for test environments")
         if self.auth_mode == "header" and self.env not in {"local", "dev"}:
             raise ValueError("AUTH_MODE=header is only allowed in local/dev")
         if self.env in {"stg", "prd"} and not (

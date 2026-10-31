@@ -275,13 +275,24 @@ class RunScheduler:
             or project.code_level
             or self.settings.default_code_level
         )
+        model = run.model
+        if self.settings.model(model) is None:
+            # taken out of MODELS while this run waited: finish it with the
+            # default model rather than fail on resume
+            model = self.settings.default_model.name
+            log.warning(
+                "run_model_replaced run_id=%s model=%s now=%s",
+                run.id,
+                run.model,
+                model,
+            )
         return RunContext(
             services=self.services,
             run_id=run.id,
             session_id=run.session_id,
             project_id=run.project_id,
             user_id=run.user_id,
-            model=run.model,
+            model=model,
             code_level=level,
             project_prompt=project.system_prompt,
             user_text=run.input["text"],
