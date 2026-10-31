@@ -1,6 +1,6 @@
 """Error responses, one shape for every route (same as the executor's)::
 
-    {"error": {"code": "<machine code>", "message": "<human readable>",
+    {"error": {"code": "<MACHINE_CODE>", "message": "<human readable>",
                "details": [{"location": [...], "type": "...",
                             "message": "...", "context": {...}}],
                "context": {...}}}
@@ -78,7 +78,8 @@ def error_body(
     context: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     error: dict[str, Any] = {
-        "code": code,
+        # upper case, as the executor and pr-batch write theirs
+        "code": code.upper(),
         "message": message,
         "details": details or [],
     }

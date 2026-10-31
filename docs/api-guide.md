@@ -25,7 +25,7 @@
 
 | 헤더 | 규칙 |
 | --- | --- |
-| `X-Api-Key` | 시스템 화면 "API 키"에서 발급(`pas_live_…`, 로컬·dev `pas_dev_…`). 모르는·대기(pending)·폐기된 key는 401 `invalid_api_key` |
+| `X-Api-Key` | 시스템 화면 "API 키"에서 발급(`pas_live_…`, 로컬·dev `pas_dev_…`). 모르는·대기(pending)·폐기된 key는 401 `INVALID_API_KEY` |
 | `X-User-Id` | 우리 사용자의 `users.id` 또는 사번(우리가 `users.id`로 바꿔 넘김). 없거나 형식 오류 400 `INVALID_IDENTITY`, 미등록·비활성 사용자 403. 단, 다른 tenant 키가 executor·배치 게이트웨이를 부를 때는 그 호출자의 사용자 ID를 형식만 보고 그대로 넘깁니다 |
 | `X-Project-Id`, `X-Session-Id` | 선택. 경로의 프로젝트·세션과 다르면 400. executor 입구에서는 그 호출자의 tenant가 우리면 멤버십을 확인하고, 다른 tenant면 형식만 봅니다 |
 
@@ -37,7 +37,7 @@ Swagger(`/docs`)에서는 Authorize 버튼에 `X-Api-Key`·`X-User-Id`가 있고
 
 ```json
 {"error": {
-  "code": "invalid_body",
+  "code": "INVALID_BODY",
   "message": "Invalid request.",
   "details": [{"location": ["body", "input", "content"], "type": "too_long",
                "message": "List should have at most 50 items",
@@ -46,9 +46,9 @@ Swagger(`/docs`)에서는 Authorize 버튼에 `X-Api-Key`·`X-User-Id`가 있고
 }}
 ```
 
-- `code`: 기계가 읽는 코드(우리 서비스는 소문자 snake_case, executor·pr-batch 코드는 그대로). `message`: 사람이 읽는 설명.
+- `code`: 기계가 읽는 코드. executor·pr-batch와 같이 대문자 snake_case입니다(예: `SESSION_BUSY`, `REVISION_CONFLICT`). `message`: 사람이 읽는 설명.
 - `details[]`: 잘못된 값마다 하나씩. `location`(요청 안의 위치, 워크플로 검증 오류는 Workflow 1.0 문서 안의 위치), `type`(이유), `message`, `context`(판단 근거 값, 예: `{"limit": 20, "requested": 23}`). 요청 값 자체는 넣지 않습니다. 요청 전체에 대한 오류면 빈 목록입니다.
-- `context`: 특정 값에 묶이지 않는 정보(예: `session_busy`의 진행 중인 `run`, `unknown_model`의 `models`). 없으면 빠집니다.
+- `context`: 특정 값에 묶이지 않는 정보(예: `SESSION_BUSY`의 진행 중인 `run`, `UNKNOWN_MODEL`의 `models`). 없으면 빠집니다.
 
 ## 2. 프로젝트·세션·메시지
 
@@ -68,7 +68,7 @@ Swagger(`/docs`)에서는 Authorize 버튼에 `X-Api-Key`·`X-User-Id`가 있고
 
 ## 에이전트 실행: `POST /sessions/{id}/runs`
 
-본문에는 `input`과 `command` 중 **정확히 하나**를 담습니다. 선택 헤더 `Idempotency-Key`를 주면, 같은 키로 다시 보낸 요청은 처음 결과를 그대로 돌려받습니다(하루 보관, 본문이 다르면 409 `idempotency_conflict`).
+본문에는 `input`과 `command` 중 **정확히 하나**를 담습니다. 선택 헤더 `Idempotency-Key`를 주면, 같은 키로 다시 보낸 요청은 처음 결과를 그대로 돌려받습니다(하루 보관, 본문이 다르면 409 `IDEMPOTENCY_CONFLICT`).
 
 ```json
 // 새 턴: content는 문자열, 또는 LangChain content block 목록
@@ -88,15 +88,15 @@ Swagger(`/docs`)에서는 Authorize 버튼에 `X-Api-Key`·`X-User-Id`가 있고
 
 | 상태 | code | 언제 |
 | --- | --- | --- |
-| 409 | `session_busy` | 다른 턴이 돌고 있음 (`error.context.run`에 진행 중인 run) |
-| 409 | `not_waiting` | 재개인데 기다리는 질문이 없음 (이미 답했거나 끝남, `error.context.run`) |
-| 409 | `stale_interrupt` | `interrupt_id`가 지금 질문이 아님 (오래된 화면, `error.context.run.waiting`에 현재 질문) |
-| 409 | `idempotency_conflict` | 같은 키, 다른 본문 |
-| 422 | `invalid_body` | `input`/`command` 둘 다 또는 둘 다 없음, 형식 오류 (`details`) |
-| 422 | `invalid_answer` | 답이 질문과 맞지 않음, 예: 후보 번호 범위 밖, 필수 입력 빈칸 (`details`) |
-| 422 | `unknown_model` | `model`이 목록에 없음 (`error.context.models`) |
-| 422 | `model_not_multimodal` | 텍스트 전용 모델에 이미지 (`error.context.models`: 이미지 가능한 모델) |
-| 422 / 413 | `invalid_image` / `image_too_large` | 이미지가 아니거나 형식·장수·크기 초과 |
+| 409 | `SESSION_BUSY` | 다른 턴이 돌고 있음 (`error.context.run`에 진행 중인 run) |
+| 409 | `NOT_WAITING` | 재개인데 기다리는 질문이 없음 (이미 답했거나 끝남, `error.context.run`) |
+| 409 | `STALE_INTERRUPT` | `interrupt_id`가 지금 질문이 아님 (오래된 화면, `error.context.run.waiting`에 현재 질문) |
+| 409 | `IDEMPOTENCY_CONFLICT` | 같은 키, 다른 본문 |
+| 422 | `INVALID_BODY` | `input`/`command` 둘 다 또는 둘 다 없음, 형식 오류 (`details`) |
+| 422 | `INVALID_ANSWER` | 답이 질문과 맞지 않음, 예: 후보 번호 범위 밖, 필수 입력 빈칸 (`details`) |
+| 422 | `UNKNOWN_MODEL` | `model`이 목록에 없음 (`error.context.models`) |
+| 422 | `MODEL_NOT_MULTIMODAL` | 텍스트 전용 모델에 이미지 (`error.context.models`: 이미지 가능한 모델) |
+| 422 / 413 | `INVALID_IMAGE` / `IMAGE_TOO_LARGE` | 이미지가 아니거나 형식·장수·크기 초과 |
 
 ## 목록 페이지네이션
 
@@ -139,7 +139,7 @@ Swagger(`/docs`)에서는 Authorize 버튼에 `X-Api-Key`·`X-User-Id`가 있고
 
 `hitl_request.type`별 화면과 `POST /sessions/{id}/runs`의 `command.resume.value`입니다. 질문 종류마다 답(reply) 모델이 정해져 있고 OpenAPI(`Resume.value`)에 나옵니다: `PlanApproveReply`·`PlanReviseReply`·`PlanCancelReply`(`action`으로 구분), `CodeApprovalReply`, `WorkflowSaveReply`, question은 문자열 또는 객체(`QuestionReply`).
 
-서버는 run이 기다리는 질문 종류의 모델로 답을 검사합니다(모르는 항목, 틀린 타입은 거절). 그다음 질문 내용과 맞는지 검사합니다(후보 번호 범위, 필수 입력칸, 계획에 없는 파라미터). 맞지 않으면 422 `invalid_answer`와 `details[]`(`location`, `message`)를 돌려줍니다. `location`은 `["body", "command", "resume", "value", ...]`이고, 입력칸 키(`0.1.lot_cd`)는 한 칸으로 들어갑니다. 문자열도 객체도 아닌 값(숫자, 목록 등)은 본문 검사에서 422 `invalid_body`가 됩니다.
+서버는 run이 기다리는 질문 종류의 모델로 답을 검사합니다(모르는 항목, 틀린 타입은 거절). 그다음 질문 내용과 맞는지 검사합니다(후보 번호 범위, 필수 입력칸, 계획에 없는 파라미터). 맞지 않으면 422 `INVALID_ANSWER`와 `details[]`(`location`, `message`)를 돌려줍니다. `location`은 `["body", "command", "resume", "value", ...]`이고, 입력칸 키(`0.1.lot_cd`)는 한 칸으로 들어갑니다. 문자열도 객체도 아닌 값(숫자, 목록 등)은 본문 검사에서 422 `INVALID_BODY`가 됩니다.
 
 | type | 받는 데이터 | value |
 | --- | --- | --- |
@@ -182,7 +182,7 @@ Swagger(`/docs`)에서는 Authorize 버튼에 `X-Api-Key`·`X-User-Id`가 있고
 | POST | `/runtime-targets/{id}/probe`, `/drain`, `/activate`, `/disable`, `/purge` | 관리자. 다시 점검 / 새 작업 배정 중지(진행 중은 마저) / 배정 복귀 / 사용 중지 / 사용 중지된 대상 제거 |
 | POST | `/maintenance/drain`, `/maintenance/activate`, `/maintenance/runs` | 관리자. executor 전체의 새 실행 접수 중지 / 재개 / 진행 중 실행을 멈추는 점검 작업 생성 |
 
-runtime·maintenance 경로는 executor 운영 key(`EXECUTOR_ADMIN_API_KEY`)가 없으면 503 `executor_admin_key_missing`입니다. POST의 `actor`는 클라이언트 값 대신 서버가 요청한 관리자(`{"type": "USER", "id": <users.id>}`)로 채웁니다. executor·pr-batch에 넘기는 사용자 ID(`X-User-Id`, `context.user_id`, actor)는 모두 사번이 아닌 `users.id`(UUID)입니다. 화면에 이름·사번이 필요하면 `/users`로 찾습니다. 나머지 본문(`idempotency_key` 등)은 executor 형식 그대로입니다.
+runtime·maintenance 경로는 executor 운영 key(`EXECUTOR_ADMIN_API_KEY`)가 없으면 503 `EXECUTOR_ADMIN_KEY_MISSING`입니다. POST의 `actor`는 클라이언트 값 대신 서버가 요청한 관리자(`{"type": "USER", "id": <users.id>}`)로 채웁니다. executor·pr-batch에 넘기는 사용자 ID(`X-User-Id`, `context.user_id`, actor)는 모두 사번이 아닌 `users.id`(UUID)입니다. 화면에 이름·사번이 필요하면 `/users`로 찾습니다. 나머지 본문(`idempotency_key` 등)은 executor 형식 그대로입니다.
 
 **API key 호출자** (executor를 직접 부르지 않고 여기로 부릅니다)
 
@@ -196,7 +196,7 @@ runtime·maintenance 경로는 executor 운영 key(`EXECUTOR_ADMIN_API_KEY`)가 
 
 우리가 `X-Api-Key`(우리 executor key), `X-User-Id`, `X-Tenant-Id`(그 호출자의 tenant)를 다시 만들어 붙입니다. `X-User-Id` 없는 GET은 그 tenant 전체 조회, 없는 쓰기는 400입니다. 운영 경로와 diagnostics는 404. 이벤트는 중계하지 않습니다(`executor.events.<tenant>`를 읽거나 `/events`를 폴링).
 
-executor가 응답하지 않으면 502 `executor_unavailable`, 시간 초과는 504 `executor_timeout`입니다.
+executor가 응답하지 않으면 502 `EXECUTOR_UNAVAILABLE`, 시간 초과는 504 `EXECUTOR_TIMEOUT`입니다.
 
 ## 6. 프로젝트 공유 메모리
 
