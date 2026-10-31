@@ -6,6 +6,7 @@ chat history, the agent checkpoint). The bytes reach the model only at call
 time (see ``agent.middleware.persona``), so checkpoints stay small.
 """
 
+import asyncio
 import base64
 import hashlib
 import io
@@ -22,6 +23,9 @@ from core.executor.storage import safe_part
 from core.models import Image
 
 MAX_SIDE = 1568  # longest side sent to the model
+# refused before decoding: a small file can declare a huge canvas
+# (decompression bomb); 50 MP covers any camera or screenshot
+MAX_PIXELS = 50_000_000
 FORMATS = {"image/png": "PNG", "image/jpeg": "JPEG", "image/webp": "WEBP"}
 EXTENSIONS = {"image/png": "png", "image/jpeg": "jpg", "image/webp": "webp"}
 
@@ -50,8 +54,11 @@ def prepare(encoded: str, mime_type: str, max_bytes: int) -> Prepared:
         raise ImageError(f"image is larger than {max_bytes} bytes")
     try:
         image = PILImage.open(io.BytesIO(raw))
+        width, height = image.size
+        if width * height > MAX_PIXELS:
+            raise ImageError(f"image is larger than {MAX_PIXELS} pixels")
         image.load()
-    except (UnidentifiedImageError, OSError):
+    except (UnidentifiedImageError, OSError, PILImage.DecompressionBombError):
         raise ImageError("not a readable image") from None
     if image.format != FORMATS[mime_type]:
         raise ImageError(f"content is {image.format}, not {mime_type}")
@@ -93,11 +100,7 @@ class Images:
                 f"{image_id}.{EXTENSIONS[prepared.mime_type]}",
             ]
         )
-        target = self.root / relative
-        target.parent.mkdir(parents=True, exist_ok=True)
-        temp = target.with_name(f".{target.name}.{os.getpid()}.tmp")
-        temp.write_bytes(prepared.data)
-        os.replace(temp, target)
+        await asyncio.to_thread(self._write, relative, prepared.data)
         row = Image(
             id=image_id,
             user_id=user_id,
@@ -116,6 +119,13 @@ class Images:
             db.add(row)
             await db.commit()
         return row
+
+    def _write(self, relative: str, data: bytes) -> None:
+        target = self.root / relative
+        target.parent.mkdir(parents=True, exist_ok=True)
+        temp = target.with_name(f".{target.name}.{os.getpid()}.tmp")
+        temp.write_bytes(data)
+        os.replace(temp, target)
 
     async def get(self, image_id: str) -> Image | None:
         async with self.db.sessions() as db:

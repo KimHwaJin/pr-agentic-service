@@ -4,6 +4,7 @@ The batch already ran on the executor; the agent only reads its results
 and hands in the report. Nothing here sends code to the executor.
 """
 
+import asyncio
 import json
 from typing import Any
 
@@ -45,7 +46,9 @@ async def read_step(sequence: int, runtime: Runtime) -> str:
         return f"Step {sequence}은 이 실행에 없습니다."
     step_result = step.get("result") or {}
     ref = step_result.get("result_ref")
-    view = services.storage.read_step_outputs(ref, max_chars=STEP_MAX_CHARS)
+    view = await asyncio.to_thread(
+        services.storage.read_step_outputs, ref, max_chars=STEP_MAX_CHARS
+    )
     observations, text = parse_observations(view.get("text", ""))
     return json.dumps(
         {

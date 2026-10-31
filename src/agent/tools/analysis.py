@@ -16,6 +16,7 @@ Every executor mutation uses an idempotency key derived from
 or a pod crash the executor returns the same receipt.
 """
 
+import asyncio
 import hashlib
 import json
 import re
@@ -801,13 +802,14 @@ def _bounded(value: Any, limit: int = 3000) -> Any:
     return value if len(text) <= limit else text[:limit] + " ...(생략)"
 
 
-def _step_view(
+async def _step_view(
     runtime: Runtime, result: dict[str, Any] | None
 ) -> dict[str, Any]:
     if not result:
         return {"status": "NOT_RUN"}
-    view = runtime.context.services.storage.read_step_outputs(
-        result.get("result_ref")
+    view = await asyncio.to_thread(  # files on the shared (NFS) volume
+        runtime.context.services.storage.read_step_outputs,
+        result.get("result_ref"),
     )
     observations, text = parse_observations(view.get("text", ""))
     return {
@@ -918,7 +920,7 @@ async def run_plan(
     ordered: list[dict[str, Any]] = []  # event payload: jsonb drops key order
     for call in segment:
         step_id = by_label.get(call.key)
-        view = _step_view(runtime, results.get(step_id))
+        view = await _step_view(runtime, results.get(step_id))
         status = {"SUCCEEDED": "succeeded", "NOT_RUN": "pending"}.get(
             view["status"], "failed"
         )
@@ -1017,7 +1019,7 @@ async def run_custom_code(
     event = _wait_operation(execution, receipt)
     execution, results, error = _apply_event(execution, event)
     step_id = receipt["operation"]["steps"][-1]["step_id"]
-    view = _step_view(runtime, results.get(step_id))
+    view = await _step_view(runtime, results.get(step_id))
     plan.setdefault("custom", []).append(
         {
             "id": custom_id,
