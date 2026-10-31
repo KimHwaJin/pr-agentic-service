@@ -20,6 +20,10 @@ def new_id() -> str:
     return str(uuid4())
 
 
+APP_POOL_NAME = "pr-agentic-app"
+GRAPH_POOL_NAME = "pr-agentic-graph"
+
+
 class Base(DeclarativeBase):
     pass
 
@@ -55,12 +59,18 @@ class Timestamped:
 
 
 class Database:
-    def __init__(self, url: str, pool_size: int):
+    def __init__(
+        self, url: str, pool_size: int, application_name: str = APP_POOL_NAME
+    ):
         self.engine: AsyncEngine = create_async_engine(
             url,
             pool_size=pool_size,
             max_overflow=pool_size,
             pool_pre_ping=True,
+            # names the connections in pg_stat_activity, so the shared
+            # database can tell this pool from the checkpoint pool and
+            # from the other services
+            connect_args={"application_name": application_name},
         )
         self.sessions = async_sessionmaker(self.engine, expire_on_commit=False)
 

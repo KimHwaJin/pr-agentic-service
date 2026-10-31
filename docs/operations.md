@@ -72,3 +72,16 @@ SSE(`/events`)가 끊기지 않도록 아래도 함께 둡니다.
 ## 7. API 문서 (`DOCS_ENABLED`)
 
 `/docs`(Swagger), `/redoc`, `/openapi.json`은 내부망 규정에 따라 개발계를 포함해 모든 서버 환경에서 꺼 둡니다. 설정은 `DOCS_ENABLED`이고 기본값과 `config.yml` 값은 `false`입니다. docker compose 로컬 실행만 `true`입니다. internal/gaia에서는 템플릿이 만든 앱의 문서 경로도 같이 내립니다.
+
+## 8. DB 연결 구분
+
+executor, pr-batch와 같은 PostgreSQL을 쓰므로 연결에 이름을 붙입니다. `pg_stat_activity.application_name`이 앱 테이블 풀은 `pr-agentic-app`, LangGraph checkpoint/store 풀은 `pr-agentic-graph`입니다. 풀별 사용량은 아래로 봅니다.
+
+```sql
+SELECT application_name, state, count(*)
+FROM pg_stat_activity
+WHERE application_name LIKE 'pr-agentic-%'
+GROUP BY 1, 2 ORDER BY 1, 2;
+```
+
+서비스별 연결 예산은 [load-design.md](load-design.md)의 표를 따릅니다.

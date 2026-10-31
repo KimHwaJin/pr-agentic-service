@@ -21,7 +21,7 @@ from sqlalchemy import text
 from src.dtest.core.assets import AssetLoader, SkillCatalog, ToolCatalog
 from src.dtest.core.checkpoints import PooledPostgresSaver
 from src.dtest.core.config import DTEST_ROOT, Settings
-from src.dtest.core.db import Database
+from src.dtest.core.db import GRAPH_POOL_NAME, Database
 from src.dtest.core.embeddings import build_embedder
 from src.dtest.core.events import EventBus
 from src.dtest.core.executor.client import ExecutorClient
@@ -60,6 +60,7 @@ async def build_services(
         timeout=settings.checkpoint_pool_timeout_seconds,
         kwargs={
             "autocommit": True,
+            "application_name": GRAPH_POOL_NAME,
             "prepare_threshold": 0,
             "row_factory": dict_row,
         },
