@@ -19,75 +19,130 @@ from src.dtest.agent.codegen import (
 from src.dtest.agent.context import ReportContext
 from src.dtest.core.services import Services
 
-EVIDENCE_MAX_CHARS = 40000
+# what one step shows in full: the read_step view
+STEP_MAX_CHARS = 12000
+# a trimmed step (the whole overview over budget) keeps this much
+TRIM_OUTPUT_CHARS = 2000
+TRIM_OBSERVATION_CHARS = 3000
 
 
 async def collect_evidence(
-    services: Services, execution_id: str, plan: dict[str, Any] | None
+    services: Services,
+    execution_id: str,
+    plan: dict[str, Any] | None,
+    max_chars: int | None = None,
 ) -> str:
+    """Overview of every step for the report writer.
+
+    Each step is shown whole (output up to STEP_MAX_CHARS, every
+    observation) while the overview fits ``max_chars``
+    (REPORT_EVIDENCE_MAX_CHARS). Over it, outputs and observations are
+    trimmed and each trimmed step says so; steps past the budget are named
+    as omitted. Only marked steps need read_step.
+    """
+    budget_total = max_chars or services.settings.report_evidence_max_chars
     result = await services.executor.result(execution_id)
-    parts: list[str] = []
+    head: list[str] = []
     if plan and plan.get("document"):
-        parts.append(
+        head.append(
             "## 승인된 계획 (Workflow 1.0)\n"
             + json.dumps(plan["document"], ensure_ascii=False)
         )
-        parts.append(
+        head.append(
             "## 입력값\n"
             + json.dumps(plan["input_values"], ensure_ascii=False, default=str)
         )
-    budget = EVIDENCE_MAX_CHARS - sum(map(len, parts))
-    for operation in result.get("operations", []):
-        for step in operation.get("steps", []):
-            lineage = step.get("lineage") or {}
-            if lineage.get("tool_name") == SETUP_TOOL:
-                continue
-            step_result = step.get("result") or {}
-            view = await asyncio.to_thread(
-                services.storage.read_step_outputs,
-                step_result.get("result_ref"),
-                max_chars=3000,
+    steps = [
+        s
+        for o in result.get("operations", [])
+        for s in o.get("steps", [])
+        if (s.get("lineage") or {}).get("tool_name") != SETUP_TOOL
+    ]
+    views = [await step_view(services, s) for s in steps]
+    full = [step_block(v, trim=False) for v in views]
+    budget = budget_total - sum(map(len, head))
+    if sum(map(len, full)) <= budget:
+        return "\n\n".join(head + full)
+    parts = list(head)
+    for i, view in enumerate(views):
+        block = step_block(view, trim=True)
+        if len(block) > budget:
+            rest = ", ".join(str(v["sequence"]) for v in views[i:])
+            parts.append(
+                f"※ Step {rest}: 분량 제한으로 생략. read_step으로 읽으세요."
             )
-            observations, text = parse_observations(view.get("text", ""))
-            label = (
-                f"{lineage.get('skill_name')}/{lineage.get('tool_name')}"
-                if lineage.get("tool_name")
-                else "code"
-            )
-            source = ""
-            written = (
-                not lineage.get("tool_name")
-                or lineage.get("skill_name") == CUSTOM_SKILL
-            )
-            if written and view.get("available"):
-                # code the agent or the batch author wrote: show it
-                source = await asyncio.to_thread(
-                    source_preview, services, step_result["result_ref"]
-                )
-            status = step_result.get("status")
-            error = step_result.get("error_message")
-            images = view.get("images")
-            lines = [f"### Step {step['sequence']} {label} — {status}"]
-            if lineage:
-                inputs = _dumps(lineage.get("input_parameters", {}))
-                lines.append(f"입력: {inputs}")
-            if source:
-                lines.append(f"코드:\n```python\n{source}\n```")
-            if observations:
-                lines.append(f"관측: {_dumps(observations)[:3000]}")
-            if text.strip():
-                lines.append(f"출력:\n{text[:2000]}")
-            if images:
-                lines.append(f"이미지 {len(images)}개 (내용은 볼 수 없음)")
-            if error:
-                lines.append(f"오류: {error}")
-            block = "\n".join(filter(None, lines))
-            if len(block) > budget:
-                parts.append("(이후 Step은 분량 제한으로 생략)")
-                return "\n\n".join(parts)
-            parts.append(block)
-            budget -= len(block)
+            break
+        parts.append(block)
+        budget -= len(block)
     return "\n\n".join(parts)
+
+
+async def step_view(
+    services: Services, step: dict[str, Any]
+) -> dict[str, Any]:
+    lineage = step.get("lineage") or {}
+    step_result = step.get("result") or {}
+    ref = step_result.get("result_ref")
+    view = await asyncio.to_thread(
+        services.storage.read_step_outputs, ref, max_chars=STEP_MAX_CHARS
+    )
+    observations, text = parse_observations(view.get("text", ""))
+    written = (
+        not lineage.get("tool_name")
+        or lineage.get("skill_name") == CUSTOM_SKILL
+    )
+    source = ""
+    if written and view.get("available"):
+        # code the agent or the batch author wrote: show it
+        source = await asyncio.to_thread(source_preview, services, ref)
+    return {
+        "sequence": step.get("sequence"),
+        "label": (
+            f"{lineage.get('skill_name')}/{lineage.get('tool_name')}"
+            if lineage.get("tool_name")
+            else "code"
+        ),
+        "status": step_result.get("status"),
+        "inputs": lineage.get("input_parameters", {}) if lineage else None,
+        "source": source,
+        "observations": _dumps(observations) if observations else "",
+        "text": text.strip(),
+        # the output went past STEP_MAX_CHARS: even read_step shows a part
+        "clipped": view.get("truncated", False),
+        "images": len(view.get("images") or []),
+        "error": step_result.get("error_message") or view.get("error"),
+    }
+
+
+def step_block(view: dict[str, Any], *, trim: bool) -> str:
+    observations, text = view["observations"], view["text"]
+    cut = []
+    if trim and len(observations) > TRIM_OBSERVATION_CHARS:
+        cut.append(f"관측 {TRIM_OBSERVATION_CHARS:,}/{len(observations):,}자")
+        observations = observations[:TRIM_OBSERVATION_CHARS]
+    if trim and len(text) > TRIM_OUTPUT_CHARS:
+        cut.append(f"출력 {TRIM_OUTPUT_CHARS:,}/{len(text):,}자")
+        text = text[:TRIM_OUTPUT_CHARS]
+    lines = [f"### Step {view['sequence']} {view['label']} — {view['status']}"]
+    if cut:
+        lines.append(
+            f"※ 일부만 표시({', '.join(cut)}). read_step으로 전체를 읽으세요."
+        )
+    if view["inputs"] is not None:
+        lines.append(f"입력: {_dumps(view['inputs'])}")
+    if view["source"]:
+        lines.append(f"코드:\n```python\n{view['source']}\n```")
+    if observations:
+        lines.append(f"관측: {observations}")
+    if text:
+        lines.append(f"출력:\n{text}")
+    if view["clipped"]:
+        lines.append(f"(출력이 {STEP_MAX_CHARS:,}자를 넘어 이후는 볼 수 없음)")
+    if view["images"]:
+        lines.append(f"이미지 {view['images']}개 (내용은 볼 수 없음)")
+    if view["error"]:
+        lines.append(f"오류: {view['error']}")
+    return "\n".join(lines)
 
 
 def _dumps(value: Any) -> str:
@@ -147,7 +202,8 @@ async def generate_report(
 ) -> str:
     """Interactive report (Markdown), written by the report agent.
 
-    Its read_step calls show in the chat as progress; its text does not.
+    Its read_step calls show in the chat as progress; its text (the
+    report itself) does not, the report arrives as an artifact.
     """
     report_ctx = ReportContext(
         services=ctx.services,
@@ -161,6 +217,5 @@ async def generate_report(
             ctx, title=title, focus=focus, evidence=evidence
         ),
         title,
-        quiet=("submit_report",),
     )
     return report["markdown"]

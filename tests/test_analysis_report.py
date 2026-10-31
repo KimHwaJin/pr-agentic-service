@@ -1,4 +1,4 @@
-"""The analysis report of write_report is written by the report agent."""
+"""Reports: evidence chosen by code, one-call writing, number check."""
 
 import asyncio
 from types import SimpleNamespace
@@ -10,12 +10,22 @@ from langchain_core.language_models.fake_chat_models import (
 from langchain_core.messages import AIMessage
 
 from src.dtest.agent import report_agent, reporter
+from src.dtest.agent.report_agent import unsupported_numbers
 from src.dtest.core.config import Settings
+
+OUTPUTS = {
+    2: "mean 1.998321\nstd 0.142695",
+    3: "count 988\n" + "row\n" * 2000,  # long output
+}
 
 
 class _ToolModel(GenericFakeChatModel):
     def bind_tools(self, tools, **kwargs):
         return self
+
+
+def _model(*messages):
+    return _ToolModel(messages=iter(messages), disable_streaming=True)
 
 
 def _call(name, args, id):
@@ -33,13 +43,14 @@ class _Executor:
                 {
                     "steps": [
                         {
-                            "sequence": 2,
-                            "lineage": {},
+                            "sequence": n,
+                            "lineage": {"skill_name": "eda", "tool_name": "t"},
                             "result": {
                                 "status": "SUCCEEDED",
-                                "result_ref": {"path": "s2"},
+                                "result_ref": {"step": n},
                             },
                         }
+                        for n in OUTPUTS
                     ]
                 }
             ]
@@ -48,10 +59,15 @@ class _Executor:
 
 class _Storage:
     def read_step_outputs(self, ref, max_chars):
-        return {"available": True, "text": "yield 97.3%"}
+        text = OUTPUTS[ref["step"]]
+        return {
+            "available": True,
+            "text": text[:max_chars],
+            "truncated": len(text) > max_chars,
+        }
 
     def step_source(self, ref):
-        return "df.mean()"
+        return ""
 
 
 class _Memory:
@@ -59,54 +75,113 @@ class _Memory:
         return [{"topic": "preferences", "content": "- 표 위주"}]
 
 
-def test_agent_reads_a_step_and_hands_in_the_report(monkeypatch):
-    model = _ToolModel(
-        messages=iter(
-            [
-                _call("read_step", {"sequence": 2}, "c1"),
-                _call(
-                    "submit_report",
-                    {
-                        "title": "다른 제목",
-                        "markdown": "# 수율 97.3%",
-                        "summary": "수율 97.3%",
-                    },
-                    "c2",
-                ),
-            ]
-        ),
-        disable_streaming=True,
+def _services():
+    return SimpleNamespace(
+        settings=Settings(),
+        executor=_Executor(),
+        storage=_Storage(),
+        memory=_Memory(),
     )
-    monkeypatch.setattr(report_agent, "chat_model", lambda s, n: model)
-    reporter._analysis_agents.clear()
-    sent: list[tuple[str, dict]] = []
 
+
+def _ctx(sent):
     async def emit(type, data, durable=True):
         sent.append((type, data))
 
-    executor = _Executor()
-    ctx = SimpleNamespace(
-        services=SimpleNamespace(
-            settings=Settings(),
-            executor=executor,
-            storage=_Storage(),
-            memory=_Memory(),
+    return cast(
+        Any,
+        SimpleNamespace(
+            services=_services(),
+            project_id="p",
+            project_prompt="",
+            user_text="수율 분석",
+            model="m",
+            emit=emit,
         ),
-        project_id="p",
-        project_prompt="",
-        user_text="수율 분석",
-        model="m",
-        emit=emit,
     )
-    markdown = asyncio.run(
+
+
+def _write(ctx, evidence):
+    return asyncio.run(
         reporter.generate_report(
-            cast(Any, ctx), "exe-1", title="수율", focus="f", evidence="개요"
+            ctx, "exe-1", title="수율", focus="f", evidence=evidence
         )
     )
-    assert markdown == "# 수율 97.3%"
-    assert executor.results == 1
-    calls = [d["name"] for t, d in sent if t == "tool_call"]
-    assert calls == ["read_step"]  # submit_report stays quiet
+
+
+def _use(monkeypatch, model):
+    monkeypatch.setattr(report_agent, "chat_model", lambda s, n: model)
+    reporter._analysis_agents.clear()
+
+
+# --- evidence ---------------------------------------------------------------
+
+
+def test_evidence_that_fits_is_whole_and_unmarked():
+    text = asyncio.run(
+        reporter.collect_evidence(cast(Any, _services()), "e", None)
+    )
+    assert "row\n" * 1999 in text  # step 3 whole
+    assert "※" not in text
+
+
+def test_evidence_over_budget_marks_what_it_cut():
+    services = cast(Any, _services())
+    text = asyncio.run(
+        reporter.collect_evidence(services, "e", None, max_chars=3000)
+    )
+    assert "mean 1.998321" in text  # step 2 is short: whole, unmarked
+    assert "※ 일부만 표시(출력 2,000/" in text
+    small = asyncio.run(
+        reporter.collect_evidence(services, "e", None, max_chars=200)
+    )
+    assert "※ Step 3: 분량 제한으로 생략" in small
+
+
+# --- writing ----------------------------------------------------------------
+
+
+def test_whole_evidence_takes_one_call(monkeypatch):
+    _use(monkeypatch, _model(AIMessage("# 수율\n평균 1.998, 988건")))
+    sent = []
+    ctx = _ctx(sent)
+    markdown = _write(ctx, "mean 1.998321\ncount 988")
+    assert markdown == "# 수율\n평균 1.998, 988건"
+    assert sent == []  # no tool calls, no report text in the chat
+
+
+def test_marked_steps_are_read_in_one_call(monkeypatch):
+    _use(
+        monkeypatch,
+        _model(
+            _call("read_step", {"sequences": [2, 3]}, "c1"),
+            AIMessage("# 수율\n표준편차 0.1427, 988건"),
+        ),
+    )
+    sent = []
+    ctx = _ctx(sent)
+    markdown = _write(ctx, "※ 일부만 표시")
+    assert markdown.endswith("0.1427, 988건")
+    assert ctx.services.executor.results == 1
+    calls = [d for t, d in sent if t == "tool_call"]
+    assert [c["label"] for c in calls] == ["Step 2, 3 결과 확인"]
+
+
+def test_an_invented_number_gets_one_repair(monkeypatch):
+    _use(
+        monkeypatch,
+        _model(
+            AIMessage("# 수율\n평균 2.345"),  # not in the evidence
+            AIMessage("# 수율\n평균 1.998"),
+        ),
+    )
+    assert _write(_ctx([]), "mean 1.998321") == "# 수율\n평균 1.998"
+
+
+def test_a_repair_that_is_no_report_keeps_the_first(monkeypatch):
+    first = "# 수율\n" + "평균 2.345 " * 20
+    _use(monkeypatch, _model(AIMessage(first), AIMessage("확인했습니다.")))
+    assert _write(_ctx([]), "mean 1.998321") == first
 
 
 def test_report_text_does_not_reach_the_chat():
@@ -125,6 +200,23 @@ def test_report_text_does_not_reach_the_chat():
     assert sent == ["tool_call"]
 
 
+# --- number check -----------------------------------------------------------
+
+
+def test_number_check():
+    evidence = "mean 1.998321 std 0.142695 ratio 0.973 count 988 n 12,345"
+    report = (
+        "평균 1.998, 표준편차 0.14, 수율 97.3%, 988건, 12,345행, "
+        "2026-10-31 10:15 실행, Step 4, 3줄 요약, 1.0 이상"
+    )
+    assert unsupported_numbers(report, evidence) == []
+    assert unsupported_numbers("평균 2.1, 비율 55%, 1,234건", evidence) == [
+        "2.1",
+        "55%",
+        "1,234",
+    ]
+
+
 def test_request_carries_the_project_and_the_overview():
     ctx = SimpleNamespace(
         services=SimpleNamespace(memory=_Memory()),
@@ -137,15 +229,12 @@ def test_request_carries_the_project_and_the_overview():
             cast(Any, ctx), title="t", focus="이상 lot", evidence="### Step 0"
         )
     )
-    for part in (
-        "수율 분석",
-        "이상 lot",
-        "소수 첫째",
-        "- 표 위주",
-        "### Step 0",
-    ):
+    for part in ("수율 분석", "이상 lot", "소수 첫째", "- 표 위주"):
         assert part in text
+    assert text.endswith("### Step 0")
 
 
-def test_report_call_limit_default():
-    assert Settings().report_model_call_limit == 8
+def test_defaults():
+    settings = Settings()
+    assert settings.report_model_call_limit == 8
+    assert settings.report_evidence_max_chars == 60000

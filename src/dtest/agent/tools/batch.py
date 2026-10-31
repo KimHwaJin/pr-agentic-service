@@ -5,67 +5,50 @@ executor; the agent only reads its results and hands in the report.
 Nothing here sends code to the executor.
 """
 
-import asyncio
-import json
 from typing import Any
 
 from langchain.tools import ToolRuntime, tool
 from langchain_core.messages import ToolMessage
 from langgraph.types import Command
 
-from src.dtest.agent.codegen import parse_observations
 from src.dtest.agent.context import ReportState
-from src.dtest.agent.reporter import source_preview
+from src.dtest.agent.reporter import step_block, step_view
 
 # context: agent.context.ReportContext (analysis) or BatchReportContext
 Runtime = ToolRuntime[Any, ReportState]
-STEP_MAX_CHARS = 12000
 SUMMARY_MAX_CHARS = 2000
+STEPS_PER_READ = 6
 
 
 @tool
-async def read_step(sequence: int, runtime: Runtime) -> str:
-    """Everything one step of the execution left: its code, text output
-    (up to 12,000 chars), observations and error.
+async def read_step(sequences: list[int], runtime: Runtime) -> str:
+    """Steps the overview marked as trimmed or omitted, shown whole: code,
+    observations, text output (up to 12,000 chars each), error.
 
-    Use it when the overview cut a step short or you need its exact
-    numbers. sequence: the step number shown in the overview.
+    Ask for every marked step you need in one call (up to 6). Steps the
+    overview shows without a mark are already complete there.
+    sequences: step numbers from the overview.
     """
     ctx = runtime.context
-    services = ctx.services
     if "result" not in ctx.cache:
-        ctx.cache["result"] = await services.executor.result(ctx.execution_id)
-    step = next(
-        (
-            s
-            for o in ctx.cache["result"].get("operations", [])
-            for s in o.get("steps", [])
-            if s.get("sequence") == sequence
-        ),
-        None,
-    )
-    if step is None:
-        return f"Step {sequence}은 이 실행에 없습니다."
-    step_result = step.get("result") or {}
-    ref = step_result.get("result_ref")
-    view = await asyncio.to_thread(
-        services.storage.read_step_outputs, ref, max_chars=STEP_MAX_CHARS
-    )
-    observations, text = parse_observations(view.get("text", ""))
-    return json.dumps(
-        {
-            "sequence": sequence,
-            "status": step_result.get("status"),
-            "code": source_preview(services, ref) if ref else "",
-            "observations": observations,
-            "output": text,
-            "truncated": view.get("truncated", False),
-            "images": len(view.get("images") or []),
-            "error": step_result.get("error_message") or view.get("error"),
-        },
-        ensure_ascii=False,
-        default=str,
-    )
+        ctx.cache["result"] = await ctx.services.executor.result(
+            ctx.execution_id
+        )
+    steps = {
+        s.get("sequence"): s
+        for o in ctx.cache["result"].get("operations", [])
+        for s in o.get("steps", [])
+    }
+    blocks = []
+    for sequence in list(dict.fromkeys(sequences))[:STEPS_PER_READ]:
+        if sequence not in steps:
+            blocks.append(f"### Step {sequence}\n이 실행에 없는 Step입니다.")
+            continue
+        view = await step_view(ctx.services, steps[sequence])
+        blocks.append(step_block(view, trim=False))
+    if len(sequences) > STEPS_PER_READ:
+        blocks.append(f"(한 번에 {STEPS_PER_READ}개까지 읽습니다)")
+    return "\n\n".join(blocks)
 
 
 @tool(return_direct=True)
