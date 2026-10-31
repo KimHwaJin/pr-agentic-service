@@ -32,4 +32,4 @@ USER agentic
 EXPOSE 8080
 
 # One uvicorn worker per pod: CPU HPA scales pods, background loops must not multiply in-process.
-CMD ["uvicorn", "main:app", "--app-dir", "src", "--host", "0.0.0.0", "--port", "8080", "--timeout-graceful-shutdown", "30"]
+CMD ["uvicorn", "main:app", "--app-dir", "src", "--host", "0.0.0.0", "--port", "8080", "--timeout-graceful-shutdown", "20"]
