@@ -27,6 +27,7 @@ class Worker:
         )
         self.scheduler = RunScheduler(services, graphs, self.owner)
         self.reports = BatchReportWorker(services, self.owner)
+        self.report_loops = settings.batch_report_concurrency
         self.report_recovery = BatchReportRecovery(services)
         self.consumer = ExecutorEventConsumer(
             services.db,
@@ -68,9 +69,6 @@ class Worker:
                 self.recovery.run_forever(), name="missed-executor-events"
             ),
             asyncio.create_task(
-                self.reports.run_forever(), name="batch-reports"
-            ),
-            asyncio.create_task(
                 self.report_recovery.run_forever(),
                 name="batch-report-recovery",
             ),
@@ -83,6 +81,14 @@ class Worker:
             asyncio.create_task(
                 self.cancel_retry.run_forever(), name="executor-cancel-retry"
             ),
+        ]
+        # each loop claims one report job under its own lease
+        # (SKIP LOCKED), so loops and pods never take the same job
+        self.tasks += [
+            asyncio.create_task(
+                self.reports.run_forever(), name=f"batch-reports-{i}"
+            )
+            for i in range(self.report_loops)
         ]
         if self.memory:
             self.tasks.append(
