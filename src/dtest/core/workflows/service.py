@@ -100,8 +100,14 @@ class WorkflowService:
             raise WorkflowError(404, "workflow not found")
         return workflow
 
-    async def readable(self, workflow_id: str, user_id: str) -> Workflow:
+    async def readable(
+        self, workflow_id: str, user_id: str, *, any_candidate: bool = False
+    ) -> Workflow:
+        """Templates, the user's own, and (``any_candidate``: an
+        administrator who promotes) every candidate."""
         workflow = await self.get(workflow_id)
+        if any_candidate and workflow.lifecycle == "candidate":
+            return workflow
         if workflow.lifecycle != "template" and workflow.author_id != user_id:
             raise WorkflowError(404, "workflow not found")
         return workflow
@@ -121,12 +127,18 @@ class WorkflowService:
         lifecycle: str | None,
         q: str | None,
         tag: str | None,
+        all_candidates: bool = False,
     ) -> list[Workflow]:
+        """``all_candidates``: every author's candidates too (an
+        administrator who promotes)."""
+        visible = [
+            Workflow.lifecycle == "template",
+            Workflow.author_id == user_id,
+        ]
+        if all_candidates:
+            visible.append(Workflow.lifecycle == "candidate")
         query = select(Workflow).where(
-            Workflow.deleted_at.is_(None),
-            or_(
-                Workflow.lifecycle == "template", Workflow.author_id == user_id
-            ),
+            Workflow.deleted_at.is_(None), or_(*visible)
         )
         if lifecycle:
             query = query.where(Workflow.lifecycle == lifecycle)

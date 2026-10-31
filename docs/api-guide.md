@@ -217,7 +217,7 @@ executor가 응답하지 않으면 502 `executor_unavailable`, 시간 초과는 
 | POST | `/workflows/validate` | 문서 검증만 |
 | POST | `/workflows/search` | `{query}` → 승격된 template만 유사도 순 |
 | GET/PATCH/DELETE | `/workflows/{id}` | GET은 문서 전체 + `calls`(tool별 설명·파라미터 출처·앞 단계 참조, 계획 승인 화면과 같은 형식) + `mine`. PATCH는 `expected_revision` 필수. DELETE는 작성자, 또는 관리자(template·candidate 모두) |
-| POST | `/workflows/{id}/promote` | candidate → template (검색·추천 대상). `WORKFLOW_PROMOTION=author`(기본)이면 작성자가 자기 워크플로를, `admin`이면 관리자만(SSO 로그인) 아무 워크플로나 승격합니다. |
+| POST | `/workflows/{id}/promote` | candidate → template (검색·추천 대상). `WORKFLOW_PROMOTION=author`(기본)이면 작성자가 자기 워크플로를, `admin`이면 관리자만(SSO 로그인) 아무 워크플로나 승격합니다. 목록·상세의 `can_promote`가 true면 승격 버튼을 보여 주면 됩니다. `admin` 모드의 관리자(SSO)에게는 목록·상세에 다른 사람의 candidate도 보입니다. |
 | POST | `/workflows/{id}/clone`, `/workflows/{id}/reindex` | |
 
 ## 8. 배치 (pr-batch 진입점)

@@ -1,6 +1,11 @@
 from fastapi import APIRouter, HTTPException, Request, Response
 
-from src.dtest.api_service.deps import ServicesDep, UserDep, admin_user
+from src.dtest.api_service.deps import (
+    ServicesDep,
+    UserDep,
+    admin_user,
+    caller_of,
+)
 from src.dtest.api_service.schemas.workflows import (
     WorkflowClone,
     WorkflowCreate,
@@ -25,7 +30,26 @@ def _error(exc: WorkflowError) -> HTTPException:
     )
 
 
-def _summary(workflow, user) -> WorkflowSummary:
+def _promoter(services, request: Request, user) -> bool:
+    """May this caller promote anyone's candidate (WORKFLOW_PROMOTION=admin,
+    an administrator signed in with SSO)?"""
+    return (
+        services.settings.workflow_promotion == "admin"
+        and user.role == "admin"
+        and caller_of(request) is None
+    )
+
+
+def _can_promote(services, request: Request, workflow, user) -> bool:
+    """What the promote button shows: a candidate the caller may promote."""
+    if workflow.lifecycle != "candidate":
+        return False
+    if services.settings.workflow_promotion == "admin":
+        return _promoter(services, request, user)
+    return workflow.author_id == user.id
+
+
+def _summary(services, request: Request, workflow, user) -> WorkflowSummary:
     steps = steps_summary(workflow.document)
     return WorkflowSummary.model_validate(
         {
@@ -37,11 +61,12 @@ def _summary(workflow, user) -> WorkflowSummary:
             "steps": steps,
             "call_count": sum(len(s["tools"]) for s in steps),
             "mine": workflow.author_id == user.id,
+            "can_promote": _can_promote(services, request, workflow, user),
         }
     )
 
 
-def _detail(services, workflow, user) -> WorkflowDetail:
+def _detail(services, request: Request, workflow, user) -> WorkflowDetail:
     calls = call_views(
         workflow.document,
         {},
@@ -53,6 +78,7 @@ def _detail(services, workflow, user) -> WorkflowDetail:
             **WorkflowRead.model_validate(workflow).model_dump(),
             "calls": calls,
             "mine": workflow.author_id == user.id,
+            "can_promote": _can_promote(services, request, workflow, user),
         }
     )
 
@@ -82,6 +108,7 @@ async def create_workflow(
 
 @router.get("", response_model=list[WorkflowSummary])
 async def list_workflows(
+    request: Request,
     services: ServicesDep,
     user: UserDep,
     lifecycle: str | None = None,
@@ -90,12 +117,17 @@ async def list_workflows(
 ):
     """Promoted templates and the caller's own candidates.
 
-    Returned as light summaries (no document).
+    Every candidate for an administrator who promotes
+    (WORKFLOW_PROMOTION=admin). Returned as light summaries (no document).
     """
     return [
-        _summary(w, user)
+        _summary(services, request, w, user)
         for w in await services.workflows.browse(
-            user.id, lifecycle=lifecycle, q=q, tag=tag
+            user.id,
+            lifecycle=lifecycle,
+            q=q,
+            tag=tag,
+            all_candidates=_promoter(services, request, user),
         )
     ]
 
@@ -130,18 +162,21 @@ async def search_workflows(
 
 
 @router.get("/{workflow_id}", response_model=WorkflowDetail)
-async def get_workflow(workflow_id: str, services: ServicesDep, user: UserDep):
+async def get_workflow(
+    workflow_id: str, request: Request, services: ServicesDep, user: UserDep
+):
     """Full document plus ``calls``.
 
     ``calls`` is a readable per-tool view (descriptions, parameters,
-    step references).
+    step references). ``can_promote``: show the promote button.
     """
     try:
-        return _detail(
-            services,
-            await services.workflows.readable(workflow_id, user.id),
-            user,
+        workflow = await services.workflows.readable(
+            workflow_id,
+            user.id,
+            any_candidate=_promoter(services, request, user),
         )
+        return _detail(services, request, workflow, user)
     except WorkflowError as exc:
         raise _error(exc) from None
 

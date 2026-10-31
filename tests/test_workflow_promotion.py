@@ -43,3 +43,32 @@ def test_admin_mode_refuses_other_users():
         _call("admin", "user")
     assert refused.value.status_code == 403
     assert _call("admin", "admin") == [("w1", "u1", True)]
+
+
+def _services(mode):
+    return cast(
+        Any, SimpleNamespace(settings=SimpleNamespace(workflow_promotion=mode))
+    )
+
+
+def _request(caller=None):
+    return cast(Any, SimpleNamespace(state=SimpleNamespace(api_client=caller)))
+
+
+def test_can_promote_follows_the_mode():
+    mine = SimpleNamespace(lifecycle="candidate", author_id="u1")
+    theirs = SimpleNamespace(lifecycle="candidate", author_id="u2")
+    template = SimpleNamespace(lifecycle="template", author_id="u1")
+    user = SimpleNamespace(id="u1", role="user")
+    admin = SimpleNamespace(id="u1", role="admin")
+    author = _services("author")
+    assert workflows._can_promote(author, _request(), mine, user)
+    assert not workflows._can_promote(author, _request(), theirs, admin)
+    assert not workflows._can_promote(author, _request(), template, user)
+    by_admin = _services("admin")
+    assert not workflows._can_promote(by_admin, _request(), mine, user)
+    assert workflows._can_promote(by_admin, _request(), theirs, admin)
+    # an api key caller is never an administrator here
+    assert not workflows._can_promote(
+        by_admin, _request(caller=object()), theirs, admin
+    )

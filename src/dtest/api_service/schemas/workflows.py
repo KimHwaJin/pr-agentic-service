@@ -55,6 +55,7 @@ class WorkflowSummary(Model):
     ]  # [{skill, tools: [{tool, execution}]}] in execution order
     call_count: int
     mine: bool
+    can_promote: bool  # a candidate this caller may promote
     created_at: datetime
     updated_at: datetime
 
@@ -64,6 +65,7 @@ class WorkflowDetail(WorkflowRead):
     # and docs
     calls: list[dict[str, Any]]
     mine: bool
+    can_promote: bool
 
 
 class WorkflowClone(Model):
