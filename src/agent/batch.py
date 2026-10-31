@@ -61,7 +61,10 @@ class BatchReportAgent:
     def __init__(self, settings: Settings):
         self.settings = settings
         self.agent = ReportAgent(
-            settings, "batch_analyst", settings.batch_report_model_call_limit
+            settings,
+            "batch_analyst",
+            settings.batch_report_model_call_limit,
+            submit=True,
         )
 
     async def write(

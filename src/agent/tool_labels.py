@@ -41,7 +41,9 @@ LABELS: dict[str, Callable[[Args], str]] = {
     "save_workflow": lambda a: "워크플로우 저장 제안",
     "finish_analysis": lambda a: "분석 정리",
     # batch report agent
-    "read_step": lambda a: f"Step {_join(a.get('sequence'))} 결과 확인",
+    "read_step": lambda a: (
+        f"Step {_join(a.get('sequences') or a.get('sequence'))} 결과 확인"
+    ),
     "submit_report": lambda a: "리포트 제출",
 }
 

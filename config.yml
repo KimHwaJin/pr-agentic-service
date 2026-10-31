@@ -99,6 +99,9 @@ AGENT_TOOL_FAILURE_LIMIT: 3
 # model calls of the report agent for an analysis report (read_step rounds
 # plus submit_report); the user waits for it inside the turn
 REPORT_MODEL_CALL_LIMIT: 8
+# step results go to the report writer whole while they fit in this many
+# chars; over it they are trimmed and marked for read_step
+REPORT_EVIDENCE_MAX_CHARS: 60000
 AGENT_COMPACT_FINISHED_ANALYSIS: true
 AGENT_SUMMARY_TRIGGER_TOKENS: 30000
 AGENT_SUMMARY_MAX_CHARS: 6000
