@@ -55,7 +55,8 @@ async def build_services(
         settings.psycopg_url,
         connection_class=AsyncConnection[DictRow],
         min_size=1,
-        max_size=max(2, settings.db_pool_size // 2),
+        max_size=settings.checkpoint_pool_size,
+        timeout=settings.checkpoint_pool_timeout_seconds,
         kwargs={
             "autocommit": True,
             "prepare_threshold": 0,
