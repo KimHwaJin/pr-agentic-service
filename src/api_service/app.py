@@ -5,6 +5,8 @@ from fastapi import APIRouter, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.exceptions import HTTPException
+from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from api_service import API_PREFIX, errors
 from api_service.auth.adapters import load_adapter
@@ -28,6 +30,52 @@ from core.config import ROOT, Settings
 from core.services import Services
 
 audit = logging.getLogger("api_service.audit")
+
+
+class BodyLimit:
+    """413 for request bodies over ``max_bytes`` (base64 images).
+
+    A declared Content-Length is refused before reading; a chunked body
+    is counted as it is read and stopped once it passes the limit, so no
+    request is held in memory whole beyond it.
+    """
+
+    def __init__(self, app: ASGIApp, max_bytes: int) -> None:
+        self.app, self.max_bytes = app, max_bytes
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send):
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+        headers = dict(scope.get("headers") or [])
+        length = headers.get(b"content-length", b"")
+        if length.isdigit() and int(length) > self.max_bytes:
+            await _too_large(send)
+            return
+        seen = 0
+
+        async def counted() -> Message:
+            nonlocal seen
+            message = await receive()
+            if message["type"] == "http.request":
+                seen += len(message.get("body", b""))
+                if seen > self.max_bytes:
+                    raise HTTPException(413, "Request body is too large.")
+            return message
+
+        await self.app(scope, counted, send)
+
+
+async def _too_large(send: Send) -> None:
+    response = JSONResponse(
+        {"detail": "Request body is too large.", "code": "too_large"},
+        status_code=413,
+    )
+    await response({"type": "http"}, _no_body, send)
+
+
+async def _no_body() -> Message:
+    return {"type": "http.request", "body": b"", "more_body": False}
 
 
 def mount_api(app: FastAPI, settings: Settings) -> None:
@@ -57,16 +105,7 @@ def mount_api(app: FastAPI, settings: Settings) -> None:
     errors.install(app)
     _caller_headers_together(app)
 
-    @app.middleware("http")
-    async def refuse_large_bodies(request: Request, call_next):
-        """413 before a too large body is read (base64 images)."""
-        length = request.headers.get("content-length", "")
-        if length.isdigit() and int(length) > settings.request_max_bytes:
-            return JSONResponse(
-                {"detail": "Request body is too large.", "code": "too_large"},
-                status_code=413,
-            )
-        return await call_next(request)
+    app.add_middleware(BodyLimit, max_bytes=settings.request_max_bytes)
 
     @app.middleware("http")
     async def audit_key_callers(request: Request, call_next):
