@@ -20,15 +20,15 @@ def _client() -> TestClient:
     app = FastAPI()
     errors.install(app)
 
-    @app.post("/v")
+    @app.post("/api/v1/v")
     async def v(body: Body):
         return {}
 
-    @app.get("/h")
+    @app.get("/api/v1/h")
     async def h():
         raise HTTPException(409, "Cancel the running turns first.")
 
-    @app.get("/a")
+    @app.get("/api/v1/a")
     async def a():
         raise ApiError(
             422,
@@ -49,7 +49,7 @@ def _client() -> TestClient:
 
 
 def test_validation_error_lists_location_type_and_context():
-    error = _client().post("/v", json={"name": "abcd"}).json()["error"]
+    error = _client().post("/api/v1/v", json={"name": "abcd"}).json()["error"]
     assert error["code"] == "invalid_body"
     (d,) = error["details"]
     assert d["location"] == ["body", "name"]
@@ -60,7 +60,7 @@ def test_validation_error_lists_location_type_and_context():
 
 
 def test_plain_http_error_gets_a_code_from_its_status():
-    assert _client().get("/h").json() == {
+    assert _client().get("/api/v1/h").json() == {
         "error": {
             "code": "conflict",
             "message": "Cancel the running turns first.",
@@ -70,7 +70,7 @@ def test_plain_http_error_gets_a_code_from_its_status():
 
 
 def test_api_error_keeps_details_and_context():
-    error = _client().get("/a").json()["error"]
+    error = _client().get("/api/v1/a").json()["error"]
     assert error["details"][0]["context"] == {
         "limit": 1000,
         "existing": 990,
