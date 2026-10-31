@@ -101,7 +101,12 @@ def validate(
                 f"skill '{call.skill}'"
             )
         if tool is None:
-            errors.append(f"{where}: unknown tool '{call.tool}'")
+            errors.append(
+                f"{where}: tool '{call.tool}' failed to load: "
+                f"{tools.broken[call.tool]}"
+                if call.tool in tools.broken
+                else f"{where}: unknown tool '{call.tool}'"
+            )
             seen[call.key] = call
             continue
         params = {p.name: p for p in tool.params}

@@ -138,7 +138,10 @@ async def read_skill(name: str, runtime: Runtime) -> str:
         return f"'{name}' skill이 없습니다."
     tools = services.tool_catalog()
     summaries = "\n".join(
-        tools.summary(t.tool) for t in skill.tools if t.tool in tools.tools
+        tools.summary(t.tool)
+        if t.tool in tools.tools
+        else f"- `{t.tool}`: (사용 불가) {tools.missing(t.tool)}"
+        for t in skill.tools
     )
     return (
         f"{skill.body}\n\n## Tools\n\n{summaries}\n\n"
@@ -153,7 +156,7 @@ async def read_tool(names: list[str], runtime: Runtime) -> str:
     return "\n\n".join(
         f"### {name}\n{tools.describe(name)}"
         if name in tools.tools
-        else f"### {name}\n'{name}' tool이 없습니다."
+        else f"### {name}\n{tools.missing(name)}"
         for name in names
     )
 
@@ -428,7 +431,7 @@ NO_CALLS = (
 # validation messages name the tool they are about (core.workflows.spec)
 _ABOUT_TOOL = re.compile(
     r"'(\w+)' (?:has no parameter|is missing required parameter|has no output)"
-    r"|unknown tool '(\w+)'|tool '(\w+)' does not belong"
+    r"|unknown tool '(\w+)'|tool '(\w+)' (?:does not belong|failed to load)"
 )
 _ABOUT_SKILL = re.compile(r"unknown skill '(\w+)'")
 
@@ -460,6 +463,8 @@ def _plan_help(
             )
             where = f" (skill `{owner}`)" if owner else ""
             lines.append(f"### {name}{where}\n{tools.describe(name)}")
+        elif name in tools.broken:
+            lines.append(f"### {name}\n{tools.missing(name)}")
         else:
             close = [t for t in tools.tools if name in t or t in name]
             hint = f" 비슷한 tool: {close}" if close else ""
