@@ -87,6 +87,8 @@ CATALOG_EXTENSIONS: []
 DEFAULT_CODE_LEVEL: 3
 PLAN_CANDIDATES: 5
 WORKFLOW_SIMILARITY: 0.93
+# author: the author promotes their own; admin: administrators only
+WORKFLOW_PROMOTION: author
 AGENT_RECURSION_LIMIT: 200
 AGENT_MODEL_CALL_LIMIT: 40
 # same tool, same error, this many times in a row in one turn: not run again

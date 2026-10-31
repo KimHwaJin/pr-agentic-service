@@ -253,6 +253,9 @@ class Settings(BaseSettings):
     default_code_level: int = Field(3, ge=1, le=4)
     plan_candidates: int = Field(5, ge=1, le=10)
     workflow_similarity: float = 0.93
+    # who may promote a candidate workflow to a template for every user:
+    # its author, or administrators only (any workflow)
+    workflow_promotion: Literal["author", "admin"] = "author"
     agent_recursion_limit: int = 200
     agent_model_call_limit: int = (
         40  # per turn; stops a model that keeps repeating a failing call

@@ -187,8 +187,14 @@ class WorkflowService:
         await self._index(workflow)
         return await self.get(workflow_id)
 
-    async def promote(self, workflow_id: str, user_id: str) -> Workflow:
-        await self.owned(workflow_id, user_id)
+    async def promote(
+        self, workflow_id: str, user_id: str, *, admin: bool = False
+    ) -> Workflow:
+        """``admin``: an administrator promotes anyone's workflow."""
+        if admin:
+            await self.get(workflow_id)
+        else:
+            await self.owned(workflow_id, user_id)
         async with self.db.sessions() as db:
             await db.execute(
                 update(Workflow)
