@@ -87,6 +87,10 @@ Swagger(`/docs`)에서는 Authorize 버튼에 `X-Api-Key`·`X-User-Id`가 있고
 
 목록 API는 `{items, next_cursor}`를 반환합니다. `next_cursor`가 있으면 그대로 `?cursor=`로 넘겨 다음(더 오래된) 페이지를 받습니다. `limit`은 1~200, 기본 50입니다.
 
+## 요청 ID
+
+모든 응답에 `X-Request-ID` 헤더가 붙습니다. 요청에 `X-Request-ID`(영문·숫자·`._:-`, 128자 이내)를 보내면 그 값을 그대로 쓰고, 없으면 서버가 만듭니다. 같은 값이 서버 로그의 `[...]` 칸과 executor 호출 헤더에 남으므로, 오류를 문의할 때 이 값을 함께 주면 추적이 빠릅니다.
+
 ## 3. 실시간 이벤트 (SSE)
 
 `GET /api/v1/sessions/{id}/events` (EventSource, `withCredentials: true`)

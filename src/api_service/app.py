@@ -27,6 +27,8 @@ from api_service.routers import (
     workflows,
 )
 from core.config import ROOT, Settings
+from core.request_context import HEADER as REQUEST_ID_HEADER
+from core.request_context import RequestId
 from core.services import Services
 
 audit = logging.getLogger("api_service.audit")
@@ -132,7 +134,10 @@ def mount_api(app: FastAPI, settings: Settings) -> None:
             allow_credentials=True,
             allow_methods=["*"],
             allow_headers=["*"],
+            expose_headers=[REQUEST_ID_HEADER],
         )
+    # outermost: every log line of the request, even a 413, carries the id
+    app.add_middleware(RequestId)
     if settings.env in {"local", "dev"}:
         app.mount(
             "/dev",
