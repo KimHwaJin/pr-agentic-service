@@ -52,6 +52,7 @@ class Worker:
             else None
         )
         self.tasks: list[asyncio.Task] = []
+        self.stopping = False
 
     def start(self) -> None:
         self.tasks = [
@@ -85,7 +86,14 @@ class Worker:
                 )
             )
 
+    def stopped_loops(self) -> list[str]:
+        """Background loops that ended on their own (each runs forever)."""
+        if self.stopping:
+            return []
+        return [t.get_name() for t in self.tasks if t.done()]
+
     async def stop(self, drain_seconds: float = 20) -> None:
+        self.stopping = True
         await self.scheduler.drain(drain_seconds)
         if self.memory:
             await self.memory.stop(drain_seconds)
