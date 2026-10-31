@@ -288,6 +288,8 @@ class Settings(BaseSettings):
     run_concurrency: int = Field(
         32, ge=1
     )  # turns are I/O bound (LLM, executor)
+    # turns of one user running at once across pods (0: no limit)
+    run_user_concurrency: int = Field(4, ge=0)
     run_lease_seconds: int = Field(60, ge=10)
     run_poll_seconds: float = 5.0  # fallback only; runs are woken over Redis
     # claims without reaching a pause before a run is failed (crash loops)
