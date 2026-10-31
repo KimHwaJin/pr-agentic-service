@@ -1,4 +1,3 @@
-from pathlib import Path
 from typing import Annotated
 
 from fastapi import APIRouter, Header, HTTPException, Request, Response
@@ -395,11 +394,9 @@ async def step_output_file(
     Paths come from execution_completed events.
     """
     await session_for(services, user, session_id)
-    if not path.startswith(f"executions/{execution_id}/"):
-        raise HTTPException(404, "Not found.")
     if not await execution_of_session(services, execution_id, session_id):
         raise HTTPException(404, "Not found.")
-    file = services.storage.resolve_result(path)
-    if not Path(file).is_file():
+    file = services.storage.execution_file(execution_id, path)
+    if file is None:
         raise HTTPException(404, "Not found.")
     return FileResponse(file)

@@ -5,6 +5,7 @@ everything in one process; the split lets the worker move to its own
 Deployment later without code changes.
 """
 
+import logging
 import os
 from contextlib import asynccontextmanager
 
@@ -21,6 +22,7 @@ from worker.runtime import Worker
 configure_logging()  # logger.yml (or HCP's own inside the company network)
 settings = get_settings()
 tracing_phoenix.setup()
+log = logging.getLogger(__name__)
 mode = os.environ.get("RUN_MODE", "all")
 api_enabled, worker_enabled = mode in {"all", "api"}, mode in {"all", "worker"}
 
@@ -32,6 +34,7 @@ async def lifespan(app: FastAPI):
         if api_enabled:
             start_api(app, services)
         worker = Worker(services) if worker_enabled else None
+        app.state.worker = worker
         if worker:
             worker.start()
         app.state.ready = True
@@ -49,8 +52,14 @@ if api_enabled:
 
 
 @app.get("/healthz", include_in_schema=False)
-async def healthz() -> dict[str, str]:
-    return {"status": "ok"}
+async def healthz() -> JSONResponse:
+    """503 once a background loop has died, so the pod is restarted."""
+    worker = getattr(app.state, "worker", None)
+    stopped = worker.stopped_loops() if worker else []
+    if stopped:
+        log.error("worker_loops_stopped loops=%s", ",".join(stopped))
+        return JSONResponse({"status": "down", "stopped": stopped}, 503)
+    return JSONResponse({"status": "ok"})
 
 
 @app.get("/readyz", include_in_schema=False)
