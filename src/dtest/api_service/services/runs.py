@@ -178,6 +178,7 @@ def _resume(active: Run | None, resume: Resume) -> Run:
             "The turn is waiting for a different question.",
             run=RunRead.model_validate(active),
         )
+    hitl.coerce(waiting, resume.value)  # typed text -> parameter types
     errors = hitl.validate(waiting, resume.value)
     if errors:
         raise ApiError(

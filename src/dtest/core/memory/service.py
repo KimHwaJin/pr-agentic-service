@@ -291,6 +291,17 @@ class ProjectMemory:
             "version": value["version"] if value else 0,
             "updated_at": value["updated_at"] if value else None,
             "total_max_chars": self.total_max_chars,
+            "limits": self.limits(),
+        }
+
+    def limits(self) -> dict[str, int]:
+        """What ``put_topics`` accepts, so a client checks before saving."""
+        return {
+            "max_topics": MAX_TOPICS,
+            "min_topic_chars": MIN_TOPIC_CHARS,
+            "title_max_chars": TITLE_MAX_CHARS,
+            "description_max_chars": DESCRIPTION_MAX_CHARS,
+            "total_max_chars": self.total_max_chars,
         }
 
     async def topics(self, project_id: str) -> list[Topic]:
@@ -388,7 +399,11 @@ class ProjectMemory:
         await self.store.aput(
             self.topics_namespace(project_id), "topics", value, index=False
         )
-        return {**value, "total_max_chars": self.total_max_chars}
+        return {
+            **value,
+            "total_max_chars": self.total_max_chars,
+            "limits": self.limits(),
+        }
 
     async def restore(
         self, project_id: str, history_id: int, *, actor: Actor
@@ -495,6 +510,7 @@ class ProjectMemory:
             "topics": await self.contents(project_id),
             "topics_version": listing["version"],
             "total_max_chars": listing["total_max_chars"],
+            "limits": listing["limits"],
         }
 
     async def content(self, project_id: str, topic_id: str) -> dict[str, Any]:

@@ -48,6 +48,9 @@ class MessageFinalData(View):
 class ToolCallData(View):
     name: str
     args: dict[str, Any] = Field(description="긴 값은 잘려 있음")
+    label: str = Field(
+        "", description="화면에 보일 진행 문구 (예: '실행 계획 작성')"
+    )
 
 
 class AgentSwitchedData(View):

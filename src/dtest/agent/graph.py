@@ -29,6 +29,7 @@ from src.dtest.agent.middleware import (
     compaction_rules,
 )
 from src.dtest.agent.prompts import load_prompt
+from src.dtest.agent.tool_labels import tool_label
 from src.dtest.agent.tools.analysis import (
     finish_analysis,
     propose_plans,
@@ -307,6 +308,9 @@ async def relay(
                             {
                                 "name": call["name"],
                                 "args": brief_args(call["args"]),
+                                "label": tool_label(
+                                    call["name"], call["args"]
+                                ),
                             },
                         )
     await tokens.flush()
