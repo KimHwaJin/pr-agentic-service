@@ -301,6 +301,9 @@ def _arg_docs(docstring: str) -> dict[str, str]:
 class ToolCatalog:
     tools: dict[str, Tool] = field(default_factory=dict)
     errors: dict[str, str] = field(default_factory=dict)
+    # tool name (file stem) -> why its file could not be read, so a lookup
+    # says "failed to load" instead of "no such tool"
+    broken: dict[str, str] = field(default_factory=dict)
 
     @classmethod
     def load(cls, root: Path) -> "ToolCatalog":
@@ -311,8 +314,10 @@ class ToolCatalog:
             try:
                 tool = _parse_tool(path)
                 catalog.tools[tool.name] = tool
-            except (SyntaxError, ValueError) as exc:
+            except (SyntaxError, ValueError, UnicodeDecodeError) as exc:
                 catalog.errors[str(path)] = str(exc)
+                catalog.broken[path.stem] = str(exc)
+                log.warning("tool_load_failed %s: %s", path, exc)
         return catalog
 
     @classmethod
@@ -322,9 +327,20 @@ class ToolCatalog:
         for root in roots:
             if root.exists():
                 part = cls.load(root)
+                for name in part.tools:
+                    catalog.broken.pop(name, None)
+                for name in part.broken:
+                    catalog.tools.pop(name, None)
                 catalog.tools.update(part.tools)
                 catalog.errors.update(part.errors)
+                catalog.broken.update(part.broken)
         return catalog
+
+    def missing(self, name: str) -> str:
+        """Why ``name`` is not usable, in Korean for the model."""
+        if name in self.broken:
+            return f"'{name}' tool 파일을 읽지 못했습니다: {self.broken[name]}"
+        return f"'{name}' tool이 없습니다."
 
     def describe(self, name: str) -> str:
         tool = self.tools[name]

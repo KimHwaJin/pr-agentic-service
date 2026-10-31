@@ -33,6 +33,10 @@ from core.models import BatchReportEvent, RunEvent
 log = logging.getLogger(__name__)
 TOKEN_FLUSH_SECONDS = 0.05
 SUBSCRIBER_QUEUE_SIZE = 1000
+# put in a subscriber's queue when live events may have been missed (a
+# full queue, a Redis reconnect): the SSE stream ends so the browser
+# reconnects with Last-Event-ID and replays the stored events
+EVENTS_LOST = "\x00lost"
 
 
 class EventBus:
@@ -150,22 +154,28 @@ class EventBus:
 
     async def _listen(self) -> None:
         patterns = (self.channel("*"), self.report_channel("*"))
+        reconnect = False
         while True:
             pubsub = self.redis.pubsub()
             try:
                 await pubsub.psubscribe(*patterns)
+                if reconnect:  # events of the gap never reached anyone
+                    for queues in list(self._subscribers.values()):
+                        for queue in list(queues):
+                            _mark_lost(queue)
                 async for message in pubsub.listen():
                     if message["type"] != "pmessage":
                         continue
                     for queue in self._subscribers.get(message["channel"], ()):
-                        with contextlib.suppress(
-                            asyncio.QueueFull
-                        ):  # a stalled client drops live events
+                        try:
                             queue.put_nowait(message["data"])
+                        except asyncio.QueueFull:  # a stalled client
+                            _mark_lost(queue)
             except asyncio.CancelledError:
                 raise
             except Exception:  # noqa: BLE001 - reconnect; SSE clients resume by Last-Event-ID
                 log.exception("event_fanout_reconnect")
+                reconnect = True
                 await asyncio.sleep(1)
             finally:
                 await pubsub.aclose()
@@ -207,3 +217,14 @@ class TokenBuffer:
 
 def runs_wake_channel(namespace: str) -> str:
     return f"{namespace}:runs:wake"
+
+
+def _mark_lost(queue: asyncio.Queue) -> None:
+    """Tell the stream reading ``queue`` to end (see EVENTS_LOST)."""
+    while True:
+        try:
+            queue.put_nowait(EVENTS_LOST)
+            return
+        except asyncio.QueueFull:
+            with contextlib.suppress(asyncio.QueueEmpty):
+                queue.get_nowait()  # nothing in it will be sent anyway

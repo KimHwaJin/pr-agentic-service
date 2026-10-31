@@ -21,10 +21,10 @@ from api_service.schemas.sessions import (
     SessionUpdate,
 )
 from api_service.services.access import execution_of_session
-from api_service.services.runs import create_run
+from api_service.services.runs import create_run, request_cancel
 from api_service.sse import event_stream
 from core.db import get_row, utcnow
-from core.executor.cancels import cancel_execution, cancel_idle_executions
+from core.executor.cancels import cancel_idle_executions
 from core.models import (
     ChatSession,
     Message,
@@ -306,41 +306,7 @@ async def run_events(
 @router.post("/runs/{run_id}/cancel", response_model=RunRead, status_code=202)
 async def cancel_run(run_id: str, services: ServicesDep, user: UserDep):
     await _run_for(services, user, run_id, write=True)
-    execution_id = None
-    async with services.db.sessions() as db:
-        run = await get_row(db, Run, run_id, lock=True)
-        if run.status in {"succeeded", "failed", "cancelled"}:
-            return run
-        run.cancel_requested = True
-        if run.status != "running":  # nobody is executing it: finish here
-            execution_id = (run.waiting or {}).get("execution_id")
-            run.status, run.waiting, run.finished_at = (
-                "cancelled",
-                None,
-                utcnow(),
-            )
-            await db.execute(
-                update(ChatSession)
-                .where(
-                    ChatSession.id == run.session_id,
-                    ChatSession.active_run_id == run.id,
-                )
-                .values(active_run_id=None)
-            )
-        await db.commit()
-    if run.status == "cancelled":
-        await services.forget_tool_effects(run_id)
-    if execution_id:  # retried by the worker if the executor is down
-        await cancel_execution(
-            services,
-            execution_id,
-            key=f"cancel:{run_id}",
-            reason="사용자 취소",
-        )
-    await services.events.emit(
-        run.session_id, run.id, "run_status", {"status": run.status}
-    )
-    return run
+    return await request_cancel(services, run_id, "사용자 취소")
 
 
 @router.get("/sessions/{session_id}/events")

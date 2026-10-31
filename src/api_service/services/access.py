@@ -104,11 +104,16 @@ async def owned_artifact(services, user, artifact_id: str) -> dict:
     """
     try:
         artifact = await services.executor.artifact(artifact_id)
-        execution = await services.executor.get(
-            artifact["produced_by"]["execution_id"]
-        )
-    except ExecutorError:
+        execution_id = (artifact.get("produced_by") or {}).get("execution_id")
+        if not execution_id:  # not produced by an execution: no owner
+            raise HTTPException(404, "Artifact not found.")
+        execution = await services.executor.get(execution_id)
+    except ExecutorError as exc:
+        if exc.status >= 500:
+            raise executor_unavailable() from None
         raise HTTPException(404, "Artifact not found.") from None
+    except httpx.HTTPError:
+        raise executor_unavailable() from None
     context = execution.get("context") or {}
     if trigger_type(execution) == "BATCH":
         if context.get("user_id") != user.id:
