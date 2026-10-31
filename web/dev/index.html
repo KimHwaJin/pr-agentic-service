@@ -1394,8 +1394,8 @@ function zoom(src) { $('lightboxImg').src = src; $('lightbox').style.display = '
 
 /* HITL: everything the user has to answer opens in the right panel ---------------- */
 const fmt = v => v === null || v === undefined ? '' : (typeof v === 'string' ? v : JSON.stringify(v));
-// a field typed str stays text ("123" is a LOT code, not a number); others parse as JSON when they can
-const parse = (t, type = '') => { const v = t.trim(); if (v === '') return null; let out; try { out = JSON.parse(v); } catch { return v; } const kinds = type.split('|').map(k => k.trim().split('[')[0]); return kinds.includes('str') && typeof out !== 'object' && !kinds.includes(typeof out === 'number' ? (Number.isInteger(out) ? 'int' : 'float') : typeof out === 'boolean' ? 'bool' : typeof out) ? v : out; };
+// the text as typed: the server turns it into the parameter's type ("500" for an int is 500)
+const parse = t => { const v = t.trim(); return v === '' ? null : v; };
 function closeHitl(id) { if (!id || $('hitl').dataset.interrupt === id) { $('hitl').classList.remove('open'); $('hitl').dataset.interrupt = ''; } document.querySelectorAll(`.hitl-note[data-interrupt="${id}"]`).forEach(n => n.remove()); }
 function openHitlPanel(w, kicker, title, sub) {
   $('hitl').dataset.interrupt = w.interrupt_id; $('hitl').classList.add('open');
@@ -1488,7 +1488,7 @@ function renderPlanApproval(w, resume) {
   foot.querySelector('#ok').onclick = () => {
     const input_values = {}, overrides = {};
     for (const el of pane().querySelectorAll('input[data-key]')) {
-      const value = parse(el.value, el.dataset.type);
+      const value = parse(el.value);
       if (el.dataset.source === 'input') { if (value !== null) input_values[el.dataset.key] = value; }
       else if (el.value !== el.dataset.initial && value !== null) overrides[el.dataset.key] = value;
     }

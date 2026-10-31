@@ -11,6 +11,7 @@ Shape errors (unknown fields, wrong types, a missing tag) come from the
 model; tests check that every question the agent asks has both.
 """
 
+import json
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from functools import cache
@@ -49,6 +50,49 @@ class ReplyRules:
     from_text: Callable[[Waiting, str], Any] = _refuse
     # message when the reply fits no shape at all (None: per field)
     shape_message: str | None = None
+
+
+def coerce(waiting: Waiting, value: Any) -> Any:
+    """A plan approval's input_values / overrides typed as text become the
+    parameter's type ("500" for an int is 500, "[1, 2]" for a list is a
+    list), so a client sends what the user typed. A str parameter keeps
+    the text ("123" stays a LOT code). Changes ``value`` in place."""
+    if waiting.get("type") != "plan_approval" or not isinstance(value, dict):
+        return value
+    candidates = waiting.get("candidates") or []
+    index = value.get("index", 0)
+    if not isinstance(index, int) or not 0 <= index < len(candidates):
+        return value
+    params = {
+        p["key"]: p
+        for call in candidates[index].get("calls") or []
+        for p in call.get("params") or []
+    }
+    for field in ("input_values", "overrides"):
+        given = value.get(field)
+        if not isinstance(given, dict):
+            continue
+        for key, text in given.items():
+            if isinstance(text, str) and key in params:
+                given[key] = _from_text(params[key].get("type"), text)
+    return value
+
+
+def _from_text(annotation: str | None, text: str) -> Any:
+    if not annotation:
+        return text
+    names = [part.strip().split("[", 1)[0] for part in annotation.split("|")]
+    if "str" in names or any(name not in _TYPES for name in names):
+        return text
+    if not text.strip():
+        return None if "None" in names else text
+    try:
+        parsed = json.loads(text)
+    except ValueError:
+        if "bool" in names and text.strip().lower() in {"true", "false"}:
+            return text.strip().lower() == "true"
+        return text  # the type check names what was expected
+    return parsed if _type_problem(annotation, parsed) is None else text
 
 
 def validate(waiting: Waiting, value: Any) -> Errors:

@@ -148,7 +148,7 @@ Swagger(`/docs`)에서는 Authorize 버튼에 `X-Api-Key`·`X-User-Id`가 있고
 | `code_approval` | `purpose`, `code`, `code_level` | `{"approve": true, "code": "수정한 코드(선택)"}` / `{"approve": false, "feedback": "..."}` |
 | `workflow_save` | `name`, `user_queries[]`, `tags[]`, `document`, `excluded_custom_steps` | `{"approve": true, "name": "...", "user_queries": [...]}` / `{"approve": false}` |
 
-`input_values`의 키는 `"<step_index>.<tool_index>.<파라미터>"`입니다. `required`가 true인 칸이 비어 있으면 승인되지 않습니다.
+`input_values`의 키는 `"<step_index>.<tool_index>.<파라미터>"`입니다. 값은 입력칸 글자 그대로 문자열로 보내도 됩니다. 서버가 파라미터 `type`에 맞춰 바꿉니다. 예를 들어 `int`이면 `"500"`을 500으로, `list`이면 `"[1, 2]"`를 목록으로, 빈 글자는 `None`을 허용하는 칸에서 null로 바꿉니다. `str` 칸은 `"123"`도 글자 그대로 둡니다. 바꿀 수 없는 값은 422 `INVALID_ANSWER`이고 `details`에 기대한 타입이 나옵니다. JSON 값(숫자, 목록)을 직접 보내도 됩니다. `required`가 true인 칸이 비어 있으면 승인되지 않습니다.
 
 ## 5. 결과물
 
