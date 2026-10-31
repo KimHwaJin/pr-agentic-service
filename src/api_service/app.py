@@ -3,7 +3,6 @@ from pathlib import Path
 
 from fastapi import APIRouter, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
@@ -69,9 +68,8 @@ class BodyLimit:
 
 
 async def _too_large(send: Send) -> None:
-    response = JSONResponse(
-        {"detail": "Request body is too large.", "code": "too_large"},
-        status_code=413,
+    response = errors.error_response(
+        413, "too_large", "Request body is too large."
     )
     await response({"type": "http"}, _no_body, send)
 

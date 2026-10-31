@@ -12,7 +12,7 @@ import json
 
 from sqlalchemy import update
 
-from api_service.errors import ApiError
+from api_service.errors import ApiError, detail
 from api_service.schemas.sessions import (
     Resume,
     RunCreate,
@@ -174,7 +174,18 @@ def _resume(active: Run | None, resume: Resume) -> Run:
     errors = hitl.validate(waiting, resume.value)
     if errors:
         raise ApiError(
-            422, "invalid_answer", "The answer is not valid.", errors=errors
+            422,
+            "invalid_answer",
+            "The answer is not valid.",
+            [
+                # "value.input_values.<slot key>": a slot key has dots
+                detail(
+                    ["body", "command", "resume", *e["field"].split(".", 2)],
+                    "invalid_answer",
+                    e["message"],
+                )
+                for e in errors
+            ],
         )
     return active
 
@@ -196,7 +207,14 @@ def _check_images(services: Services, data: RunInput, spec) -> None:
             422,
             "invalid_image",
             f"At most {spec.max_images} images per turn.",
-            errors=[{"field": "input.content", "message": "too many images"}],
+            [
+                detail(
+                    ["body", "input", "content"],
+                    "too_many_images",
+                    "too many images",
+                    {"limit": spec.max_images, "requested": len(images)},
+                )
+            ],
         )
     total = sum(len(i.base64) * 3 // 4 for i in images)
     if total > settings.image_max_total_bytes:
@@ -204,7 +222,17 @@ def _check_images(services: Services, data: RunInput, spec) -> None:
             413,
             "image_too_large",
             "Images are too large in total.",
-            max_bytes=settings.image_max_total_bytes,
+            [
+                detail(
+                    ["body", "input", "content"],
+                    "images_too_large",
+                    "Images are too large in total.",
+                    {
+                        "limit": settings.image_max_total_bytes,
+                        "requested": total,
+                    },
+                )
+            ],
         )
 
 
@@ -231,8 +259,12 @@ async def _save_images(
                     422,
                     "invalid_image",
                     "An image could not be read.",
-                    errors=[
-                        {"field": f"input.images.{n}", "message": str(exc)}
+                    [
+                        detail(
+                            ["body", "input", "images", n],
+                            "invalid_image",
+                            str(exc),
+                        )
                     ],
                 ) from None
             saved.append(

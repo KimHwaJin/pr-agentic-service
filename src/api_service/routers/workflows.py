@@ -1,6 +1,9 @@
-from fastapi import APIRouter, HTTPException, Request, Response
+import re
+
+from fastapi import APIRouter, Request, Response
 
 from api_service.deps import ServicesDep, UserDep, admin_user, caller_of
+from api_service.errors import ApiError, detail
 from api_service.schemas.workflows import (
     WorkflowClone,
     WorkflowCreate,
@@ -16,12 +19,28 @@ from core.workflows.view import call_views, steps_summary
 router = APIRouter(prefix="/workflows", tags=["workflows"])
 
 
-def _error(exc: WorkflowError) -> HTTPException:
-    return HTTPException(
-        exc.status,
-        {"message": str(exc), "errors": exc.details}
-        if exc.details
-        else str(exc),
+_WHERE = re.compile(r"^([\w$\[\]./]+): (.*)$", re.S)
+_CODES = {403: "forbidden", 404: "not_found", 409: "conflict"}
+
+
+def _error(exc: WorkflowError) -> ApiError:
+    """Validation problems ("steps[0].tools[1]: ...") become details."""
+    details = []
+    for problem in exc.details:
+        where, message = "", problem
+        if match := _WHERE.match(problem):
+            where, message = match.groups()
+        # within the Workflow 1.0 document
+        location: list[str | int] = [
+            int(p) if p.isdigit() else p
+            for p in re.findall(r"[^.\[\]/$]+", where)
+        ]
+        if location[:1] != ["workflow"]:
+            location.insert(0, "workflow")
+        details.append(detail(location, "invalid_workflow", message))
+    code = "invalid_workflow" if exc.status == 422 else "workflow_error"
+    return ApiError(
+        exc.status, _CODES.get(exc.status, code), str(exc), details
     )
 
 
