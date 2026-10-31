@@ -47,3 +47,16 @@
 | PG `max_connections` | — | Pod당 최대 연결 = `DB_POOL_SIZE × 2 + CHECKPOINT_POOL_SIZE` (기본 36). `maxReplicas × 36 + 여유(마이그레이션, 운영 접속 등 20)`보다 커야 한다. 기본값(max 6)이면 236 이상 |
 | HPA | CPU 60%, min 2 / max 6 | CPU가 LLM 대기를 반영하지 않으므로 min 2를 유지한다. 큐 적체는 `RUN_CONCURRENCY`로 흡수 |
 | `terminationGracePeriodSeconds` | 60 | preStop 5초 → uvicorn 연결 종료 대기(`--timeout-graceful-shutdown 20`, SSE가 있으면 끝까지 기다림) → 새 run 수락 중단, 진행 중 turn과 메모리 작업을 함께 마무리(최대 20초) → 남은 run은 lease 반납 후 다른 Pod가 이어감. 합계 약 45~50초 |
+
+## checkpoint 저장이 한 줄로 서던 문제 (2026-10-31)
+
+LangGraph `AsyncPostgresSaver`는 연결 풀을 받아도 saver 하나에 락을 걸고 모든 읽기·쓰기를 그 안에서 합니다. 프로세스가 saver 하나를 같이 쓰므로, `CHECKPOINT_POOL_SIZE`가 16이어도 checkpoint I/O는 한 번에 하나였습니다. `core/checkpoints.py`의 `PooledPostgresSaver`는 풀일 때 이 락을 끕니다(같은 라이브러리의 store가 풀에서 하는 것과 같음). 같은 대화(thread)에 동시에 쓰는 일은 세션당 한 턴 규칙이 막습니다.
+
+측정(로컬 PostgreSQL 16, 풀 16, 동시 턴 32개 × 10단계, 단계마다 읽기·상태 저장·중간 결과 저장, 상태 약 20KB):
+
+| | 전체 | 호출 평균 | p95 | 동시에 일한 DB 연결 |
+| --- | --- | --- | --- | --- |
+| 기존 saver | 1.95~2.30초 | 62~74ms | 75~119ms | 1 |
+| PooledPostgresSaver | 0.70~0.73초 | 20~21ms | 32~34ms | 16 |
+
+DB가 같은 기계에 있어 쿼리가 빠른 조건입니다. DB가 네트워크 너머라 쿼리가 느릴수록 기존 방식의 대기는 동시 턴 수만큼 곱해져 차이가 더 커집니다. 라이브러리 버전은 고정했고(`langgraph-checkpoint-postgres==3.1.3`), 락 위치가 바뀌면 `tests/test_checkpoint_saver.py`가 실패합니다.
