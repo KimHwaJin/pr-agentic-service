@@ -938,7 +938,8 @@ async function openProjectModal(id) {
 }
 function closeProjectModal() { $('projectModal').classList.remove('open'); }
 /* memory topics: the headings of the project memory, editable per project */
-const TOPIC = { max: 6, min: 100, title: 40, desc: 200 };
+// the topic limits come from the server (GET /memory: limits); these only fill in before it answers
+let TOPIC = { max: 6, min: 100, title: 40, desc: 200 };
 let topicKey = 0;
 async function loadMemory(keepDrafts) {
   if (!PM.id) { PM.sections = []; PM.topics = []; renderMemory(); return; }
@@ -946,6 +947,7 @@ async function loadMemory(keepDrafts) {
   const mem = await api(`/projects/${PM.id}/memory`);
   PM.sections = mem.topics.map(m => ({ ...m, draft: drafts[m.topic] ?? m.content }));
   PM.topicsVersion = mem.topics_version; PM.total = mem.total_max_chars;
+  if (mem.limits) TOPIC = { max: mem.limits.max_topics, min: mem.limits.min_topic_chars, title: mem.limits.title_max_chars, desc: mem.limits.description_max_chars };
   PM.topics = mem.topics.map(t => ({ id: t.topic, title: t.title, description: t.description, max_chars: t.max_chars, replace: false, key: ++topicKey }));
   PM.topicsOrig = topicsJson();
   if (PM.removed) PM.removed = (await api(`/projects/${PM.id}/memory/history?removed=true&limit=30`)).items;
