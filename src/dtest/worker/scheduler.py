@@ -10,6 +10,7 @@ import asyncio
 import contextlib
 import logging
 from datetime import timedelta
+from time import monotonic
 from typing import Any
 
 from pydantic import TypeAdapter
@@ -66,12 +67,22 @@ class RunScheduler:
 
     async def run_forever(self) -> None:
         listener = asyncio.create_task(self._listen())
+        failures = 0
         try:
             while self.accepting:
                 # before claiming, so a wake during the claim is not lost
                 self._wake.clear()
                 free = self.settings.run_concurrency - len(self.tasks)
-                runs = await self._claim(free) if free > 0 else []
+                try:
+                    runs = await self._claim(free) if free > 0 else []
+                except asyncio.CancelledError:
+                    raise
+                except Exception:  # noqa: BLE001 - DB blip: keep claiming
+                    failures += 1
+                    log.exception("run_claim_failed attempt=%d", failures)
+                    await asyncio.sleep(min(30.0, 2.0**failures))
+                    continue
+                failures = 0
                 for run in runs:
                     task = asyncio.create_task(self._execute(run))
                     self.tasks.add(task)
@@ -87,6 +98,10 @@ class RunScheduler:
 
     def _task_done(self, task: asyncio.Task) -> None:
         self.tasks.discard(task)
+        if not task.cancelled() and task.exception() is not None:
+            # _execute could not even record the failure (DB down): the
+            # lease runs out and another claim retries the run
+            log.error("run_task_crashed", exc_info=task.exception())
         # a slot is free: claim queued work now, not at the next poll
         self._wake.set()
 
@@ -116,16 +131,23 @@ class RunScheduler:
             await db.commit()
 
     async def _listen(self) -> None:
-        pubsub = self.services.redis.pubsub()
-        await pubsub.subscribe(
-            runs_wake_channel(self.settings.redis_namespace)
-        )
-        try:
-            async for message in pubsub.listen():
-                if message["type"] == "message":
-                    self._wake.set()
-        finally:
-            await pubsub.aclose()
+        """Wake-ups over Redis; reconnects (polling covers the gap)."""
+        while True:
+            pubsub = self.services.redis.pubsub()
+            try:
+                await pubsub.subscribe(
+                    runs_wake_channel(self.settings.redis_namespace)
+                )
+                async for message in pubsub.listen():
+                    if message["type"] == "message":
+                        self._wake.set()
+            except asyncio.CancelledError:
+                raise
+            except Exception:  # noqa: BLE001 - reconnect
+                log.exception("run_wake_listener_reconnect")
+                await asyncio.sleep(1)
+            finally:
+                await pubsub.aclose()
 
     async def _claim(self, limit: int) -> list[Run]:
         now = utcnow()
@@ -155,27 +177,50 @@ class RunScheduler:
         return list(runs)
 
     async def _heartbeat(self, run_id: str, task: asyncio.Task) -> None:
+        """Renew the lease; stop the turn once it may have run out.
+
+        A failed renewal is retried at the next beat. When none has worked
+        for two thirds of the lease, another pod may claim the run soon, so
+        this turn stops rather than run twice.
+        """
+        lease = self.settings.run_lease_seconds
+        renewed = monotonic()
         while True:
-            await asyncio.sleep(self.settings.run_lease_seconds / 3)
-            async with self.services.db.sessions() as db:
-                result = await db.execute(
-                    update(Run)
-                    .where(
-                        Run.id == run_id,
-                        Run.lease_owner == self.owner,
-                        Run.status == "running",
-                    )
-                    .values(
-                        lease_expires_at=utcnow()
-                        + timedelta(seconds=self.settings.run_lease_seconds)
-                    )
-                    .returning(Run.cancel_requested)
-                )
-                row = result.first()
-                await db.commit()
+            await asyncio.sleep(lease / 3)
+            try:
+                row = await self._renew(run_id)
+            except asyncio.CancelledError:
+                raise
+            except Exception:  # noqa: BLE001 - retried at the next beat
+                log.warning("run_heartbeat_failed run_id=%s", run_id)
+                if monotonic() - renewed >= lease * 2 / 3:
+                    log.error("run_lease_unrenewed run_id=%s", run_id)
+                    task.cancel()
+                    return
+                continue
+            renewed = monotonic()
             if row is None or row.cancel_requested:
                 task.cancel()  # lease lost or user cancelled
                 return
+
+    async def _renew(self, run_id: str) -> Any:
+        async with self.services.db.sessions() as db:
+            result = await db.execute(
+                update(Run)
+                .where(
+                    Run.id == run_id,
+                    Run.lease_owner == self.owner,
+                    Run.status == "running",
+                )
+                .values(
+                    lease_expires_at=utcnow()
+                    + timedelta(seconds=self.settings.run_lease_seconds)
+                )
+                .returning(Run.cancel_requested)
+            )
+            row = result.first()
+            await db.commit()
+        return row
 
     async def _context(self, run: Run) -> RunContext:
         async with self.services.db.sessions() as db:

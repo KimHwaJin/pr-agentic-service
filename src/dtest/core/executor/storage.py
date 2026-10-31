@@ -94,6 +94,28 @@ class SharedStorage:
                 break
             parent = parent.parent
 
+    def execution_file(
+        self, execution_id: str, relative_path: str
+    ) -> Path | None:
+        """A result file of one execution, or None.
+
+        ``relative_path`` (under the shared root, as events give it) must
+        stay inside ``executions/<execution_id>/`` once resolved: a path
+        such as ``executions/<mine>/../<other>/...`` would otherwise reach
+        any execution's files on the shared volume.
+        """
+        own = (self.result_root / "executions" / execution_id).resolve()
+        path = (self.result_root / relative_path).resolve()
+        if (
+            "/" in execution_id
+            or execution_id in {"", ".", ".."}
+            or path == own
+            or not path.is_relative_to(own)
+            or not path.is_file()
+        ):
+            return None
+        return path
+
     def resolve_result(self, relative_path: str) -> Path:
         path = (self.result_root / relative_path).resolve()
         if not path.is_relative_to(self.result_root.resolve()):

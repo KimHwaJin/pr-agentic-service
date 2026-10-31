@@ -16,6 +16,7 @@ tenant: pr-batch keeps the one the batch was registered with.
 """
 
 import hashlib
+import re
 from uuid import UUID
 
 import httpx
@@ -145,8 +146,44 @@ def registers(method: str, path: str) -> bool:
     return method == "POST" and path.strip("/") == "batches"
 
 
-# pr-batch admin API (our key's admin scope): not for callers
-_ADMIN_PATHS = {"batches:disable-by-owner"}
+# The pr-batch routes callers may reach, by (method, path). Our key has
+# pr-batch's admin scope (batches:disable-by-owner), so anything else,
+# admin calls included, stays out. Ids are UUIDs: no "/", "." or ":" can
+# ride in a segment, and httpx never sees a dot segment to resolve.
+_ID = r"[0-9a-fA-F-]{36}"
+_ALLOWED: list[tuple[str, str]] = [
+    ("GET", r"runtimes"),
+    ("GET", r"scripts"),
+    ("POST", r"scripts"),
+    ("GET", rf"scripts/{_ID}"),
+    ("PATCH", rf"scripts/{_ID}"),
+    ("DELETE", rf"scripts/{_ID}"),
+    ("GET", rf"scripts/{_ID}/versions"),
+    ("POST", rf"scripts/{_ID}/versions"),
+    ("GET", rf"scripts/{_ID}/versions/{_ID}"),
+    ("GET", rf"scripts/{_ID}/versions/{_ID}/content"),
+    ("GET", r"batches"),
+    ("POST", r"batches"),
+    ("GET", rf"batches/{_ID}"),
+    ("PATCH", rf"batches/{_ID}"),
+    ("DELETE", rf"batches/{_ID}"),
+    ("POST", rf"batches/{_ID}/enable"),
+    ("POST", rf"batches/{_ID}/disable"),
+    ("GET", rf"batches/{_ID}/skipped-windows"),
+    ("GET", rf"batches/{_ID}/runs"),
+    ("POST", rf"batches/{_ID}/runs"),
+    ("GET", rf"batches/{_ID}/runs/{_ID}"),
+    ("POST", rf"batches/{_ID}/runs/{_ID}/cancel"),
+]
+ROUTES = [(m, re.compile(p)) for m, p in _ALLOWED]
+
+
+def relayed(method: str, path: str) -> bool:
+    """Is ``path`` (already stripped of "/") a route callers may use?"""
+    return any(
+        method == allowed and pattern.fullmatch(path)
+        for allowed, pattern in ROUTES
+    )
 
 
 async def gateway_identity(
@@ -186,7 +223,8 @@ async def batch_gateway(
     services: ServicesDep,
     _headers: IdentityHeaders = None,
 ):
-    if path.strip("/") in _ADMIN_PATHS:
+    path = path.strip("/")
+    if not relayed(request.method, path):
         raise HTTPException(404, "Not available through this service.")
     if request.cookies.get(services.settings.session_cookie_name):
         user: User | None = await current_user(request)
@@ -195,7 +233,7 @@ async def batch_gateway(
         _, user_id, user = await key_identity(
             request,
             services,
-            user_required=path.strip("/") != "runtimes",
+            user_required=path != "runtimes",
             any_user_outside=True,
         )
     headers = {
