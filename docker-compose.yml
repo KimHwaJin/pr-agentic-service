@@ -14,6 +14,8 @@ x-app-env: &app-env
   # Local values on top of config.yml (shared, mounted below); they win over
   # it. Edits here apply on `docker compose up -d`.
   RUN_MODE: all
+  # Swagger at /docs for local testing (off elsewhere, config.yml)
+  DOCS_ENABLED: "true"
   DATABASE_URL: postgresql+psycopg://${PG_USER:-executor}:${PG_PASSWORD:-executor}@postgres:5432/${PG_DB:-agentic}
   REDIS_URL: redis://redis:6379/0
   SSO_ADAPTER: dev
