@@ -21,7 +21,7 @@ from sqlalchemy import text
 from core.assets import AssetLoader, SkillCatalog, ToolCatalog
 from core.checkpoints import PooledPostgresSaver
 from core.config import ROOT, Settings
-from core.db import Database
+from core.db import GRAPH_POOL_NAME, Database
 from core.embeddings import build_embedder
 from core.events import EventBus
 from core.executor.client import ExecutorClient
@@ -60,6 +60,7 @@ async def build_services(
         timeout=settings.checkpoint_pool_timeout_seconds,
         kwargs={
             "autocommit": True,
+            "application_name": GRAPH_POOL_NAME,
             "prepare_threshold": 0,
             "row_factory": dict_row,
         },

@@ -23,7 +23,7 @@ from core.memory.service import ProjectMemory
 
 async def main() -> None:
     settings = get_settings()
-    db = Database(settings.database_url, 2)
+    db = Database(settings.database_url, 2, "pr-agentic-script")
     try:
         async with AsyncPostgresStore.from_conn_string(
             settings.psycopg_url
