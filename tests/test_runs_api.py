@@ -457,3 +457,14 @@ def test_apply_overrides_refuses_what_it_cannot_apply():
         plan_format.apply_overrides(document, {}, {"1.0.data": 1})
     with pytest.raises(plan_format.PlanFormatError):
         plan_format.apply_overrides(document, {}, {"9.9.x": 1})
+
+
+def test_a_long_text_turn_is_accepted():
+    # the block-count bound once capped plain strings at 50 characters
+    body = RunCreate.model_validate({"input": {"content": "가" * 5000}})
+    assert len(body.input.text) == 5000
+    with pytest.raises(ValidationError):
+        RunCreate.model_validate({"input": {"content": "가" * 20001}})
+    blocks = [{"type": "text", "text": "a"}] * 51
+    with pytest.raises(ValidationError):
+        RunCreate.model_validate({"input": {"content": blocks}})

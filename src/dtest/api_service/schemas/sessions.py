@@ -43,8 +43,9 @@ ContentBlock = Annotated[TextBlock | ImageBlock, Field(discriminator="type")]
 class RunInput(Model):
     """A user turn: text, or LangChain content blocks (text + images)."""
 
-    content: str | list[ContentBlock] = Field(
-        max_length=50,
+    # the 50-block bound is on the list only: on the union it also capped a
+    # plain string at 50 characters
+    content: str | Annotated[list[ContentBlock], Field(max_length=50)] = Field(
         description="문자열, 또는 [{type: text, text}, {type: image, base64, "
         "mime_type, name?}] 블록 목록",
     )
