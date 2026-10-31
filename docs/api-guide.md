@@ -50,6 +50,35 @@ Swagger(`/docs`)에서는 Authorize 버튼에 `X-Api-Key`·`X-User-Id`가 있고
 - `details[]`: 잘못된 값마다 하나씩. `location`(요청 안의 위치, 워크플로 검증 오류는 Workflow 1.0 문서 안의 위치), `type`(이유), `message`, `context`(판단 근거 값, 예: `{"limit": 20, "requested": 23}`). 요청 값 자체는 넣지 않습니다. 요청 전체에 대한 오류면 빈 목록입니다.
 - `context`: 특정 값에 묶이지 않는 정보(예: `SESSION_BUSY`의 진행 중인 `run`, `UNKNOWN_MODEL`의 `models`). 없으면 빠집니다.
 
+**오류 코드 표:** 화면 문구는 `code`로 고릅니다. `message`는 개발자용 영문 설명이라 사용자에게 그대로 보여 주지 않는 것을 권합니다. executor·pr-batch 코드는 각 서비스 가이드를 봅니다.
+
+| code | 상태 | 뜻 | 화면 문구 예 |
+| --- | --- | --- | --- |
+| `LOGIN_REQUIRED` | 401 | 로그인 필요 | (로그인으로 이동) |
+| `INVALID_API_KEY` | 401 | 모르는 API key | API key를 확인하세요. |
+| `INVALID_IDENTITY` | 400 | `X-User-Id`가 없거나 형식 오류 | 사용자 정보가 없습니다. |
+| `FORBIDDEN` | 403 | 권한 없음(작성자·관리자 전용 등) | 권한이 없습니다. |
+| `NOT_FOUND` | 404 | 없거나 볼 수 없는 대상 | 찾을 수 없습니다. |
+| `CONFLICT` | 409 | 다른 곳에서 먼저 바뀜(버전 충돌), 진행 중인 대화가 있어 삭제 불가 등 | 다른 곳에서 바뀌었습니다. 새로 불러오세요. |
+| `SESSION_BUSY` | 409 | 다른 턴이 진행 중 | 이전 요청을 처리하고 있습니다. 끝난 뒤 보내거나 중지하세요. |
+| `NOT_WAITING` | 409 | 답할 질문이 없음 | 이미 답했거나 끝난 질문입니다. |
+| `STALE_INTERRUPT` | 409 | 화면의 질문이 지금 질문과 다름 | 질문이 바뀌었습니다. 새로 불러오세요. |
+| `IDEMPOTENCY_CONFLICT` | 409 | 같은 `Idempotency-Key`에 다른 본문 | (재시도 키를 새로 만듦) |
+| `INVALID_BODY` | 422 | 요청 형식 오류(`details`에 칸별 이유) | 입력값을 확인하세요. |
+| `INVALID_ANSWER` | 422 | 확인 답이 질문과 맞지 않음(`details`) | 입력칸을 확인하세요. |
+| `INVALID_WORKFLOW` | 422 | 워크플로 문서 검증 실패(`details`) | 워크플로 내용을 확인하세요. |
+| `UNKNOWN_MODEL` | 422 | 없는 모델(`context.models`) | 모델을 다시 고르세요. |
+| `MODEL_NOT_MULTIMODAL` | 422 | 이미지를 못 받는 모델 | 이미지를 받을 수 있는 모델을 고르세요. |
+| `INVALID_IMAGE` | 422 | 이미지가 아니거나 장수 초과 | 이미지 형식·장수를 확인하세요. |
+| `IMAGE_TOO_LARGE` | 413 | 이미지 합계 크기 초과 | 이미지가 너무 큽니다. |
+| `TOO_LARGE` | 413 | 요청 전체가 32MB 초과 | 요청이 너무 큽니다(최대 32MB). |
+| `BAD_GATEWAY` | 502 | executor·pr-batch가 응답하지 않음 | 잠시 후 다시 시도하세요. |
+| `EXECUTOR_UNAVAILABLE` | 502 | executor가 응답하지 않음 | 잠시 후 다시 시도하세요. |
+| `EXECUTOR_TIMEOUT` | 504 | executor 응답 시간 초과 | 잠시 후 다시 시도하세요. |
+| `EXECUTOR_ADMIN_KEY_MISSING` | 503 | 운영 key 미설정(시스템 화면) | 운영 설정이 필요합니다. |
+| `BAD_REQUEST` | 400 | 그 밖의 잘못된 요청 | 요청을 확인하세요. |
+
+
 ## 2. 프로젝트·세션·메시지
 
 | Method | Path | 설명 |
@@ -120,7 +149,7 @@ Swagger(`/docs`)에서는 Authorize 버튼에 `X-Api-Key`·`X-User-Id`가 있고
 | `run_status` | `{status, execution_id?, operation_id?, steps?}` | 상태 표시. `waiting_executor`면 실행 중 단계 표시, `waiting_input`이면 확인 카드(입력창 글도 답으로 받음) |
 | `token` | `{text}` | 답변 스트리밍. 뒤이어 `tool_call`이 오면 중간 출력으로 옮김 |
 | `message_final` | `{content}` | 확정 답변 (Markdown) |
-| `tool_call` | `{name, args}` | 백그라운드 메시지 (Agent가 하는 일) |
+| `tool_call` | `{name, args, label}` | 백그라운드 메시지 (Agent가 하는 일). 화면에는 `label`(예: "실행 계획 작성", "분석 skill 확인 · eda")을 그대로 보여 줍니다. 도구 이름별 문구 표를 프론트가 따로 둘 필요가 없습니다 |
 | `agent_switched` | `{agent: main\|analyst, task?}` | 담당 전환 표시 |
 | `plan_approved`, `plan_auto_approved`, `plan_revised` | 계획 정보 | 백그라운드 메시지 |
 | `execution_progress` | `{event_type, status, step, error, reason?, paused_seconds?, finished_during_handover?}` | executor 단계별 진행. `event_type`이 `execution.step_handover_started`면 실행 중인 단계를 다른 executor 워커가 넘겨받는 중(`reason`: `EXECUTOR_SHUTDOWN`\|`EXECUTOR_UNRESPONSIVE`, 커널은 계속 실행되고 코드가 다시 돌지 않음), `execution.step_handover_completed`면 넘겨받기 완료(`paused_seconds`: 멈춰 있던 초). 둘 다 정보 표시용이며 이어서 같은 단계의 `execution.step_completed`가 옵니다 |
@@ -213,8 +242,8 @@ executor가 응답하지 않으면 502 `EXECUTOR_UNAVAILABLE`, 시간 초과는 
 
 | Method | Path | 설명 |
 | --- | --- | --- |
-| GET | `/projects/{id}/memory` | `{topics: [{topic, title, description, max_chars, content, lines[], version, updated_at}], topics_version, total_max_chars}`. 주제 순서대로, 빈 주제 포함(`content: ""`, `version: 0`). `lines[]`: `{id, text, author(user\|agent), updated_at, source}` |
-| GET | `/projects/{id}/memory/topics` | `{topics: [{id, title, description, max_chars}], version, updated_at, total_max_chars}`. `version: 0`은 기본 주제(고친 적 없음) |
+| GET | `/projects/{id}/memory` | `{topics: [{topic, title, description, max_chars, content, lines[], version, updated_at}], topics_version, total_max_chars, limits}`. 주제 순서대로, 빈 주제 포함(`content: ""`, `version: 0`). `lines[]`: `{id, text, author(user\|agent), updated_at, source}` |
+| GET | `/projects/{id}/memory/topics` | `{topics: [{id, title, description, max_chars}], version, updated_at, total_max_chars, limits}`. `version: 0`은 기본 주제(고친 적 없음). `limits`: `{max_topics, min_topic_chars, title_max_chars, description_max_chars, total_max_chars}`로, PUT이 받아 주는 한도입니다. 화면에서 미리 검사할 때 이 값을 씁니다(숫자를 화면에 고정하지 않음) |
 | PUT | `/projects/{id}/memory/topics` | `{topics: [{id?, title, description?, max_chars, replace?}], expected_version}`. 목록 전체를 순서대로 보냅니다. **수정**: 기존 `id` 그대로 → 제목·설명·한도만 바뀌고 본문 유지(한도를 본문보다 낮춰도 됨: 그 뒤 줄이는 쓰기만 허용). **새 주제**: `id` 없음 → 새 id, 빈 본문(다음 대화부터 채워짐). **교체**: 기존 `id` + `replace: true` → 새 id·빈 본문. **삭제**: 목록에서 뺌. 교체·삭제된 본문은 이력(`topic_replaced`/`topic_removed`)에 남아 복원할 수 있습니다. 409 버전 불일치, 422 제한 위반·모르는 id |
 | PUT | `/projects/{id}/memory/{topic}` | `{content, expected_version}`. 주제 본문 전체를 바꿉니다. 바뀌지 않은 줄은 작성자를 유지하고, 새로 쓰거나 고친 줄은 `author=user`. 404 없는 주제, 409 버전 불일치, 422 한도 초과 또는 `# `·`## ` 제목 줄 |
 | GET | `/projects/{id}/memory/history?topic=&removed=&limit=` | 변경 이력(최신 먼저): `{id, topic, title, action(update\|delete\|revert\|migrate\|topic_removed\|topic_replaced\|topic_restored), before, after, version, replaced_by, actor{type,id}, session_id, run_id, created_at}`. `removed=true`면 교체·삭제된 주제만 |
@@ -242,6 +271,11 @@ executor가 응답하지 않으면 502 `EXECUTOR_UNAVAILABLE`, 시간 초과는 
 - 사용자가 비활성화되면 그 사람의 배치가 꺼집니다(`disabled_reason: USER_DEACTIVATED`). 그 배치의 수동 실행은 409 `OWNER_DEACTIVATED`입니다.
 - `POST /api/v1/batch/scripts/from-notebook` `{artifact_id, name?}`: 세션 노트북을 배치 스크립트로 등록합니다.
 - 배치 실행의 노트북·리포트 artifact는 `/api/v1/artifacts/{id}`로 볼 수 있습니다(배치 소유자 = 실행의 `context.user_id`만).
+- **일정(schedule) 보내는 법:** 요청 본문 형식은 pr-batch 가이드(공유 폴더 `batch-api-guide/pr-batch-api-guide.md`)를 따릅니다. 화면 입력을 바꿀 때 지킬 것은 아래와 같습니다.
+  - 시각은 서울 시간 기준이고, `+09:00`을 붙인 ISO 8601로 보냅니다(예: `2026-11-01T09:00:00+09:00`). 브라우저의 `datetime-local` 값은 시간대가 없으므로 그대로 보내지 않습니다.
+  - 간격 실행은 `{"kind": "INTERVAL", "seconds": 분×60}`, 매일 실행은 `{"kind": "CALENDAR", "frequency": "DAILY", "at": "HH:MM:SS"}`, cron은 `{"kind": "CRON", "expression": "0 9 * * MON-FRI"}`입니다.
+  - 매일 실행의 기간을 날짜로 받으면 `start_at`은 시작일 `00:00:00`, `end_at`은 종료일 `23:59:59`로 보냅니다(종료일 포함).
+  - **배치를 수정할 때 일정이 바뀌지 않았으면 `schedule`을 본문에서 뺍니다.** 같은 일정을 다시 보내면 pr-batch가 새 일정으로 보고 간격 실행의 주기를 지금부터 다시 셉니다.
 
 ## 9. 배치 리포트
 

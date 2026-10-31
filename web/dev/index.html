@@ -786,13 +786,8 @@ const S = { projects: [], models: [], images: [], waiting: false, csrf: null, pr
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const md = s => marked.parse(esc(s));
-const TOOL_TEXT = {
-  read_knowledge: a => `도메인 지식 확인 · ${a.name}`, save_memory: a => `메모리 저장 · ${a.topic || ''}`,
-  delete_memory: () => '메모리 삭제', start_analysis: () => '분석 담당에게 전달', read_skill: a => `분석 skill 확인 · ${a.name}`,
-  read_tool: a => `도구 확인 · ${(a.names || [a.name]).join(', ')}`, search_tools: () => '도구 검색', search_workflows: () => '등록된 워크플로우 검색',
-  propose_plans: () => '실행 계획 작성', revise_call: a => `파라미터 수정 · #${a.call}`, run_plan: a => a.decisions ? '조건 판단 후 이어서 실행' : '코드 실행 요청',
-  run_custom_code: a => `직접 작성한 코드 실행 · ${a.purpose || ''}`, write_report: () => '리포트·노트북 확정', save_workflow: () => '워크플로우 저장 제안', finish_analysis: () => '분석 정리',
-};
+// progress text of a tool call: the server's label on the tool_call event
+const toolText = d => d.label || d.name;
 
 // codes with a plainer message than the service's own
 const CODE_TEXT = {
@@ -1186,7 +1181,7 @@ async function runHistory(runId) {
     const act = document.createElement('details'); act.className = 'activity'; act.dataset.done = '1';
     const line = e => e.type === 'plan_approved' ? ['✓', `계획 승인 · ${e.data.title}`]
       : e.type === 'context_summarized' ? ['✓', `이전 대화 정리 · 메시지 ${e.data.messages}개를 요약`]
-      : ['·', (TOOL_TEXT[e.data.name] || (() => e.data.name))(e.data.args || {})];
+      : ['·', toolText(e.data)];
     act.innerHTML = `<summary><span class="done-ico"></span><span class="t">작업 ${steps.length}단계</span><span class="chev">›</span></summary><div class="steps">${steps.map(e => { const [ico, text] = line(e);
       return `<div class="step"><span class="ico">${ico}</span><span>${esc(text)}</span></div>`; }).join('')}</div>`;
     out.push(act);
@@ -1276,7 +1271,7 @@ function openStream() {
   on('token', e => { if (!S.answerEl) S.answerEl = addAnswer(''); S.answerEl.dataset.raw += e.data.text; S.answerEl.innerHTML = md(S.answerEl.dataset.raw); scrollDown(); });
   on('message_final', e => { if (S.answerEl) S.answerEl.remove(); S.answerEl = null; finishActivity(false); addAnswer(e.data.content); });
   // Text the model writes before a tool call is not the answer: move it out of the chat.
-  on('tool_call', e => { if (S.answerEl) { const raw = S.answerEl.dataset.raw.trim(); S.answerEl.remove(); if (raw) note(raw); } S.answerEl = null; step('tool', (TOOL_TEXT[e.data.name] || (() => e.data.name))(e.data.args || {})); });
+  on('tool_call', e => { if (S.answerEl) { const raw = S.answerEl.dataset.raw.trim(); S.answerEl.remove(); if (raw) note(raw); } S.answerEl = null; step('tool', toolText(e.data)); });
   on('agent_switched', e => step('switch', e.data.agent === 'analyst' ? '분석 담당이 이어서 진행' : '대화 담당으로 복귀'));
   on('plan_approved', e => step('ok', `계획 승인 · ${e.data.title}`));
   on('plan_auto_approved', e => step('ok', `등록된 워크플로우로 바로 실행 · ${e.data.title}`));
@@ -1825,7 +1820,6 @@ async function renderReports() {
 }
 
 /* one report, drawn with the chat components from its event stream */
-const BATCH_TOOL_TEXT = { read_step: a => `Step ${a.sequence} 결과 확인`, submit_report: () => '리포트 제출' };
 async function openReport(id) {
   showChat(); closeHitl(); closeStream(); setBusy(false);
   S.session = null; S.run = null; S.answerEl = S.activity = null;
@@ -1846,7 +1840,7 @@ async function openReport(id) {
   });
   on('token', e => { if (!S.answerEl) S.answerEl = addAnswer(''); S.answerEl.dataset.raw += e.data.text; S.answerEl.innerHTML = md(S.answerEl.dataset.raw); scrollDown(); });
   on('message_final', e => { if (S.answerEl) S.answerEl.remove(); S.answerEl = null; finishActivity(false); addAnswer(e.data.content); });
-  on('tool_call', e => { if (S.answerEl && !S.answerEl.dataset.raw.trim()) S.answerEl.remove(); S.answerEl = null; step('tool', (BATCH_TOOL_TEXT[e.data.name] || (() => e.data.name))(e.data.args || {})); });
+  on('tool_call', e => { if (S.answerEl && !S.answerEl.dataset.raw.trim()) S.answerEl.remove(); S.answerEl = null; step('tool', toolText(e.data)); });
   on('activity', e => { if (e.data.state === 'started') setActivityTitle(e.data.label); });
   on('artifact', e => addFiles([e.data]));
   on('run_error', e => showError(e.data.message));
