@@ -18,6 +18,9 @@ DB_POOL_SIZE: 10
 CHECKPOINT_POOL_SIZE: 16
 CHECKPOINT_POOL_TIMEOUT_SECONDS: 30
 AUTO_MIGRATE: true
+# /docs, /redoc, /openapi.json: off on dev/stg/prd (internal network rules);
+# docker-compose turns them on for local runs
+DOCS_ENABLED: false
 
 # SSO. dev (fixed employee) is refused when APP_ENV is set.
 SSO_ADAPTER: idp

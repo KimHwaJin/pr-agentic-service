@@ -1,6 +1,6 @@
 # 프론트엔드 연동 가이드 (API v1)
 
-기준 경로는 `/api/v1`입니다. 전체 스키마는 서비스의 `/docs`(Swagger)와 `/openapi.json`에서 확인할 수 있습니다. 동작하는 참고 구현은 `web/dev/index.html`(로컬·dev 환경의 `/dev/`)입니다.
+기준 경로는 `/api/v1`입니다. 전체 스키마는 서비스의 `/docs`(Swagger)와 `/openapi.json`에서 확인할 수 있습니다. 내부망 규정상 dev·stg·prd에서는 꺼져 있고(`DOCS_ENABLED: false`), 로컬(docker compose)에서만 켜집니다. 동작하는 참고 구현은 `web/dev/index.html`(로컬·dev 환경의 `/dev/`)입니다.
 
 ## 1. 인증 (SSO)
 

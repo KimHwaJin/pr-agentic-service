@@ -78,6 +78,30 @@ async def _no_body() -> Message:
     return {"type": "http.request", "body": b"", "more_body": False}
 
 
+def docs_urls(settings: Settings) -> dict[str, str | None]:
+    """FastAPI's docs arguments: Swagger, ReDoc and the schema only with
+    ``DOCS_ENABLED`` (internal network rules: off even on dev)."""
+    on = settings.docs_enabled
+    return {
+        "docs_url": "/docs" if on else None,
+        "redoc_url": "/redoc" if on else None,
+        "openapi_url": "/openapi.json" if on else None,
+    }
+
+
+def hide_docs(app: FastAPI) -> None:
+    """Removes the docs routes of an app built by someone else (the gaia
+    template), for ``DOCS_ENABLED`` off."""
+    paths = {app.docs_url, app.redoc_url, app.openapi_url}
+    if app.docs_url and app.swagger_ui_oauth2_redirect_url:
+        paths.add(app.swagger_ui_oauth2_redirect_url)
+    paths.discard(None)
+    app.router.routes[:] = [
+        r for r in app.router.routes if getattr(r, "path", None) not in paths
+    ]
+    app.docs_url = app.redoc_url = app.openapi_url = None
+
+
 def mount_api(app: FastAPI, settings: Settings) -> None:
     api = APIRouter(prefix=API_PREFIX)
     for module in (
