@@ -5,7 +5,7 @@ from the repo root: ``python -m src.dtest.local`` (port 8080, or PORT), or
 
 Builds a plain FastAPI app and attaches the service as the template's
 ``app.py`` does (src/dtest/entry.py). ``/api/admin/appReady`` stands in for
-the template's readiness route.
+the template's readiness route, ``/healthz`` for its liveness route.
 """
 
 import os
@@ -14,7 +14,7 @@ from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 
 from src.dtest.core.logging_setup import configure_logging
-from src.dtest.entry import attach
+from src.dtest.entry import attach, worker_health
 
 configure_logging()  # logger.yml (or HCP's own inside the company network)
 
@@ -26,6 +26,14 @@ attach(app)
 async def app_ready() -> JSONResponse:
     ready = getattr(app.state, "ready", False)
     return JSONResponse({"ready": ready}, 200 if ready else 503)
+
+
+@app.get("/healthz", include_in_schema=False)
+async def healthz() -> JSONResponse:
+    alive, stopped = worker_health(app)
+    if not alive:
+        return JSONResponse({"status": "down", "stopped": stopped}, 503)
+    return JSONResponse({"status": "ok"})
 
 
 if __name__ == "__main__":

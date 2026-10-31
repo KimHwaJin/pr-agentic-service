@@ -49,7 +49,8 @@ def attach(app: FastAPI) -> None:
 
     Call before the app serves anything (before ``uvicorn.run``: on
     Windows it switches uvicorn to the selector loop psycopg needs).
-    ``app.state.ready`` is True between our startup and shutdown.
+    ``app.state.ready`` is True between our startup and shutdown;
+    ``worker_health(app)`` is for the liveness route.
     """
     use_selector_loop()
     settings = get_settings()
@@ -59,6 +60,16 @@ def attach(app: FastAPI) -> None:
         mount_api(app, settings)
     # added last, so outermost: our startup runs before the app's own
     app.add_middleware(DtestLifespan)
+
+
+def worker_health(app: FastAPI) -> tuple[bool, list[str]]:
+    """(alive, stopped loop names). Not alive once a background loop has
+    died, so the liveness route can answer 503 and the pod is restarted."""
+    worker = getattr(app.state, "worker", None)
+    stopped = worker.stopped_loops() if worker else []
+    if stopped:
+        log.error("worker_loops_stopped loops=%s", ",".join(stopped))
+    return not stopped, stopped
 
 
 class DtestLifespan:
@@ -114,8 +125,10 @@ class DtestLifespan:
         stack.callback(gaia_runtime.set_services, None)
         if api_enabled:
             start_api(app, services)
+        app.state.worker = None
         if worker_enabled:
             worker = Worker(services)
+            app.state.worker = worker
             worker.start()
             stack.push_async_callback(worker.stop)
         app.state.ready = True
