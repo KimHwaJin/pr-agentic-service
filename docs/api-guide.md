@@ -140,7 +140,7 @@ Swagger(`/docs`)에서는 Authorize 버튼에 `X-Api-Key`·`X-User-Id`가 있고
 `GET /api/v1/sessions/{id}/events` (EventSource, `withCredentials: true`)
 
 - 각 이벤트의 `event:` 이름이 아래 type이고, `data`는 `{id?, type, run_id, data}`입니다. 안쪽 `data`의 모양은 type마다 정해져 있고, OpenAPI의 `RunEvents.items`(`<Type>Event` schema, 예: `ToolCallEvent`)에 그대로 나옵니다. 서버는 이벤트를 보내기 전에 이 모델로 검사합니다.
-- `id`가 있는 이벤트는 저장되어 재연결 시 `Last-Event-ID`로 이어 받습니다. 커서 없이 연결하면 진행 중인 run의 이벤트를 처음부터 다시 받습니다. 서버가 실시간 이벤트를 놓쳤을 수 있으면(전달 지연, 내부 재연결) 스트림을 닫습니다. EventSource는 자동으로 다시 연결해 놓친 저장 이벤트를 받으니, 직접 구현한 클라이언트도 연결이 끊기면 `Last-Event-ID`로 다시 연결해야 합니다.
+- `id`가 있는 이벤트는 저장되어 재연결 시 `Last-Event-ID`로 이어 받습니다. 커서 없이 연결하면 진행 중인 run의 이벤트를 처음부터 다시 받습니다. 단, 연결하기 전에 run이 이미 끝났으면 다시 보낼 진행 중 run이 없어 아무 이벤트도 오지 않습니다. 짧은 턴은 POST 직후 연결 전에 끝날 수 있으니, SSE를 연결한 뒤 `GET /runs/{run_id}`로 상태를 한 번 확인하고 이미 끝났으면 `GET /runs/{run_id}/events`로 결과를 받습니다(세션 SSE를 run 시작 전에 미리 열어 두면 이 확인이 필요 없습니다). 서버가 실시간 이벤트를 놓쳤을 수 있으면(전달 지연, 내부 재연결) 스트림을 닫습니다. EventSource는 자동으로 다시 연결해 놓친 저장 이벤트를 받으니, 직접 구현한 클라이언트도 연결이 끊기면 `Last-Event-ID`로 다시 연결해야 합니다.
 - `token`은 저장하지 않는 실시간 이벤트입니다. 완료되면 `message_final`로 확정 답변이 옵니다.
 - `token`으로 흘러온 글 뒤에 `tool_call`이 오면 그 글은 사용자에게 하는 답이 아니라 도구를 부르기 전의 중간 출력입니다("스킬을 확인하겠습니다" 같은 진행 멘트). 채팅 답변에서 빼고 단계 표시 아래 접힌 영역 등에 따로 보여 줍니다. 사용자에게 하는 말은 `message_final` 하나이고, 지난 대화를 다시 열 때도 이것만 메시지로 남습니다.
 
