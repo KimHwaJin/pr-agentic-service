@@ -339,6 +339,8 @@ class Settings(BaseSettings):
     # previous runs' summaries the agent reads (memory per batch)
     batch_report_memory_runs: int = Field(5, ge=0, le=50)
     batch_report_model_call_limit: int = 20
+    # batch report jobs one pod writes at once (each a series of LLM calls)
+    batch_report_concurrency: int = Field(4, ge=1)
     # Recovery of reports whose execution.completed never reached us: every
     # interval, our successful BATCH executions of the lookback without a
     # job get one. A retention of report jobs must keep them longer than
