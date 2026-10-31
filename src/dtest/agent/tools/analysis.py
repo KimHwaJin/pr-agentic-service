@@ -1142,7 +1142,11 @@ async def write_report(title: str, focus: str, runtime: Runtime) -> Command:
         evidence = await collect_evidence(ctx.services, execution["id"], plan)
         async with ctx.activity("report_writing"):
             markdown = await generate_report(
-                ctx, title=title, focus=focus, evidence=evidence
+                ctx,
+                execution["id"],
+                title=title,
+                focus=focus,
+                evidence=evidence,
             )
         artifact = await executor.create_report(
             execution["id"],

@@ -12,33 +12,16 @@ event format.
 
 from typing import Any
 
-from langchain.agents import create_agent
-from langchain.agents.middleware import (
-    AgentMiddleware,
-    ModelCallLimitMiddleware,
-    ToolErrorMiddleware,
-)
-from langchain_core.messages import AIMessage, HumanMessage
 from langgraph.store.base import BaseStore
 
-from src.dtest.agent.context import BatchReportContext, BatchReportState
-from src.dtest.agent.graph import relay, tool_error
-from src.dtest.agent.llm import chat_model
-from src.dtest.agent.middleware import (
-    JsonArgumentsMiddleware,
-    ToolFailureLimitMiddleware,
-)
-from src.dtest.agent.prompts import load_prompt
+from src.dtest.agent.context import BatchReportContext
+from src.dtest.agent.report_agent import ReportAgent, ReportMissing, handed_in
 from src.dtest.agent.reporter import collect_evidence
-from src.dtest.agent.tools.batch import read_step, submit_report
 from src.dtest.core.config import Settings
 from src.dtest.core.db import utcnow
 
-TOOLS = [read_step, submit_report]
-
-
-class ReportMissing(RuntimeError):
-    """The agent ended without a report."""
+__all__ = ["BatchReportAgent", "ReportMissing"]
+BATCH_TITLE = "배치 실행 리포트"
 
 
 def memory_namespace(batch_id: str) -> tuple[str, ...]:
@@ -73,34 +56,13 @@ async def remember_run(
 
 
 class BatchReportAgent:
-    """One compiled graph per served model name."""
+    """The report agent (agent.report_agent) with the batch prompt."""
 
     def __init__(self, settings: Settings):
         self.settings = settings
-        self._graphs: dict[str, Any] = {}
-
-    def get(self, name: str):
-        if name not in self._graphs:
-            middleware: list[AgentMiddleware[Any, Any, Any]] = [
-                JsonArgumentsMiddleware(),
-                ToolFailureLimitMiddleware(
-                    self.settings.agent_tool_failure_limit
-                ),
-                ToolErrorMiddleware(on_error=tool_error),
-                ModelCallLimitMiddleware(
-                    run_limit=self.settings.batch_report_model_call_limit,
-                    exit_behavior="end",
-                ),
-            ]
-            self._graphs[name] = create_agent(
-                chat_model(self.settings, name),
-                tools=TOOLS,
-                system_prompt=load_prompt("batch_analyst").render(),
-                middleware=middleware,
-                state_schema=BatchReportState,
-                context_schema=BatchReportContext,
-            )
-        return self._graphs[name]
+        self.agent = ReportAgent(
+            settings, "batch_analyst", settings.batch_report_model_call_limit
+        )
 
     async def write(
         self,
@@ -112,19 +74,10 @@ class BatchReportAgent:
         evidence = await collect_evidence(
             ctx.services, ctx.execution_id, plan=None
         )
-        graph = self.get(ctx.model)
-        request = HumanMessage(_request(execution, history, evidence))
         async with ctx.activity("report_writing"):
-            state = await relay(
-                graph.astream(
-                    {"messages": [request]},
-                    {"recursion_limit": self.settings.agent_recursion_limit},
-                    context=ctx,
-                    stream_mode=["messages", "updates", "values"],
-                ),
-                ctx.emit,
+            return await self.agent.write(
+                ctx, _request(execution, history, evidence), BATCH_TITLE
             )
-        return _report(state)
 
 
 def _request(
@@ -155,21 +108,4 @@ def _request(
 
 
 def _report(state: dict[str, Any]) -> dict[str, Any]:
-    """The submitted report; else the agent's last text as the report."""
-    if report := state.get("report"):
-        return report
-    last = next(
-        (
-            m
-            for m in reversed(state.get("messages", []))
-            if isinstance(m, AIMessage) and m.text.strip()
-        ),
-        None,
-    )
-    if last is None:
-        raise ReportMissing("the agent ended without submitting a report")
-    return {
-        "title": "배치 실행 리포트",
-        "markdown": last.text,
-        "summary": last.text[:2000],
-    }
+    return handed_in(state, BATCH_TITLE)

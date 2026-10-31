@@ -13,6 +13,7 @@ from langgraph.store.memory import InMemoryStore
 from sqlalchemy.dialects import postgresql
 
 from src.dtest.agent import batch as batch_agent
+from src.dtest.agent import report_agent
 from src.dtest.agent.batch import (
     BatchReportAgent,
     ReportMissing,
@@ -432,7 +433,7 @@ def test_agent_hands_in_its_report(monkeypatch):
         ),
         disable_streaming=True,
     )
-    monkeypatch.setattr(batch_agent, "chat_model", lambda s, n: model)
+    monkeypatch.setattr(report_agent, "chat_model", lambda s, n: model)
 
     async def evidence(services, execution_id, plan):
         return "### Step 0 code — SUCCEEDED"

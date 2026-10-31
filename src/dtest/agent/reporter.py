@@ -1,24 +1,22 @@
-"""Report writer: turns executed code and its outputs into a Markdown report.
+"""Evidence of an execution, and the analysis report.
 
-Used by the analyst (interactive sessions); the batch report agent
-(agent.batch) starts from the same evidence. The model only sees bounded
-evidence (call lines, observations, text output, errors); numbers must come
-from that evidence.
+``collect_evidence`` is the bounded overview (call lines, observations,
+text output, errors) both reports start from. The report agent
+(agent.report_agent) reads the steps it needs in full with read_step;
+numbers must come from that evidence. ``generate_report`` writes the
+analysis report of a chat turn; agent.batch writes batch reports.
 """
 
 import asyncio
 import json
 from typing import Any
 
-from langchain_core.messages import HumanMessage, SystemMessage
-
 from src.dtest.agent.codegen import (
     CUSTOM_SKILL,
     SETUP_TOOL,
     parse_observations,
 )
-from src.dtest.agent.llm import chat_model
-from src.dtest.agent.prompts import load_prompt
+from src.dtest.agent.context import ReportContext
 from src.dtest.core.services import Services
 
 EVIDENCE_MAX_CHARS = 40000
@@ -101,42 +99,68 @@ def source_preview(services: Services, result_ref: dict[str, Any]) -> str:
     return services.storage.step_source(result_ref)
 
 
-async def write_markdown(
-    services: Services, model: str, system: str, request: str
-) -> str:
-    llm = chat_model(services.settings, model)
-    response = await llm.ainvoke(
-        [SystemMessage(system), HumanMessage(request)]
-    )
-    return response.text
+_analysis_agents: dict[int, Any] = {}
 
 
-async def generate_report(
+def analysis_agent(settings):
+    """The report agent with the analysis prompt, one per Settings."""
+    from src.dtest.agent.report_agent import ReportAgent  # imports agent.tools
+
+    key = id(settings)
+    if key not in _analysis_agents:
+        _analysis_agents[key] = ReportAgent(
+            settings, "reporter", settings.report_model_call_limit
+        )
+    return _analysis_agents[key]
+
+
+async def analysis_request(
     ctx, *, title: str, focus: str, evidence: str
 ) -> str:
-    """Interactive report.
+    """What the report agent gets for an analysis report.
 
     ``ctx`` is the agent RunContext (project prompt + memory preferences).
     """
-    services = ctx.services
-    prompt = load_prompt("reporter")
     # the default Preferences topic, while the project keeps it
     preferences = next(
         (
             t["content"]
-            for t in await services.memory.contents(ctx.project_id)
+            for t in await ctx.services.memory.contents(ctx.project_id)
             if t["topic"] == "preferences"
         ),
         "",
     )
-    system = prompt.render(
-        project_prompt=ctx.project_prompt or "없음",
-        report_preferences=preferences or "없음",
-    )
-    request = (
+    return (
         f"# 제목\n{title}\n\n"
         f"# 사용자 요청\n{ctx.user_text}\n\n"
         f"# 강조할 점\n{focus}\n\n"
-        f"# 근거\n{evidence}"
+        f"# 프로젝트 지침\n{ctx.project_prompt or '없음'}\n\n"
+        "# 선호 (프로젝트 메모리 Preferences)\n"
+        "보고서 형식·분석 방식에 관한 사용자 선호입니다. 보고서와 관계없는 "
+        f"줄은 무시합니다.\n{preferences or '없음'}\n\n"
+        f"# 실행 개요\n{evidence or '(Step 결과 없음)'}"
     )
-    return await write_markdown(services, ctx.model, system, request)
+
+
+async def generate_report(
+    ctx, execution_id: str, *, title: str, focus: str, evidence: str
+) -> str:
+    """Interactive report (Markdown), written by the report agent.
+
+    Its read_step calls show in the chat as progress; its text does not.
+    """
+    report_ctx = ReportContext(
+        services=ctx.services,
+        execution_id=execution_id,
+        model=ctx.model,
+        send=ctx.emit,
+    )
+    report = await analysis_agent(ctx.services.settings).write(
+        report_ctx,
+        await analysis_request(
+            ctx, title=title, focus=focus, evidence=evidence
+        ),
+        title,
+        quiet=("submit_report",),
+    )
+    return report["markdown"]
