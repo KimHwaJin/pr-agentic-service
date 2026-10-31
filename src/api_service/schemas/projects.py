@@ -85,6 +85,18 @@ class MemoryTopicsWrite(Model):
     expected_version: int = Field(ge=0)
 
 
+class MemoryLimits(Model):
+    """What PUT /memory/topics accepts (422 otherwise)."""
+
+    max_topics: int
+    min_topic_chars: int = Field(description="smallest max_chars of a topic")
+    title_max_chars: int
+    description_max_chars: int
+    total_max_chars: int = Field(
+        description="the topics' max_chars add up to at most this"
+    )
+
+
 class MemoryTopicsRead(Model):
     topics: list[MemoryTopic]
     version: int = Field(description="0 = the defaults, never edited")
@@ -92,6 +104,7 @@ class MemoryTopicsRead(Model):
     total_max_chars: int = Field(
         description="the topics' max_chars add up to at most this"
     )
+    limits: MemoryLimits
 
 
 class MemoryTopicContent(Model):
@@ -109,6 +122,7 @@ class MemoryRead(Model):
     topics: list[MemoryTopicContent] = Field(description="in topic order")
     topics_version: int
     total_max_chars: int
+    limits: MemoryLimits
 
 
 class MemoryContentWrite(Model):
