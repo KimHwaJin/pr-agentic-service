@@ -527,7 +527,7 @@
   <div id="workflowsView" style="display:none;flex:1;overflow:auto">
     <div class="page">
       <div class="page-head"><h1>워크플로우</h1>
-        <select class="sort" id="wfFilter"><option value="">전체</option><option value="template">공개</option><option value="candidate">내 후보</option></select>
+        <select class="sort" id="wfFilter"><option value="">전체</option><option value="template">공개</option><option value="candidate">후보</option></select>
         <select class="sort" id="wfSort"><option value="updated">최근 수정순</option><option value="name">이름순</option></select></div>
       <div class="muted" style="font-size:13px;margin:-8px 0 14px">분석 담당이 저장한 실행 흐름입니다. 공개된 것은 비슷한 질문이 오면 계획 후보로 추천됩니다.</div>
       <label class="page-search"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><input id="wfSearch" placeholder="워크플로우 검색 (이름, 목적, skill, tool)"></label>
@@ -798,6 +798,7 @@ const TOOL_TEXT = {
 const CODE_TEXT = {
   OWNER_DEACTIVATED: '사용자가 비활성화되어 꺼진 배치입니다. 배치를 다시 켠 뒤 실행하세요.',
   executor_admin_key_missing: 'executor 운영 key(EXECUTOR_ADMIN_API_KEY)가 설정되지 않아 런타임·점검 화면을 쓸 수 없습니다.',
+  too_large: '요청이 너무 큽니다(최대 32MB). 이미지 수나 크기를 줄여 주세요.',
 };
 async function api(path, opts = {}) {
   const headers = { 'Content-Type': 'application/json', ...(S.csrf ? { 'X-CSRF-Token': S.csrf } : {}), ...(opts.headers || {}) };
@@ -806,8 +807,9 @@ async function api(path, opts = {}) {
   const data = r.status === 204 ? null : await r.json();
   if (!r.ok) {
     const fields = (data?.errors || []).map(e => `${e.field}: ${e.message}`).join(', ');
-    const text = CODE_TEXT[data?.code] || (typeof data?.detail === 'string' ? data.detail : data?.message || JSON.stringify(data?.detail ?? data));
-    showError(`${text}${data?.code ? ` (${data.code})` : ''}${fields ? ` · ${fields}` : ''}`);
+    // opts.errorText: this call's own wording by status (e.g. 409 on delete)
+    const text = opts.errorText?.[r.status] || CODE_TEXT[data?.code] || (typeof data?.detail === 'string' ? data.detail : data?.message || JSON.stringify(data?.detail ?? data));
+    showError(`${text}${data?.code ? ` (${data.code})` : ''}${fields ? ` · ${fields}` : ''}`, r.headers.get('x-request-id'));
     throw new Error(r.status);
   }
   return data;
@@ -1101,8 +1103,8 @@ async function saveProject() {
   if (!PM.id || project.id === S.project) await selectProject(project.id); else renderProjects();
 }
 async function deleteProject() {
-  if (!PM.id || !confirm('프로젝트를 삭제할까요? 대화 목록에서 사라집니다.')) return;
-  await api(`/projects/${PM.id}`, { method: 'DELETE' });
+  if (!PM.id || !confirm('프로젝트를 삭제할까요? 대화 목록에서 사라지고, 열려 있는 코드 실행(커널)도 취소됩니다.')) return;
+  await api(`/projects/${PM.id}`, { method: 'DELETE', errorText: { 409: '진행 중인 대화가 있어 삭제할 수 없습니다. 먼저 대화를 중지하세요.' } });
   closeProjectModal(); await loadProjects();
   if (PM.id === S.project) await selectProject(S.projects.find(p => p.is_default).id); else renderProjects();
 }
@@ -1254,7 +1256,8 @@ function openStream() {
   const on = (type, fn) => S.es.addEventListener(type, e => fn(JSON.parse(e.data)));
   on('run_status', e => {
     S.run = e.run_id; const st = e.data.status; S.waiting = st === 'waiting_input';
-    if (st === 'queued' || st === 'running') { setBusy(true); startActivity(); setActivityTitle('생각하는 중'); }
+    // queued: not claimed yet (e.g. the user's other turns fill RUN_USER_CONCURRENCY)
+    if (st === 'queued' || st === 'running') { setBusy(true); startActivity(); setActivityTitle(st === 'queued' ? '실행 대기 중' : '생각하는 중'); }
     if (st === 'waiting_executor') setActivityTitle(`코드 실행 중 · ${(e.data.steps || []).length}단계`);
     if (st === 'waiting_input') { setActivityTitle('확인을 기다리는 중'); setBusy(true); }
     // a turn that ended without message_final keeps its partial answer on screen, not as the next turn's start
@@ -1301,8 +1304,15 @@ function addFiles(items) {
   const wrap = document.createElement('div'); wrap.className = 'files'; wrap.innerHTML = fileCards(items);
   logEl().appendChild(wrap); scrollDown();
 }
-function showError(msg) {
+// requestId (X-Request-ID): the same id is in the server log, click copies it
+function showError(msg, requestId) {
   const d = document.createElement('div'); d.className = 'error'; d.textContent = msg;
+  if (requestId) {
+    const id = document.createElement('span'); id.className = 'mono'; id.style.cssText = 'cursor:pointer;opacity:.75;margin-left:6px';
+    id.title = '클릭하면 복사됩니다. 오류를 문의할 때 함께 전달하세요.'; id.textContent = `요청 ID ${requestId}`;
+    id.onclick = () => { navigator.clipboard?.writeText(requestId); id.textContent = '요청 ID 복사됨'; setTimeout(() => id.textContent = `요청 ID ${requestId}`, 1200); };
+    d.appendChild(id);
+  }
   if ($('systemView').style.display !== 'none') { $('sysBody').prepend(d); return; }
   if ($('executionsView').style.display !== 'none') { $('execListBody').prepend(d); return; }
   if ($('batchesView').style.display !== 'none') { $('batchBody').prepend(d); return; }
@@ -1554,7 +1564,7 @@ function workflowDetail(w) {
     <div class="actions">${w.mine ? `<button class="btn" onclick="editWorkflow('${w.id}')">수정</button>` : ''}
       <button class="btn" onclick="cloneWorkflow('${w.id}')">복제</button>
       <button class="btn" onclick="searchPreview('${w.id}')">추천 확인</button>
-      ${w.mine && w.lifecycle === 'candidate' ? `<button class="btn" onclick="promote('${w.id}')">공개(승격)</button>` : ''}
+      ${w.can_promote ? `<button class="btn" onclick="promote('${w.id}')">공개(승격)</button>` : ''}
       ${w.mine || S.isAdmin ? `<button class="btn" style="color:var(--bad)" onclick="deleteWorkflow('${w.id}', '${esc(w.name).replace(/'/g, '&#39;')}')">삭제</button>` : ''}</div>`;
 }
 async function promote(id) { await api(`/workflows/${id}/promote`, { method: 'POST' }); await loadWorkflows(); openWorkflow(id); }
@@ -2343,7 +2353,7 @@ async function loadUsers() {
     : '<div class="muted">사용자가 없습니다.</div>';
 }
 async function setUser(id, change, name = '') {
-  if (change.is_active === false && !confirm(`${name} 사용자를 비활성화할까요? 그 사람의 배치도 모두 꺼집니다.`)) return;
+  if (change.is_active === false && !confirm(`${name} 사용자를 비활성화할까요? 그 사람의 배치는 모두 꺼지고, 진행 중인 대화와 코드 실행(커널)도 모두 취소됩니다.`)) return;
   await api(`/admin/users/${id}`, { method: 'PATCH', body: change });
   loadUsers();
 }
