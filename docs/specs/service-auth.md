@@ -216,7 +216,7 @@ REDIS_URL: "redis://…"              # 지금과 같음 (세션·큐·executor 
 
 - **tenant 값**: 우리 tenant는 설정 `EXECUTOR_TENANT_ID`(기본 `pr-agentic`)입니다. 이 문서의 `pr-agentic-service`는 그 값을 가리킵니다.
 - **executor 게이트웨이와 브라우저**: `/api/v1/executor/{path}`는 key 호출자의 입구이면서, 기존처럼 브라우저(SSO)의 조회 중계도 계속 맡습니다(실행 이력·시스템 화면). 쿠키 요청은 403이 아니라 기존 규칙(멤버십 확인 후 시스템 조회, 관리자 경로)으로 처리합니다. 쓰기와 `/artifacts/*`는 key 호출자만 씁니다.
-- **runtime·maintenance**: executor의 admin 전용 API라 운영 key `EXECUTOR_ADMIN_API_KEY`로 부릅니다. `EXECUTOR_API_KEY`는 있는데 운영 key가 비어 있으면 시스템 화면의 그 탭은 503 `executor_admin_key_missing`입니다. 둘 다 비어 있으면(로컬 header 모드 executor) key 없이 부릅니다.
+- **runtime·maintenance**: executor의 admin 전용 API라 운영 key `EXECUTOR_ADMIN_API_KEY`로 부릅니다. `EXECUTOR_API_KEY`는 있는데 운영 key가 비어 있으면 시스템 화면의 그 탭은 503 `EXECUTOR_ADMIN_KEY_MISSING`입니다. 둘 다 비어 있으면(로컬 header 모드 executor) key 없이 부릅니다.
 - **tenant 헤더**: 우리 executor 호출은 모두 `X-Tenant-Id: EXECUTOR_TENANT_ID`를 붙입니다(운영 API 제외). header 모드 executor는 key가 없으면 tenant를 `dev`로 잡기 때문입니다. 그래서 우리 relay key의 `allowed_tenants`에 우리 tenant가 있어야 합니다.
 - **관리자 실행 목록의 사용자 필터**: executor가 `user_id` 파라미터를 받지 않으므로 그 값을 `X-User-Id`로 바꿔 보냅니다.
 - **비활성화 재시도**: 사용자 비활성화 때 바로 `disable-by-owner`를 부르고, 실패하면 `users.batches_disable_pending`이 남아 워커가 5분마다 다시 부릅니다.

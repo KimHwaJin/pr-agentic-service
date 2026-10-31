@@ -50,7 +50,7 @@ def _client() -> TestClient:
 
 def test_validation_error_lists_location_type_and_context():
     error = _client().post("/api/v1/v", json={"name": "abcd"}).json()["error"]
-    assert error["code"] == "invalid_body"
+    assert error["code"] == "INVALID_BODY"
     (d,) = error["details"]
     assert d["location"] == ["body", "name"]
     assert d["type"] == "string_too_long"
@@ -62,7 +62,7 @@ def test_validation_error_lists_location_type_and_context():
 def test_plain_http_error_gets_a_code_from_its_status():
     assert _client().get("/api/v1/h").json() == {
         "error": {
-            "code": "conflict",
+            "code": "CONFLICT",
             "message": "Cancel the running turns first.",
             "details": [],
         }
@@ -97,7 +97,7 @@ async def test_batch_errors_are_converted():
         )
     )
     error = json.loads(bytes(response.body))["error"]
-    assert error["code"] == "validation_error"
+    assert error["code"] == "VALIDATION_ERROR"
     assert error["details"] == [
         {
             "location": ["body", "cron"],
