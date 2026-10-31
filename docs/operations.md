@@ -68,3 +68,7 @@ SSE(`/events`)가 끊기지 않도록 아래도 함께 둡니다.
 ## 6. 요청 추적
 
 모든 응답에 `X-Request-ID`가 붙고, 같은 값이 로그의 `[...]` 칸과 executor 호출 헤더에 남습니다. 사용자 오류 메시지의 8자리 오류 ID는 서버 로그의 같은 줄을 찾는 데 씁니다.
+
+## 7. API 문서 (`DOCS_ENABLED`)
+
+`/docs`(Swagger), `/redoc`, `/openapi.json`은 내부망 규정에 따라 개발계를 포함해 모든 서버 환경에서 꺼 둡니다. 설정은 `DOCS_ENABLED`이고 기본값과 `config.yml` 값은 `false`입니다. docker compose 로컬 실행만 `true`입니다. internal/gaia에서는 템플릿이 만든 앱의 문서 경로도 같이 내립니다.

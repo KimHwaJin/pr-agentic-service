@@ -127,6 +127,9 @@ class Settings(BaseSettings):
     # how long a checkpoint write waits for a free connection
     checkpoint_pool_timeout_seconds: float = Field(30.0, gt=0)
     auto_migrate: bool = True
+    # Swagger UI, ReDoc and /openapi.json. Off unless turned on: the internal
+    # network rules forbid them even on the dev environment.
+    docs_enabled: bool = False
 
     # SSO. "dev" returns a fixed employee and is refused outside env=local.
     sso_adapter: Literal["dev", "idp"] = "dev"

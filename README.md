@@ -48,7 +48,7 @@ shared-infra(postgres, redis)와 executor compose가 떠 있는 상태에서:
 docker compose up -d --build
 ```
 
-- http://localhost:8080/dev/ 테스트 콘솔, http://localhost:8080/docs API 문서
+- http://localhost:8080/dev/ 테스트 콘솔, http://localhost:8080/docs API 문서(로컬만, `DOCS_ENABLED`)
 - 서비스 DB(`agentic`)는 `db-init`이 공용 Postgres에 없으면 만듭니다.
 - executor 공유 볼륨은 `../executor/shared_dir`(`EXECUTOR_SHARED_DIR`로 변경), LLM은 `model.frodo.com` 게이트웨이를 씁니다.
 - `src/dtest/assets/`와 `src/dtest/agent/prompts/`는 마운트되어 있어 수정하면 재빌드 없이 다음 요청부터 반영됩니다.

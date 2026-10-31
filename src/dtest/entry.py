@@ -28,7 +28,12 @@ from fastapi import FastAPI
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from src.dtest import tracing_phoenix  # optional (docs/phoenix-tracing.md)
-from src.dtest.api_service.app import mount_api, start_api, stop_api
+from src.dtest.api_service.app import (
+    hide_docs,
+    mount_api,
+    start_api,
+    stop_api,
+)
 from src.dtest.core.bootstrap import build_services
 from src.dtest.core.config import get_settings
 from src.dtest.core.request_context import install_log_field
@@ -60,6 +65,8 @@ def attach(app: FastAPI) -> None:
     api_enabled, _ = run_mode()
     if api_enabled:
         mount_api(app, settings)
+    if not settings.docs_enabled:  # internal network rules: docs off
+        hide_docs(app)
     # added last, so outermost: our startup runs before the app's own
     app.add_middleware(DtestLifespan)
 

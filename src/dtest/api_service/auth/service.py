@@ -46,7 +46,7 @@ class SsoService:
 
     def _destination(self, return_to: str, target: str) -> str:
         s = self.settings
-        if target == "docs":
+        if target == "docs" and s.docs_enabled:
             return s.public_api_origin + "/docs"
         parsed = urlsplit(return_to)
         if (
