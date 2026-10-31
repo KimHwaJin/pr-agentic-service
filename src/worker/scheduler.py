@@ -23,6 +23,7 @@ from core.contracts.hitl import PauseRequest
 from core.db import affected, get_row, utcnow
 from core.events import runs_wake_channel
 from core.executor.cancels import cancel_execution
+from core.failures import user_message
 from core.models import (
     ChatSession,
     CodeSource,
@@ -319,10 +320,9 @@ class RunScheduler:
         except LeaseLost:
             log.warning("run_lease_lost run_id=%s", run.id)
         except Exception as exc:  # noqa: BLE001
-            log.exception("run_failed run_id=%s", run.id)
-            await self._finish(
-                run, "failed", error=f"{type(exc).__name__}: {exc}"
-            )
+            # details stay in the log; the user sees a sentence and an id
+            error = user_message(exc, "run", run_id=run.id)
+            await self._finish(run, "failed", error=error)
         finally:
             heartbeat.cancel()
 

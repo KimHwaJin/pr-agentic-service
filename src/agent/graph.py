@@ -229,7 +229,14 @@ def tool_error(exc: Exception, request: Any) -> str:
     The model can then adapt instead of failing the run.
     """
     if isinstance(exc, ExecutorError):
-        return f"executor 오류 {exc.status}: {exc.body}"
+        # the model may quote it to the user: the error code and message
+        # only, not the whole response body
+        error = exc.body.get("error") if isinstance(exc.body, dict) else None
+        if isinstance(error, dict):
+            detail = f"{error.get('code')}: {error.get('message', '')}"
+        else:
+            detail = str(exc.body)
+        return f"executor 오류 {exc.status}: {detail[:500]}"
     message = f"도구 실행 오류 ({type(exc).__name__}): {exc}"
     if isinstance(exc, TypeError) and "argument" in str(exc):
         # the call did not match the function: say what it takes
