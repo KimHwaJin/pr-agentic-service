@@ -39,6 +39,7 @@ from src.dtest.core.executor.client import (
     Identity,
     trigger_type,
 )
+from src.dtest.core.failures import user_message
 from src.dtest.core.models import BatchReportJob
 from src.dtest.core.notebook_links import lab_url
 from src.dtest.core.services import Services
@@ -368,8 +369,7 @@ class BatchReportWorker:
         except LeaseLost:
             raise
         except Exception as exc:  # noqa: BLE001
-            log.warning("batch_report_failed job=%s stage=%s", job.id, stage)
-            error = f"{type(exc).__name__}: {exc}"[:2000]
+            error = user_message(exc, "batch_report", job=job.id, stage=stage)
             await self._set(
                 job.id,
                 state="FAILED",

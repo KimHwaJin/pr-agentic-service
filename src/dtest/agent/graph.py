@@ -206,7 +206,21 @@ class AgentGraphs:
             ),
             None,
         )
-        return TurnResult(None, last.text if last else "")
+        text = last.text if last else ""
+        if not text.strip() or text.startswith(LIMIT_PREFIX):
+            # ModelCallLimitMiddleware ended the turn (its message is an
+            # English note), or the model said nothing: the user still gets
+            # an answer
+            text = STOPPED_ANSWER
+        return TurnResult(None, text)
+
+
+LIMIT_PREFIX = "Model call limits exceeded"
+STOPPED_ANSWER = (
+    "요청을 처리하는 단계가 너무 많아져 중간에 멈췄습니다. 지금까지의 진행 "
+    "내용은 남아 있으니 '계속'이라고 보내 이어서 진행하거나, 질문을 나눠서 "
+    "다시 요청해 주세요."
+)
 
 
 def tool_error(exc: Exception, request: Any) -> str:
@@ -215,7 +229,14 @@ def tool_error(exc: Exception, request: Any) -> str:
     The model can then adapt instead of failing the run.
     """
     if isinstance(exc, ExecutorError):
-        return f"executor 오류 {exc.status}: {exc.body}"
+        # the model may quote it to the user: the error code and message
+        # only, not the whole response body
+        error = exc.body.get("error") if isinstance(exc.body, dict) else None
+        if isinstance(error, dict):
+            detail = f"{error.get('code')}: {error.get('message', '')}"
+        else:
+            detail = str(exc.body)
+        return f"executor 오류 {exc.status}: {detail[:500]}"
     message = f"도구 실행 오류 ({type(exc).__name__}): {exc}"
     if isinstance(exc, TypeError) and "argument" in str(exc):
         # the call did not match the function: say what it takes

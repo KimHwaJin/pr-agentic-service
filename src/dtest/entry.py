@@ -28,7 +28,7 @@ from fastapi import FastAPI
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from src.dtest import tracing_phoenix  # optional (docs/phoenix-tracing.md)
-from src.dtest.api_service.app import mount_api, start_api
+from src.dtest.api_service.app import mount_api, start_api, stop_api
 from src.dtest.core.bootstrap import build_services
 from src.dtest.core.config import get_settings
 from src.dtest.gaia_bridge import runtime as gaia_runtime
@@ -125,6 +125,7 @@ class DtestLifespan:
         stack.callback(gaia_runtime.set_services, None)
         if api_enabled:
             start_api(app, services)
+            stack.push_async_callback(stop_api)
         app.state.worker = None
         if worker_enabled:
             worker = Worker(services)

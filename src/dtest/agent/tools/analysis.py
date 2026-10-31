@@ -825,6 +825,7 @@ async def _step_view(
 async def run_plan(
     runtime: Runtime,
     decisions: dict[str, dict[str, Any]] | None = None,
+    restart: bool = False,
 ) -> Command:
     """Run the next calls of the approved plan on the executor and wait for
     their results.
@@ -834,6 +835,8 @@ async def run_plan(
     decisions: {"<call number>": {"run": true|false, "reason": "..."}} for
     conditional calls, decided from the condition in the skill's Tool list
     and the condition_tool's results you already observed.
+    restart: true only after the user agreed to run the plan again from the
+    first call because the kernel expired (this tool says when).
     """
     ctx = runtime.context
     plan = runtime.state.get("plan")
@@ -850,12 +853,31 @@ async def run_plan(
     }
     number = {c.key: i for i, c in enumerate(spec.calls(plan["document"]))}
     execution = runtime.state.get("execution")
-    if not (execution and execution.get("alive")):
-        # A new kernel has none of the earlier variables: re-run everything
-        # that had succeeded.
-        for state in plan["calls"].values():
-            if state["status"] == "succeeded":
-                state["status"] = "pending"
+    if execution and execution.get("alive"):
+        status = (await ctx.services.executor.get(execution["id"]))["state"]
+        if status["status"] != "WAITING_FOR_OPERATION":  # the wait expired
+            execution = {**execution, "alive": False}
+    done = [k for k, s in plan["calls"].items() if s["status"] == "succeeded"]
+    if done and not (execution and execution.get("alive")):
+        # A new kernel has none of the earlier variables. Running the calls
+        # again can take as long as the first time (a step may take days),
+        # so only when the user asks for it.
+        if not restart:
+            calls = ", ".join(f"#{number[k]}" for k in done if k in number)
+            return _reply(
+                runtime,
+                "커널이 만료되어(이전 실행 후 대기 시간 초과) 앞서 성공한 "
+                f"호출 {calls}의 변수가 사라졌습니다. 남은 호출을 이어서 "
+                "실행할 수 없습니다. 이미 나온 결과 파일은 남아 있습니다. "
+                "사용자에게 이 사실과 처음부터 다시 실행하면 앞의 호출에 "
+                "걸린 시간만큼 다시 걸린다는 점을 알리고, 다시 실행할지 "
+                "물어보세요. 사용자가 원하면 run_plan(restart=true)를 "
+                "호출하세요.",
+                plan=plan,
+                execution=execution,
+            )
+        for key in done:
+            plan["calls"][key]["status"] = "pending"
     segment, undecided = _segment(plan, decisions)
     if not segment:
         if undecided:

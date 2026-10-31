@@ -323,7 +323,7 @@ def test_a_failed_stage_is_recorded():
     cast(Any, worker.agent).write = write
     asyncio.run(worker._run(cast(Any, job)))
     assert job.state == "FAILED" and job.failed_stage == "GENERATING"
-    assert "ReportMissing" in job.error
+    assert "오류 ID" in job.error and "ReportMissing" not in job.error
     assert [t for _, t, _ in services.events.sent][-2:] == [
         "run_error",
         "run_status",

@@ -87,6 +87,8 @@ CATALOG_EXTENSIONS: []
 DEFAULT_CODE_LEVEL: 3
 PLAN_CANDIDATES: 5
 WORKFLOW_SIMILARITY: 0.93
+# author: the author promotes their own; admin: administrators only
+WORKFLOW_PROMOTION: author
 AGENT_RECURSION_LIMIT: 200
 AGENT_MODEL_CALL_LIMIT: 40
 # same tool, same error, this many times in a row in one turn: not run again
@@ -111,6 +113,7 @@ MEMORY_WORKER_CONCURRENCY: 1
 
 # Run scheduler.
 RUN_CONCURRENCY: 32
+RUN_USER_CONCURRENCY: 4
 RUN_LEASE_SECONDS: 60
 RUN_POLL_SECONDS: 5.0
 RUN_MAX_ATTEMPTS: 5
@@ -125,6 +128,7 @@ RUN_REQUEST_RETENTION_DAYS: 1
 # Images sent with a turn (vision models only).
 IMAGE_MAX_BYTES: 10485760
 IMAGE_MAX_TOTAL_BYTES: 20971520
+REQUEST_MAX_BYTES: 33554432
 IMAGE_CONTEXT_TURNS: 3
 
 # pr-batch. Our key there (BATCH_API_KEY) is a secret: env only.

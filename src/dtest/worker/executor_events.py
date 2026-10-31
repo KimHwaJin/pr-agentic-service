@@ -25,7 +25,7 @@ from typing import Any
 
 from redis.asyncio import Redis
 from redis.exceptions import ResponseError
-from sqlalchemy import select
+from sqlalchemy import case, or_, select, update
 from sqlalchemy.dialects.postgresql import insert
 
 from src.dtest.core.db import Database, utcnow
@@ -261,17 +261,46 @@ class MissedEventRecovery:
             await asyncio.sleep(self.interval)
 
     async def sweep(self) -> list[str]:
+        """Up to 50 waits, least recently checked first.
+
+        A wait is checked again after 2 minutes in its first hour, 10
+        minutes in its first day and hourly after that: a step can run for
+        days, and each check reads the execution's whole event timeline.
+        """
+        now = utcnow()
+        since = Run.updated_at  # when the run started waiting
+        again_after = case(
+            (since > now - timedelta(hours=1), now - timedelta(minutes=2)),
+            (since > now - timedelta(days=1), now - timedelta(minutes=10)),
+            else_=now - timedelta(hours=1),
+        )
         async with self.db.sessions() as session:
             waiting = (
                 await session.scalars(
                     select(Run)
                     .where(
                         Run.status == "waiting_executor",
-                        Run.updated_at < utcnow() - self.after,
+                        since < now - self.after,
+                        or_(
+                            Run.recovery_checked_at.is_(None),
+                            Run.recovery_checked_at < again_after,
+                        ),
+                    )
+                    .order_by(
+                        Run.recovery_checked_at.asc().nulls_first(),
+                        Run.updated_at,
                     )
                     .limit(50)
                 )
             ).all()
+            if waiting:
+                await session.execute(
+                    update(Run)
+                    .where(Run.id.in_([r.id for r in waiting]))
+                    # updated_at is the wait's start: keep it
+                    .values(recovery_checked_at=now, updated_at=Run.updated_at)
+                )
+                await session.commit()
         woken = []
         for run in waiting:
             if run_id := await self._recover(run):

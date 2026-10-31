@@ -101,3 +101,46 @@ def test_recovery_leaves_runs_whose_event_has_not_happened(monkeypatch):
         ),
     )
     assert asyncio.run(recovery._recover(run)) is None
+
+
+def test_recovery_checks_least_recently_checked_waits_with_backoff():
+    import asyncio
+    from contextlib import asynccontextmanager
+    from types import SimpleNamespace
+
+    from sqlalchemy.dialects import postgresql
+
+    from src.dtest.worker import executor_events
+
+    statements: list[str] = []
+    run = SimpleNamespace(id="run-1", waiting={})
+
+    class Session:
+        async def scalars(self, statement):
+            statements.append(
+                str(statement.compile(dialect=postgresql.dialect()))
+            )
+            return SimpleNamespace(all=lambda: [run])
+
+        async def execute(self, statement):
+            statements.append(
+                str(statement.compile(dialect=postgresql.dialect()))
+            )
+
+        async def commit(self):
+            pass
+
+    class Db:
+        @asynccontextmanager
+        async def sessions(self):
+            yield Session()
+
+    recovery = executor_events.MissedEventRecovery(
+        cast(Any, Db()), cast(Any, None), on_wake=None, after_seconds=120
+    )
+    assert asyncio.run(recovery.sweep()) == []  # no execution id: skipped
+    select_sql, update_sql = statements
+    assert "ORDER BY runs.recovery_checked_at ASC NULLS FIRST" in select_sql
+    assert "CASE WHEN" in select_sql
+    assert "recovery_checked_at=" in update_sql
+    assert "updated_at=runs.updated_at" in update_sql

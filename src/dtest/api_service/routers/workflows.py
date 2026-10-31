@@ -1,6 +1,6 @@
-from fastapi import APIRouter, HTTPException, Response
+from fastapi import APIRouter, HTTPException, Request, Response
 
-from src.dtest.api_service.deps import ServicesDep, UserDep
+from src.dtest.api_service.deps import ServicesDep, UserDep, admin_user
 from src.dtest.api_service.schemas.workflows import (
     WorkflowClone,
     WorkflowCreate,
@@ -169,11 +169,20 @@ async def update_workflow(
 
 @router.post("/{workflow_id}/promote", response_model=WorkflowRead)
 async def promote_workflow(
-    workflow_id: str, services: ServicesDep, user: UserDep
+    workflow_id: str, request: Request, services: ServicesDep, user: UserDep
 ):
-    """Candidate -> template: searchable and recommendable for every user."""
+    """Candidate -> template: searchable and recommendable for every user.
+
+    WORKFLOW_PROMOTION=author: the author, own workflows; admin:
+    administrators (SSO login) only, any workflow.
+    """
+    admin = services.settings.workflow_promotion == "admin"
+    if admin:
+        await admin_user(request, user)
     try:
-        return await services.workflows.promote(workflow_id, user.id)
+        return await services.workflows.promote(
+            workflow_id, user.id, admin=admin
+        )
     except WorkflowError as exc:
         raise _error(exc) from None
 
