@@ -19,6 +19,7 @@ from redis.asyncio import Redis
 from sqlalchemy import text
 
 from src.dtest.core.assets import AssetLoader, SkillCatalog, ToolCatalog
+from src.dtest.core.checkpoints import PooledPostgresSaver
 from src.dtest.core.config import DTEST_ROOT, Settings
 from src.dtest.core.db import Database
 from src.dtest.core.embeddings import build_embedder
@@ -104,7 +105,7 @@ async def build_services(
         memory=ProjectMemory(store, db, settings.memory_total_max_chars),
         workflows=workflows,
         embedder=embedder,
-        checkpointer=AsyncPostgresSaver(pool),
+        checkpointer=PooledPostgresSaver(pool),
         analysis_skills=AssetLoader(
             settings.catalog_roots("skills"), SkillCatalog.load_many
         ),
