@@ -800,16 +800,24 @@ const CODE_TEXT = {
   executor_admin_key_missing: 'executor 운영 key(EXECUTOR_ADMIN_API_KEY)가 설정되지 않아 런타임·점검 화면을 쓸 수 없습니다.',
   too_large: '요청이 너무 큽니다(최대 32MB). 이미지 수나 크기를 줄여 주세요.',
 };
+// every error body (ours, the executor's, pr-batch's through the gateway):
+// {"error": {code, message, details: [{location, type, message, context}], context?}}
+function apiError(data, status) {
+  const e = data?.error;
+  if (e && typeof e === 'object') return { code: e.code || '', message: e.message || `오류 (${status})`, details: e.details || [], context: e.context || {} };
+  return { code: data?.code || '', message: data?.message || (typeof data?.detail === 'string' ? data.detail : `오류 (${status})`), details: [], context: {} };
+}
 async function api(path, opts = {}) {
   const headers = { 'Content-Type': 'application/json', ...(S.csrf ? { 'X-CSRF-Token': S.csrf } : {}), ...(opts.headers || {}) };
   const r = await fetch(API + path, { credentials: 'include', ...opts, headers, body: opts.body && JSON.stringify(opts.body) });
   if (r.status === 401) { toLogin(); throw new Error('login'); }
   const data = r.status === 204 ? null : await r.json();
   if (!r.ok) {
-    const fields = (data?.errors || []).map(e => `${e.field}: ${e.message}`).join(', ');
+    const err = apiError(data, r.status);
+    const fields = err.details.map(d => `${(d.location || []).filter(p => p !== 'body').join('.')}: ${d.message || d.type}`).join(', ');
     // opts.errorText: this call's own wording by status (e.g. 409 on delete)
-    const text = opts.errorText?.[r.status] || CODE_TEXT[data?.code] || (typeof data?.detail === 'string' ? data.detail : data?.message || JSON.stringify(data?.detail ?? data));
-    showError(`${text}${data?.code ? ` (${data.code})` : ''}${fields ? ` · ${fields}` : ''}`, r.headers.get('x-request-id'));
+    const text = opts.errorText?.[r.status] || CODE_TEXT[err.code] || err.message;
+    showError(`${text}${err.code ? ` (${err.code})` : ''}${fields ? ` · ${fields}` : ''}`, r.headers.get('x-request-id'));
     throw new Error(r.status);
   }
   return data;
@@ -1795,7 +1803,7 @@ async function saveScript() {
     else {
       const form = new FormData(); form.append('type', 'NOTEBOOK'); form.append('file', file); if (name) form.append('name', name);
       const r = await fetch(`${API}/batch/scripts`, { method: 'POST', credentials: 'include', headers: { ...idemKey(), ...(S.csrf ? { 'X-CSRF-Token': S.csrf } : {}) }, body: form });
-      if (!r.ok) { const data = await r.json().catch(() => ({})); showError(data.message || data.detail || `등록 실패 (${r.status})`); throw new Error(r.status); }
+      if (!r.ok) { const data = await r.json().catch(() => ({})); showError(apiError(data, r.status).message); throw new Error(r.status); }
     }
     $('scriptModal').classList.remove('open'); batchTab('scripts');
   } catch { alert('등록하지 못했습니다. 화면의 오류 메시지를 확인하세요.'); }
@@ -1899,7 +1907,7 @@ async function removeItem(path, revision) {
   const r = await fetch(`${API}${path}`, { method: 'DELETE', credentials: 'include', headers: { ...idemKey(), 'If-Match': `"${revision}"`, ...(S.csrf ? { 'X-CSRF-Token': S.csrf } : {}) } });
   if (r.ok) return null;
   const data = await r.json().catch(() => ({}));
-  return data.code || `HTTP_${r.status}`;
+  return apiError(data, r.status).code || `HTTP_${r.status}`;
 }
 async function deleteBatch(id) {
   const b = BT.batches.find(x => x.id === id); if (!b) return;
@@ -1926,7 +1934,7 @@ async function uploadVersion(input) {
   const form = new FormData(); form.append('file', file);
   const r = await fetch(`${API}/batch/scripts/${BT.script.id}/versions`, { method: 'POST', credentials: 'include', headers: { ...idemKey(), ...(S.csrf ? { 'X-CSRF-Token': S.csrf } : {}) }, body: form });
   const data = await r.json().catch(() => ({}));
-  if (!r.ok) return alert(`새 버전을 올리지 못했습니다: ${data.message || data.code || r.status}`);
+  if (!r.ok) return alert(`새 버전을 올리지 못했습니다: ${apiError(data, r.status).message}`);
   await loadBatchLists();
   await openScript(BT.script.id);
   const pinned = BT.batches.filter(b => b.script_id === BT.script.id).map(b => b.name);
@@ -1940,11 +1948,10 @@ async function wfCall(path, method, body) {
   return { ok: r.ok, status: r.status, data };
 }
 function wfErrors(res) {
-  const d = res.data?.detail;
   if (res.status === 403) return ['작성자만 고칠 수 있습니다. 복제해서 내 워크플로우로 만든 뒤 수정하세요.'];
   if (res.status === 409) return ['다른 곳에서 먼저 저장했습니다. 닫고 다시 열어 최신 내용으로 수정하세요.'];
-  if (d && typeof d === 'object') return [d.message, ...(d.errors || [])].filter(Boolean);
-  return [typeof d === 'string' ? d : `오류 (${res.status})`];
+  const err = apiError(res.data, res.status);
+  return [err.message, ...err.details.map(d => `${(d.location || []).join('.')}: ${d.message}`)];
 }
 const wfMsg = (lines, ok = false) => `<div style="margin:8px 0;padding:8px 12px;border-radius:8px;font-size:13px;background:${ok ? '#e3f1e7' : '#fdecea'};color:${ok ? 'var(--ok)' : 'var(--bad)'}">${lines.map(esc).join('<br>')}</div>`;
 async function editWorkflow(id) {

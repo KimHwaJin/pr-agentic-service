@@ -34,6 +34,7 @@ from api_service.deps import (
     key_identity,
     project_for,
 )
+from api_service.errors import STATUS_CODES, detail, error_response
 from api_service.routers.artifacts import render_view
 from api_service.schemas.batch import BatchScriptFromNotebook
 from api_service.services.access import owned_artifact
@@ -266,6 +267,8 @@ async def batch_gateway(
         raise HTTPException(504, "pr-batch did not answer in time.") from None
     except httpx.HTTPError:
         raise HTTPException(502, "pr-batch is not reachable.") from None
+    if result.status_code >= 400:
+        return await _batch_error(result)
     passthrough = {
         k: v
         for k, v in result.headers.items()
@@ -281,4 +284,55 @@ async def batch_gateway(
 
     return StreamingResponse(
         chunks(), status_code=result.status_code, headers=passthrough
+    )
+
+
+async def _batch_error(result: httpx.Response) -> Response:
+    """pr-batch's ``{code, message, errors: [{loc, type, msg}]}`` in our
+    error shape (api_service.errors), so every route fails the same way."""
+    try:
+        await result.aread()
+    finally:
+        await result.aclose()
+    try:
+        body = result.json()
+    except ValueError:
+        body = None
+    if not isinstance(body, dict):
+        return error_response(
+            result.status_code,
+            STATUS_CODES.get(result.status_code, "error"),
+            result.text[:500] or "pr-batch refused the request.",
+        )
+    if isinstance(body.get("error"), dict):  # already ours
+        return Response(
+            result.content,
+            result.status_code,
+            media_type="application/json",
+        )
+    details = [
+        detail(
+            list(e.get("loc") or []),
+            str(e.get("type") or "invalid"),
+            str(e.get("msg") or ""),
+            e.get("ctx") if isinstance(e.get("ctx"), dict) else None,
+        )
+        for e in body.get("errors") or body.get("details") or []
+        if isinstance(e, dict)
+    ]
+    message = body.get("message") or body.get("detail")
+    if not isinstance(message, str):
+        message = "pr-batch refused the request."
+    code = body.get("code") or STATUS_CODES.get(result.status_code, "error")
+    extra = {
+        k: v
+        for k, v in body.items()
+        if k not in {"code", "message", "detail", "errors", "details"}
+    }
+    return error_response(
+        result.status_code,
+        str(code),
+        message,
+        details,
+        extra or None,
     )

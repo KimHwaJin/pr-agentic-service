@@ -16,7 +16,7 @@ def test_unreachable_upstream_is_a_bad_gateway():
 
     response = TestClient(app).get("/x")
     assert response.status_code == 502
-    assert response.json()["code"] == "bad_gateway"
+    assert response.json()["error"]["code"] == "bad_gateway"
 
 
 def test_patch_null_clears_only_nullable_fields():
