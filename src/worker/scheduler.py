@@ -22,7 +22,7 @@ from agent.titles import summarize_title
 from core.contracts.hitl import PauseRequest
 from core.db import affected, get_row, utcnow
 from core.events import runs_wake_channel
-from core.executor.client import ExecutorError
+from core.executor.cancels import cancel_execution
 from core.models import (
     ChatSession,
     CodeSource,
@@ -301,15 +301,12 @@ class RunScheduler:
             )
         if not execution_id:
             return
-        try:
-            await self.services.executor.cancel(
-                execution_id,
-                who=await self.services.executor.opener(execution_id),
-                idempotency_key=f"cancel:{run_id}",
-                reason="사용자 취소",
-            )
-        except ExecutorError:
-            pass  # already terminal
+        await cancel_execution(
+            self.services,
+            execution_id,
+            key=f"cancel:{run_id}",
+            reason="사용자 취소",
+        )
 
     async def _cancel_requested(self, run_id: str) -> bool:
         async with self.services.db.sessions() as db:

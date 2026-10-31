@@ -3,6 +3,7 @@ import os
 import socket
 
 from agent.graph import AgentGraphs
+from core.executor.cancels import ExecutionCancelRetry
 from core.services import Services
 from worker.batch_reports import BatchReportRecovery, BatchReportWorker
 from worker.executor_events import ExecutorEventConsumer, MissedEventRecovery
@@ -46,6 +47,7 @@ class Worker:
         )
         self.retention = Retention(services)
         self.batch_disable = BatchDisableRetry(services)
+        self.cancel_retry = ExecutionCancelRetry(services)
         self.memory = (
             MemoryWorker(services, self.owner)
             if settings.memory_worker_enabled
@@ -77,6 +79,9 @@ class Worker:
             ),
             asyncio.create_task(
                 self.batch_disable.run_forever(), name="batch-disable-retry"
+            ),
+            asyncio.create_task(
+                self.cancel_retry.run_forever(), name="executor-cancel-retry"
             ),
         ]
         if self.memory:
