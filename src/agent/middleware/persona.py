@@ -12,6 +12,7 @@ the main agent takes over and explains the situation, so a turn never stops
 on a half-done hand-off.
 """
 
+import asyncio
 import json
 from collections.abc import Awaitable, Callable
 from typing import Any, cast
@@ -246,7 +247,7 @@ async def _image_data(ctx: RunContext, image_id: str) -> str | None:
     if image_id not in cache:
         image = await ctx.services.images.get(image_id)
         cache[image_id] = (
-            ctx.services.images.read_base64(image)
+            await asyncio.to_thread(ctx.services.images.read_base64, image)
             if image is not None and image.session_id == ctx.session_id
             else None
         )

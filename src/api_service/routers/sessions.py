@@ -24,7 +24,7 @@ from api_service.services.access import execution_of_session
 from api_service.services.runs import create_run
 from api_service.sse import event_stream
 from core.db import get_row, utcnow
-from core.executor.client import ExecutorError
+from core.executor.cancels import cancel_execution, cancel_idle_executions
 from core.models import (
     ChatSession,
     Message,
@@ -165,6 +165,7 @@ async def delete_session(
         await db.commit()
     # the agent's history of the session goes with it (thread = session)
     await services.checkpointer.adelete_thread(session_id)
+    await cancel_idle_executions(services, [session_id], reason="세션 삭제")
     return Response(status_code=204)
 
 
@@ -329,16 +330,13 @@ async def cancel_run(run_id: str, services: ServicesDep, user: UserDep):
         await db.commit()
     if run.status == "cancelled":
         await services.forget_tool_effects(run_id)
-    if execution_id:
-        try:
-            await services.executor.cancel(
-                execution_id,
-                who=await services.executor.opener(execution_id),
-                idempotency_key=f"cancel:{run_id}",
-                reason="사용자 취소",
-            )
-        except ExecutorError:
-            pass  # already terminal
+    if execution_id:  # retried by the worker if the executor is down
+        await cancel_execution(
+            services,
+            execution_id,
+            key=f"cancel:{run_id}",
+            reason="사용자 취소",
+        )
     await services.events.emit(
         run.session_id, run.id, "run_status", {"status": run.status}
     )

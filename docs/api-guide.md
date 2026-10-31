@@ -40,7 +40,7 @@ Swagger(`/docs`)에서는 Authorize 버튼에 `X-Api-Key`·`X-User-Id`가 있고
 | Method | Path | 설명 |
 | --- | --- | --- |
 | GET/POST | `/projects` | 목록 / 생성 `{name, description?, system_prompt?, code_level?}` |
-| GET/PATCH/DELETE | `/projects/{id}` | `system_prompt`는 모든 Agent에 주입되는 프로젝트 지침입니다. 응답의 `effective_code_level`은 실제 적용되는 코드 레벨입니다. 기본 프로젝트는 삭제할 수 없습니다. |
+| GET/PATCH/DELETE | `/projects/{id}` | `system_prompt`는 모든 Agent에 주입되는 프로젝트 지침입니다. 응답의 `effective_code_level`은 실제 적용되는 코드 레벨입니다. 기본 프로젝트는 삭제할 수 없고, 실행 중인 턴이 있으면 409입니다(먼저 취소). 삭제하면 아직 열려 있는 executor 실행도 취소됩니다. |
 | POST | `/projects/{id}/sessions` | `{input?, title?, code_level?, model?}`. `input`이 있으면 세션을 만들고 바로 첫 턴을 시작합니다(응답 `{session, run}`). 첫 턴이 거절되면(모델 이름 오류 등) 세션도 만들지 않습니다. |
 | GET | `/projects/{id}/sessions?limit=&cursor=` | 세션 목록(최근 수정순). `{items, next_cursor}`. `active_run_id`가 있으면 작업 중입니다. |
 | GET/PATCH/DELETE | `/sessions/{id}` | `title`, `code_level`(1~4, null이면 프로젝트 기본값) 변경. 응답의 `effective_code_level`은 세션 → 프로젝트 → 서비스 기본값 순으로 정해진 실제 값입니다. `title_source`: `initial`(첫 메시지 앞부분) → `auto`(첫 답변 후 LLM 요약) / `user`(직접 변경, 이후 자동 변경 없음) |

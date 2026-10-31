@@ -6,6 +6,7 @@ requests. A new turn and an answer both end the same way: the run is
 always finds the row).
 """
 
+import asyncio
 import hashlib
 import json
 
@@ -216,7 +217,8 @@ async def _save_images(
     try:
         for n, block in enumerate(body.input.images):
             try:
-                prepared = image_store.prepare(
+                prepared = await asyncio.to_thread(  # decode + resize
+                    image_store.prepare,
                     block.base64,
                     block.mime_type,
                     services.settings.image_max_bytes,
