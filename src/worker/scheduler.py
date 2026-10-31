@@ -14,7 +14,7 @@ from time import monotonic
 from typing import Any
 
 from pydantic import TypeAdapter
-from sqlalchemy import or_, select, update
+from sqlalchemy import func, or_, select, update
 
 from agent.context import RunContext
 from agent.graph import AgentGraphs
@@ -23,6 +23,7 @@ from core.contracts.hitl import PauseRequest
 from core.db import affected, get_row, utcnow
 from core.events import runs_wake_channel
 from core.executor.cancels import cancel_execution
+from core.failures import user_message
 from core.models import (
     ChatSession,
     CodeSource,
@@ -150,23 +151,66 @@ class RunScheduler:
                 await pubsub.aclose()
 
     async def _claim(self, limit: int) -> list[Run]:
+        """Oldest claimable runs first, at most RUN_USER_CONCURRENCY running
+        per user across pods (soft: two pods claiming at once may both take
+        one), so one user's many sessions cannot fill every slot."""
         now = utcnow()
+        per_user = self.settings.run_user_concurrency
+        claimable = or_(
+            Run.status == "queued",
+            (Run.status == "running") & (Run.lease_expires_at < now),
+        )
+        query = select(Run).where(claimable)
+        if per_user:
+            # each user's oldest few only: a user with hundreds queued
+            # must not crowd everyone else out of the candidates
+            ranked = (
+                select(
+                    Run.id,
+                    func.row_number()
+                    .over(partition_by=Run.user_id, order_by=Run.created_at)
+                    .label("n"),
+                )
+                .where(claimable)
+                .subquery()
+            )
+            query = query.where(
+                Run.id.in_(select(ranked.c.id).where(ranked.c.n <= per_user))
+            )
         async with self.services.db.sessions() as db:
-            runs = (
+            candidates = (
                 await db.scalars(
-                    select(Run)
-                    .where(
-                        or_(
-                            Run.status == "queued",
-                            (Run.status == "running")
-                            & (Run.lease_expires_at < now),
-                        )
-                    )
-                    .order_by(Run.created_at)
-                    .limit(limit)
+                    query.order_by(Run.created_at)
+                    .limit(limit * 2 if per_user else limit)
                     .with_for_update(skip_locked=True)
                 )
             ).all()
+            running: dict[str, int] = {}
+            if per_user and candidates:
+                running = {
+                    user_id: count
+                    for user_id, count in (
+                        await db.execute(
+                            select(Run.user_id, func.count())
+                            .where(
+                                Run.status == "running",
+                                Run.lease_expires_at >= now,
+                                Run.user_id.in_(
+                                    {r.user_id for r in candidates}
+                                ),
+                            )
+                            .group_by(Run.user_id)
+                        )
+                    ).all()
+                }
+            runs: list[Run] = []
+            for run in candidates:
+                if len(runs) == limit:
+                    break
+                if per_user and running.get(run.user_id, 0) >= per_user:
+                    continue  # waits for one of this user's turns to end
+                running[run.user_id] = running.get(run.user_id, 0) + 1
+                runs.append(run)
             for run in runs:
                 run.status, run.lease_owner = "running", self.owner
                 run.lease_expires_at = now + timedelta(
@@ -231,13 +275,24 @@ class RunScheduler:
             or project.code_level
             or self.settings.default_code_level
         )
+        model = run.model
+        if self.settings.model(model) is None:
+            # taken out of MODELS while this run waited: finish it with the
+            # default model rather than fail on resume
+            model = self.settings.default_model.name
+            log.warning(
+                "run_model_replaced run_id=%s model=%s now=%s",
+                run.id,
+                run.model,
+                model,
+            )
         return RunContext(
             services=self.services,
             run_id=run.id,
             session_id=run.session_id,
             project_id=run.project_id,
             user_id=run.user_id,
-            model=run.model,
+            model=model,
             code_level=level,
             project_prompt=project.system_prompt,
             user_text=run.input["text"],
@@ -276,10 +331,9 @@ class RunScheduler:
         except LeaseLost:
             log.warning("run_lease_lost run_id=%s", run.id)
         except Exception as exc:  # noqa: BLE001
-            log.exception("run_failed run_id=%s", run.id)
-            await self._finish(
-                run, "failed", error=f"{type(exc).__name__}: {exc}"
-            )
+            # details stay in the log; the user sees a sentence and an id
+            error = user_message(exc, "run", run_id=run.id)
+            await self._finish(run, "failed", error=error)
         finally:
             heartbeat.cancel()
 

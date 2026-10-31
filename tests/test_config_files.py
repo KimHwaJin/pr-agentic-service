@@ -176,3 +176,13 @@ def test_header_mode_only_in_local_and_dev(root, monkeypatch):
     monkeypatch.setenv("APP_ENV", "prd")
     with pytest.raises(ValueError, match="AUTH_MODE=header"):
         Settings()
+
+
+def test_executor_test_mode_is_refused_in_stg(root, monkeypatch):
+    (root / "config.stg.yml").write_text(
+        "sso_adapter: idp\ncookie_secure: true\nexecutor_api_key: exe\n"
+        "batch_api_key: bat\nexecutor_io_mode: api\n"
+    )
+    monkeypatch.setenv("APP_ENV", "stg")
+    with pytest.raises(ValueError, match="EXECUTOR_IO_MODE=api"):
+        Settings()

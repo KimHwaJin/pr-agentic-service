@@ -69,3 +69,28 @@ def test_encoded_traversal_never_reaches_pr_batch(client, monkeypatch, url):
     monkeypatch.setattr(batch, "_client", upstream)
     response = client.post(url, headers={"X-Api-Key": "x", "X-User-Id": "u"})
     assert response.status_code == 404
+
+
+def test_relay_streams_and_maps_connection_errors(client, monkeypatch):
+    import httpx
+
+    async def identity(*args, **kwargs):
+        return None, None, None
+
+    def handler(request):
+        if request.url.path.endswith("/runtimes"):
+            return httpx.Response(
+                200, content=b"x" * 100_000, headers={"etag": "v1"}
+            )
+        raise httpx.ConnectError("refused")
+
+    upstream = httpx.AsyncClient(
+        base_url="http://batch", transport=httpx.MockTransport(handler)
+    )
+    monkeypatch.setattr(batch, "key_identity", identity)
+    monkeypatch.setattr(batch, "_client", lambda services: upstream)
+    ok = client.get("/api/v1/batch/runtimes", headers={"X-Api-Key": "x"})
+    assert ok.status_code == 200 and len(ok.content) == 100_000
+    assert ok.headers["etag"] == "v1"
+    down = client.get("/api/v1/batch/scripts", headers={"X-Api-Key": "x"})
+    assert down.status_code == 502

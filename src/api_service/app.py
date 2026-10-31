@@ -3,6 +3,7 @@ from pathlib import Path
 
 from fastapi import APIRouter, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from api_service import API_PREFIX, errors
@@ -55,6 +56,17 @@ def mount_api(app: FastAPI, settings: Settings) -> None:
     )
     errors.install(app)
     _caller_headers_together(app)
+
+    @app.middleware("http")
+    async def refuse_large_bodies(request: Request, call_next):
+        """413 before a too large body is read (base64 images)."""
+        length = request.headers.get("content-length", "")
+        if length.isdigit() and int(length) > settings.request_max_bytes:
+            return JSONResponse(
+                {"detail": "Request body is too large.", "code": "too_large"},
+                status_code=413,
+            )
+        return await call_next(request)
 
     @app.middleware("http")
     async def audit_key_callers(request: Request, call_next):
@@ -113,6 +125,11 @@ def _caller_headers_together(app: FastAPI) -> None:
         return schema
 
     app.openapi = openapi  # ty: ignore[invalid-assignment]
+
+
+async def stop_api() -> None:
+    """Closes the API's own HTTP clients (pr-batch gateway)."""
+    await batch.close_clients()
 
 
 def start_api(app: FastAPI, services: Services) -> None:

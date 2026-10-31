@@ -5,7 +5,7 @@ import json
 from collections.abc import Awaitable, Callable
 from typing import Any
 
-from fastapi import Request
+from fastapi import HTTPException, Request
 from fastapi.responses import StreamingResponse
 
 from core.events import EventBus
@@ -26,11 +26,15 @@ def event_stream(
     Listening starts before the replay so nothing falls in between;
     durable events already sent are skipped by id.
     """
+    try:
+        start = int(cursor) if cursor else 0
+    except ValueError:
+        raise HTTPException(422, "Last-Event-ID must be a number.") from None
     queue = events.listen_to(channel)
 
     async def stream():
         try:
-            last = int(cursor) if cursor else 0
+            last = start
             for event in await history(last):
                 last = event["id"]
                 yield _format(event)

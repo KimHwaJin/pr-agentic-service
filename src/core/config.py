@@ -253,6 +253,9 @@ class Settings(BaseSettings):
     default_code_level: int = Field(3, ge=1, le=4)
     plan_candidates: int = Field(5, ge=1, le=10)
     workflow_similarity: float = 0.93
+    # who may promote a candidate workflow to a template for every user:
+    # its author, or administrators only (any workflow)
+    workflow_promotion: Literal["author", "admin"] = "author"
     agent_recursion_limit: int = 200
     agent_model_call_limit: int = (
         40  # per turn; stops a model that keeps repeating a failing call
@@ -288,6 +291,8 @@ class Settings(BaseSettings):
     run_concurrency: int = Field(
         32, ge=1
     )  # turns are I/O bound (LLM, executor)
+    # turns of one user running at once across pods (0: no limit)
+    run_user_concurrency: int = Field(4, ge=0)
     run_lease_seconds: int = Field(60, ge=10)
     run_poll_seconds: float = 5.0  # fallback only; runs are woken over Redis
     # claims without reaching a pause before a run is failed (crash loops)
@@ -305,6 +310,9 @@ class Settings(BaseSettings):
     # Images sent with a turn (vision models only).
     image_max_bytes: int = 10 * 1024 * 1024
     image_max_total_bytes: int = 20 * 1024 * 1024
+    # request bodies larger than this (Content-Length) are refused with 413
+    # before they are read; the ingress should have its own limit too
+    request_max_bytes: int = 32 * 1024 * 1024
     image_context_turns: int = (
         3  # images of the last N user turns reach the model
     )
@@ -354,6 +362,8 @@ class Settings(BaseSettings):
             raise ValueError(
                 "SESSION_MAX_SECONDS must be at least SESSION_TTL_SECONDS"
             )
+        if self.executor_io_mode == "api" and self.env in {"stg", "prd"}:
+            raise ValueError("EXECUTOR_IO_MODE=api is for test environments")
         if self.auth_mode == "header" and self.env not in {"local", "dev"}:
             raise ValueError("AUTH_MODE=header is only allowed in local/dev")
         if self.env in {"stg", "prd"} and not (

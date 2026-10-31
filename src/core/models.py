@@ -145,6 +145,10 @@ class Run(Timestamped, Base):
     finished_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True)
     )
+    # when MissedEventRecovery last asked the executor about this wait
+    recovery_checked_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True)
+    )
 
 
 class RunEvent(Base):
@@ -337,6 +341,7 @@ Index(
 )
 # SSE replay reads a session's events after a cursor
 Index("ix_run_events_session_id_id", RunEvent.session_id, RunEvent.id)
+Index("ix_run_events_run_id_id", RunEvent.run_id, RunEvent.id)
 Index("ix_messages_session_created", Message.session_id, Message.created_at)
 Index(
     "ix_memory_extraction_claim",

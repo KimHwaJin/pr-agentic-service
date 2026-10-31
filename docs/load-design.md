@@ -41,6 +41,7 @@
 | 설정 | 기본 | 조정 기준 |
 | --- | --- | --- |
 | `RUN_CONCURRENCY` | 32 | `waiting`이 아닌 `queued` run이 계속 쌓이면 올린다. LLM 게이트웨이의 동시 처리 한도를 넘지 않게 Pod 수 × 값으로 맞춘다 |
+| `RUN_USER_CONCURRENCY` | 4 | 한 사용자가 여러 Pod에 걸쳐 동시에 돌릴 수 있는 turn 수. 한 사용자가 세션을 여러 개 열어 슬롯을 독차지하지 못하게 한다. 0이면 제한 없음 |
 | `DB_POOL_SIZE` | 10 (+overflow 10) | SQLAlchemy 풀. Pod당 최대 `DB_POOL_SIZE × 2` 연결 |
 | `CHECKPOINT_POOL_SIZE` | 16 | LangGraph checkpointer/store 풀. 실행 중인 turn의 graph step마다 체크포인트를 쓰므로 `RUN_CONCURRENCY`의 절반 이상으로 둔다. 연결을 30초(`CHECKPOINT_POOL_TIMEOUT_SECONDS`) 안에 못 얻으면 turn이 실패한다 |
 | PG `max_connections` | — | Pod당 최대 연결 = `DB_POOL_SIZE × 2 + CHECKPOINT_POOL_SIZE` (기본 36). `maxReplicas × 36 + 여유(마이그레이션, 운영 접속 등 20)`보다 커야 한다. 기본값(max 6)이면 236 이상 |

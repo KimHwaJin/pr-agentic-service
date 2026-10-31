@@ -133,3 +133,38 @@ async def test_stop_drains_runs_and_memory_together():
     await worker.stop(drain_seconds=1)
     assert sorted(started) == ["memory", "runs"]
     assert loop.time() - begin < 0.35
+
+
+def test_claim_query_limits_each_user():
+    from sqlalchemy.dialects import postgresql
+
+    statements: list[str] = []
+
+    class Session:
+        async def scalars(self, statement):
+            statements.append(
+                str(statement.compile(dialect=postgresql.dialect()))
+            )
+            return SimpleNamespace(all=lambda: [])
+
+        async def commit(self):
+            pass
+
+    class Db:
+        def sessions(self):
+
+            class Ctx:
+                async def __aenter__(self):
+                    return Session()
+
+                async def __aexit__(self, *exc):
+                    return None
+
+            return Ctx()
+
+    scheduler = _scheduler()
+    scheduler.settings.run_user_concurrency = 2
+    scheduler.services.db = Db()
+    assert asyncio.run(scheduler._claim(8)) == []
+    assert "row_number() OVER (PARTITION BY runs.user_id" in statements[0]
+    assert "FOR UPDATE SKIP LOCKED" in statements[0]

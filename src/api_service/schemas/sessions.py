@@ -30,7 +30,9 @@ class TextBlock(Model):
 
 class ImageBlock(Model):
     type: Literal["image"]
-    base64: str = Field(min_length=1)
+    # a parse-time bound (IMAGE_MAX_BYTES is checked after decoding): 16 MB
+    # of base64 is 12 MB of image, above any IMAGE_MAX_BYTES in use
+    base64: str = Field(min_length=1, max_length=16 * 1024 * 1024)
     mime_type: Literal["image/png", "image/jpeg", "image/webp"]
     name: str | None = Field(None, max_length=255)
 
@@ -42,8 +44,9 @@ class RunInput(Model):
     """A user turn: text, or LangChain content blocks (text + images)."""
 
     content: str | list[ContentBlock] = Field(
+        max_length=50,
         description="문자열, 또는 [{type: text, text}, {type: image, base64, "
-        "mime_type, name?}] 블록 목록"
+        "mime_type, name?}] 블록 목록",
     )
 
     @model_validator(mode="after")

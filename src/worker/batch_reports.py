@@ -35,6 +35,7 @@ from agent.batch import BatchReportAgent, previous_runs, remember_run
 from agent.context import BatchReportContext
 from core.db import affected, new_id, utcnow
 from core.executor.client import ExecutorError, Identity, trigger_type
+from core.failures import user_message
 from core.models import BatchReportJob
 from core.notebook_links import lab_url
 from core.services import Services
@@ -364,8 +365,7 @@ class BatchReportWorker:
         except LeaseLost:
             raise
         except Exception as exc:  # noqa: BLE001
-            log.warning("batch_report_failed job=%s stage=%s", job.id, stage)
-            error = f"{type(exc).__name__}: {exc}"[:2000]
+            error = user_message(exc, "batch_report", job=job.id, stage=stage)
             await self._set(
                 job.id,
                 state="FAILED",
