@@ -1,3 +1,4 @@
+import logging
 from collections.abc import AsyncIterator, Awaitable, Callable, Collection
 from dataclasses import dataclass
 from typing import Any, cast
@@ -51,6 +52,8 @@ from src.dtest.agent.tools.main import (
 from src.dtest.core.config import Settings
 from src.dtest.core.events import TokenBuffer
 from src.dtest.core.executor.client import ExecutorError
+
+log = logging.getLogger(__name__)
 
 TOOLS = [
     ask_user,
@@ -161,6 +164,18 @@ class AgentGraphs:
                 if resume["interrupt_id"] in pending
                 else None
             )
+            if command is None:
+                # The API checks the id against run.waiting; a checkpoint
+                # without it (already answered on a pod that died before
+                # recording it) continues from the checkpoint, which asks
+                # again if the question is still open.
+                log.warning(
+                    "resume_interrupt_not_pending run_id=%s interrupt=%s "
+                    "pending=%s",
+                    ctx.run_id,
+                    resume["interrupt_id"],
+                    ",".join(pending),
+                )
         elif any(
             getattr(m, "id", None) == ctx.run_id
             for m in state.values.get("messages", [])

@@ -5,6 +5,7 @@
 - 설계: [docs/design/00-design-draft.md](docs/design/00-design-draft.md)
 - 프론트 연동: [docs/api-guide.md](docs/api-guide.md)
 - 부하 설계·측정: [docs/load-design.md](docs/load-design.md)
+- 운영 메모 (키 발급, 캐시 반영 시간, 마이그레이션, ingress): [docs/operations.md](docs/operations.md)
 - Workflow 표준: [docs/specs/workflow-1.0](docs/specs/workflow-1.0/workflow_spec_1.0.md)
 - 내부망(gaia 템플릿) 반영: [docs/internal-network.md](docs/internal-network.md)
 

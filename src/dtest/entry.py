@@ -31,6 +31,7 @@ from src.dtest import tracing_phoenix  # optional (docs/phoenix-tracing.md)
 from src.dtest.api_service.app import mount_api, start_api, stop_api
 from src.dtest.core.bootstrap import build_services
 from src.dtest.core.config import get_settings
+from src.dtest.core.request_context import install_log_field
 from src.dtest.gaia_bridge import runtime as gaia_runtime
 from src.dtest.winloop import use_selector_loop
 from src.dtest.worker.runtime import Worker
@@ -53,6 +54,7 @@ def attach(app: FastAPI) -> None:
     ``worker_health(app)`` is for the liveness route.
     """
     use_selector_loop()
+    install_log_field()  # record.request_id for HCP's formatter too
     settings = get_settings()
     tracing_phoenix.setup()
     api_enabled, _ = run_mode()

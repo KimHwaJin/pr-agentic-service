@@ -13,8 +13,17 @@ from src.dtest.api_service.schemas.users import (
     UserBrief,
     UserRead,
 )
+from src.dtest.api_service.services.runs import request_cancel
 from src.dtest.core.batch_admin import tell_batch
-from src.dtest.core.models import Project, ProjectMember, User
+from src.dtest.core.executor.cancels import cancel_idle_executions
+from src.dtest.core.models import (
+    ChatSession,
+    Project,
+    ProjectMember,
+    Run,
+    User,
+)
+from src.dtest.core.services import Services
 
 router = APIRouter(tags=["users"])
 
@@ -103,5 +112,35 @@ async def update_user(
     forget_user(user_id)
     if deactivated:
         await tell_batch(services, user_id)
+        await stop_user_work(services, user_id)
     async with services.db.sessions() as db:
         return await db.get(User, user_id)
+
+
+async def stop_user_work(services: Services, user_id: str) -> None:
+    """A deactivated user's turns and executor kernels stop with them.
+
+    Their running or waiting runs are cancelled (the executor execution a
+    run waits on included); kernels their sessions may still keep open
+    are cancelled as on a session delete. Cancels the executor misses are
+    retried by the worker.
+    """
+    async with services.db.sessions() as db:
+        runs = (
+            await db.scalars(
+                select(Run.id).where(
+                    Run.user_id == user_id,
+                    Run.status.notin_(("succeeded", "failed", "cancelled")),
+                )
+            )
+        ).all()
+        sessions = (
+            await db.scalars(
+                select(ChatSession.id).where(ChatSession.user_id == user_id)
+            )
+        ).all()
+    for run_id in runs:
+        await request_cancel(services, run_id, "사용자 비활성화")
+    await cancel_idle_executions(
+        services, list(sessions), reason="사용자 비활성화"
+    )

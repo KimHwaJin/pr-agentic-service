@@ -13,6 +13,7 @@ from pathlib import Path
 import yaml
 
 from src.dtest.core.config import ROOT
+from src.dtest.core.request_context import install_log_field
 
 LOGGER_CONFIG = ROOT / "logger.yml"
 # our keys and theirs (pas_ ours, exe_ executor, bat_ pr-batch), and an
@@ -43,6 +44,7 @@ def configure_logging(path: Path = LOGGER_CONFIG) -> None:
         apply_logger_config(path)
     else:
         init_logger()
+    install_log_field()
     mask_secrets()
 
 

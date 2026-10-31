@@ -6,6 +6,8 @@ from typing import Any
 
 import httpx
 
+from src.dtest.core.request_context import HEADER as REQUEST_ID_HEADER
+from src.dtest.core.request_context import request_id
 from src.dtest.core.service_headers import SYSTEM, Identity, with_key
 
 log = logging.getLogger(__name__)
@@ -80,8 +82,11 @@ class ExecutorClient:
     async def _call(
         self, method: str, url: str, who: Identity = SYSTEM, **kwargs: Any
     ) -> Any:
+        headers = self.headers(who)
+        if (rid := request_id.get()) != "-":
+            headers[REQUEST_ID_HEADER] = rid
         response = await self.http.request(
-            method, url, headers=self.headers(who), **kwargs
+            method, url, headers=headers, **kwargs
         )
         if response.status_code >= 400:
             try:
@@ -93,7 +98,7 @@ class ExecutorClient:
                 method,
                 url,
                 response.status_code,
-                body,
+                _clip(body),
             )
             raise ExecutorError(response.status_code, body)
         return response.json() if response.content else None
@@ -298,3 +303,14 @@ class ExecutorClient:
             await response.aread()
             raise ExecutorError(response.status_code, response.text)
         return response, response.aiter_bytes()
+
+
+LOG_BODY_CHARS = 1000
+
+
+def _clip(body: Any) -> str:
+    """An error body for a log line: tracebacks and echoed code cut short."""
+    text = str(body)
+    if len(text) <= LOG_BODY_CHARS:
+        return text
+    return f"{text[:LOG_BODY_CHARS]}... ({len(text)} chars)"
