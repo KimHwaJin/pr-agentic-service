@@ -9,7 +9,7 @@
 # Locally (APP_ENV empty) the docker-compose.yml environment or .env adds the
 # local values. Precedence: environment > .env > config.{APP_ENV}.yml > this
 # file. Relative paths are under the repo root. RUN_MODE and PHOENIX_* are
-# read from the environment only.
+# read from the environment only. config.example.yml explains every key.
 
 # Database / Redis.
 REDIS_NAMESPACE: agentic
