@@ -4,7 +4,9 @@ The id comes from the caller's ``X-Request-ID`` (an ingress or gateway
 usually sets one) or is made here, is sent back in the response header,
 and is passed on to the executor so one request can be followed across
 services. Log records carry it as ``record.request_id`` ("-" outside a
-request), which a formatter can print with ``%(request_id)s``.
+request), and ``RequestIdInMessage`` writes it into the message as
+``request_id=<id>``: the platform's log format (HCP) prints only the
+message, so a record attribute alone would not reach Kibana.
 """
 
 import logging
@@ -34,6 +36,24 @@ def install_log_field() -> None:
 
     factory._adds_request_id = True  # ty: ignore[unresolved-attribute]
     logging.setLogRecordFactory(factory)
+
+
+class RequestIdInMessage(logging.Filter):
+    """Ends a request's log messages with `` request_id=<id>``.
+
+    On handlers (``core.logging_setup``); a record two handlers write gets
+    the id once.
+    """
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        rid = getattr(record, "request_id", "-")
+        if rid != "-" and not getattr(record, "request_id_in_message", False):
+            record.msg, record.args = (
+                f"{record.getMessage()} request_id={rid}",
+                None,
+            )
+            record.request_id_in_message = True
+        return True
 
 
 class RequestId:
