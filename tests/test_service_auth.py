@@ -274,18 +274,6 @@ def test_without_key_or_cookie_login_is_required():
     assert err.value.status_code == 401
 
 
-def test_header_mode_trusts_the_user_header():
-    request, user = _authenticate(
-        _Db(users=[_user()]),
-        {"X-User-Id": USER},
-        settings=Settings(auth_mode="header"),
-    )
-    caller = deps.caller_of(request)
-    assert (
-        user.id == USER and caller and caller.tenant == "dtest-agent-service"
-    )
-
-
 def test_the_cookie_decides_when_both_are_sent():
     class Sso:
         async def authenticate(self, request):
@@ -431,25 +419,6 @@ def test_disable_by_owner_call(monkeypatch):
         "owner_id": USER,
         "reason": "USER_DEACTIVATED",
     }
-
-
-def test_disable_by_owner_without_a_key_names_our_tenant(monkeypatch):
-    # header mode: no tenant would mean pr-batch's "dev"
-    sent: list[httpx.Request] = []
-    real = httpx.AsyncClient
-
-    def client(**kw):
-        def handle(request):
-            sent.append(request)
-            return httpx.Response(200, json={"disabled": 0})
-
-        return real(transport=httpx.MockTransport(handle), **kw)
-
-    monkeypatch.setattr(batch_admin.httpx, "AsyncClient", client)
-    settings = Settings(batch_api_key="")
-    asyncio.run(batch_admin.disable_batches_of(settings, USER))
-    assert "x-api-key" not in sent[0].headers
-    assert sent[0].headers["x-tenant-id"] == settings.executor_tenant_id
 
 
 def test_a_failed_disable_stays_pending(monkeypatch):

@@ -30,14 +30,10 @@ SSO_ADAPTER_FACTORY: "idp_login:create_sdk"
 SSO_ALLOWED_RETURN_ROOTS: ["/"]
 SESSION_COOKIE_NAME: agentic_session
 
-# Callers other than the browser (docs/specs/service-auth.md): X-Api-Key of
-# an api client (issued on the 시스템 page) + X-User-Id. header: X-User-Id
-# without a key, local only (refused with APP_ENV).
-AUTH_MODE: api_key
-# Our keys go to the executor and pr-batch (X-Api-Key). false: no key, for
-# a local executor / pr-batch in AUTH_MODE=header; refused with APP_ENV
-# (dev, stg and prd are always key mode, 2026-11-01).
-SERVICE_KEYS_ENABLED: true
+# Callers other than the browser (docs/specs/service-auth.md) always send
+# X-Api-Key of an api client (issued on the 시스템 page) + X-User-Id, and
+# we always send our keys to the executor and pr-batch: there is no
+# keyless mode in any environment (2026-11-01).
 API_CLIENT_CACHE_SECONDS: 60
 COOKIE_SAMESITE: lax
 # Login sessions slide: idle this long ends one, activity extends it, up to
