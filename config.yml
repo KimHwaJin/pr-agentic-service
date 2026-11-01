@@ -90,6 +90,14 @@ CATALOG_EXTENSIONS: []
 DEFAULT_CODE_LEVEL: 3
 PLAN_CANDIDATES: 5
 WORKFLOW_SIMILARITY: 0.93
+# mixed: recommended templates first, new plans for the rest, in one card;
+# recommend_first: recommended templates alone first (new plans after the
+# user rejects them), new plans only when nothing matches
+PLAN_RECOMMEND_MODE: mixed
+# a template runs without the approval card only when it is the only
+# candidate and its embedding search similarity is at least this (never on
+# keyword search); at least WORKFLOW_SIMILARITY
+WORKFLOW_AUTO_RUN_SIMILARITY: 0.97
 # author: the author promotes their own; admin: administrators only
 WORKFLOW_PROMOTION: author
 AGENT_RECURSION_LIMIT: 200

@@ -59,6 +59,7 @@ Idempotency-Key: 7f0c…            (선택, 권장)
 | `plan_approval` | `{"action": "approve", "index": n, "input_values": {"<s>.<t>.<param>": 값}, "overrides": {"<s>.<t>.<param>": 값}}` | `index`가 후보 범위 안인지, 그 후보의 `input_slots` 중 `required`가 모두 채워졌는지, `overrides` 키가 그 후보의 파라미터인지 |
 | | `{"action": "revise", "feedback": "..."}` | `feedback` 1자 이상 |
 | | `{"action": "cancel"}` | |
+| | `{"action": "reject_templates"}` | 질문의 `allow_reject_templates`가 true(후보가 모두 등록된 워크플로우)일 때만 |
 | `code_approval` | `{"approve": true, "code": "수정한 코드(선택)"}` / `{"approve": false, "feedback": "..."}` | `approve` 불리언 필수 |
 | `workflow_save` | `{"approve": true, "name": "...", "user_queries": [...]}` / `{"approve": false}` | `approve` 필수, `user_queries` 1개 이상(승인 시) |
 

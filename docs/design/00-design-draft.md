@@ -214,9 +214,9 @@ pr-batch(`/Users/a10054/SKAX_PROJECT/pr-batch`, 개발 중)는 사용자 스크�
 
 ### 9.7 확정
 
-- `allow_immediate_execution=true` template + 질문에서 입력값이 모두 채워짐 → 승인 HITL 생략. Agent 작성 코드가 섞이면 항상 승인.
+- `allow_immediate_execution=true` template 하나만 후보 + 질문에서 입력값이 모두 채워짐 + 서버 임베딩 검색 유사도 `WORKFLOW_AUTO_RUN_SIMILARITY`(기본 0.97) 이상 → 승인 HITL 생략. 후보가 둘 이상이거나 키워드 검색이면 항상 승인. Agent 작성 코드가 섞이면 항상 승인.
 - 추천 검색 대상: 승격된 template만. candidate(저장했지만 승격 전, 작성자만 보는 워크플로우)는 검색 풀에 넣지 않는다.
-- **계획 후보 수**: 한 번에 제안하는 실행 계획 수는 설정값 `PLAN_CANDIDATES`(기본 5). 검색으로 template k개가 추천되면 나머지 5-k개를 analyst가 새로 생성해 함께 보여준다. 사용자는 승인 화면에서 하나를 골라 입력값을 확인·수정하고 승인한다. 추천 template 후보에는 출처와 유사도를 표시한다.
+- **계획 후보 수**: 한 번에 제안하는 실행 계획 수는 설정값 `PLAN_CANDIDATES`(기본 5). 검색으로 template k개가 추천되면 나머지 5-k개를 analyst가 새로 생성해 함께 보여준다. 사용자는 승인 화면에서 하나를 골라 입력값을 확인·수정하고 승인한다. 추천 template 후보에는 출처와 유사도를 표시한다. 이 방식이 `PLAN_RECOMMEND_MODE=mixed`(기본)이고, `recommend_first`는 추천 template만 먼저 보여 주고 사용자가 "추천 말고 새로 만들기"(`reject_templates`)를 고르면 새 계획 `PLAN_CANDIDATES`개를 제안한다. 추천이 없으면 처음부터 새 계획을 제안한다.
 
 ## 10. prj_re 기능 중 포함 범위 (확정)
 

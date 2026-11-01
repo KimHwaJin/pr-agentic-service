@@ -1461,7 +1461,7 @@ function renderPlanApproval(w, resume) {
     </div>`).join('');
   body.innerHTML = `<div class="cand-tabs">${items}</div>`;
   foot.innerHTML = `<div class="row"><input id="fb" placeholder="수정 요청 (예: 표본을 500개로, 상관분석도 추가)"><button class="btn" id="rev">수정 요청</button></div>
-    <div class="row" style="justify-content:flex-end"><span id="need" style="flex:1;font-size:12px;color:var(--accent)"></span><button class="btn" id="no">취소</button><button class="btn primary" id="ok">승인하고 실행</button></div>`;
+    <div class="row" style="justify-content:flex-end"><span id="need" style="flex:1;font-size:12px;color:var(--accent)"></span><button class="btn" id="no">취소</button>${w.allow_reject_templates ? '<button class="btn" id="anew">추천 말고 새로 만들기</button>' : ''}<button class="btn primary" id="ok">승인하고 실행</button></div>`;
   let current = 0;
   const pane = () => body.querySelector(`.cand[data-i="${current}"] .cand-pane`);
   const check = () => {
@@ -1491,6 +1491,8 @@ function renderPlanApproval(w, resume) {
   };
   foot.querySelector('#rev').onclick = () => resume({ action: 'revise', feedback: foot.querySelector('#fb').value });
   foot.querySelector('#no').onclick = () => resume({ action: 'cancel' });
+  const anew = foot.querySelector('#anew');  // only when every candidate is a template
+  if (anew) anew.onclick = () => resume({ action: 'reject_templates' });
 }
 
 function paramRow(p) {

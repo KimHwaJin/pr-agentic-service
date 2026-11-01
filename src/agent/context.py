@@ -52,6 +52,10 @@ class AnalysisState(AgentState):
         (one kernel, one notebook).
     nudges: text-only analyst replies sent back in this graph run.
     notice: one-off instruction appended to the next model call only.
+    recommend: what this run's search_workflows found and what the user
+        said of it: {"run_id", "similarity": {workflow_id: float | None
+        (keyword search)}, "rejected": bool (reject_templates)}; another
+        run's value means nothing.
     """
 
     active_agent: NotRequired[str]
@@ -59,6 +63,7 @@ class AnalysisState(AgentState):
     execution: NotRequired[dict[str, Any] | None]
     nudges: NotRequired[int]
     notice: NotRequired[str | None]
+    recommend: NotRequired[dict[str, Any] | None]
 
 
 @dataclass

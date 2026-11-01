@@ -258,6 +258,14 @@ class Settings(BaseSettings):
     default_code_level: int = Field(3, ge=1, le=4)
     plan_candidates: int = Field(5, ge=1, le=10)
     workflow_similarity: float = 0.93
+    # how propose_plans offers templates: mixed = recommended templates
+    # first, new plans for the rest of plan_candidates, in one card;
+    # recommend_first = only the recommended templates first (new plans
+    # once the user rejects them), new plans alone when nothing matches
+    plan_recommend_mode: Literal["mixed", "recommend_first"] = "mixed"
+    # a template runs without the approval card only when it is the one
+    # candidate and its search similarity (embedding search) reaches this
+    workflow_auto_run_similarity: float = 0.97
     # who may promote a candidate workflow to a template for every user:
     # its author, or administrators only (any workflow)
     workflow_promotion: Literal["author", "admin"] = "author"
@@ -374,6 +382,11 @@ class Settings(BaseSettings):
         if self.session_max_seconds < self.session_ttl_seconds:
             raise ValueError(
                 "SESSION_MAX_SECONDS must be at least SESSION_TTL_SECONDS"
+            )
+        if self.workflow_auto_run_similarity < self.workflow_similarity:
+            raise ValueError(
+                "WORKFLOW_AUTO_RUN_SIMILARITY must be at least "
+                "WORKFLOW_SIMILARITY"
             )
         if self.executor_io_mode == "api" and self.env in {"stg", "prd"}:
             raise ValueError("EXECUTOR_IO_MODE=api is for test environments")

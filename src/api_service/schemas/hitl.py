@@ -49,8 +49,20 @@ class PlanCancelReply(Model):
     action: Literal["cancel"]
 
 
+class PlanRejectTemplatesReply(Model):
+    """plan_approval: none of the recommended workflows; design new plans.
+
+    Only when the question has ``allow_reject_templates: true``.
+    """
+
+    action: Literal["reject_templates"]
+
+
 PlanReply = Annotated[
-    PlanApproveReply | PlanReviseReply | PlanCancelReply,
+    PlanApproveReply
+    | PlanReviseReply
+    | PlanCancelReply
+    | PlanRejectTemplatesReply,
     Field(discriminator="action"),
 ]
 

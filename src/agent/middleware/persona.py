@@ -82,6 +82,25 @@ CODE_LEVELS = {
     ),
     4: "4 (free_code): tool은 참고만 하고 필요한 코드를 자유롭게 작성 가능.",
 }
+# step 3 of analyst.md per PLAN_RECOMMEND_MODE; {n} = PLAN_CANDIDATES
+PLAN_RECOMMEND = {
+    "mixed": (
+        "`propose_plans`로 계획 후보를 {n}개 채워 제안합니다. "
+        "추천 워크플로우가 k개면 그것을 앞에 두고 나머지 {n}-k개는 새로 "
+        "설계합니다. 후보마다 접근이 달라야 하며(범위, 표본 방식, 추가 분석 "
+        "등), 가장 요청에 맞는 것을 첫 번째에 둡니다."
+    ),
+    "recommend_first": (
+        "`propose_plans`로 계획 후보를 제안합니다. `search_workflows`가 "
+        "추천 워크플로우를 찾았으면 추천 워크플로우(`workflow_id` 후보)만 "
+        "먼저 제안하고 새 계획은 섞지 않습니다. 사용자가 추천을 거절하면 "
+        "도구가 알려 주는 대로 등록된 워크플로우를 쓰지 말고 새 계획을 "
+        "{n}개 설계해 다시 제안합니다. 추천이 없으면 처음부터 새 계획을 "
+        "{n}개 설계해 제안합니다. 새 계획은 후보마다 접근이 달라야 하며"
+        "(범위, 표본 방식, 추가 분석 등), 가장 요청에 맞는 것을 첫 번째에 "
+        "둡니다."
+    ),
+}
 
 
 class PersonaMiddleware(AgentMiddleware[AnalysisState, RunContext]):
@@ -163,7 +182,7 @@ class PersonaMiddleware(AgentMiddleware[AnalysisState, RunContext]):
             skills=skills or "없음",
             code_level=CODE_LEVELS[ctx.code_level],
             plan=_plan_status(cast(AnalysisState, request.state)),
-            plan_candidates=ctx.services.settings.plan_candidates,
+            plan_recommend=plan_recommend(ctx.services.settings),
         )
         extras = [
             f"# 프로젝트 지침 (사용자가 작성)\n{ctx.project_prompt}"
@@ -190,6 +209,13 @@ class PersonaMiddleware(AgentMiddleware[AnalysisState, RunContext]):
                     ],
                 )
             )
+
+
+def plan_recommend(settings: Any) -> str:
+    """Step 3 of the analyst prompt for this PLAN_RECOMMEND_MODE."""
+    return PLAN_RECOMMEND[settings.plan_recommend_mode].replace(
+        "{n}", str(settings.plan_candidates)
+    )
 
 
 async def _with_images(messages: list, ctx: RunContext) -> list:
