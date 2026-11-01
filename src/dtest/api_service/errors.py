@@ -28,7 +28,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException
 
-from src.dtest.api_service import API_PREFIX
+from src.dtest.api_service.paths import is_own
 from src.dtest.core.db import NotFound
 
 log = logging.getLogger(__name__)
@@ -111,19 +111,18 @@ def error_response(
     )
 
 
-# Our routes. The app is shared with the gaia template's own APIs, whose
-# errors keep the handler they had before ours (or FastAPI's default).
-OWN_PREFIXES = (API_PREFIX + "/", "/view/", "/dev/")
-
 Handler = Callable[[Request, Exception], Response | Awaitable[Response]]
 
 
 def install(app: FastAPI) -> None:
-    app.add_exception_handler(ApiError, _api_error)
-    app.add_exception_handler(NotFound, _not_found)
+    """Our error shape on our paths (``paths.is_own``). The app may be
+    shared with the gaia template's own APIs, whose errors keep the
+    handler they had before ours (or FastAPI's default)."""
     handlers = app.exception_handlers
     starlette_http = handlers.get(HTTPException, http_exception_handler)
     for cls, handler, previous in (
+        (ApiError, _api_error, handlers.get(ApiError, _reraise)),
+        (NotFound, _not_found, handlers.get(NotFound, _reraise)),
         (
             RequestValidationError,
             _invalid_body,
@@ -143,9 +142,8 @@ def install(app: FastAPI) -> None:
 
 def _scoped(own: Handler, other: Handler) -> Handler:
     async def handle(request: Request, exc: Exception) -> Response:
-        path = request.url.path
-        mine = path.startswith(OWN_PREFIXES) or path + "/" in OWN_PREFIXES
-        response = (own if mine else other)(request, exc)
+        handler = own if is_own(request.url.path) else other
+        response = handler(request, exc)
         return await response if inspect.isawaitable(response) else response
 
     return handle
@@ -157,6 +155,7 @@ async def _invalid_body_default(request: Request, exc: Exception) -> Response:
 
 
 async def _reraise(request: Request, exc: Exception) -> Response:
+    """Not ours to answer: on to the app's 500 handling."""
     raise exc
 
 
