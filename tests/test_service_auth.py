@@ -360,11 +360,31 @@ def test_disable_by_owner_call(monkeypatch):
     assert sent[0].url.path == "/api/v1/batches:disable-by-owner"
     assert sent[0].headers["x-api-key"] == "bat_test_k"
     assert "x-user-id" not in sent[0].headers
-    assert sent[0].headers["x-tenant-id"] == settings.executor_tenant_id
+    # every tenant of our key, not ours alone
+    assert "x-tenant-id" not in sent[0].headers
     assert json.loads(sent[0].content) == {
         "owner_id": USER,
         "reason": "USER_DEACTIVATED",
     }
+
+
+def test_disable_by_owner_without_a_key_names_our_tenant(monkeypatch):
+    # header mode: no tenant would mean pr-batch's "dev"
+    sent: list[httpx.Request] = []
+    real = httpx.AsyncClient
+
+    def client(**kw):
+        def handle(request):
+            sent.append(request)
+            return httpx.Response(200, json={"disabled": 0})
+
+        return real(transport=httpx.MockTransport(handle), **kw)
+
+    monkeypatch.setattr(batch_admin.httpx, "AsyncClient", client)
+    settings = Settings(batch_api_key="")
+    asyncio.run(batch_admin.disable_batches_of(settings, USER))
+    assert "x-api-key" not in sent[0].headers
+    assert sent[0].headers["x-tenant-id"] == settings.executor_tenant_id
 
 
 def test_a_failed_disable_stays_pending(monkeypatch):

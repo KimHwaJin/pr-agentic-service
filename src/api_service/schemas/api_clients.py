@@ -9,8 +9,10 @@ from api_service.schemas.base import Model
 
 class ApiClientCreate(Model):
     name: str = Field(min_length=1, max_length=64)
-    # executor/pr-batch tenant of the client; empty = this service's own
-    tenant: str | None = Field(None, pattern=r"^[a-z][a-z0-9-]{1,62}[a-z0-9]$")
+    # executor/pr-batch tenant of the client (their TENANT_ID_PATTERN)
+    tenant: str = Field(pattern=r"^[a-z][a-z0-9-]{1,62}[a-z0-9]$")
+    # required to issue a key of this service's own tenant
+    own_tenant: bool = False
     description: str | None = Field(None, max_length=2000)
 
 
@@ -31,3 +33,8 @@ class ApiClientIssued(Model):
     client: ApiClientRead
     # shown once: only its SHA-256 is kept
     api_key: str
+
+
+class TenantRevoked(Model):
+    tenant: str
+    revoked: int
