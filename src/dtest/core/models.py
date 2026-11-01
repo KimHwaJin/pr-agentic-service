@@ -449,3 +449,8 @@ class ApiClient(Timestamped, Base):
     last_used_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True)
     )
+    # the tenant was cut off (no active key left) and pr-batch has not yet
+    # turned its batches off (worker.user_deactivation retries)
+    batches_disable_pending: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="false"
+    )

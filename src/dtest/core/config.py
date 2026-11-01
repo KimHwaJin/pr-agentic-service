@@ -9,6 +9,7 @@ config.yml plus environment/.env values. Keys are case-insensitive in every
 source (``REDIS_URL`` or ``redis_url``; the config files use upper case).
 """
 
+import logging
 import os
 import re
 from functools import lru_cache
@@ -36,14 +37,41 @@ ROOT = Path(__file__).resolve().parents[3]
 DTEST_ROOT = ROOT / "src/dtest"
 
 
+log = logging.getLogger(__name__)
+
 APP_ENVS = ("dev", "stg", "prd")
 # executor stream names a tenant_id may not take
 RESERVED_TENANT_IDS = frozenset({"dlq", "work"})
 
 
+_TEMPLATE_SLOT = re.compile(r"<[^<>\n]{1,40}>")
+
+
 def is_placeholder(value: str) -> bool:
-    """A template value left in a config file (<exe-key>, REPLACE_...)."""
-    return value.startswith("<") or "REPLACE" in value.upper()
+    """A template value left in a config file (<exe-key>, REPLACE_...,
+    https://<api-host>)."""
+    return bool(_TEMPLATE_SLOT.search(value)) or "REPLACE" in value.upper()
+
+
+def placeholders(value: Any, path: str = "") -> list[str]:
+    """Settings paths of template values left anywhere in ``value``."""
+    if isinstance(value, str):
+        return [path] if is_placeholder(value) else []
+    if isinstance(value, BaseModel):
+        value = value.model_dump()
+    if isinstance(value, dict):
+        return [
+            hit
+            for key, item in value.items()
+            for hit in placeholders(item, f"{path}.{key}" if path else key)
+        ]
+    if isinstance(value, list | tuple):
+        return [
+            hit
+            for i, item in enumerate(value)
+            for hit in placeholders(item, f"{path}[{i}]")
+        ]
+    return []
 
 
 def app_env() -> str | None:
@@ -183,7 +211,7 @@ class Settings(BaseSettings):
     # Service-to-service auth (docs/specs/service-auth.md).
     # api_key: callers other than the browser send X-Api-Key (a key of
     # api_clients) and X-User-Id. header: X-User-Id is trusted without a
-    # key (local/dev only, for testers).
+    # key (local only, for testers).
     auth_mode: Literal["api_key", "header"] = "api_key"
     # how long a verified caller key is cached (revocation delay)
     api_client_cache_seconds: float = Field(60, ge=0, le=300)
@@ -191,13 +219,13 @@ class Settings(BaseSettings):
     # Executor.
     executor_base_url: str = "http://localhost:8000"
     # Our key at the executor (X-Api-Key, a relay key). Empty only against
-    # an executor in header mode (local/dev).
+    # an executor in header mode (local only).
     executor_api_key: str = ""
     # The operator key of the executor's runtime and maintenance APIs, for
     # the 시스템 page; empty = those pages answer 503.
     executor_admin_api_key: str = ""
     # Send our keys (X-Api-Key) to the executor and pr-batch. false: no key
-    # goes out, for an executor / pr-batch in AUTH_MODE=header (local/dev
+    # goes out, for an executor / pr-batch in AUTH_MODE=header (local
     # only); the keys above are then ignored.
     service_keys_enabled: bool = True
     # The executor tenant of this service (the default tenant of our key):
@@ -416,21 +444,24 @@ class Settings(BaseSettings):
             )
         if self.executor_io_mode == "api" and self.env in {"stg", "prd"}:
             raise ValueError("EXECUTOR_IO_MODE=api is for test environments")
-        if self.auth_mode == "header" and self.env not in {"local", "dev"}:
-            raise ValueError("AUTH_MODE=header is only allowed in local/dev")
+        # Deployed (dev, stg, prd) is always key mode, both ways
+        # (2026-11-01): header mode and keyless calls are local only.
+        if self.auth_mode == "header" and self.env != "local":
+            raise ValueError("AUTH_MODE=header is only allowed locally")
         if not self.service_keys_enabled:
-            if self.env not in {"local", "dev"}:
+            if self.env != "local":
                 raise ValueError(
-                    "SERVICE_KEYS_ENABLED=false is only allowed in local/dev"
+                    "SERVICE_KEYS_ENABLED=false is only allowed locally"
                 )
             # validate_assignment is off: no re-run of this validator
             self.executor_api_key = self.executor_admin_api_key = ""
             self.batch_api_key = ""
-        if self.env in {"stg", "prd"} and not (
+        if self.env != "local" and not (
             self.executor_api_key and self.batch_api_key
         ):
             raise ValueError(
-                "EXECUTOR_API_KEY and BATCH_API_KEY are required in stg/prd"
+                "EXECUTOR_API_KEY and BATCH_API_KEY are required when "
+                "APP_ENV is set"
             )
         for name in (
             "executor_api_key",
@@ -440,7 +471,25 @@ class Settings(BaseSettings):
             if is_placeholder(getattr(self, name)):
                 raise ValueError(
                     f"{name.upper()} is still a placeholder; set the issued "
-                    "key (or SERVICE_KEYS_ENABLED=false in local/dev)"
+                    "key (or SERVICE_KEYS_ENABLED=false locally)"
+                )
+        if self.env != "local":
+            left = placeholders(self.model_dump())
+            if left:
+                raise ValueError(
+                    "config values still hold a template placeholder: "
+                    + ", ".join(name.upper() for name in left)
+                )
+            if self.sso_adapter == "idp" and not self.sso_allowed_origins:
+                raise ValueError(
+                    "SSO_ALLOWED_ORIGINS is empty: every SSO login would "
+                    "be refused (502); set the SSO login page origin"
+                )
+            if not self.admin_employee_ids:
+                log.warning(
+                    "admin_employee_ids_empty env=%s: nobody becomes an "
+                    "administrator at first login",
+                    self.env,
                 )
         if self.executor_tenant_id in RESERVED_TENANT_IDS:
             raise ValueError(

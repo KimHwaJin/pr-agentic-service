@@ -4,6 +4,8 @@ import yaml
 from src.dtest.core import config
 from src.dtest.core.config import Settings
 
+SSO = 'sso_adapter: idp\nsso_allowed_origins: ["https://sso"]\n'
+
 
 @pytest.fixture
 def root(tmp_path, monkeypatch):
@@ -25,8 +27,9 @@ def test_without_app_env_only_config_yml_is_read(root):
 
 def test_app_env_file_wins_over_config_yml(root, monkeypatch):
     (root / "config.stg.yml").write_text(
-        "batch_base_url: http://stg:8100\nsso_adapter: idp\n"
-        "cookie_secure: true\nexecutor_api_key: exe\nbatch_api_key: bat\n"
+        "batch_base_url: http://stg:8100\n"
+        + SSO
+        + "cookie_secure: true\nexecutor_api_key: exe\nbatch_api_key: bat\n"
     )
     monkeypatch.setenv("APP_ENV", "stg")
     settings = Settings()
@@ -84,7 +87,7 @@ PER_ENV_KEYS = {
     "executor_base_url",
     "executor_api_key",
     "executor_admin_api_key",
-    "service_keys_enabled",
+    "sso_allowed_origins",
     "batch_base_url",
     "batch_api_key",
 }
@@ -149,7 +152,9 @@ def test_settings_load_under_a_cp949_locale(root):
         "from core import config\n"
         "from pathlib import Path\n"
         "config.ROOT = Path.cwd()\n"
-        "assert config.Settings().dev_employee_name == '개발자'\n"
+        # escaped: the command line itself must not need the locale
+        "assert config.Settings().dev_employee_name == "
+        "'\\uac1c\\ubc1c\\uc790'\n"
     )
     done = subprocess.run(
         [sys.executable, "-c", code], cwd=root, env=env, capture_output=True
@@ -160,28 +165,27 @@ def test_settings_load_under_a_cp949_locale(root):
 
 
 def test_stg_needs_our_service_keys(root, monkeypatch):
-    (root / "config.stg.yml").write_text(
-        "sso_adapter: idp\ncookie_secure: true\n"
-    )
+    (root / "config.stg.yml").write_text(SSO + "cookie_secure: true\n")
     monkeypatch.setenv("APP_ENV", "stg")
     with pytest.raises(ValueError, match="EXECUTOR_API_KEY and BATCH_API_KEY"):
         Settings()
 
 
-def test_header_mode_only_in_local_and_dev(root, monkeypatch):
+@pytest.mark.parametrize("env", ["dev", "prd"])
+def test_header_mode_only_locally(root, monkeypatch, env):
     assert Settings(auth_mode="header").auth_mode == "header"  # local
-    (root / "config.prd.yml").write_text(
-        "sso_adapter: idp\ncookie_secure: true\n"
+    (root / f"config.{env}.yml").write_text(
+        SSO + "cookie_secure: true\n"
         "executor_api_key: exe\nbatch_api_key: bat\nauth_mode: header\n"
     )
-    monkeypatch.setenv("APP_ENV", "prd")
+    monkeypatch.setenv("APP_ENV", env)
     with pytest.raises(ValueError, match="AUTH_MODE=header"):
         Settings()
 
 
 def test_executor_test_mode_is_refused_in_stg(root, monkeypatch):
     (root / "config.stg.yml").write_text(
-        "sso_adapter: idp\ncookie_secure: true\nexecutor_api_key: exe\n"
+        SSO + "cookie_secure: true\nexecutor_api_key: exe\n"
         "batch_api_key: bat\nexecutor_io_mode: api\n"
     )
     monkeypatch.setenv("APP_ENV", "stg")
@@ -194,7 +198,7 @@ def test_a_placeholder_key_does_not_start(root, monkeypatch, key):
     # a template value left in config.{env}.yml passed the empty check and
     # failed only at the first call (401)
     (root / "config.stg.yml").write_text(
-        "sso_adapter: idp\ncookie_secure: true\n"
+        SSO + "cookie_secure: true\n"
         f"executor_api_key: '{key}'\nbatch_api_key: bat\n"
     )
     monkeypatch.setenv("APP_ENV", "stg")
@@ -202,34 +206,94 @@ def test_a_placeholder_key_does_not_start(root, monkeypatch, key):
         Settings()
 
 
-def test_dev_may_send_no_keys(root, monkeypatch):
-    (root / "config.dev.yml").write_text(
-        "sso_adapter: idp\nservice_keys_enabled: false\n"
-        "executor_api_key: <exe-key>\nbatch_api_key: <bat-key>\n"
-        "executor_admin_api_key: <op-key>\n"
-    )
+def test_dev_needs_our_service_keys_too(root, monkeypatch):
+    # dev is key mode like stg and prd (2026-11-01)
+    (root / "config.dev.yml").write_text(SSO)
     monkeypatch.setenv("APP_ENV", "dev")
-    settings = Settings()
+    with pytest.raises(ValueError, match="EXECUTOR_API_KEY and BATCH_API_KEY"):
+        Settings()
+
+
+def test_only_a_local_run_may_send_no_keys(root, monkeypatch):
+    settings = Settings(
+        service_keys_enabled=False,
+        executor_api_key="<exe-key>",
+        batch_api_key="<bat-key>",
+        executor_admin_api_key="<op-key>",
+    )
     assert (
         settings.executor_api_key,
         settings.executor_admin_api_key,
         settings.batch_api_key,
     ) == ("", "", "")
-
-
-def test_dev_with_keys_on_needs_real_ones(root, monkeypatch):
     (root / "config.dev.yml").write_text(
-        "sso_adapter: idp\nservice_keys_enabled: true\n"
-        "executor_api_key: exe_dev_k\nbatch_api_key: <bat-key>\n"
+        SSO + "service_keys_enabled: false\n"
+        "executor_api_key: exe\nbatch_api_key: bat\n"
+    )
+    monkeypatch.setenv("APP_ENV", "dev")
+    with pytest.raises(ValueError, match="SERVICE_KEYS_ENABLED=false"):
+        Settings()
+
+
+def test_dev_keys_need_real_ones(root, monkeypatch):
+    (root / "config.dev.yml").write_text(
+        SSO + "executor_api_key: exe_dev_k\nbatch_api_key: <bat-key>\n"
     )
     monkeypatch.setenv("APP_ENV", "dev")
     with pytest.raises(ValueError, match="BATCH_API_KEY is still a"):
         Settings()
 
 
+@pytest.mark.parametrize(
+    "line, name",
+    [
+        ("llm_api_key: <llm-api-key>", "LLM_API_KEY"),
+        ("public_api_origin: https://<api-host>", "PUBLIC_API_ORIGIN"),
+        ('cors_origins: ["https://<front-host>"]', "CORS_ORIGINS[0]"),
+        (
+            "models: [{name: <model-name>, default: true}]",
+            "MODELS[0].NAME",
+        ),
+    ],
+)
+def test_a_template_value_left_anywhere_does_not_start(
+    root, monkeypatch, line, name
+):
+    (root / "config.stg.yml").write_text(
+        SSO
+        + "cookie_secure: true\nexecutor_api_key: exe\nbatch_api_key: bat\n"
+        f"{line}\n"
+    )
+    monkeypatch.setenv("APP_ENV", "stg")
+    with pytest.raises(ValueError, match="template placeholder") as raised:
+        Settings()
+    assert name in str(raised.value)
+
+
+def test_sso_needs_its_login_origin_when_deployed(root, monkeypatch):
+    (root / "config.prd.yml").write_text(
+        "sso_adapter: idp\ncookie_secure: true\n"
+        "executor_api_key: exe\nbatch_api_key: bat\n"
+    )
+    monkeypatch.setenv("APP_ENV", "prd")
+    with pytest.raises(ValueError, match="SSO_ALLOWED_ORIGINS is empty"):
+        Settings()
+
+
+def test_no_administrators_is_a_warning(root, monkeypatch, caplog):
+    (root / "config.prd.yml").write_text(
+        SSO
+        + "cookie_secure: true\nexecutor_api_key: exe\nbatch_api_key: bat\n"
+    )
+    monkeypatch.setenv("APP_ENV", "prd")
+    with caplog.at_level("WARNING"):
+        Settings()
+    assert "admin_employee_ids_empty" in caplog.text
+
+
 def test_keys_cannot_be_turned_off_in_prd(root, monkeypatch):
     (root / "config.prd.yml").write_text(
-        "sso_adapter: idp\ncookie_secure: true\nservice_keys_enabled: false\n"
+        SSO + "cookie_secure: true\nservice_keys_enabled: false\n"
         "executor_api_key: exe\nbatch_api_key: bat\n"
     )
     monkeypatch.setenv("APP_ENV", "prd")

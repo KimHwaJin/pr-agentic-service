@@ -191,6 +191,21 @@ def test_outside_tenants_bring_their_own_user_ids():
     assert err.value.status_code == 403
 
 
+def test_outside_tenants_cannot_act_for_one_we_deactivated():
+    # the same employee id is the same person in every tenant
+    gone = User(
+        id="e1", employee_id="E1", name="n", role="user", is_active=False
+    )
+    _REQUEST_DB[0] = _Db([_client(tenant="partner")], [gone])
+    request = _request({"X-Api-Key": KEY, "X-User-Id": "E1"})
+    services = request.app.state.services
+    with pytest.raises(HTTPException) as err:
+        asyncio.run(
+            deps.key_identity(request, services, any_user_outside=True)
+        )
+    assert err.value.status_code == 403
+
+
 @pytest.mark.parametrize(
     ("user_id", "ok"),
     [("E12345", True), ("svc-report", True), ("their.user-7", False)],
@@ -444,6 +459,40 @@ def test_a_failed_disable_stays_pending(monkeypatch):
     monkeypatch.setattr(batch_admin, "disable_batches_of", down)
     services = cast(Any, SimpleNamespace(settings=Settings(), db=None))
     assert asyncio.run(batch_admin.tell_batch(services, USER)) is False
+
+
+def test_disable_by_tenant_call(monkeypatch):
+    sent: list[httpx.Request] = []
+    real = httpx.AsyncClient
+
+    def client(**kw):
+        def handle(request):
+            sent.append(request)
+            return httpx.Response(200, json={"disabled": 3})
+
+        return real(transport=httpx.MockTransport(handle), **kw)
+
+    monkeypatch.setattr(batch_admin.httpx, "AsyncClient", client)
+    settings = Settings(batch_api_key="bat_test_k")
+    disabled = asyncio.run(
+        batch_admin.disable_batches_of_tenant(settings, "partner")
+    )
+    assert disabled == 3
+    assert sent[0].url.path == "/api/v1/batches:disable-by-tenant"
+    assert sent[0].headers["x-api-key"] == "bat_test_k"
+    assert sent[0].headers["x-tenant-id"] == "partner"
+    assert "x-user-id" not in sent[0].headers
+    assert json.loads(sent[0].content) == {"reason": "TENANT_REVOKED"}
+
+
+def test_a_failed_tenant_disable_stays_pending(monkeypatch):
+    async def down(settings, tenant):
+        raise httpx.ConnectError("pr-batch down")
+
+    monkeypatch.setattr(batch_admin, "disable_batches_of_tenant", down)
+    services = cast(Any, SimpleNamespace(settings=Settings(), db=None))
+    told = asyncio.run(batch_admin.tell_batch_tenant(services, "partner"))
+    assert told is False
 
 
 # --- events ------------------------------------------------------------------

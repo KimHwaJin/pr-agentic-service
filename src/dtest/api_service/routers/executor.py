@@ -140,10 +140,12 @@ PASS_HEADERS = {"content-type", "etag", "location", "content-disposition"}
 SCOPE_PARAMS = {"user_id", "tenant_id"}
 
 
+# one route per method: each gets its own OpenAPI operationId
 @router.api_route(
-    "/{path:path}",
-    methods=["GET", "POST"],
-    description=relay_description(),
+    "/{path:path}", methods=["GET"], description=relay_description()
+)
+@router.api_route(
+    "/{path:path}", methods=["POST"], description=relay_description()
 )
 async def relay(
     path: str,

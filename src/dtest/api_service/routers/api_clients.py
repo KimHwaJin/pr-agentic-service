@@ -4,7 +4,9 @@ We are the only place that decides which tenants may use the executor
 and pr-batch: our keys there are allowed every tenant
 (``allowed_tenants: ["*"]``), so issuing a key here is all a new tenant
 takes, and a key is active at once. Revoking it (or every key of a
-tenant) is how a tenant is cut off. A revoked key is refused (401).
+tenant) is how a tenant is cut off. A revoked key is refused (401). When
+another tenant has no active key left, pr-batch turns its batches off
+(``disable-by-tenant``; retried by the worker until it has heard).
 
 The tenant is always named. Our own tenant is given only on purpose
 (``own_tenant``): its key reads every execution of our users as a system
@@ -12,7 +14,7 @@ read.
 """
 
 from fastapi import APIRouter, HTTPException
-from sqlalchemy import select
+from sqlalchemy import select, update
 
 from src.dtest.api_service.deps import AdminDep, ServicesDep
 from src.dtest.api_service.schemas.api_clients import (
@@ -22,6 +24,7 @@ from src.dtest.api_service.schemas.api_clients import (
     TenantRevoked,
 )
 from src.dtest.api_service.services import api_clients
+from src.dtest.core.batch_admin import tell_batch_tenant
 from src.dtest.core.config import RESERVED_TENANT_IDS
 from src.dtest.core.db import utcnow
 from src.dtest.core.models import ApiClient
@@ -65,6 +68,7 @@ async def issue_client(
             key_prefix=key[: len(api_clients.key_prefix(settings.env)) + 4],
             key_sha256=api_clients.digest(key),
             status="active",
+            batches_disable_pending=False,
             description=body.description,
             created_by=admin.id,
         )
@@ -88,9 +92,14 @@ async def revoke_client(
             raise HTTPException(409, "The key is already revoked.")
         client.status = "revoked"
         client.revoked_at = utcnow()
+        cut_off = await _mark_cut_off(db, services, client.tenant)
         await db.commit()
         await db.refresh(client)
     api_clients.forget(client.key_sha256)
+    if cut_off:
+        await tell_batch_tenant(services, client.tenant)
+        async with services.db.sessions() as db:
+            client = await db.get(ApiClient, client_id)
     return client
 
 
@@ -110,7 +119,36 @@ async def revoke_tenant(tenant: str, services: ServicesDep, admin: AdminDep):
         for client in clients:
             client.status = "revoked"
             client.revoked_at = now
+        cut_off = await _mark_cut_off(db, services, tenant)
         await db.commit()
     for client in clients:
         api_clients.forget(client.key_sha256)
-    return TenantRevoked(tenant=tenant, revoked=len(clients))
+    told = cut_off and await tell_batch_tenant(services, tenant)
+    return TenantRevoked(
+        tenant=tenant,
+        revoked=len(clients),
+        batches_disabled=told,
+        batches_disable_pending=cut_off and not told,
+    )
+
+
+async def _mark_cut_off(db, services, tenant: str) -> bool:
+    """True when ``tenant`` (not ours) has no active key left: pr-batch is
+    then told to turn its batches off, retried by the worker until it has
+    heard (``batches_disable_pending``). Call after the revoke, before the
+    commit. Our own tenant's batches belong to our users and stay."""
+    if tenant == services.settings.executor_tenant_id:
+        return False
+    await db.flush()
+    if await db.scalar(
+        select(ApiClient.id).where(
+            ApiClient.tenant == tenant, ApiClient.status == "active"
+        )
+    ):
+        return False
+    await db.execute(
+        update(ApiClient)
+        .where(ApiClient.tenant == tenant)
+        .values(batches_disable_pending=True)
+    )
+    return True

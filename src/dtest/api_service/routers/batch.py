@@ -231,10 +231,12 @@ async def gateway_identity(
     return Identity(user_id=user_id, project_id=project, tenant=tenant)
 
 
-@router.api_route(
-    "/api/v1/batch/{path:path}",
-    methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
-)
+# one route per method: each gets its own OpenAPI operationId
+@router.api_route("/api/v1/batch/{path:path}", methods=["GET"])
+@router.api_route("/api/v1/batch/{path:path}", methods=["POST"])
+@router.api_route("/api/v1/batch/{path:path}", methods=["PUT"])
+@router.api_route("/api/v1/batch/{path:path}", methods=["PATCH"])
+@router.api_route("/api/v1/batch/{path:path}", methods=["DELETE"])
 async def batch_gateway(
     path: str,
     request: Request,

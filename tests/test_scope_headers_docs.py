@@ -59,3 +59,14 @@ def test_sso_only_apis_show_no_caller_headers():
             p for p in operation.get("parameters", []) if p["in"] == "header"
         ], path
     assert paths["/api/v1/models"]["get"].get("security")
+
+
+def test_every_operation_has_its_own_id():
+    # client generators key on operationId; the gateways serve several
+    # methods from one function
+    ids = [
+        operation["operationId"]
+        for item in _operations().values()
+        for operation in item.values()
+    ]
+    assert len(ids) == len(set(ids))
