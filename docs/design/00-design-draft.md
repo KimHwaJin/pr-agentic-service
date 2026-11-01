@@ -201,7 +201,7 @@ analyst의 실행 계획 = **Workflow 1.0 문서 + 실행 바인딩**.
 ### 9.5 등록·검색·추천
 
 - API: candidate 등록, 조회, 수정(revision CAS), 승격(template, 작성자가 직접), 복제, 삭제, 재색인, 검색. 권한은 candidate 작성자 전용, template 전체 조회.
-- 검색: 등록 시 `user_queries`(이 워크플로우가 답하는 질문 예시)를 쿼리별 임베딩 → pgvector HNSW → 워크플로우 단위로 묶어 유사도 순 반환. 기준값 기본 0.93 (설정).
+- 검색: 등록 시 `user_queries`(이 워크플로우가 답하는 질문 예시)를 쿼리별 임베딩 → pgvector HNSW → 워크플로우 단위로 묶어 유사도 순 반환. 기준값 기본 0.70 (설정 `WORKFLOW_SIMILARITY`).
 - 추천: analyst의 `search_workflows` 도구(검색 풀은 template만). 강제 단계 아님. 추천 template과 새로 생성한 계획을 합쳐 `PLAN_CANDIDATES`개를 승인 화면에 제시 (9.7 참고).
 - 등록 경로: (1) 사용자가 결과 화면에서 저장, (2) 분석 성공 후 Agent가 저장 제안 → 사용자 승인.
 
@@ -214,7 +214,7 @@ pr-batch(`/Users/a10054/SKAX_PROJECT/pr-batch`, 개발 중)는 사용자 스크�
 
 ### 9.7 확정
 
-- `allow_immediate_execution=true` template 하나만 후보 + 질문에서 입력값이 모두 채워짐 + 서버 임베딩 검색 유사도 `WORKFLOW_AUTO_RUN_SIMILARITY`(기본 0.97) 이상 → 승인 HITL 생략. 후보가 둘 이상이거나 키워드 검색이면 항상 승인. Agent 작성 코드가 섞이면 항상 승인.
+- `allow_immediate_execution=true` template 하나만 후보 + 질문에서 입력값이 모두 채워짐 + 서버 임베딩 검색 유사도 `WORKFLOW_AUTO_RUN_SIMILARITY`(기본 0.77) 이상 → 승인 HITL 생략. 후보가 둘 이상이거나 키워드 검색이면 항상 승인. Agent 작성 코드가 섞이면 항상 승인.
 - 추천 검색 대상: 승격된 template만. candidate(저장했지만 승격 전, 작성자만 보는 워크플로우)는 검색 풀에 넣지 않는다.
 - **계획 후보 수**: 한 번에 제안하는 실행 계획 수는 설정값 `PLAN_CANDIDATES`(기본 5). 검색으로 template k개가 추천되면 나머지 5-k개를 analyst가 새로 생성해 함께 보여준다. 사용자는 승인 화면에서 하나를 골라 입력값을 확인·수정하고 승인한다. 추천 template 후보에는 출처와 유사도를 표시한다. 이 방식이 `PLAN_RECOMMEND_MODE=mixed`(기본)이고, `recommend_first`는 추천 template만 먼저 보여 주고 사용자가 "추천 말고 새로 만들기"(`reject_templates`)를 고르면 새 계획 `PLAN_CANDIDATES`개를 제안한다. 추천이 없으면 처음부터 새 계획을 제안한다.
 
