@@ -37,7 +37,7 @@ USER_HEADER = APIKeyHeader(
     scheme_name="X-User-Id",
     auto_error=False,
     description="Our users.id the key caller acts for (required with "
-    "X-Api-Key; alone in AUTH_MODE=header, local only).",
+    "X-Api-Key).",
 )
 
 
@@ -91,9 +91,8 @@ async def current_user(
 
     A request with the session cookie is decided by SSO alone (CSRF
     included). Without it, ``X-Api-Key`` names an active api client and
-    ``X-User-Id`` one of our active users (``users.id`` or employee id);
-    ``AUTH_MODE=header`` (local only)
-    trusts ``X-User-Id`` without a key. The caller is kept on
+    ``X-User-Id`` one of our active users (``users.id`` or employee id).
+    There is no keyless mode. The caller is kept on
     ``request.state.api_client`` (None for SSO).
     """
     services = get_services(request)
@@ -131,7 +130,7 @@ async def sso_user(request: Request) -> User:
     settings = services.settings
     request.state.api_client = None
     if not request.cookies.get(settings.session_cookie_name):
-        if request.headers.get("x-api-key") or settings.auth_mode == "header":
+        if request.headers.get("x-api-key"):
             raise HTTPException(403, "This API needs an SSO login.")
         raise HTTPException(401, "Login required.")
     return await _sso_login(request, services)
@@ -199,15 +198,12 @@ def _check_employee_id(settings, user_id: str) -> None:
 
 
 async def _caller(request: Request, services: Services) -> Caller:
-    settings = services.settings
     key = request.headers.get("x-api-key", "")
     if key:
         caller = await api_clients.verify(services, key)
         if caller is None:
             raise ApiError(401, "invalid_api_key", "Unknown API key.")
         return caller
-    if settings.auth_mode == "header":
-        return Caller("header", "header", settings.executor_tenant_id)
     raise HTTPException(401, "Login required.")
 
 

@@ -199,18 +199,6 @@ def test_operator_routes_need_the_operator_key():
     assert sent[0].headers["x-api-key"] == "exe_ops"
     assert sent[0].headers["x-user-id"] == "a-1"
     assert "x-tenant-id" not in sent[0].headers
-    # an executor in header mode (no keys at all): no key, still allowed
-    sent.clear()
-    asyncio.run(
-        relay._for_user(
-            cast(Any, _services(sent, api_key="")),
-            _request("GET", "runtime-targets", {}),
-            "runtime-targets",
-            match,
-            admin,
-        )
-    )
-    assert "x-api-key" not in sent[0].headers
 
 
 def test_browser_list_is_scoped_by_the_user_header(monkeypatch):
