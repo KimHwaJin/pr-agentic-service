@@ -6,11 +6,15 @@ from src.dtest.api_service.app import mount_api
 from src.dtest.core.config import Settings
 
 
-def _headers() -> dict[tuple[str, str], set[str]]:
+def _operations() -> dict:
     app = FastAPI()
     mount_api(app, Settings())
+    return app.openapi()["paths"]
+
+
+def _headers() -> dict[tuple[str, str], set[str]]:
     found = {}
-    for path, item in app.openapi()["paths"].items():
+    for path, item in _operations().items():
         for method, operation in item.items():
             found[path, method] = {
                 p["name"]
@@ -38,3 +42,20 @@ def test_scope_headers_only_on_the_gateways():
         "/api/v1/executor/{path}",
         "/api/v1/batch/{path}",
     }
+
+
+def test_sso_only_apis_show_no_caller_headers():
+    paths = _operations()
+    sso_only = [
+        ("/api/v1/admin/api-clients", "get"),
+        ("/api/v1/admin/users", "get"),
+        ("/api/v1/admin/users/{user_id}", "patch"),
+        ("/api/v1/auth/dev/role", "post"),
+    ]
+    for path, method in sso_only:
+        operation = paths[path][method]
+        assert not operation.get("security"), path
+        assert not [
+            p for p in operation.get("parameters", []) if p["in"] == "header"
+        ], path
+    assert paths["/api/v1/models"]["get"].get("security")

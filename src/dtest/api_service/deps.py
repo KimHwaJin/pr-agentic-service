@@ -97,16 +97,51 @@ async def current_user(
     ``request.state.api_client`` (None for SSO).
     """
     services = get_services(request)
-    settings = services.settings
     request.state.api_client = None
-    if request.cookies.get(settings.session_cookie_name):
-        login = await request.app.state.sso.authenticate(request)
-        user = await _user(services, login.user_id)
-        if user is None or not user.is_active:
-            raise HTTPException(401, "Login required.")
-        return user
+    if request.cookies.get(services.settings.session_cookie_name):
+        return await _sso_login(request, services)
     _, _, user = await key_identity(request, services)
     assert user is not None
+    return user
+
+
+async def user_or_service(
+    request: Request, _headers: IdentityHeaders = None
+) -> User | None:
+    """``current_user``, but a key caller may leave out ``X-User-Id``.
+
+    For reads that are no one's (the configured models): None is a service
+    calling for itself.
+    """
+    services = get_services(request)
+    request.state.api_client = None
+    if request.cookies.get(services.settings.session_cookie_name):
+        return await _sso_login(request, services)
+    _, _, user = await key_identity(request, services, user_required=False)
+    return user
+
+
+async def sso_user(request: Request) -> User:
+    """The user of the SSO session cookie; key callers are refused.
+
+    For the APIs only a person in the browser uses (administration, the
+    dev role switch). It takes no caller headers, so OpenAPI shows none.
+    """
+    services = get_services(request)
+    settings = services.settings
+    request.state.api_client = None
+    if not request.cookies.get(settings.session_cookie_name):
+        if request.headers.get("x-api-key") or settings.auth_mode == "header":
+            raise HTTPException(403, "This API needs an SSO login.")
+        raise HTTPException(401, "Login required.")
+    return await _sso_login(request, services)
+
+
+async def _sso_login(request: Request, services: Services) -> User:
+    login = await request.app.state.sso.authenticate(request)
+    user = await _user(services, login.user_id)
+    if user is None or not user.is_active:
+        raise HTTPException(401, "Login required.")
     return user
 
 
@@ -231,8 +266,10 @@ def forget_user(user_id: str) -> None:
 
 
 async def admin_user(
-    request: Request, user: Annotated[User, Depends(current_user)]
+    request: Request, user: Annotated[User, Depends(sso_user)]
 ) -> User:
+    """An administrator's SSO login. As a route dependency it takes no
+    caller headers; called with ``current_user``'s user it refuses keys."""
     if caller_of(request) is not None:
         raise HTTPException(403, "Administrator APIs need an SSO login.")
     if user.role != "admin":
@@ -243,6 +280,8 @@ async def admin_user(
 ServicesDep = Annotated[Services, Depends(get_services)]
 UserDep = Annotated[User, Depends(current_user)]
 AdminDep = Annotated[User, Depends(admin_user)]
+SsoUserDep = Annotated[User, Depends(sso_user)]
+UserOrServiceDep = Annotated[User | None, Depends(user_or_service)]
 
 WRITE_ROLES = {"owner", "editor"}
 

@@ -4,7 +4,7 @@ from fastapi import APIRouter, HTTPException, Request, Response
 
 from src.dtest.api_service import deps
 from src.dtest.api_service.auth.service import LoginSessionRead
-from src.dtest.api_service.deps import ServicesDep, UserDep
+from src.dtest.api_service.deps import ServicesDep, SsoUserDep
 from src.dtest.api_service.schemas.base import Model
 from src.dtest.api_service.schemas.users import UserRead
 from src.dtest.core.db import get_row
@@ -42,7 +42,9 @@ class DevRole(Model):
 
 
 @router.post("/dev/role", response_model=UserRead)
-async def switch_dev_role(body: DevRole, services: ServicesDep, user: UserDep):
+async def switch_dev_role(
+    body: DevRole, services: ServicesDep, user: SsoUserDep
+):
     """Local development only: switch the dev login between user and admin.
 
     Exists only locally (APP_ENV empty) with SSO_ADAPTER=dev (404 otherwise).
