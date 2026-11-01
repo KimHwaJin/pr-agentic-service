@@ -25,7 +25,7 @@ from typing import Any
 
 from redis.asyncio import Redis
 from redis.exceptions import ResponseError
-from sqlalchemy import case, or_, select, update
+from sqlalchemy import case, func, or_, select, update
 from sqlalchemy.dialects.postgresql import insert
 
 from core.db import Database, utcnow
@@ -213,20 +213,22 @@ class ExecutorEventConsumer:
         if self.executor is None:
             return event
         try:
-            timeline = await self.executor.events(event["execution_id"])
+            # just that event: the whole timeline grows with every step
+            item = await self.executor.event(
+                event["execution_id"], event["event_sequence"]
+            )
         except ExecutorError as exc:
             if exc.status == 404:  # not an execution of our tenant
                 return None
             raise
-        for item in timeline:
-            if str(item.get("event_id")) == event["event_id"]:
-                return {
-                    **event,
-                    "event_type": item["event_type"],
-                    "event_sequence": int(item["event_sequence"]),
-                    "payload": item.get("payload", {}),
-                }
-        return None
+        if item is None or str(item.get("event_id")) != event["event_id"]:
+            return None
+        return {
+            **event,
+            "event_type": item["event_type"],
+            "event_sequence": int(item["event_sequence"]),
+            "payload": item.get("payload", {}),
+        }
 
 
 class MissedEventRecovery:
@@ -265,7 +267,7 @@ class MissedEventRecovery:
 
         A wait is checked again after 2 minutes in its first hour, 10
         minutes in its first day and hourly after that: a step can run for
-        days, and each check reads the execution's whole event timeline.
+        days. Each check reads the timeline past the last event delivered.
         """
         now = utcnow()
         since = Run.updated_at  # when the run started waiting
@@ -301,19 +303,46 @@ class MissedEventRecovery:
                     .values(recovery_checked_at=now, updated_at=Run.updated_at)
                 )
                 await session.commit()
+        seen = await self._seen(
+            {(r.waiting or {}).get("execution_id") for r in waiting} - {None}
+        )
         woken = []
         for run in waiting:
-            if run_id := await self._recover(run):
+            execution_id = (run.waiting or {}).get("execution_id")
+            if run_id := await self._recover(run, seen.get(execution_id)):
                 woken.append(run_id)
                 await self.on_wake(run_id)
         return woken
 
-    async def _recover(self, run: Run) -> str | None:
+    async def _seen(self, execution_ids: set[str]) -> dict[str, int]:
+        """The last event sequence each execution delivered to us.
+
+        A run waits for an event after those, so recovery reads only the
+        timeline past it.
+        """
+        if not execution_ids:
+            return {}
+        async with self.db.sessions() as session:
+            rows = await session.execute(
+                select(
+                    ExecutorInbox.execution_id,
+                    func.max(ExecutorInbox.event_sequence),
+                )
+                .where(ExecutorInbox.execution_id.in_(execution_ids))
+                .group_by(ExecutorInbox.execution_id)
+            )
+            return {e: int(s) for e, s in rows.all()}
+
+    async def _recover(self, run: Run, seen: int | None = None) -> str | None:
         execution_id = (run.waiting or {}).get("execution_id")
         if not execution_id:
             return None
         try:
-            events = await self.executor.events(execution_id)
+            # from the last delivered event on (it is re-read, in case it
+            # is the one this run waits for and its wake was lost)
+            events = await self.executor.events(
+                execution_id, None if seen is None else seen - 1
+            )
         except ExecutorError as exc:
             log.warning(
                 "missed_event_lookup_failed run_id=%s status=%s",

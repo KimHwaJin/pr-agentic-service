@@ -37,7 +37,7 @@ def test_recovery_delivers_the_event_the_run_waits_for(monkeypatch):
         return "run-1"
 
     class Executor:
-        async def events(self, execution_id):
+        async def events(self, execution_id, after_sequence=None):
             return [
                 {
                     "event_id": "e1",
@@ -81,7 +81,7 @@ def test_recovery_leaves_runs_whose_event_has_not_happened(monkeypatch):
     from worker import executor_events
 
     class Executor:
-        async def events(self, execution_id):
+        async def events(self, execution_id, after_sequence=None):
             return [
                 {
                     "event_id": "e1",
@@ -144,3 +144,58 @@ def test_recovery_checks_least_recently_checked_waits_with_backoff():
     assert "CASE WHEN" in select_sql
     assert "recovery_checked_at=" in update_sql
     assert "updated_at=runs.updated_at" in update_sql
+
+
+def _timeline_client(sent, items):
+    import httpx
+
+    from core.executor.client import ExecutorClient
+
+    def handle(request: httpx.Request) -> httpx.Response:
+        sent.append(dict(request.url.params))
+        return httpx.Response(200, json={"items": items})
+
+    client = ExecutorClient("http://executor", 5, "k", "", "pr-agentic")
+    client.http = httpx.AsyncClient(
+        base_url="http://executor/api/v1",
+        transport=httpx.MockTransport(handle),
+    )
+    return client
+
+
+def test_confirming_an_event_reads_only_that_event():
+    import asyncio
+
+    sent: list[dict] = []
+    item = {"event_id": "e9", "event_sequence": 9, "event_type": "x"}
+    client = _timeline_client(sent, [item])
+    assert asyncio.run(client.event("x-1", 9)) == item
+    assert sent == [{"after_sequence": "8", "limit": "1"}]
+    assert asyncio.run(client.event("x-1", 10)) is None  # sequence differs
+
+
+def test_recovery_reads_past_the_last_delivered_event(monkeypatch):
+    import asyncio
+    from types import SimpleNamespace
+
+    from worker import executor_events
+
+    asked = []
+
+    class Executor:
+        async def events(self, execution_id, after_sequence=None):
+            asked.append(after_sequence)
+            return []
+
+    recovery = executor_events.MissedEventRecovery(
+        cast(Any, None), cast(Any, Executor()), on_wake=None, after_seconds=120
+    )
+    run = cast(
+        Any,
+        SimpleNamespace(
+            id="run-1", waiting={"execution_id": "x-1", "operation_id": "o"}
+        ),
+    )
+    asyncio.run(recovery._recover(run, seen=12))
+    asyncio.run(recovery._recover(run))
+    assert asked == [11, None]
