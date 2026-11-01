@@ -27,6 +27,8 @@ class ApiClientRead(Model):
     created_at: datetime
     revoked_at: datetime | None
     last_used_at: datetime | None
+    # its tenant was cut off; pr-batch not yet told (retried)
+    batches_disable_pending: bool = False
 
 
 class ApiClientIssued(Model):
@@ -38,3 +40,7 @@ class ApiClientIssued(Model):
 class TenantRevoked(Model):
     tenant: str
     revoked: int
+    # pr-batch turned the tenant's batches off (False for our own tenant,
+    # or while a call failed: then batches_disable_pending, retried)
+    batches_disabled: bool = False
+    batches_disable_pending: bool = False

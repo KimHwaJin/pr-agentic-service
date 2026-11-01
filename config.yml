@@ -1,10 +1,11 @@
 # Values shared by every environment (copied into the image): every Settings
 # key (src/core/config.py) except the per-environment ones, which live only in
 # config.{APP_ENV}.yml: DATABASE_URL, REDIS_URL, PUBLIC_API_ORIGIN,
-# FRONTEND_ORIGIN, CORS_ORIGINS, COOKIE_SECURE, ADMIN_EMPLOYEE_IDS,
+# FRONTEND_ORIGIN, CORS_ORIGINS, SSO_ALLOWED_ORIGINS, COOKIE_SECURE,
+# ADMIN_EMPLOYEE_IDS,
 # LLM_API_KEY, MODELS, EXECUTOR_BASE_URL, BATCH_BASE_URL, and our keys at
 # the executor and pr-batch (EXECUTOR_API_KEY, EXECUTOR_ADMIN_API_KEY,
-# BATCH_API_KEY, SERVICE_KEYS_ENABLED).
+# BATCH_API_KEY).
 # Locally (APP_ENV empty) the docker-compose.yml environment or .env adds the
 # local values. Precedence: environment > .env > config.{APP_ENV}.yml > this
 # file. Relative paths are under the repo root. RUN_MODE and PHOENIX_* are
@@ -26,14 +27,17 @@ DOCS_ENABLED: false
 # SSO. dev (fixed employee) is refused when APP_ENV is set.
 SSO_ADAPTER: idp
 SSO_ADAPTER_FACTORY: "idp_login:create_sdk"
-SSO_ALLOWED_ORIGINS: []
 SSO_ALLOWED_RETURN_ROOTS: ["/"]
 SESSION_COOKIE_NAME: agentic_session
 
 # Callers other than the browser (docs/specs/service-auth.md): X-Api-Key of
 # an api client (issued on the 시스템 page) + X-User-Id. header: X-User-Id
-# without a key, local/dev only.
+# without a key, local only (refused with APP_ENV).
 AUTH_MODE: api_key
+# Our keys go to the executor and pr-batch (X-Api-Key). false: no key, for
+# a local executor / pr-batch in AUTH_MODE=header; refused with APP_ENV
+# (dev, stg and prd are always key mode, 2026-11-01).
+SERVICE_KEYS_ENABLED: true
 API_CLIENT_CACHE_SECONDS: 60
 COOKIE_SAMESITE: lax
 # Login sessions slide: idle this long ends one, activity extends it, up to

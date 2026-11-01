@@ -28,8 +28,30 @@ class _Db:
                 return False
 
             async def scalar(self, statement):
-                name = statement.compile().params.get("name_1")
+                params = statement.compile().params
+                if "status_1" in params:  # an active key of the tenant
+                    return next(
+                        (
+                            r.id
+                            for r in db.rows
+                            if r.tenant == params["tenant_1"]
+                            and r.status == params["status_1"]
+                        ),
+                        None,
+                    )
+                name = params.get("name_1")
                 return next((r.id for r in db.rows if r.name == name), None)
+
+            async def execute(self, statement):  # mark the tenant pending
+                params = statement.compile().params
+                for r in db.rows:
+                    if r.tenant == params["tenant_1"]:
+                        r.batches_disable_pending = params[
+                            "batches_disable_pending"
+                        ]
+
+            async def flush(self):
+                pass
 
             async def scalars(self, statement):
                 tenant = statement.compile().params.get("tenant_1")
@@ -120,7 +142,20 @@ def test_there_is_no_activation_step(setup):
     assert got.status_code in {404, 405}
 
 
-def test_revoking_a_tenant_revokes_all_its_keys(setup, monkeypatch):
+@pytest.fixture
+def told(monkeypatch):
+    """Tenants pr-batch is told to turn off (disable-by-tenant)."""
+    tenants: list[str] = []
+
+    async def tell(services, tenant):
+        tenants.append(tenant)
+        return True
+
+    monkeypatch.setattr(router, "tell_batch_tenant", tell)
+    return tenants
+
+
+def test_revoking_a_tenant_revokes_all_its_keys(setup, monkeypatch, told):
     client, db = setup
     forgotten = []
     monkeypatch.setattr(api_clients, "forget", forgotten.append)
@@ -129,9 +164,58 @@ def test_revoking_a_tenant_revokes_all_its_keys(setup, monkeypatch):
             "/admin/api-clients", json={"name": name, "tenant": tenant}
         )
     got = client.post("/admin/api-clients/tenants/partner/revoke")
-    assert got.json() == {"tenant": "partner", "revoked": 2}
+    assert got.json() == {
+        "tenant": "partner",
+        "revoked": 2,
+        "batches_disabled": True,
+        "batches_disable_pending": False,
+    }
     assert [r.status for r in db.rows] == ["revoked", "revoked", "active"]
     assert all(r.revoked_at for r in db.rows[:2])
     assert len(forgotten) == 2
+    # pr-batch turns the tenant's batches off
+    assert told == ["partner"]
     again = client.post("/admin/api-clients/tenants/partner/revoke")
     assert again.json()["revoked"] == 0
+
+
+def test_a_failed_tenant_disable_is_left_for_the_worker(setup, monkeypatch):
+    client, db = setup
+
+    async def down(services, tenant):
+        return False
+
+    monkeypatch.setattr(router, "tell_batch_tenant", down)
+    client.post("/admin/api-clients", json={"name": "a", "tenant": "partner"})
+    got = client.post("/admin/api-clients/tenants/partner/revoke").json()
+    assert (got["batches_disabled"], got["batches_disable_pending"]) == (
+        False,
+        True,
+    )
+    assert db.rows[0].batches_disable_pending is True
+
+
+def test_batches_stop_when_the_last_key_of_a_tenant_goes(setup, told):
+    client, _ = setup
+    ids = [
+        client.post(
+            "/admin/api-clients", json={"name": name, "tenant": "partner"}
+        ).json()["client"]["id"]
+        for name in ("a", "b")
+    ]
+    client.post(f"/admin/api-clients/{ids[0]}/revoke")
+    assert told == []  # the tenant still has an active key
+    got = client.post(f"/admin/api-clients/{ids[1]}/revoke")
+    assert got.status_code == 200
+    assert told == ["partner"]
+
+
+def test_our_own_tenant_keeps_its_batches(setup, told):
+    client, _ = setup
+    client.post(
+        "/admin/api-clients",
+        json={"name": "a", "tenant": "ours", "own_tenant": True},
+    )
+    got = client.post("/admin/api-clients/tenants/ours/revoke").json()
+    assert got["revoked"] == 1 and got["batches_disabled"] is False
+    assert told == []
