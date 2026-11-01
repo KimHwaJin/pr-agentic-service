@@ -8,11 +8,11 @@ from types import SimpleNamespace
 import pytest
 from pydantic import ValidationError
 
-from agent.middleware.persona import plan_recommend
-from agent.tools import analysis
-from api_service.services import hitl
-from core.config import Settings
-from core.workflows import spec
+from src.dtest.agent.middleware.persona import plan_recommend
+from src.dtest.agent.tools import analysis
+from src.dtest.api_service.services import hitl
+from src.dtest.core.config import Settings
+from src.dtest.core.workflows import spec
 
 
 def _settings(**over):
@@ -274,8 +274,8 @@ def test_reject_templates_reply_needs_the_question_to_allow_it():
 
 
 def test_reject_templates_is_refused_with_422():
-    from api_service.errors import ApiError
-    from api_service.services import runs
+    from src.dtest.api_service.errors import ApiError
+    from src.dtest.api_service.services import runs
 
     active = SimpleNamespace(
         status="waiting_input",
@@ -298,7 +298,7 @@ def test_reject_templates_is_refused_with_422():
 def test_the_card_shape_documents_allow_reject_templates():
     from pydantic import TypeAdapter
 
-    from core.contracts.hitl import PauseRequest
+    from src.dtest.core.contracts.hitl import PauseRequest
 
     pause = TypeAdapter(PauseRequest).validate_python(
         {
@@ -326,7 +326,7 @@ def test_prompt_step_three_follows_the_mode():
 
 
 def test_analyst_prompt_takes_the_mode_text():
-    from agent.prompts import load_prompt
+    from src.dtest.agent.prompts import load_prompt
 
     body = load_prompt("analyst").body
     assert "3. {plan_recommend}" in body

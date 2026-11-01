@@ -92,7 +92,9 @@ PLAN_CANDIDATES: 5
 WORKFLOW_SIMILARITY: 0.93
 # mixed: recommended templates first, new plans for the rest, in one card;
 # recommend_first: recommended templates alone first (new plans after the
-# user rejects them), new plans only when nothing matches
+# user rejects them), new plans only when nothing matches. internal/gaia:
+# keep mixed, the gaia bridge approves the first candidate on its own and
+# never rejects templates (src/dtest/gaia_bridge/auto_replies.py)
 PLAN_RECOMMEND_MODE: mixed
 # a template runs without the approval card only when it is the only
 # candidate and its embedding search similarity is at least this (never on
