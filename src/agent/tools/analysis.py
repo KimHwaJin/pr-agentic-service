@@ -292,6 +292,7 @@ async def propose_plans(
                     "workflow_id": template.id,
                     "revision": template.revision,
                     "name": template.name,
+                    "similarity": recommend["similarity"].get(template.id),
                 }
             elif not candidate.get("calls"):
                 problems.append(f"후보 {index} ({title}): {NO_CALLS}")
@@ -347,7 +348,7 @@ async def propose_plans(
     if not prepared:
         return _reply(runtime, "제안할 계획이 없습니다.")
 
-    if _auto_run(prepared, recommend, settings.workflow_auto_run_similarity):
+    if _auto_run(prepared, settings.workflow_auto_run_similarity):
         first = prepared[0]
         choice: Any = {
             "action": "approve",
@@ -452,14 +453,11 @@ async def propose_plans(
     )
 
 
-def _auto_run(
-    prepared: list[dict[str, Any]],
-    recommend: dict[str, Any],
-    threshold: float,
-) -> bool:
+def _auto_run(prepared: list[dict[str, Any]], threshold: float) -> bool:
     """Run without the approval card: one template candidate the template
     allows to run at once, every required input given, and a search
-    similarity of this run at least ``threshold`` (keyword search: none)."""
+    similarity of this run (``source.similarity``, measured by the server;
+    none on keyword search) at least ``threshold``."""
     if len(prepared) != 1 or not prepared[0]["source"]:
         return False
     first = prepared[0]
@@ -467,7 +465,7 @@ def _auto_run(
         return False
     if any(s["required"] and s["value"] is None for s in first["input_slots"]):
         return False
-    similarity = recommend["similarity"].get(first["source"]["workflow_id"])
+    similarity = first["source"]["similarity"]
     return similarity is not None and similarity >= threshold
 
 
