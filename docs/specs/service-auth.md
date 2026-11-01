@@ -92,13 +92,12 @@
 | POST | `/executions/{id}/operations`, `/finalize`, `/cancel`, `/retry` |
 | GET | `/executions/{id}/operations`, `/operations/{op}`, `/operations/{op}/result`, `/operations/{op}/steps` |
 | GET | `/executions/{id}/steps`, `/steps/{step}` |
-| GET | `/executions/{id}/attempts`, `/attempts/{a}`, `/attempts/{a}/steps` |
 | GET | `/executions/{id}/events` |
 | GET | `/executions/{id}/notebook`, `/notebook/cells/{n}` |
 | GET·POST | `/executions/{id}/artifacts` |
 | GET | `/artifacts/{artifact_id}`, `/artifacts/{artifact_id}/content` |
 
-**막는 경로**: `/runtime-pools`, `/runtime-targets*`, `/maintenance*`(admin 전용 운영 API), `/executions/{id}/diagnostics`(내부 진단 정보).
+**막는 경로**: `/runtime-pools`, `/runtime-targets*`, `/maintenance*`(admin 전용 운영 API), `/executions/{id}/diagnostics`(내부 진단 정보), `/executions/{id}/attempts*`(재시도 이력, 관리자 화면 전용).
 
 **이벤트**: 게이트웨이는 이벤트를 중계하지 않는다. 외부 호출자는 `executor.events.<tenant>`를 직접 읽거나 `GET /executions/{id}`·`/events`로 폴링한다.
 

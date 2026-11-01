@@ -78,10 +78,10 @@ _ALLOWED: list[tuple[str, str, Sso, bool]] = [
     ("POST", rf"{E}/artifacts", None, True),
     ("GET", rf"artifacts/{UUID}", None, True),
     ("GET", rf"artifacts/{UUID}/content", None, True),
-    ("GET", rf"{E}/attempts", "admin", True),
-    ("GET", rf"{E}/attempts/{UUID}", "admin", True),
-    ("GET", rf"{E}/attempts/{UUID}/steps", "admin", True),
-    # internal diagnostics: our administrators only
+    # retry history and internal diagnostics: our administrators only
+    ("GET", rf"{E}/attempts", "admin", False),
+    ("GET", rf"{E}/attempts/{UUID}", "admin", False),
+    ("GET", rf"{E}/attempts/{UUID}/steps", "admin", False),
     ("GET", rf"{E}/diagnostics", "admin", False),
     # runtime and maintenance operations: our administrators only
     ("GET", r"runtime-targets", "ops", False),
@@ -104,12 +104,47 @@ _ALLOWED: list[tuple[str, str, Sso, bool]] = [
     ("POST", r"maintenance/runs", "ops", False),
 ]
 ROUTES = [(m, re.compile(p), s, k) for m, p, s, k in _ALLOWED]
+
+
+def _readable(pattern: str) -> str:
+    """A route pattern as a path: ``executions/{execution_id}/steps/{id}``."""
+    return (
+        pattern.replace(f"(?P<execution>{UUID})", "{execution_id}")
+        .replace(UUID, "{id}")
+        .replace(r"\d+", "{n}")
+    )
+
+
+def relay_description() -> str:
+    """OpenAPI text of the relay: the routes key callers may use (made from
+    ``_ALLOWED``, so the docs follow the table)."""
+    rows = "\n".join(
+        f"| {method} | `/{_readable(pattern)}` |"
+        for method, pattern, _, key in _ALLOWED
+        if key
+    )
+    return (
+        "executor `/api/v1/<path>` through this service; any other path "
+        "is 404.\n\n"
+        "**API key callers** (`X-Api-Key` + `X-User-Id`; a GET without "
+        "`X-User-Id` reads the whole tenant) may use:\n\n"
+        "| Method | Path |\n| --- | --- |\n"
+        f"{rows}\n\n"
+        "Runtime, maintenance, attempts and diagnostics are for our "
+        "administrators' SSO login only (the admin pages)."
+    )
+
+
 PASS_HEADERS = {"content-type", "etag", "location", "content-disposition"}
 # list filters the executor no longer takes: the headers decide the scope
 SCOPE_PARAMS = {"user_id", "tenant_id"}
 
 
-@router.api_route("/{path:path}", methods=["GET", "POST"])
+@router.api_route(
+    "/{path:path}",
+    methods=["GET", "POST"],
+    description=relay_description(),
+)
 async def relay(
     path: str,
     request: Request,

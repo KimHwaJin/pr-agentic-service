@@ -223,12 +223,12 @@ runtime·maintenance 경로는 executor 운영 key(`EXECUTOR_ADMIN_API_KEY`)가 
 | Method | Path (`/api/v1/executor` 아래) |
 | --- | --- |
 | GET·POST | `/executions` |
-| GET | `/executions/{id}`, `/result`, `/steps`, `/steps/{id}`, `/operations`, `/operations/{id}`, `/operations/{id}/result`, `/operations/{id}/steps`, `/attempts`, `/attempts/{id}`, `/attempts/{id}/steps`, `/events`, `/notebook`, `/notebook/cells/{n}` |
+| GET | `/executions/{id}`, `/result`, `/steps`, `/steps/{id}`, `/operations`, `/operations/{id}`, `/operations/{id}/result`, `/operations/{id}/steps`, `/events`, `/notebook`, `/notebook/cells/{n}` |
 | POST | `/executions/{id}/operations`, `/finalize`, `/cancel`, `/retry` |
 | GET·POST | `/executions/{id}/artifacts` |
 | GET | `/artifacts/{id}`, `/artifacts/{id}/content` |
 
-우리가 `X-Api-Key`(우리 executor key), `X-User-Id`, `X-Tenant-Id`(그 호출자의 tenant)를 다시 만들어 붙입니다. `X-User-Id` 없는 GET은 그 tenant 전체 조회, 없는 쓰기는 400입니다. 운영 경로와 diagnostics는 404. 이벤트는 중계하지 않습니다(`executor.events.<tenant>`를 읽거나 `/events`를 폴링).
+우리가 `X-Api-Key`(우리 executor key), `X-User-Id`, `X-Tenant-Id`(그 호출자의 tenant)를 다시 만들어 붙입니다. `X-User-Id` 없는 GET은 그 tenant 전체 조회, 없는 쓰기는 400입니다. 운영 경로, attempts, diagnostics는 404. 이벤트는 중계하지 않습니다(`executor.events.<tenant>`를 읽거나 `/events`를 폴링).
 
 executor가 응답하지 않으면 502 `EXECUTOR_UNAVAILABLE`, 시간 초과는 504 `EXECUTOR_TIMEOUT`입니다.
 
