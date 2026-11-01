@@ -1,5 +1,7 @@
 from typing import Any, cast
 
+import pytest
+
 from worker.executor_events import matches
 
 
@@ -199,3 +201,87 @@ def test_recovery_reads_past_the_last_delivered_event(monkeypatch):
     asyncio.run(recovery._recover(run, seen=12))
     asyncio.run(recovery._recover(run))
     assert asked == [11, None]
+
+
+# --- entries the executor cannot confirm ---------------------------------
+
+
+class _Redis:
+    def __init__(self, claimed=()):
+        self.acked: list[str] = []
+        self.claimed = list(claimed)
+
+    async def xack(self, stream, group, message_id):
+        self.acked.append(message_id)
+
+    async def xpending_range(self, stream, group, min, max, count):
+        return [
+            {"message_id": m, "time_since_delivered": 120000}
+            for m, _ in self.claimed
+        ]
+
+    async def xclaim(self, stream, group, consumer, idle, ids):
+        return self.claimed
+
+
+class _Confirming:
+    """Executor.event: an ExecutorError status per execution id."""
+
+    def __init__(self, statuses):
+        self.statuses = statuses
+
+    async def event(self, execution_id, sequence):
+        from core.executor.client import ExecutorError
+
+        raise ExecutorError(self.statuses[execution_id], {})
+
+
+def _wake_fields(execution_id):
+    return {
+        "event_id": f"e-{execution_id}",
+        "execution_id": execution_id,
+        "event_type": "execution.completed",
+        "event_sequence": "0",
+        "payload": "{}",
+    }
+
+
+def _event_consumer(redis, statuses):
+    from worker.executor_events import ExecutorEventConsumer
+
+    return ExecutorEventConsumer(
+        cast(Any, None),
+        cast(Any, redis),
+        "s",
+        "g",
+        "c",
+        on_wake=None,
+        on_progress=None,
+        on_completed=None,
+        executor=cast(Any, _Confirming(statuses)),
+    )
+
+
+@pytest.mark.parametrize("status", [400, 404, 422])
+def test_entries_the_executor_cannot_read_are_dropped(status):
+    # a forged or broken entry (an id that is not a UUID, sequence 0) is
+    # refused the same way on every retry: ACK it instead of keeping it
+    import asyncio
+
+    redis = _Redis()
+    consumer = _event_consumer(redis, {"bad": status})
+    asyncio.run(consumer._handle("m1", _wake_fields("bad")))
+    assert redis.acked == ["m1"]
+
+
+def test_a_failing_entry_does_not_hold_back_the_others():
+    # the oldest pending entry comes first in every reclaim; if it fails
+    # (executor down for it), the ones claimed with it are still handled
+    import asyncio
+
+    redis = _Redis(
+        claimed=[("m1", _wake_fields("down")), ("m2", _wake_fields("bad"))]
+    )
+    consumer = _event_consumer(redis, {"down": 503, "bad": 422})
+    asyncio.run(consumer._reclaim())
+    assert redis.acked == ["m2"]  # m1 stays pending, retried later

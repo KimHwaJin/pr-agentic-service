@@ -168,3 +168,47 @@ def test_claim_query_limits_each_user():
     assert asyncio.run(scheduler._claim(8)) == []
     assert "row_number() OVER (PARTITION BY runs.user_id" in statements[0]
     assert "FOR UPDATE SKIP LOCKED" in statements[0]
+
+
+class _Sessions:
+    def sessions(self):
+        class _Session:
+            async def __aenter__(self):
+                return None
+
+            async def __aexit__(self, *exc):
+                return False
+
+        return _Session()
+
+
+async def test_an_event_stored_while_parking_still_wakes_the_run(
+    monkeypatch,
+):
+    # the consumer stored the event after our inbox check and looked for a
+    # waiting run before our commit: the run was still running, so nobody
+    # woke it. The check after the commit does.
+    scheduler = _scheduler()
+    scheduler.services.db = _Sessions()  # type: ignore[attr-defined]
+    waiting = {"execution_id": "x-1", "interrupt_id": "i-1"}
+    stored = {"event_type": "execution.completed", "payload": {"ok": 1}}
+    woken: list[tuple] = []
+
+    async def arrived(db, wait):
+        return stored if wait is waiting else None
+
+    async def wake(db, execution_id, event_type, payload):
+        woken.append((execution_id, event_type, payload))
+        return "run-1"
+
+    monkeypatch.setattr(scheduler, "_arrived_event", arrived)
+    monkeypatch.setattr("worker.scheduler.wake_waiting_run", wake)
+    assert await scheduler._woken_late("run-1", waiting)
+    assert woken == [("x-1", "execution.completed", {"ok": 1})]
+
+    async def nothing(db, wait):
+        return None
+
+    monkeypatch.setattr(scheduler, "_arrived_event", nothing)
+    assert not await scheduler._woken_late("run-1", waiting)
+    assert len(woken) == 1  # no event, no wake

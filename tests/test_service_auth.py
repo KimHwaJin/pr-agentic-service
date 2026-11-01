@@ -192,7 +192,7 @@ def test_outside_tenants_bring_their_own_user_ids():
 
 
 def test_our_tenant_needs_our_users_on_gateways_too():
-    _REQUEST_DB[0] = _Db([_client(tenant="pr-agentic")], [])
+    _REQUEST_DB[0] = _Db([_client(tenant="dtest-agent-service")], [])
     request = _request({"X-Api-Key": KEY, "X-User-Id": "someone"})
     with pytest.raises(HTTPException) as err:
         asyncio.run(
@@ -237,7 +237,9 @@ def test_header_mode_trusts_the_user_header():
         settings=Settings(auth_mode="header"),
     )
     caller = deps.caller_of(request)
-    assert user.id == USER and caller and caller.tenant == "pr-agentic"
+    assert (
+        user.id == USER and caller and caller.tenant == "dtest-agent-service"
+    )
 
 
 def test_the_cookie_decides_when_both_are_sent():
@@ -326,10 +328,17 @@ def test_key_caller_registers_in_its_tenant(monkeypatch):
     assert who.tenant == "partner" and who.project_id == "theirs"
 
 
-def test_only_registration_carries_tenant_and_project(monkeypatch):
+def test_every_call_names_the_tenant_registration_the_project(monkeypatch):
+    # pr-batch finds scripts and batches by (tenant, user): a call without
+    # the tenant would look in the key's default one (or "dev" in header
+    # mode) and answer 404
     monkeypatch.setattr(batch, "project_for", batch.project_for)
     who = _gateway("PATCH", "batches/b-1", {"X-Project-Id": "p-1"})
-    assert who.headers() == {"X-User-Id": USER}
+    assert who.headers() == {"X-User-Id": USER, "X-Tenant-Id": "ours"}
+    caller = api_clients.Caller("c", "partner-agent", "partner")
+    for method, path in [("POST", "scripts"), ("GET", "batches/b-1")]:
+        who = _gateway(method, path, {}, caller, member=False)
+        assert who.headers() == {"X-User-Id": USER, "X-Tenant-Id": "partner"}
     assert _gateway("GET", "runtimes", {}).headers() == {}  # key only
 
 
@@ -351,6 +360,7 @@ def test_disable_by_owner_call(monkeypatch):
     assert sent[0].url.path == "/api/v1/batches:disable-by-owner"
     assert sent[0].headers["x-api-key"] == "bat_test_k"
     assert "x-user-id" not in sent[0].headers
+    assert sent[0].headers["x-tenant-id"] == settings.executor_tenant_id
     assert json.loads(sent[0].content) == {
         "owner_id": USER,
         "reason": "USER_DEACTIVATED",
