@@ -154,3 +154,47 @@ def test_batch_flags_come_from_pr_batch_as_sent(client, monkeypatch):
     )
     assert enabled.headers["etag"] == '"3"'
     assert enabled.json() == {"id": ID, "enabled": True, "can_disable": True}
+
+
+def test_key_caller_goes_as_its_tenant_with_our_key(monkeypatch):
+    """The gateway is the only tenant check pr-batch has (our key is
+    allowed every tenant), so the caller's own headers never get through."""
+    import httpx
+
+    from api_service.services.api_clients import Caller
+
+    sent: list[httpx.Request] = []
+
+    async def identity(request, *args, **kwargs):
+        request.state.api_client = Caller("c-1", "partner-agent", "partner")
+        return None, "u1", None
+
+    def handler(request):
+        sent.append(request)
+        return httpx.Response(200, json={"items": []})
+
+    app = FastAPI()
+    app.include_router(batch.router)
+    app.state.services = SimpleNamespace(
+        settings=Settings(batch_api_key="bat_ours", executor_tenant_id="ours")
+    )
+    upstream = httpx.AsyncClient(
+        base_url="http://batch", transport=httpx.MockTransport(handler)
+    )
+    monkeypatch.setattr(batch, "key_identity", identity)
+    monkeypatch.setattr(batch, "_client", lambda services: upstream)
+    got = TestClient(app).get(
+        "/api/v1/batch/batches",
+        headers={
+            "X-Api-Key": "pas_live_theirs",
+            "X-Tenant-Id": "someone-else",
+            "X-User-Id": "u1",
+            "Authorization": "Bearer theirs",
+        },
+    )
+    assert got.status_code == 200
+    headers = sent[0].headers
+    assert headers["x-api-key"] == "bat_ours"
+    assert headers["x-tenant-id"] == "partner"
+    assert headers["x-user-id"] == "u1"
+    assert "authorization" not in headers
