@@ -179,6 +179,8 @@ class SsoService:
         session = await self.store.read_session(sid)
         if session is None:
             raise HTTPException(401, "Login required.")
+        # who the browser request is, for the audit line (app.py)
+        request.state.sso_user_id = session.user_id
         if request.method not in {"GET", "HEAD", "OPTIONS"}:
             token = request.headers.get("x-csrf-token", "")
             if not secrets.compare_digest(

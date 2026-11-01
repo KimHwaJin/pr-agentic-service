@@ -114,7 +114,11 @@ class SkillCatalog:
             rows, problems = tool_table(body)
             if problems:
                 catalog.errors[str(path)] = "; ".join(problems)
-                log.warning("skill %s: %s", path, "; ".join(problems))
+                log.warning(
+                    "skill_invalid path=%s problems=%s",
+                    path,
+                    "; ".join(problems),
+                )
             catalog.skills[name] = Skill(
                 name,
                 meta.get("description", ""),
@@ -401,7 +405,9 @@ class _Library:
             path = self.files[name]
             units, warnings = _units(path, path.read_text("utf-8"))
             for warning in warnings:
-                log.warning("tool_helper_warning %s: %s", path, warning)
+                log.warning(
+                    "tool_helper_warning path=%s warning=%s", path, warning
+                )
             self._parsed[name] = units
         return self._parsed[name]
 
@@ -597,11 +603,15 @@ class ToolCatalog:
                 if warnings:
                     catalog.warnings[str(path)] = warnings
                     for warning in warnings:
-                        log.warning("tool_load_warning %s", warning)
+                        log.warning(
+                            "tool_load_warning path=%s warning=%s",
+                            path,
+                            warning,
+                        )
             except (SyntaxError, ValueError, UnicodeDecodeError) as exc:
                 catalog.errors[str(path)] = str(exc)
                 catalog.broken[path.stem] = str(exc)
-                log.warning("tool_load_failed %s: %s", path, exc)
+                log.warning("tool_load_failed path=%s error=%s", path, exc)
         if check:
             catalog._check_names()
         return catalog
@@ -657,7 +667,7 @@ class ToolCatalog:
             del self.tools[name]
             self.broken[name] = message
             self.errors[name] = message
-            log.warning("tool_load_failed %s: %s", name, message)
+            log.warning("tool_load_failed tool=%s error=%s", name, message)
 
     def missing(self, name: str) -> str:
         """Why ``name`` is not usable, in Korean for the model."""

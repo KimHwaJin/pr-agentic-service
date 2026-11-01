@@ -313,9 +313,13 @@ class BatchReportWorker:
             current = asyncio.current_task()
             if current is not None and current.cancelling():
                 raise  # shutdown: the lease runs out, another pod resumes
-            log.warning("batch_report_stopped job=%s (lease lost)", job.id)
+            log.warning(
+                "batch_report_stopped job=%s reason=lease_lost", job.id
+            )
         except LeaseLost:
-            log.warning("batch_report_stopped job=%s (lease lost)", job.id)
+            log.warning(
+                "batch_report_stopped job=%s reason=lease_lost", job.id
+            )
         finally:
             heartbeat.cancel()
             with contextlib.suppress(asyncio.CancelledError):
