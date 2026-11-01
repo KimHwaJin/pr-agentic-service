@@ -16,10 +16,15 @@ from src.dtest.gaia_bridge.models import GaiaSession
 
 
 async def user_for(services: Services, employee_id: str) -> User:
+    """Our user of a gaia employee id, created on first use.
+
+    The same person whatever case gaia and SSO spell the id in: users.id
+    is the lowercased employee id (api_service.users.user_id_of).
+    """
     async with services.db.sessions() as db:
         user = await db.scalar(
             select(User).where(User.employee_id == employee_id)
-        )
+        ) or await db.get(User, employee_id.strip().lower())
         if user is not None:
             return user
         # name unknown until the first SSO login, which refreshes it

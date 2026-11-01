@@ -172,3 +172,30 @@ def test_gaia_sessions_table_is_registered():
 def _no_leftover_services():
     yield
     assert runtime.current() is None
+
+
+async def test_an_employee_id_in_another_case_is_the_same_user():
+    from types import SimpleNamespace
+
+    from src.dtest.core.models import User
+    from src.dtest.gaia_bridge import identity
+
+    known = User(id="a10054", employee_id="A10054", name="n", role="user")
+
+    class Session:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *exc):
+            return False
+
+        async def scalar(self, statement):  # by the exact employee id
+            return None
+
+        async def get(self, model, key):
+            return known if key == "a10054" else None
+
+    services = SimpleNamespace(
+        db=SimpleNamespace(sessions=Session), settings=None
+    )
+    assert await identity.user_for(services, "a10054") is known

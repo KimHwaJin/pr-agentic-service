@@ -28,8 +28,10 @@ spec:
           readinessProbe:
             httpGet: {path: /api/admin/appReady, port: 8080}
             periodSeconds: 5
+          # ours: 503 once a background loop (run scheduler, events, ...)
+          # has died; the template's appReady does not see them
           livenessProbe:
-            httpGet: {path: /api/admin/appReady, port: 8080}
+            httpGet: {path: /api/v1/healthz, port: 8080}
             periodSeconds: 15
             failureThreshold: 4
           lifecycle:

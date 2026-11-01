@@ -120,6 +120,20 @@ async def test_worker_only_mode_starts_no_api(log, monkeypatch):
     assert "api.start" not in log and "worker.start" in log
 
 
+def test_liveness_is_ours_and_sees_dead_loops(log):
+    from fastapi.testclient import TestClient
+
+    app = gaia_like_app(log)
+    http = TestClient(app)  # no lifespan: no worker yet
+    assert http.get("/api/v1/healthz").json() == {"status": "ok"}
+    app.state.worker = type(
+        "W", (), {"stopped_loops": lambda self: ["run-scheduler"]}
+    )()
+    got = http.get("/api/v1/healthz")
+    assert got.status_code == 503
+    assert got.json() == {"status": "down", "stopped": ["run-scheduler"]}
+
+
 def test_imports_use_the_src_dtest_package():
     # app.py puts both the repo root and src/ on sys.path: mixing
     # "core.x" and "src.dtest.core.x" would load the same module twice

@@ -25,6 +25,7 @@ from contextlib import AsyncExitStack
 from typing import Any
 
 from fastapi import FastAPI
+from fastapi.responses import JSONResponse
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from src.dtest import tracing_phoenix  # optional (docs/phoenix-tracing.md)
@@ -55,8 +56,9 @@ def attach(app: FastAPI) -> None:
 
     Call before the app serves anything (before ``uvicorn.run``: on
     Windows it switches uvicorn to the selector loop psycopg needs).
-    ``app.state.ready`` is True between our startup and shutdown;
-    ``worker_health(app)`` is for the liveness route.
+    ``app.state.ready`` is True between our startup and shutdown.
+    ``GET /api/v1/healthz`` (``worker_health``) is the liveness route: the
+    template's ``/api/admin/appReady`` does not know our background loops.
     """
     use_selector_loop()
     install_log_field()  # record.request_id for HCP's formatter too
@@ -67,8 +69,29 @@ def attach(app: FastAPI) -> None:
         mount_api(app, settings)
     if not settings.docs_enabled:  # internal network rules: docs off
         hide_docs(app)
+    app.add_api_route(
+        HEALTH_PATH,
+        healthz_route(app),
+        methods=["GET"],
+        include_in_schema=False,
+    )
     # added last, so outermost: our startup runs before the app's own
     app.add_middleware(DtestLifespan)
+
+
+# liveness: 503 once a background loop has died, so k8s restarts the pod
+# (deploy/kubernetes/deployment.yml); no login, under our own paths
+HEALTH_PATH = "/api/v1/healthz"
+
+
+def healthz_route(app: FastAPI):
+    async def healthz() -> JSONResponse:
+        alive, stopped = worker_health(app)
+        if not alive:
+            return JSONResponse({"status": "down", "stopped": stopped}, 503)
+        return JSONResponse({"status": "ok"})
+
+    return healthz
 
 
 def worker_health(app: FastAPI) -> tuple[bool, list[str]]:

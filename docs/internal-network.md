@@ -18,7 +18,8 @@
 
 `GaiaService.main()`은 앱의 lifespan을 자기 것으로 바꾸므로 lifespan이나 startup 훅은 쓸 수 없습니다. `attach`는 ASGI 미들웨어 `DtestLifespan`을 붙여, uvicorn의 lifespan 메시지를 먼저 받아 DB/Redis 연결과 worker를 띄우고(종료 때는 반대로) 메시지를 gaia 쪽으로 넘깁니다(`src/dtest/entry.py`).
 
-- uvicorn은 startup이 끝나야 포트를 열기 때문에 `/api/admin/appReady`(gaia 제공)는 우리 준비가 끝난 뒤에야 응답합니다. k8s readiness/liveness probe는 이 경로를 씁니다.
+- uvicorn은 startup이 끝나야 포트를 열기 때문에 `/api/admin/appReady`(gaia 제공)는 우리 준비가 끝난 뒤에야 응답합니다. k8s readiness probe는 이 경로를 씁니다.
+- liveness probe는 우리 `/api/v1/healthz`입니다(`attach`가 붙임, 로그인 없음). 실행 스케줄러 같은 백그라운드 루프가 하나라도 죽으면 503을 줘서 Pod가 재시작됩니다. appReady는 이 루프들을 모릅니다.
 - 우리 startup이 실패하면 `lifespan.startup.failed`를 보내 프로세스가 종료됩니다(재시작은 k8s가 함). 그냥 예외를 던지면 uvicorn이 "lifespan 미지원"으로 보고 서비스 없이 떠 버리기 때문입니다.
 - `RUN_MODE=all | api | worker`는 그대로입니다.
 
