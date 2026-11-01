@@ -24,7 +24,7 @@ def test_a_chunked_body_over_the_limit_is_stopped():
     app = FastAPI()
     mount_api(app, Settings(request_max_bytes=1000))
 
-    @app.post("/echo")
+    @app.post("/api/v1/echo")
     async def echo(request: Request):
         return {"size": len(await request.body())}
 
@@ -34,7 +34,7 @@ def test_a_chunked_body_over_the_limit_is_stopped():
         for _ in range(n):
             yield b"x" * 400
 
-    big = client.post("/echo", content=chunks(5))  # no Content-Length
+    big = client.post("/api/v1/echo", content=chunks(5))  # no Content-Length
     assert big.status_code == 413
-    small = client.post("/echo", content=chunks(2))
+    small = client.post("/api/v1/echo", content=chunks(2))
     assert small.json() == {"size": 800}
