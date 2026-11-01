@@ -198,23 +198,44 @@ class ExecutorClient:
             session_id=context.get("session_id"),
         )
 
-    async def events(self, execution_id: str) -> list[dict[str, Any]]:
-        """The execution's durable event timeline, oldest first."""
+    async def events(
+        self, execution_id: str, after_sequence: int | None = None
+    ) -> list[dict[str, Any]]:
+        """The execution's durable event timeline, oldest first.
+
+        ``after_sequence``: only the events after it (an incremental read).
+        """
         items: list[dict[str, Any]] = []
         cursor = None
         while True:
+            params: dict[str, Any] = {"limit": 200}
+            if cursor:
+                params["cursor"] = cursor
+            elif after_sequence is not None:
+                params["after_sequence"] = after_sequence
             page = await self._call(
-                "GET",
-                f"/executions/{execution_id}/events",
-                params={
-                    "limit": 200,
-                    **({"cursor": cursor} if cursor else {}),
-                },
+                "GET", f"/executions/{execution_id}/events", params=params
             )
             items += page["items"]
             cursor = page.get("next_cursor")
             if not cursor:
                 return items
+
+    async def event(
+        self, execution_id: str, sequence: int
+    ) -> dict[str, Any] | None:
+        """The one timeline event at ``sequence``, or None."""
+        page = await self._call(
+            "GET",
+            f"/executions/{execution_id}/events",
+            params={"after_sequence": sequence - 1, "limit": 1},
+        )
+        items = [
+            i
+            for i in page["items"]
+            if int(i.get("event_sequence", -1)) == sequence
+        ]
+        return items[0] if items else None
 
     async def executions(
         self, created_after: datetime, **filters: str

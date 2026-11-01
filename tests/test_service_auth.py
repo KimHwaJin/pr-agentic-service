@@ -381,8 +381,10 @@ class _Timeline:
     def __init__(self, items):
         self.items = items
 
-    async def events(self, execution_id):
-        return self.items
+    async def event(self, execution_id, sequence):
+        return next(
+            (i for i in self.items if i["event_sequence"] == sequence), None
+        )
 
 
 def _consume(timeline, fields, monkeypatch):

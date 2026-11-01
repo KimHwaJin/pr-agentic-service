@@ -90,3 +90,18 @@ pr-agentic-service, executor, pr-batch가 같은 PostgreSQL을 씁니다. 모든
 | 5 | 32/32 | 121.2초 / 159.8초 | 10 / 10 / 0 | 16 / 9 | 없음 |
 
 앱 풀이 꽉 찬 것은 32개 턴의 세션·run을 한꺼번에 만든 첫 1초뿐이었고, 턴이 도는 2~3분 동안은 평균 0.03~0.04개였습니다. 5로 줄여도 턴 시간과 성공률은 그대로여서 기본값을 5로 내렸습니다.
+
+## executor 조회 부하 (2026-11-01)
+
+분석 한 건(계획 operation 1~2개 + finalize + 리포트)에서 우리가 executor에 보내는 요청은 쓰기 4~5번(submit, append, finalize, create_report)과 조회 7~8번입니다. 조회는 모두 execution_id 인덱스를 타는 짧은 SELECT입니다. 로컬 executor 실측 기준입니다.
+
+| 조회 | 언제 | executor 쪽 일 | 실측 |
+|---|---|---|---|
+| `GET /executions/{id}/result` | 리포트당 1번(근거 수집, read_step은 캐시 재사용) | SELECT 6개(execution, operations, steps, attempts, artifacts, attempt별 개수), 조인·잠금·파일 읽기 없음 | 18KB, 9~17ms |
+| `GET /executions/{id}/events` (확인) | 깨우는 이벤트마다(분석 한 건에 보통 3번) | `after_sequence=N-1&limit=1`로 그 이벤트 한 건만 | 약 1KB |
+| `GET /executions/{id}/events` (복구) | 이벤트를 놓쳐 오래 기다리는 run만, 백오프 | 우리가 받은 마지막 이벤트 이후만 | 실행 길이와 무관 |
+| `GET /executions/{id}`, `/artifacts`, `/artifacts/{id}` | 커널 확인, 노트북 찾기, 결과물 열기 | 기본키 단건 또는 짧은 목록 | result와 같거나 더 가벼움 |
+
+이벤트 확인은 원래 실행의 타임라인 전체(이벤트 30개 기준 38KB)를 매번 처음부터 읽었습니다. 실행이 길수록 누적이 이벤트 수의 제곱으로 커져서, 2026-11-01부터 한 건 조회로 바꿨습니다.
+
+리포트 근거를 result 대신 우리가 저장한 이벤트(executor_inbox의 `operation_completed.step_results`)로 만들 수도 있습니다. executor 부하는 리포트당 GET 1번(약 10ms)이 줄어들 뿐입니다. 대신 이벤트에 없는 lineage(skill, tool, 입력값)를 우리 상태에서 다시 맞춰야 합니다. 배치 실행은 그 정보가 우리 쪽에 없으니 result가 계속 필요하고, 근거 수집 코드도 두 갈래가 됩니다. 그래서 result 조회를 유지합니다.
