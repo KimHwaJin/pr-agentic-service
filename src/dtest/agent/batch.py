@@ -16,7 +16,7 @@ from langgraph.store.base import BaseStore
 
 from src.dtest.agent.context import BatchReportContext
 from src.dtest.agent.report_agent import ReportAgent, ReportMissing, handed_in
-from src.dtest.agent.reporter import collect_evidence
+from src.dtest.agent.reporter import collect_evidence, trimmed
 from src.dtest.core.config import Settings
 from src.dtest.core.db import utcnow
 
@@ -79,7 +79,10 @@ class BatchReportAgent:
         )
         async with ctx.activity("report_writing"):
             return await self.agent.write(
-                ctx, _request(execution, history, evidence), BATCH_TITLE
+                ctx,
+                _request(execution, history, evidence),
+                BATCH_TITLE,
+                can_read=trimmed(evidence),
             )
 
 

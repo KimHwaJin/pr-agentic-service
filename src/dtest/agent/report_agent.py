@@ -17,6 +17,7 @@ is looked up in the evidence it was given; numbers found nowhere get one
 repair call. No checkpointer: a retry starts over.
 """
 
+import bisect
 import logging
 import re
 from typing import Any
@@ -66,11 +67,15 @@ class ReportAgent:
             call_limit,
             submit,
         )
-        self.tools = [read_step, submit_report] if submit else [read_step]
-        self._graphs: dict[str, Any] = {}
+        self._graphs: dict[tuple[str, bool], Any] = {}
 
-    def get(self, name: str):
-        if name not in self._graphs:
+    def tools(self, can_read: bool) -> list:
+        """read_step only when the evidence left something out."""
+        return [read_step] * can_read + [submit_report] * self.submit
+
+    def get(self, name: str, can_read: bool = True):
+        key = (name, can_read)
+        if key not in self._graphs:
             # agent.graph imports the tools
             from src.dtest.agent.graph import tool_error
 
@@ -84,22 +89,26 @@ class ReportAgent:
                     run_limit=self.call_limit, exit_behavior="end"
                 ),
             ]
-            self._graphs[name] = create_agent(
+            self._graphs[key] = create_agent(
                 chat_model(self.settings, name),
-                tools=self.tools,
+                tools=self.tools(can_read),
                 system_prompt=load_prompt(self.prompt).render(),
                 middleware=middleware,
                 state_schema=ReportState,
             )
-        return self._graphs[name]
+        return self._graphs[key]
 
     async def _run(
-        self, ctx: Any, messages: list, quiet: tuple[str, ...]
+        self,
+        ctx: Any,
+        messages: list,
+        quiet: tuple[str, ...],
+        can_read: bool,
     ) -> dict[str, Any]:
         from src.dtest.agent.graph import relay
 
         return await relay(
-            self.get(ctx.model).astream(
+            self.get(ctx.model, can_read).astream(
                 {"messages": messages},
                 {"recursion_limit": self.settings.agent_recursion_limit},
                 context=ctx,
@@ -115,13 +124,16 @@ class ReportAgent:
         request: str,
         default_title: str,
         quiet: tuple[str, ...] = (),
+        can_read: bool = True,
     ) -> dict[str, Any]:
         """{title, markdown, summary}.
 
         ``ctx`` needs services, execution_id, model, cache and emit; tool
-        calls not in ``quiet`` go out as tool_call events.
+        calls not in ``quiet`` go out as tool_call events. ``can_read``
+        False (the request already holds every step in full) binds no
+        read_step, so an analysis report is one model call.
         """
-        state = await self._run(ctx, [HumanMessage(request)], quiet)
+        state = await self._run(ctx, [HumanMessage(request)], quiet, can_read)
         report = handed_in(state, default_title)
         missing = unsupported_numbers(report["markdown"], sources(state))
         if not missing:
@@ -131,10 +143,10 @@ class ReportAgent:
             ctx.execution_id,
             missing[:20],
         )
-        fix = HumanMessage(repair_request(missing, self.submit))
+        fix = HumanMessage(repair_request(missing, self.submit, can_read))
         try:
             fixed_state = await self._run(
-                ctx, [*state["messages"], fix], quiet
+                ctx, [*state["messages"], fix], quiet, can_read
             )
             fixed = handed_in(fixed_state, default_title)
         except ReportMissing:
@@ -169,7 +181,9 @@ def handed_in(state: dict[str, Any], default_title: str) -> dict[str, Any]:
     }
 
 
-def repair_request(missing: list[str], submit: bool) -> str:
+def repair_request(
+    missing: list[str], submit: bool, can_read: bool = True
+) -> str:
     listed = ", ".join(missing[:30])
     how = (
         "고친 리포트 전체를 submit_report로 다시 제출하세요."
@@ -180,8 +194,9 @@ def repair_request(missing: list[str], submit: bool) -> str:
         "검토: 리포트의 다음 수치는 받은 근거(실행 개요, read_step 결과)에서 "
         f"찾지 못했습니다: {listed}\n"
         "근거의 값을 반올림하거나 백분율로 바꾼 것이면 그대로 두고, 근거에 "
-        "없는 값이면 근거의 값으로 고치거나 지우세요. 필요하면 read_step으로 "
-        f"확인하세요. {how}"
+        "없는 값이면 근거의 값으로 고치거나 지우세요. "
+        + ("필요하면 read_step으로 확인하세요. " if can_read else "")
+        + how
     )
 
 
@@ -200,46 +215,83 @@ _SKIP = re.compile(
     r"|\d{1,2}:\d{2}(?::\d{2})?"
     r"|(?:Step|step|단계)\s*\d+"
 )
-_NUMBER = re.compile(r"(?<![\w.])[-+]?\d[\d,]*(?:\.\d+)?(?:[eE][-+]?\d+)?%?")
+# heading and list numbering ("### 3.5 LOT별 비교", "2. 결과")
+_NUMBERING = re.compile(
+    r"^(\s*(?:#{1,6}\s*|[-*]\s+)?)\d+(?:\.\d+)*[.)]?\s", re.M
+)
+_NUMBER = re.compile(
+    r"(?P<bound>[<>≤≥]=?\s*)?(?<![\w.])[-+]?\d[\d,]*(?:\.\d+)?"
+    r"(?:[eE][-+]?\d+)?%?"
+)
 
 
-def _numbers(text: str) -> list[tuple[str, float, int, bool]]:
-    """(as written, value, decimals, percent) of each number."""
+def _clean(text: str) -> str:
+    text = text.replace("−", "-").replace("–", "-")
+    return _SKIP.sub(" ", _NUMBERING.sub(r"\1", text))
+
+
+def _numbers(text: str) -> list[tuple[str, float, int, bool, bool]]:
+    """(as written, value, decimals, percent, bound) of each number."""
     found = []
-    for match in _NUMBER.finditer(_SKIP.sub(" ", text)):
+    for match in _NUMBER.finditer(_clean(text)):
         raw = match.group().rstrip(",")
-        percent = raw.endswith("%")
-        body = raw.rstrip("%").replace(",", "")
+        bound = bool(match.group("bound"))
+        body = raw.lstrip("<>≤≥= ")
+        percent = body.endswith("%")
+        body = body.rstrip("%").replace(",", "")
         try:
             value = float(body)
         except ValueError:
             continue
         mantissa = body.lower().split("e")[0]
         decimals = len(mantissa.split(".")[1]) if "." in mantissa else 0
-        found.append((raw, value, decimals, percent))
+        found.append((raw.strip(), value, decimals, percent, bound))
     return found
 
 
-def unsupported_numbers(markdown: str, evidence: str) -> list[str]:
-    """Numbers of the report found nowhere in the evidence.
+def _near(sorted_values: list[float], target: float, tolerance: float) -> bool:
+    i = bisect.bisect_left(sorted_values, target - tolerance)
+    return i < len(sorted_values) and sorted_values[i] <= target + tolerance
 
-    A report number is supported when an evidence number equals it after
-    rounding to the report's decimals, or after ×100 for a percentage.
-    Whole numbers under 100 (counts, list numbers, quartile positions)
-    are not checked.
+
+def unsupported_numbers(markdown: str, evidence: str) -> list[str]:
+    """Numbers of the report the evidence does not account for.
+
+    A report number is accounted for when an evidence number equals it
+    after rounding to the report's decimals (×100 for a percentage, sign
+    ignored), or the gap between two does (for a percentage: their
+    ratio). A bound ("p>0.23")
+    may be the evidence value rounded either way. Whole numbers under 100,
+    dates, step references and heading or list numbering are not checked.
     """
-    known = [v for _, v, _, _ in _numbers(evidence)]
-    known_set = set(known)
+    known = sorted({abs(v) for _, v, _, _, _ in _numbers(evidence)})
     missing: list[str] = []
-    for raw, value, decimals, percent in _numbers(markdown):
-        if decimals == 0 and abs(value) < 100 and not percent:
+    for raw, value, decimals, percent, bound in _numbers(markdown):
+        value = abs(value)
+        if decimals == 0 and value < 100 and not percent:
             continue
-        if value in known_set:
+        unit = 10**-decimals
+        tolerance = (unit if bound else 0.5 * unit) + 1e-12
+        # (target, tolerance): a percentage may be a ratio in the evidence
+        targets = [(value, tolerance)]
+        if percent:
+            targets.append((value / 100, tolerance / 100))
+        if any(_near(known, t, tol) for t, tol in targets):
             continue
-        tolerance = 0.5 * 10**-decimals + 1e-12
-        candidates = known + ([k * 100 for k in known] if percent else [])
-        if any(abs(k - value) <= tolerance for k in candidates):
+        if _derived(known, value, tolerance, percent):
             continue
         if raw not in missing:
             missing.append(raw)
     return missing
+
+
+def _derived(known: list[float], value: float, tol: float, percent: bool):
+    """A gap a - b of two evidence numbers, or for a percentage their
+    ratio a / b (a share, a change rate)."""
+    for b in known:
+        if percent:
+            if b and _near(known, b * value / 100, tol / 100 * b):
+                return True
+        elif _near(known, b + value, tol):
+            return True
+    return False

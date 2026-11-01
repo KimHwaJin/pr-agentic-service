@@ -9,6 +9,7 @@ analysis report of a chat turn; agent.batch writes batch reports.
 
 import asyncio
 import json
+import re
 from typing import Any
 
 from src.dtest.agent.codegen import (
@@ -24,6 +25,13 @@ STEP_MAX_CHARS = 12000
 # a trimmed step (the whole overview over budget) keeps this much
 TRIM_OUTPUT_CHARS = 2000
 TRIM_OBSERVATION_CHARS = 3000
+# every note collect_evidence leaves on a trimmed or omitted step
+_TRIMMED = re.compile(r"^※ .*read_step으로", re.M)
+
+
+def trimmed(evidence: str) -> bool:
+    """True when the evidence left part of a step out (read_step needed)."""
+    return bool(_TRIMMED.search(evidence))
 
 
 async def collect_evidence(
@@ -217,5 +225,6 @@ async def generate_report(
             ctx, title=title, focus=focus, evidence=evidence
         ),
         title,
+        can_read=trimmed(evidence),
     )
     return report["markdown"]

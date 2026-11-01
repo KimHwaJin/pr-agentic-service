@@ -20,7 +20,10 @@ OUTPUTS = {
 
 
 class _ToolModel(GenericFakeChatModel):
+    bound: list[str] | None = None
+
     def bind_tools(self, tools, **kwargs):
+        self.bound = [t.name for t in tools]
         return self
 
 
@@ -142,25 +145,39 @@ def test_evidence_over_budget_marks_what_it_cut():
 
 
 def test_whole_evidence_takes_one_call(monkeypatch):
-    _use(monkeypatch, _model(AIMessage("# 수율\n평균 1.998, 988건")))
+    model = _model(AIMessage("# 수율\n평균 1.998, 988건"))
+    _use(monkeypatch, model)
     sent = []
     ctx = _ctx(sent)
     markdown = _write(ctx, "mean 1.998321\ncount 988")
     assert markdown == "# 수율\n평균 1.998, 988건"
     assert sent == []  # no tool calls, no report text in the chat
+    assert not model.bound  # nothing to re-read: no read_step to call
+
+
+def test_trimmed_evidence_is_detected():
+    assert not reporter.trimmed("mean 1.998321\n※ 참고: 단위는 nm")
+    assert reporter.trimmed(
+        "※ 일부만 표시(출력 2,000/9,000자). read_step으로 전체를 읽으세요."
+    )
+    assert reporter.trimmed(
+        "※ Step 4, 5: 분량 제한으로 생략. read_step으로 읽으세요."
+    )
 
 
 def test_marked_steps_are_read_in_one_call(monkeypatch):
-    _use(
-        monkeypatch,
-        _model(
-            _call("read_step", {"sequences": [2, 3]}, "c1"),
-            AIMessage("# 수율\n표준편차 0.1427, 988건"),
-        ),
+    model = _model(
+        _call("read_step", {"sequences": [2, 3]}, "c1"),
+        AIMessage("# 수율\n표준편차 0.1427, 988건"),
     )
+    _use(monkeypatch, model)
     sent = []
     ctx = _ctx(sent)
-    markdown = _write(ctx, "※ 일부만 표시")
+    markdown = _write(
+        ctx,
+        "※ 일부만 표시(출력 2,000/9,000자). read_step으로 전체를 읽으세요.",
+    )
+    assert model.bound == ["read_step"]
     assert markdown.endswith("0.1427, 988건")
     assert ctx.services.executor.results == 1
     calls = [d for t, d in sent if t == "tool_call"]
@@ -214,6 +231,24 @@ def test_number_check():
         "2.1",
         "55%",
         "1,234",
+    ]
+
+
+def test_number_check_false_positives():
+    evidence = (
+        "corr -0.036 p 0.234 mean_a 1.20 mean_b 1.09 pass 973 total 1000"
+    )
+    report = (
+        "### 3.5 LOT별 비교\n"
+        "1. 결과\n"
+        "- 상관 −0.036, p>0.23\n"  # U+2212 minus; a bound rounded down
+        "- 평균 차이 0.11\n"  # 1.20 - 1.09
+        "- 합격 비중 97.3%"  # 973 / 1000
+    )
+    assert unsupported_numbers(report, evidence) == []
+    assert unsupported_numbers("평균 4.27, 비중 55%", evidence) == [
+        "4.27",
+        "55%",
     ]
 
 
