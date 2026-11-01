@@ -191,6 +191,35 @@ def test_outside_tenants_bring_their_own_user_ids():
     assert err.value.status_code == 403
 
 
+@pytest.mark.parametrize(
+    ("user_id", "ok"),
+    [("E12345", True), ("svc-report", True), ("their.user-7", False)],
+)
+def test_outside_users_are_employee_ids_when_a_pattern_is_set(user_id, ok):
+    _REQUEST_DB[0] = _Db([_client(tenant="partner")], [])
+    settings = Settings(employee_id_pattern=r"e[0-9]{5}")
+    request = _request(
+        {"X-Api-Key": KEY, "X-User-Id": user_id}, settings=settings
+    )
+    services = request.app.state.services
+    run = deps.key_identity(request, services, any_user_outside=True)
+    if ok:
+        assert asyncio.run(run)[1] == user_id.lower()
+        return
+    with pytest.raises(ApiError) as err:
+        asyncio.run(run)
+    assert (err.value.status, err.value.code) == (400, "INVALID_IDENTITY")
+
+
+def test_our_user_id_is_the_lowercased_employee_id():
+    from api_service.users import user_id_of
+
+    assert user_id_of(" E12345 ") == "e12345"
+    for bad in ["", "-e1", "e" * 37, "김철수"]:
+        with pytest.raises(HTTPException):
+            user_id_of(bad)
+
+
 def test_our_tenant_needs_our_users_on_gateways_too():
     _REQUEST_DB[0] = _Db([_client(tenant="dtest-agent-service")], [])
     request = _request({"X-Api-Key": KEY, "X-User-Id": "someone"})

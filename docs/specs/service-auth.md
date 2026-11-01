@@ -21,7 +21,7 @@
 | 헤더 | 규칙 |
 | --- | --- |
 | `X-Api-Key` | stg·prd 필수 |
-| `X-User-Id` | 소문자로 바꾼 뒤 `^[a-z0-9][a-z0-9._-]{0,63}$`. 값은 우리 `users.id`(uuid4 소문자 문자열, 그대로 통과) |
+| `X-User-Id` | 소문자로 바꾼 뒤 `^[a-z0-9][a-z0-9._-]{0,63}$`. 값은 **SSO 사번(소문자)**. 우리 `users.id`가 곧 소문자 사번이다(2026-11-01). 외부 tenant도 사번을 보내고, 사람이 아닌 호출은 `svc-` 접두어를 쓴다 |
 | `X-Project-Id` | 선택. `^[A-Za-z0-9][A-Za-z0-9._-]{0,254}$`, `unscoped` 금지 |
 | `X-Session-Id` | 선택. 있으면 `X-Project-Id` 필수. pr-batch는 무시 |
 | `X-Tenant-Id` | relay key만, `allowed_tenants` 안의 값만. 우리 key는 executor·pr-batch에서 `["*"]`(형식에 맞고 예약어가 아닌 모든 tenant, 2026-11-01) |
@@ -227,3 +227,5 @@ REDIS_URL: "redis://…"              # 지금과 같음 (세션·큐·executor 
 - **이벤트 확인**: wake 이벤트(`operation_completed`, `completed`)는 executor 타임라인에서 같은 `event_id`를 찾아 그 값으로 씁니다. 못 찾으면 버립니다. 배치 리포트는 `GET /executions/{id}`(시스템 조회)로 상태·trigger·owner를 정합니다.
 - **외부 tenant 배치의 리포트** (2026-11-01): 외부 tenant로 등록된 배치의 실행 이벤트는 `executor.events.<그 tenant>`로 가고, 우리는 우리 tenant 스트림만 읽습니다. 누락 복구(`BatchReportRecovery`)도 우리 key의 기본 tenant만 조회합니다. 그래서 배치 리포트는 우리 tenant 배치에만 만들어지고, 외부 tenant 배치는 리포트 대상이 아닙니다. 외부 호출자는 실행 결과를 executor 게이트웨이로 조회합니다.
 - **pr-batch PATCH의 다른 tenant**: pr-batch는 배치를 (tenant, 사용자)로 찾으므로, 저장된 tenant와 다른 tenant로 부르면 403이 아니라 404입니다(존재 여부를 드러내지 않음).
+- **사용자 = SSO 사번** (2026-11-01, 세 서비스 공통): 새 사용자의 `users.id`는 소문자 사번입니다(`api_service/users.py` `user_id_of`). 그래서 executor·pr-batch에 보내는 `X-User-Id`, 배치 owner, `disable-by-owner`의 `owner_id`, executor 작업 공간 `tenants/{tenant}/users/{사번}/…`이 모두 사번입니다. tenant가 달라도 사번이 같으면 같은 사람이고, 이 원칙은 비활성화에만 씁니다. 데이터 접근은 지금처럼 (tenant, 사번)으로 격리됩니다. `users.id`(36자)와 `X-User-Id` 형식에 맞지 않는 사번은 로그인을 거부합니다(403). 이전에 만들어진 사용자는 uuid가 남으므로 통합테스트 전 DB 리셋과 함께 전환합니다.
+- **외부 tenant의 사번 검증**: 외부 tenant key의 `X-User-Id`는 형식을 검사하고, `EMPLOYEE_ID_PATTERN`(정규식, 소문자 전체 일치)을 설정하면 그 패턴도 검사합니다. `SERVICE_USER_PREFIX`(`svc-`)로 시작하는 값은 시스템 계정이라 패턴 검사를 건너뜁니다. 외부 tenant에 key를 발급할 때 "X-User-Id = SSO 사번"을 약속받습니다.
