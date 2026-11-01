@@ -185,12 +185,12 @@ def test_executions_are_read_until_they_pass_the_cutoff():
     [
         ("POST", "batches", True),
         ("POST", "/batches/", True),
-        ("PATCH", "batches/b-1", False),  # pr-batch keeps its tenant
+        ("PATCH", "batches/b-1", False),  # pr-batch keeps its project
         ("POST", "batches/b-1/runs", False),
         ("GET", "batches", False),
     ],
 )
-def test_only_registration_names_a_tenant(method, path, expected):
+def test_only_registration_names_a_project(method, path, expected):
     assert registers(method, path) is expected
 
 

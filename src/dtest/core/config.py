@@ -40,6 +40,11 @@ APP_ENVS = ("dev", "stg", "prd")
 RESERVED_TENANT_IDS = frozenset({"dlq", "work"})
 
 
+def is_placeholder(value: str) -> bool:
+    """A template value left in a config file (<exe-key>, REPLACE_...)."""
+    return value.startswith("<") or "REPLACE" in value.upper()
+
+
 def app_env() -> str | None:
     """The deployment environment, or None for a local run."""
     env = os.environ.get("APP_ENV") or dotenv_values(
@@ -122,10 +127,10 @@ class Settings(BaseSettings):
     redis_namespace: str = "agentic"
     # app-table pool (+ the same overflow); measured peak use is the burst
     # of run creation, idle while turns run (docs/load-design.md)
-    db_pool_size: int = 5
+    db_pool_size: int = 3
     # psycopg pool of the LangGraph checkpointer and store: every graph
     # step of every running turn (RUN_CONCURRENCY) writes through it
-    checkpoint_pool_size: int = Field(16, ge=2)
+    checkpoint_pool_size: int = Field(8, ge=2)
     # how long a checkpoint write waits for a free connection
     checkpoint_pool_timeout_seconds: float = Field(30.0, gt=0)
     auto_migrate: bool = True
@@ -183,6 +188,10 @@ class Settings(BaseSettings):
     # The operator key of the executor's runtime and maintenance APIs, for
     # the 시스템 page; empty = those pages answer 503.
     executor_admin_api_key: str = ""
+    # Send our keys (X-Api-Key) to the executor and pr-batch. false: no key
+    # goes out, for an executor / pr-batch in AUTH_MODE=header (local/dev
+    # only); the keys above are then ignored.
+    service_keys_enabled: bool = True
     # The executor tenant of this service (the default tenant of our key):
     # the events of our executions and of the batches registered through
     # us come to <executor_event_stream>.<tenant>. The same in every
@@ -190,7 +199,7 @@ class Settings(BaseSettings):
     # change it to keep its events apart. Executor and pr-batch list it in
     # our key's allowed_tenants.
     executor_tenant_id: str = Field(
-        "pr-agentic", pattern=r"^[a-z][a-z0-9-]{1,62}[a-z0-9]$"
+        "dtest-agent-service", pattern=r"^[a-z][a-z0-9-]{1,62}[a-z0-9]$"
     )
     # This service's folder on the executor input PV (INPUT_STORAGE_ROOT):
     # the local mount, and the same folder relative to INPUT_STORAGE_ROOT.
@@ -311,7 +320,7 @@ class Settings(BaseSettings):
 
     # Run scheduler.
     run_concurrency: int = Field(
-        32, ge=1
+        16, ge=1
     )  # turns are I/O bound (LLM, executor)
     # turns of one user running at once across pods (0: no limit)
     run_user_concurrency: int = Field(4, ge=0)
@@ -395,12 +404,30 @@ class Settings(BaseSettings):
             raise ValueError("EXECUTOR_IO_MODE=api is for test environments")
         if self.auth_mode == "header" and self.env not in {"local", "dev"}:
             raise ValueError("AUTH_MODE=header is only allowed in local/dev")
+        if not self.service_keys_enabled:
+            if self.env not in {"local", "dev"}:
+                raise ValueError(
+                    "SERVICE_KEYS_ENABLED=false is only allowed in local/dev"
+                )
+            # validate_assignment is off: no re-run of this validator
+            self.executor_api_key = self.executor_admin_api_key = ""
+            self.batch_api_key = ""
         if self.env in {"stg", "prd"} and not (
             self.executor_api_key and self.batch_api_key
         ):
             raise ValueError(
                 "EXECUTOR_API_KEY and BATCH_API_KEY are required in stg/prd"
             )
+        for name in (
+            "executor_api_key",
+            "executor_admin_api_key",
+            "batch_api_key",
+        ):
+            if is_placeholder(getattr(self, name)):
+                raise ValueError(
+                    f"{name.upper()} is still a placeholder; set the issued "
+                    "key (or SERVICE_KEYS_ENABLED=false in local/dev)"
+                )
         if self.executor_tenant_id in RESERVED_TENANT_IDS:
             raise ValueError(
                 f"EXECUTOR_TENANT_ID {self.executor_tenant_id!r} is reserved"

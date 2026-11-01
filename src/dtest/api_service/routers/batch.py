@@ -8,11 +8,12 @@ batches and scripts (404 otherwise).
 Reports of finished batch runs are not asked for by pr-batch: the worker
 starts one when the executor reports a successful BATCH execution (see
 ``worker.batch_reports``); users read them under ``/api/v1/batch-reports``.
-A batch is registered (``POST /batches``) with the caller's tenant as
-``X-Tenant-Id`` (ours for the browser), so pr-batch submits its runs there
-and their events come to that tenant's stream; ``X-Project-Id`` is sent
-then too (pr-batch keeps it and never changes it). Other calls send no
-tenant: pr-batch keeps the one the batch was registered with.
+Every call names the caller's tenant as ``X-Tenant-Id`` (ours for the
+browser): pr-batch keeps scripts and batches per (tenant, user), so a
+script, the batch made from it and every later read or change must name
+the same tenant, and pr-batch submits a batch's runs there (their events
+come to that tenant's stream). ``X-Project-Id`` is sent on registration
+(``POST /batches``) only: pr-batch keeps it and never changes it.
 """
 
 import hashlib
@@ -65,6 +66,13 @@ def batch_headers(services: Services, who: Identity) -> dict[str, str]:
     return with_key(services.settings.batch_api_key, who)
 
 
+def ours(services: Services, user_id: str) -> Identity:
+    """A browser user's call: our tenant, named (see the module doc)."""
+    return Identity(
+        user_id=user_id, tenant=services.settings.executor_tenant_id
+    )
+
+
 @router.post("/api/v1/batch/scripts/from-notebook", status_code=201)
 async def notebook_to_batch_script(
     body: BatchScriptFromNotebook, services: ServicesDep, user: UserDep
@@ -87,7 +95,7 @@ async def notebook_to_batch_script(
     result = await _client(services).post(
         "/api/v1/scripts",
         headers={
-            **batch_headers(services, Identity(user_id=user.id)),
+            **batch_headers(services, ours(services, user.id)),
             "Idempotency-Key": f"nb-{body.artifact_id}-{digest}",
         },
         data={
@@ -117,7 +125,7 @@ async def batch_script_view(
     The page reads the uploaded file through the gateway; pr-batch answers
     only to the script's owner. Cells carry Step N / 건너뜀 marks.
     """
-    headers = batch_headers(services, Identity(user_id=user.id))
+    headers = batch_headers(services, ours(services, user.id))
     client = _client(services)
     script, version = (
         await client.get(f"/api/v1/scripts/{script_id}", headers=headers),
@@ -203,20 +211,21 @@ async def gateway_identity(
 ) -> Identity:
     """Who a gateway call is made for.
 
-    The tenant and the project only on registration: the browser's tenant
-    is ours and its project one the user belongs to; a key caller's project
-    in another tenant is its own and only checked for form. ``user`` None:
-    a key caller of another tenant, whose ``user_id`` is its own.
+    The tenant on every call: the browser's is ours, a key caller's its
+    own. The project only on registration: the browser's is one the user
+    belongs to; a key caller's project in another tenant is its own and
+    only checked for form. ``user`` None: a key caller of another tenant,
+    whose ``user_id`` is its own.
     """
     if path.strip("/") == "runtimes":  # pr-batch's own settings
         return Identity()
-    if not registers(request.method, path):
-        return Identity(user_id=user_id)
     caller = caller_of(request)
-    ours = services.settings.executor_tenant_id
-    tenant = caller.tenant if caller else ours
+    our_tenant = services.settings.executor_tenant_id
+    tenant = caller.tenant if caller else our_tenant
+    if not registers(request.method, path):
+        return Identity(user_id=user_id, tenant=tenant)
     project = identity_header(request, "x-project-id", PROJECT_ID)
-    if project and tenant == ours and user is not None:
+    if project and tenant == our_tenant and user is not None:
         await project_for(services, user, project)
     return Identity(user_id=user_id, project_id=project, tenant=tenant)
 

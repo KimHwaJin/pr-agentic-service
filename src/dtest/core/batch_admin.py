@@ -7,7 +7,7 @@ from sqlalchemy import update
 
 from src.dtest.core.config import Settings
 from src.dtest.core.models import User
-from src.dtest.core.service_headers import with_key
+from src.dtest.core.service_headers import Identity, with_key
 from src.dtest.core.services import Services
 
 log = logging.getLogger(__name__)
@@ -26,7 +26,11 @@ async def disable_batches_of(settings: Settings, owner_id: str) -> int:
     ) as http:
         response = await http.post(
             "/api/v1/batches:disable-by-owner",
-            headers=with_key(settings.batch_api_key),
+            # our tenant named: the same rule as the gateway's calls
+            headers=with_key(
+                settings.batch_api_key,
+                Identity(tenant=settings.executor_tenant_id),
+            ),
             json={"owner_id": owner_id, "reason": "USER_DEACTIVATED"},
         )
     response.raise_for_status()

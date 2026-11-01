@@ -34,7 +34,7 @@ from src.dtest.core.models import (
     RunEvent,
 )
 from src.dtest.core.services import Services
-from src.dtest.worker.executor_events import matches
+from src.dtest.worker.executor_events import matches, wake_waiting_run
 from src.dtest.worker.memory import mark_dirty
 
 log = logging.getLogger(__name__)
@@ -412,7 +412,7 @@ class RunScheduler:
                     "steps": value.get("steps", []),
                 },
             )
-            if event:
+            if event or await self._woken_late(run.id, waiting):
                 await self.notify(run.id)
             return
         async with self.services.db.sessions() as db:
@@ -447,6 +447,29 @@ class RunScheduler:
             run, "hitl_request", {"interrupt_id": interrupt["id"], **value}
         )
         await self._emit(run, "run_status", {"status": "waiting_input"})
+
+    async def _woken_late(self, run_id: str, waiting: dict[str, Any]) -> bool:
+        """Queue the run for an event stored while it was being parked.
+
+        The consumer stores an event, then wakes the run only if it is
+        ``waiting_executor``. One that lands after our inbox check but
+        before our commit finds the run still ``running`` and passes it by
+        (waiting for the row lock would not help: its query filters on the
+        status it sees, running),
+        so we look once more after the commit. Waking twice is harmless:
+        only a waiting run is queued.
+        """
+        async with self.services.db.sessions() as db:
+            event = await self._arrived_event(db, waiting)
+        if event is None:
+            return False
+        woken = await wake_waiting_run(
+            self.services.db,
+            waiting["execution_id"],
+            event["event_type"],
+            event["payload"],
+        )
+        return woken == run_id
 
     @staticmethod
     async def _arrived_event(

@@ -92,7 +92,12 @@ def test_batch_script_page_reads_through_the_gateway(monkeypatch):
         {"index": 1, "executed": True, "sequence": 0},
     ]
     assert all(
-        headers == {"X-Api-Key": "bat_test_k", "X-User-Id": USER}
+        headers
+        == {
+            "X-Api-Key": "bat_test_k",
+            "X-User-Id": USER,
+            "X-Tenant-Id": "dtest-agent-service",
+        }
         for _, headers in client.calls
     )
 

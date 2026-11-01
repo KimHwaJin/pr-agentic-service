@@ -15,6 +15,8 @@ ADMIN_EMPLOYEE_IDS: []
 LLM_API_KEY: <llm-api-key>
 
 EXECUTOR_BASE_URL: http://<executor-host>:8000
+# true only: stg/prd always send the issued keys below.
+SERVICE_KEYS_ENABLED: true
 # Our keys at the executor (relay) and its operator key (시스템 page
 # runtime views; may stay empty). Secrets: better as Deployment env.
 EXECUTOR_API_KEY: <exe-key>

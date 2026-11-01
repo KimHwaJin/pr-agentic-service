@@ -62,7 +62,7 @@
 | `/api/v1/executor/{path}` (신규, 필수) | executor | 3.5 참고 |
 
 - 호출자의 tenant를 `X-Tenant-Id`로 붙인다. SSO 사용자는 `pr-agentic-service`.
-- pr-batch에는 **배치 등록(`POST /batches`) 때만** `X-Tenant-Id`를 보낸다. pr-batch는 PATCH에서 명시된 tenant가 저장값과 다르면 403이므로, 다른 tenant로 등록된 배치를 우리 화면에서 고칠 때 막히지 않게 하기 위해서다.
+- pr-batch에는 **모든 호출에** `X-Tenant-Id`를 보낸다(`GET /runtimes` 제외). pr-batch는 스크립트·배치를 (tenant, 사용자)로 찾으므로, 스크립트 등록·배치 등록·이후 조회와 변경이 모두 같은 tenant를 말해야 한다. 빠뜨리면 key의 기본 tenant(header 모드면 `dev`)에서 찾아 404가 된다. `scripts/from-notebook`, 스크립트 화면, `disable-by-owner`도 우리 tenant를 붙인다.
 - `X-Project-Id`는 배치 등록 때만 의미가 있다. pr-batch는 project를 바꿀 수 없으므로 우리 화면에서도 배치의 프로젝트 이동은 "새 배치 만들기"로 안내한다.
 
 ### 3.5 executor 게이트웨이 상세 (필수 범위)
@@ -125,7 +125,7 @@ identity_headers(
 ### 4.2 pr-batch 호출 (`src/dtest/api_service/routers/batch.py`)
 
 - 제거: `_batch_token()`, `_private_key()`, `Authorization: Bearer`, `sets_tenant`/`with_tenant`, 설정 `BATCH_JWT_*`, `keys/`, Dockerfile `COPY keys`.
-- 추가: `X-Api-Key: BATCH_API_KEY`, `X-User-Id`, (등록 때) `X-Project-Id`·`X-Tenant-Id`.
+- 추가: `X-Api-Key: BATCH_API_KEY`, `X-User-Id`, `X-Tenant-Id`(모든 호출), (등록 때) `X-Project-Id`.
 - `GET /runtimes`는 key만으로 부른다(pr-batch가 자기 설정 `BATCH_RUNTIMES`로 응답).
 
 ### 4.3 executor 호출 (`src/dtest/core/executor/client.py`)
@@ -175,7 +175,8 @@ REDIS_URL: "redis://…"              # 지금과 같음 (세션·큐·executor 
 ```
 
 - `AUTH_MODE: header`는 `APP_ENV`가 명시적으로 `local`·`dev`일 때만. `APP_ENV`가 비었거나 stg·prd면 기동 거부.
-- stg·prd에서 `BATCH_API_KEY`·`EXECUTOR_API_KEY`가 비면 기동 거부.
+- stg·prd에서 `BATCH_API_KEY`·`EXECUTOR_API_KEY`가 비면 기동 거부. 템플릿 값(`<exe-key>`처럼 `<`로 시작하거나 `REPLACE`가 들어간 값)이 남아 있어도 기동 거부.
+- `SERVICE_KEYS_ENABLED: false`(local·dev 전용): executor·pr-batch에 key를 보내지 않는다(둘 다 header 모드일 때). 이때 위 key 값은 무시한다. stg·prd에서 false면 기동 거부.
 - 로그 마스킹: `X-Api-Key`, `pas_*`·`exe_*`·`bat_*` 패턴을 접근·오류·httpx 로그에서 지운다.
 
 ## 8. 테스트
@@ -214,7 +215,7 @@ REDIS_URL: "redis://…"              # 지금과 같음 (세션·큐·executor 
 
 스펙과 다르게 또는 더 구체적으로 정한 부분입니다.
 
-- **tenant 값**: 우리 tenant는 설정 `EXECUTOR_TENANT_ID`(기본 `pr-agentic`)입니다. 이 문서의 `pr-agentic-service`는 그 값을 가리킵니다.
+- **tenant 값**: 우리 tenant는 설정 `EXECUTOR_TENANT_ID`(`dtest-agent-service`, 2026-11-01)입니다. 이 문서의 `pr-agentic-service`는 그 값을 가리킵니다. executor·pr-batch의 우리 key 항목(`tenant`, `allowed_tenants`)도 같은 이름이어야 합니다.
 - **executor 게이트웨이와 브라우저**: `/api/v1/executor/{path}`는 key 호출자의 입구이면서, 기존처럼 브라우저(SSO)의 조회 중계도 계속 맡습니다(실행 이력·시스템 화면). 쿠키 요청은 403이 아니라 기존 규칙(멤버십 확인 후 시스템 조회, 관리자 경로)으로 처리합니다. 쓰기와 `/artifacts/*`는 key 호출자만 씁니다.
 - **runtime·maintenance**: executor의 admin 전용 API라 운영 key `EXECUTOR_ADMIN_API_KEY`로 부릅니다. `EXECUTOR_API_KEY`는 있는데 운영 key가 비어 있으면 시스템 화면의 그 탭은 503 `EXECUTOR_ADMIN_KEY_MISSING`입니다. 둘 다 비어 있으면(로컬 header 모드 executor) key 없이 부릅니다.
 - **tenant 헤더**: 우리 executor 호출은 모두 `X-Tenant-Id: EXECUTOR_TENANT_ID`를 붙입니다(운영 API 제외). header 모드 executor는 key가 없으면 tenant를 `dev`로 잡기 때문입니다. 그래서 우리 relay key의 `allowed_tenants`에 우리 tenant가 있어야 합니다.
