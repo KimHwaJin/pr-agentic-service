@@ -27,6 +27,7 @@ from fastapi.responses import StreamingResponse
 from api_service.deps import (
     PROJECT_ID,
     USER_ID,
+    ExecutorScopeHeaders,
     IdentityHeaders,
     ServicesDep,
     current_user,
@@ -114,6 +115,7 @@ async def relay(
     request: Request,
     services: ServicesDep,
     _headers: IdentityHeaders = None,
+    _scope: ExecutorScopeHeaders = None,
 ):
     route = _match(request.method, path)
     cookie = services.settings.session_cookie_name
