@@ -13,9 +13,6 @@ from src.dtest.core.models import ChatSession, Project, ProjectMember, User
 from src.dtest.core.services import Services
 
 USER_ID = re.compile(r"^[a-z0-9][a-z0-9._-]{0,63}$")
-UUID = re.compile(
-    r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
-)
 PROJECT_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,254}$")
 
 
@@ -123,6 +120,7 @@ async def key_identity(
         any_user_outside
         and caller.tenant != services.settings.executor_tenant_id
     ):
+        _check_employee_id(services.settings, user_id)
         request.state.caller_user_id = user_id
         return caller, user_id, None
     user = await _user(services, user_id)
@@ -130,6 +128,16 @@ async def key_identity(
         raise HTTPException(403, "Unknown or inactive user.")
     request.state.caller_user_id = user.id
     return caller, user.id, user
+
+
+def _check_employee_id(settings, user_id: str) -> None:
+    """Another tenant's user is an SSO employee id (or a system account),
+    the person the executor and pr-batch know in every tenant."""
+    pattern = settings.employee_id_pattern
+    if not pattern or user_id.startswith(settings.service_user_prefix):
+        return
+    if not re.fullmatch(pattern, user_id):
+        raise invalid_identity("X-User-Id is not an employee id.")
 
 
 async def _caller(request: Request, services: Services) -> Caller:
@@ -182,7 +190,8 @@ async def _user(services: Services, user_id: str) -> User | None:
     if cached and cached[0] > time.monotonic():
         return cached[1]
     async with services.db.sessions() as db:
-        user = await db.get(User, user_id) if UUID.fullmatch(user_id) else None
+        # users.id: a lowercased employee id (or a uuid from before)
+        user = await db.get(User, user_id)
         if user is None:
             user = await db.scalar(
                 select(User).where(func.lower(User.employee_id) == user_id)

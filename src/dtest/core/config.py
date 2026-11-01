@@ -10,6 +10,7 @@ source (``REDIS_URL`` or ``redis_url``; the config files use upper case).
 """
 
 import os
+import re
 from functools import lru_cache
 from pathlib import Path
 from typing import Any, Literal
@@ -156,6 +157,13 @@ class Settings(BaseSettings):
     dev_employee_id: str = "dev0001"
     dev_employee_name: str = "개발자"
     admin_employee_ids: list[str] = []
+    # X-User-Id of a key caller of another tenant is an SSO employee id
+    # (2026-11-01); it is sent on to the executor and pr-batch as is.
+    # A regex for it (lowercased, full match; empty: the X-User-Id form
+    # only). Ids starting with SERVICE_USER_PREFIX name a system account
+    # and pass without it.
+    employee_id_pattern: str = ""
+    service_user_prefix: str = "svc-"
 
     # LLM gateway (OpenAI compatible, vLLM).
     llm_base_url: str = "http://localhost:8001/v1"
@@ -249,6 +257,12 @@ class Settings(BaseSettings):
     def _under_root(cls, path: Path) -> Path:
         # Relative paths in config files are under the repo root, not cwd.
         return path if path.is_absolute() else ROOT / path
+
+    @field_validator("employee_id_pattern")
+    @classmethod
+    def _a_regex(cls, pattern: str) -> str:
+        re.compile(pattern)  # a bad one fails at startup
+        return pattern
 
     @property
     def executor_tenant_stream(self) -> str:

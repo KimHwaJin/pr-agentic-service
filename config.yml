@@ -44,6 +44,11 @@ LOGIN_FLOW_TTL_SECONDS: 300
 # SSO_ADAPTER=dev only
 DEV_EMPLOYEE_ID: dev0001
 DEV_EMPLOYEE_NAME: 개발자
+# X-User-Id of another tenant's key caller is an SSO employee id. Regex
+# of it (lowercased; empty = form check only). SERVICE_USER_PREFIX ids are
+# system accounts and pass without it.
+EMPLOYEE_ID_PATTERN: ""
+SERVICE_USER_PREFIX: svc-
 
 # LLM gateway (OpenAI compatible, vLLM).
 LLM_BASE_URL: http://model.frodo.com/v1
