@@ -44,27 +44,44 @@ USER_HEADER = APIKeyHeader(
 async def identity_headers(
     x_api_key: Annotated[str | None, Security(API_KEY)] = None,
     x_user_id: Annotated[str | None, Security(USER_HEADER)] = None,
-    x_project_id: Annotated[
-        str | None,
-        Header(
-            alias="X-Project-Id",
-            description="Key callers, optional: must repeat the path's "
-            "project; on the executor and batch gateways the project the "
-            "call is for.",
-        ),
-    ] = None,
-    x_session_id: Annotated[
-        str | None,
-        Header(
-            alias="X-Session-Id",
-            description="Key callers, optional (needs X-Project-Id).",
-        ),
-    ] = None,
 ) -> None:
     """Documents the caller headers; ``current_user`` checks them."""
 
 
+ProjectHeader = Annotated[
+    str | None,
+    Header(
+        alias="X-Project-Id",
+        description="Key callers, optional: the project the call is for.",
+    ),
+]
+
+
+async def executor_scope_headers(
+    x_project_id: ProjectHeader = None,
+    x_session_id: Annotated[
+        str | None,
+        Header(
+            alias="X-Session-Id",
+            description="Key callers, optional (needs X-Project-Id): the "
+            "session the call is for.",
+        ),
+    ] = None,
+) -> None:
+    """Documents the project/session headers of the executor gateway.
+
+    Only the gateways send them on; elsewhere a key caller may still repeat
+    the path's ids (``_same_as_path``), but they are not shown there.
+    """
+
+
+async def batch_scope_headers(x_project_id: ProjectHeader = None) -> None:
+    """Documents ``X-Project-Id`` of the batch gateway (registration)."""
+
+
 IdentityHeaders = Annotated[None, Depends(identity_headers)]
+ExecutorScopeHeaders = Annotated[None, Depends(executor_scope_headers)]
+BatchScopeHeaders = Annotated[None, Depends(batch_scope_headers)]
 
 
 async def current_user(

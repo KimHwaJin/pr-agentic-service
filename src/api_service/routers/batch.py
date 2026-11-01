@@ -26,6 +26,7 @@ from fastapi.responses import HTMLResponse, StreamingResponse
 
 from api_service.deps import (
     PROJECT_ID,
+    BatchScopeHeaders,
     IdentityHeaders,
     ServicesDep,
     UserDep,
@@ -239,6 +240,7 @@ async def batch_gateway(
     request: Request,
     services: ServicesDep,
     _headers: IdentityHeaders = None,
+    _scope: BatchScopeHeaders = None,
 ):
     path = path.strip("/")
     if not relayed(request.method, path):
