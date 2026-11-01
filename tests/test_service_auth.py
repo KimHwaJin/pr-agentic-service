@@ -295,6 +295,27 @@ def test_admin_apis_refuse_key_callers():
     assert err.value.status_code == 403
 
 
+def test_sso_only_apis_refuse_key_callers():
+    _REQUEST_DB[0] = _Db([_client()], [_user(role="admin")])
+    request = _request({"X-Api-Key": KEY, "X-User-Id": USER})
+    with pytest.raises(HTTPException) as err:
+        asyncio.run(deps.sso_user(request))
+    assert err.value.status_code == 403
+    with pytest.raises(HTTPException) as err:
+        asyncio.run(deps.sso_user(_request({})))
+    assert err.value.status_code == 401
+
+
+def test_a_key_alone_reads_what_is_no_ones():
+    _REQUEST_DB[0] = _Db([_client()], [_user()])
+    request = _request({"X-Api-Key": KEY})
+    assert asyncio.run(deps.user_or_service(request)) is None
+    assert deps.caller_of(request) is not None
+    named = _request({"X-Api-Key": KEY, "X-User-Id": USER})
+    user = asyncio.run(deps.user_or_service(named))
+    assert user is not None and user.id == USER
+
+
 def test_a_revoked_key_is_forgotten_here_at_once():
     client = _client()
     db = _Db([client], [_user()])
