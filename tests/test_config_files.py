@@ -267,3 +267,21 @@ def test_keyless_switches_are_gone(root, monkeypatch, key):
     monkeypatch.setenv("APP_ENV", "dev")
     with pytest.raises(ValueError, match="EXECUTOR_API_KEY and BATCH_API_KEY"):
         Settings()
+
+
+def test_config_example_documents_every_setting():
+    # config.example.yml is the annotated list of every setting: it holds
+    # each Settings key, its shared values match config.yml, and its
+    # MODELS entries are valid.
+    example = yaml.safe_load(
+        (config.ROOT / "config.example.yml").read_text(encoding="utf-8")
+    )
+    example = {k.lower(): v for k, v in example.items()}
+    assert set(example) == set(Settings.model_fields)
+    shared = yaml.safe_load(
+        (config.ROOT / "config.yml").read_text(encoding="utf-8")
+    )
+    for key, value in shared.items():
+        assert example[key.lower()] == value, key
+    for model in example["models"]:
+        config.ModelSpec.model_validate(model)
