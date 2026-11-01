@@ -568,7 +568,7 @@ class MemoryWorker:
                 if exc.status == 409 and attempt == 0:
                     continue
                 log.warning(
-                    "memory_apply_failed project=%s topic=%s: %s",
+                    "memory_apply_failed project=%s topic=%s error=%s",
                     project_id,
                     topic_id,
                     exc,
@@ -649,7 +649,7 @@ class MemoryWorker:
         attempts = state.attempts + 1
         if attempts >= MAX_ATTEMPTS and chunk:
             log.error(
-                "memory_extract_gave_up project=%s messages=%d: %s",
+                "memory_extract_gave_up project=%s messages=%d error=%s",
                 state.project_id,
                 len(chunk),
                 error,

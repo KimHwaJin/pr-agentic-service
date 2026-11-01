@@ -131,22 +131,13 @@ def mount_api(app: FastAPI, settings: Settings) -> None:
 
     app.add_middleware(BodyLimit, max_bytes=settings.request_max_bytes)
 
+    tenant = settings.executor_tenant_id
+
     @app.middleware("http")
-    async def audit_key_callers(request: Request, call_next):
-        """One line per request of a key caller (client, user, result)."""
+    async def audit_requests(request: Request, call_next):
+        """One audit line per key call and per SSO write (see audit_line)."""
         response = await call_next(request)
-        caller = getattr(request.state, "api_client", None)
-        if caller is not None:
-            audit.info(
-                "api_client_request client=%s tenant=%s user=%s method=%s "
-                "path=%s status=%s",
-                caller.name,
-                caller.tenant,
-                getattr(request.state, "caller_user_id", ""),
-                request.method,
-                request.url.path,
-                response.status_code,
-            )
+        audit_line(request, response.status_code, tenant)
         return response
 
     if settings.cors_origins:
@@ -165,6 +156,44 @@ def mount_api(app: FastAPI, settings: Settings) -> None:
             "/dev",
             StaticFiles(directory=DTEST_ROOT / "web/dev", html=True),
             name="dev",
+        )
+
+
+WRITE_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})
+
+
+def audit_line(request: Request, status: int, tenant: str) -> None:
+    """Who did what, in the message itself: the platform's log format may
+    print only ``%(message)s``. Keys match the executor's and pr-batch's
+    (client, tenant, user, method, path) so Kibana finds all three.
+
+    Key callers: every request. SSO browser users: writes only (reads are
+    the screens' polling), as ``client=sso`` in our own tenant.
+    """
+    state = request.state
+    caller = getattr(state, "api_client", None)
+    if caller is not None:
+        audit.info(
+            "api_client_request client=%s tenant=%s user=%s method=%s "
+            "path=%s status=%s",
+            caller.name,
+            caller.tenant,
+            getattr(state, "caller_user_id", ""),
+            request.method,
+            request.url.path,
+            status,
+        )
+        return
+    user = getattr(state, "sso_user_id", None)
+    if user is not None and request.method in WRITE_METHODS:
+        audit.info(
+            "sso_write_request client=sso tenant=%s user=%s method=%s "
+            "path=%s status=%s",
+            tenant,
+            user,
+            request.method,
+            request.url.path,
+            status,
         )
 
 

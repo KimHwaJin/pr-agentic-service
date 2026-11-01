@@ -13,7 +13,10 @@ from pathlib import Path
 import yaml
 
 from src.dtest.core.config import ROOT
-from src.dtest.core.request_context import install_log_field
+from src.dtest.core.request_context import (
+    RequestIdInMessage,
+    install_log_field,
+)
 
 LOGGER_CONFIG = ROOT / "logger.yml"
 # our keys and theirs (pas_ ours, exe_ executor, bat_ pr-batch), and an
@@ -45,12 +48,14 @@ def configure_logging(path: Path = LOGGER_CONFIG) -> None:
     else:
         init_logger()
     install_log_field()
-    mask_secrets()
+    install_filters()
 
 
-def mask_secrets() -> None:
-    """Puts ``SecretFilter`` on every handler configured so far."""
-    secret_filter = SecretFilter()
+def install_filters() -> None:
+    """Puts the request id into, and masks secrets out of, the message on
+    every handler configured so far (HCP's included). The id goes first so
+    the mask also covers the finished message."""
+    filters = [RequestIdInMessage(), SecretFilter()]
     loggers = [logging.getLogger()] + [
         logger
         for logger in logging.root.manager.loggerDict.values()
@@ -58,8 +63,9 @@ def mask_secrets() -> None:
     ]
     for logger in loggers:
         for handler in logger.handlers:
-            if not any(isinstance(f, SecretFilter) for f in handler.filters):
-                handler.addFilter(secret_filter)
+            for new in filters:
+                if not any(isinstance(f, type(new)) for f in handler.filters):
+                    handler.addFilter(new)
 
 
 def apply_logger_config(path: Path) -> None:

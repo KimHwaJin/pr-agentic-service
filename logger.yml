@@ -7,7 +7,9 @@ disable_existing_loggers: false
 
 formatters:
   standard:
-    format: "%(asctime)s %(levelname)s %(name)s [%(request_id)s]: %(message)s"
+    # values (request_id included) are in the message, as under HCP's
+    # format, so this line prints what Kibana will show
+    format: "%(asctime)s %(levelname)s %(name)s: %(message)s"
 
 handlers:
   console:
