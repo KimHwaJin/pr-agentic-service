@@ -950,48 +950,42 @@ async function loadMemory(keepDrafts) {
 }
 function topicsJson() { return JSON.stringify(PM.topics.map(({ id, title, description, max_chars, replace }) => ({ id, title, description, max_chars, replace }))); }
 function topicsDirty() { return PM.id && topicsJson() !== PM.topicsOrig; }
-function topicProblems() {
-  const out = {}, all = [], titles = {};
-  const ts = PM.topics;
-  if (!ts.length) all.push('주제가 하나는 있어야 합니다.');
-  if (ts.length > TOPIC.max) all.push(`주제는 ${TOPIC.max}개까지입니다.`);
-  ts.forEach(t => {
-    const p = [], title = t.title.trim();
-    if (!title) p.push('제목을 입력하세요');
-    else if (title.length > TOPIC.title) p.push(`제목은 ${TOPIC.title}자까지`);
-    if (title && titles[title.toLowerCase()]) p.push('같은 제목이 있습니다');
-    titles[title.toLowerCase()] = true;
-    if (t.description.trim().length > TOPIC.desc) p.push(`설명은 ${TOPIC.desc}자까지`);
-    if (!Number.isInteger(t.max_chars) || t.max_chars < TOPIC.min) p.push(`한도는 ${TOPIC.min}자 이상`);
-    if (p.length) out[t.key] = p;
-  });
-  const sum = ts.reduce((n, t) => n + (Number.isInteger(t.max_chars) ? t.max_chars : 0), 0);
-  if (sum > PM.total) all.push(`한도 합계 ${sum.toLocaleString()}자가 전체 한도 ${PM.total.toLocaleString()}자를 넘습니다.`);
-  return { out, all, sum, ok: !all.length && !Object.keys(out).length };
+// The server checks topics (PUT /memory/topics answers 422 with details per
+// field); the screen only shows what it said. limits are for the hints.
+function topicErrors(err) {
+  const out = { fields: {}, all: [] };
+  for (const d of err?.details || []) {
+    const [, where, i, field] = d.location || [];  // body.topics.<i>.<field>
+    if (where === 'topics' && Number.isInteger(i)) (out.fields[i] ||= {})[field || 'topic'] = d.message;
+    else out.all.push(d.message);
+  }
+  if (!out.all.length && !Object.keys(out.fields).length && err?.message) out.all.push(err.message);
+  return out;
 }
+const topicSum = () => PM.topics.reduce((n, t) => n + (Number.isInteger(t.max_chars) ? t.max_chars : 0), 0);
 function renderTopics() {
   const el = $('pmTopics'); if (!el) return;
-  const pr = topicProblems(), dirty = topicsDirty();
+  const pr = PM.topicErrors || { fields: {}, all: [] }, dirty = topicsDirty(), sum = topicSum();
   el.innerHTML = `
     <h3>주제 <span style="font-weight:400;color:var(--faint);font-size:12px">메모리의 제목입니다. 제목·설명·한도를 고쳐도 내용은 그대로 남습니다.</span>
-      <span class="usage">한도 합계 ${pr.sum.toLocaleString()} / ${PM.total.toLocaleString()}자<div class="bar"><i style="width:${Math.min(100, pr.sum / PM.total * 100)}%;${pr.sum > PM.total ? 'background:var(--bad)' : ''}"></i></div></span></h3>
-    ${PM.topics.map((t, i) => `
+      <span class="usage">한도 합계 ${sum.toLocaleString()} / ${PM.total.toLocaleString()}자<div class="bar"><i style="width:${Math.min(100, sum / PM.total * 100)}%"></i></div></span></h3>
+    ${PM.topics.map((t, i) => { const fe = pr.fields[i] || {}; return `
       <div class="mem-topic">
-        <input value="${esc(t.title)}" maxlength="60" placeholder="제목" class="${(pr.out[t.key] || []).some(x => x.includes('제목')) ? 'bad' : ''}" oninput="PM.topics[${i}].title=this.value; renderTopicsSoon()">
-        <input value="${esc(t.description)}" placeholder="설명 (한 줄, 어떤 내용을 넣을지 Agent가 따릅니다)" class="${(pr.out[t.key] || []).some(x => x.includes('설명')) ? 'bad' : ''}" oninput="PM.topics[${i}].description=this.value; renderTopicsSoon()">
-        <input type="number" min="${TOPIC.min}" step="50" value="${Number.isInteger(t.max_chars) ? t.max_chars : ''}" title="이 주제의 글자 수 한도" class="${(pr.out[t.key] || []).some(x => x.includes('한도')) ? 'bad' : ''}" oninput="PM.topics[${i}].max_chars=this.value === '' ? null : +this.value; renderTopicsSoon()">
+        <input value="${esc(t.title)}" placeholder="제목" class="${fe.title ? 'bad' : ''}" oninput="PM.topics[${i}].title=this.value; renderTopicsSoon()">
+        <input value="${esc(t.description)}" placeholder="설명 (한 줄, 어떤 내용을 넣을지 Agent가 따릅니다)" class="${fe.description ? 'bad' : ''}" oninput="PM.topics[${i}].description=this.value; renderTopicsSoon()">
+        <input type="number" min="${TOPIC.min}" step="50" value="${Number.isInteger(t.max_chars) ? t.max_chars : ''}" title="이 주제의 글자 수 한도" class="${fe.max_chars ? 'bad' : ''}" oninput="PM.topics[${i}].max_chars=this.value === '' ? null : +this.value; renderTopicsSoon()">
         <span class="acts">
           <button class="ghost" title="위로" ${i ? '' : 'disabled'} onclick="moveTopic(${i}, -1)">↑</button>
           <button class="ghost" title="새 주제로 바꿉니다 (지금 내용은 비워집니다)" ${t.id && !t.replace ? '' : 'disabled'} onclick="replaceTopic(${i})">교체</button>
           <button class="ghost" style="color:var(--bad)" title="주제를 지웁니다 (내용은 비워집니다)" onclick="removeTopic(${i})">삭제</button></span>
         ${!t.id ? '<div class="tag" style="color:var(--accent)">새 주제 · 저장 후 다음 대화부터 채워집니다</div>' : t.replace ? '<div class="tag">교체 예정 · 저장하면 지금 내용이 비워집니다 (기록에서 복원 가능)</div>' : ''}
-        ${(pr.out[t.key] || []).length ? `<div class="tag">${esc(pr.out[t.key].join(' · '))}</div>` : ''}
-      </div>`).join('')}
+        ${Object.keys(fe).length ? `<div class="tag" style="color:var(--bad)">${esc(Object.values(fe).join(' · '))}</div>` : ''}
+      </div>`; }).join('')}
     <div class="foot">
-      <button class="ghost" ${PM.topics.length >= TOPIC.max ? `disabled title="주제는 ${TOPIC.max}개까지입니다"` : ''} onclick="addTopic()">+ 주제 추가</button>
+      <button class="ghost" onclick="addTopic()">+ 주제 추가</button>
       <span class="${pr.all.length ? 'err' : 'ok'}">${esc(pr.all.join(' ')) || (dirty ? '저장하지 않은 주제 변경이 있습니다.' : `최대 ${TOPIC.max}개, 주제마다 ${TOPIC.min}자 이상`)}</span>
       ${dirty ? '<button class="ghost" onclick="resetTopics()">변경 취소</button>' : ''}
-      <button class="ghost" ${dirty && pr.ok ? '' : 'disabled'} onclick="saveTopics()">주제 저장</button>
+      <button class="ghost" ${dirty ? '' : 'disabled'} onclick="saveTopics()">주제 저장</button>
       <button class="ghost" onclick="toggleRemovedTopics()">${PM.removed ? '지운 주제 닫기' : '지운 주제'}</button></div>
     ${PM.removed ? `<div class="mem-removed">${PM.removed.filter(h => !PM.topics.some(t => t.id === h.topic)).map(h => `
       <div class="h"><span><b>${esc(h.title || h.topic)}</b> · ${h.action === 'topic_replaced' ? '교체됨' : '삭제됨'} · ${ago(h.created_at)}</span>
@@ -1004,7 +998,7 @@ function renderTopicsSoon() {
   clearTimeout(topicsTimer);
   topicsTimer = setTimeout(() => { const f = document.activeElement, idx = [...$('pmTopics').querySelectorAll('input')].indexOf(f), pos = f?.selectionStart; renderTopics(); const again = $('pmTopics').querySelectorAll('input')[idx]; if (again) { again.focus(); try { again.setSelectionRange(pos, pos); } catch {} } }, 250);
 }
-function addTopic() { PM.topics.push({ id: null, title: '', description: '', max_chars: Math.max(TOPIC.min, Math.min(300, PM.total - topicProblems().sum)), replace: false, key: ++topicKey }); renderTopics(); }
+function addTopic() { PM.topics.push({ id: null, title: '', description: '', max_chars: Math.max(TOPIC.min, Math.min(300, PM.total - topicSum())), replace: false, key: ++topicKey }); renderTopics(); }
 function moveTopic(i, d) { const [t] = PM.topics.splice(i, 1); PM.topics.splice(i + d, 0, t); renderTopics(); }
 function hasContent(t) { const m = PM.sections.find(x => x.topic === t.id); return m && m.content.trim(); }
 function replaceTopic(i) {
@@ -1017,15 +1011,16 @@ function removeTopic(i) {
   if (t.id && hasContent(t) && !confirm(`'${t.title}'을(를) 지우면 내용이 비워집니다.\n지운 내용은 '지운 주제'에서 복원할 수 있습니다. 계속할까요?`)) return;
   PM.topics.splice(i, 1); renderTopics();
 }
-function resetTopics() { PM.topics = JSON.parse(PM.topicsOrig).map(t => ({ ...t, key: ++topicKey })); renderTopics(); }
+function resetTopics() { PM.topics = JSON.parse(PM.topicsOrig).map(t => ({ ...t, key: ++topicKey })); PM.topicErrors = null; renderTopics(); }
 async function saveTopics() {
   if (!topicsDirty()) return true;
-  if (!topicProblems().ok) { renderTopics(); return false; }
+  PM.topicErrors = null;
   const ids = new Set(PM.topics.map(t => t.id)), cleared = PM.sections.filter(m => m.content.trim() && (!ids.has(m.topic) || PM.topics.some(t => t.id === m.topic && t.replace)));
   if (cleared.length && !confirm(`${cleared.map(m => m.title).join(', ')}의 내용이 비워집니다.\n지운 내용은 '지운 주제'에서 복원할 수 있습니다. 저장할까요?`)) return false;
   try {
     await api(`/projects/${PM.id}/memory/topics`, { method: 'PUT', body: { topics: PM.topics.map(t => ({ id: t.id, title: t.title.trim(), description: t.description.trim(), max_chars: t.max_chars, replace: t.replace })), expected_version: PM.topicsVersion } });
   } catch (e) {
+    if (e.message === '422') { PM.topicErrors = topicErrors(e.api); renderTopics(); }
     if (e.message === '409' && confirm('주제가 그동안 바뀌었습니다. 최신 주제를 불러올까요? (지금 바꾼 주제는 사라집니다)')) await loadMemory(true);
     return false;
   }
@@ -1051,6 +1046,7 @@ function renderMemory() {
       <textarea id="memText${i}" rows="4" placeholder="- 한 줄에 하나씩" oninput="PM.sections[${i}].draft=this.value; renderMemoryUsage(${i})">${esc(m.draft)}</textarea>
       <div class="meta">${m.version ? `v${m.version} · ${ago(m.updated_at)}` : '아직 없음'}${m.lines.length ? ` · 직접 작성 ${authors.user || 0}줄 · Agent ${authors.agent || 0}줄` : ''}
         <button class="ghost" onclick="toggleMemoryHistory(${i})">${PM.open[m.topic] ? '기록 닫기' : '기록'}</button></div>
+      <div class="field-err" id="memErr${i}"></div>
       <div id="memHist${i}"></div>
     </div>`;
   }).join('') : '<div style="color:var(--faint);font-size:13px;margin-bottom:12px">프로젝트를 만든 뒤 공유 메모리를 쓸 수 있습니다.</div>';
@@ -1059,8 +1055,7 @@ function renderMemory() {
 }
 function renderMemoryUsage(i) {
   const m = PM.sections[i], used = m.draft.length;
-  $(`memUse${i}`).innerHTML = `${used.toLocaleString()} / ${m.max_chars.toLocaleString()}자<div class="bar"><i style="width:${Math.min(100, used / m.max_chars * 100)}%;${used > m.max_chars ? 'background:var(--bad)' : ''}"></i></div>`;
-  $(`memText${i}`).classList.toggle('over', used > m.max_chars);
+  $(`memUse${i}`).innerHTML = `${used.toLocaleString()} / ${m.max_chars.toLocaleString()}자<div class="bar"><i style="width:${Math.min(100, used / m.max_chars * 100)}%"></i></div>`;
 }
 async function toggleMemoryHistory(i) {
   const m = PM.sections[i];
@@ -1093,13 +1088,15 @@ async function saveProject() {
   if (!body.name) { $('pmName').focus(); return; }
   if (topicsDirty() && !(await saveTopics())) { document.querySelector('.tab[data-tab="memory"]').click(); return; }
   const project = PM.id ? await api(`/projects/${PM.id}`, { method: 'PATCH', body }) : await api('/projects', { method: 'POST', body });
-  for (const m of PM.sections) {
+  for (const [i, m] of PM.sections.entries()) {
     if (m.draft === m.content) continue;
+    $(`memErr${i}`).textContent = '';
     try {
       await api(`/projects/${project.id}/memory/${encodeURIComponent(m.topic)}`, { method: 'PUT', body: { content: m.draft, expected_version: m.version } });
     } catch (e) {
       // 409: changed meanwhile (e.g. the memory worker); 422: too long or a heading
       document.querySelector('.tab[data-tab="memory"]').click();
+      if (e.message === '422') $(`memErr${i}`).textContent = (e.api?.details || []).map(d => d.message).join(' · ') || e.api?.message || '';
       if (e.message === '409' && confirm(`${m.title}이(가) 그동안 바뀌었습니다. 최신 내용을 불러올까요? (지금 수정한 내용은 사라집니다)`)) await loadMemory();
       return;
     }
@@ -1210,11 +1207,10 @@ $('model').onchange = syncAttach;
 function drawShots() {
   $('shots').innerHTML = S.images.map((im, i) => `<div class="shot"><img src="${im.url}" title="${esc(im.name)}"><button onclick="S.images.splice(${i},1);drawShots()">×</button></div>`).join('');
 }
+// The server checks images (type, count, size) and answers 422/413 on send;
+// the draft comes back so the user can fix it.
 async function addImages(files) {
-  const max = currentModel()?.max_images || 0;
   for (const f of files) {
-    if (!['image/png', 'image/jpeg', 'image/webp'].includes(f.type)) { showError(`${f.name}: png, jpeg, webp만 첨부할 수 있습니다.`); continue; }
-    if (S.images.length >= max) { showError(`이미지는 한 번에 ${max}장까지 첨부할 수 있습니다.`); break; }
     const url = await new Promise(res => { const r = new FileReader(); r.onload = () => res(r.result); r.readAsDataURL(f); });
     S.images.push({ url, name: f.name, mime_type: f.type, base64: url.split(',')[1] });
   }
@@ -1252,7 +1248,10 @@ async function send() {
       const r = await api(`/sessions/${S.session}/runs`, { method: 'POST', body: answering ? { input: { content } } : { input: { content }, model: $('model').value } });
       S.run = r.run.id;
     }
-  } catch { if (!answering) { setBusy(false); finishActivity(true); } }
+  } catch (e) {
+    if (!answering) { setBusy(false); finishActivity(true); }
+    if (e.api) { input.value = text; autosize(); S.images = images; drawShots(); }  // refused: keep the draft
+  }
 }
 
 async function cancelRun() { if (S.run) await api(`/runs/${S.run}/cancel`, { method: 'POST' }); }
@@ -1578,7 +1577,7 @@ function workflowDetail(w) {
       <button class="btn" onclick="cloneWorkflow('${w.id}')">복제</button>
       <button class="btn" onclick="searchPreview('${w.id}')">추천 확인</button>
       ${w.can_promote ? `<button class="btn" onclick="promote('${w.id}')">공개(승격)</button>` : ''}
-      ${w.mine || S.isAdmin ? `<button class="btn" style="color:var(--bad)" onclick="deleteWorkflow('${w.id}', '${esc(w.name).replace(/'/g, '&#39;')}')">삭제</button>` : ''}</div>`;
+      ${w.can_delete ? `<button class="btn" style="color:var(--bad)" onclick="deleteWorkflow('${w.id}', '${esc(w.name).replace(/'/g, '&#39;')}')">삭제</button>` : ''}</div>`;
 }
 async function promote(id) { await api(`/workflows/${id}/promote`, { method: 'POST' }); await loadWorkflows(); openWorkflow(id); }
 async function deleteWorkflow(id, name) {
@@ -1629,10 +1628,12 @@ async function renderBatches() {
       <td>${esc(scheduleText(b.schedule))}</td><td>${b.next_run_at ? fmtTime(b.next_run_at) : '<span class="muted">-</span>'}</td>
       <td>${batchState(b)}</td>
       <td style="white-space:nowrap" onclick="event.stopPropagation()"><button class="btn" onclick="runBatch('${b.id}', this)">지금 실행</button>
-        ${b.schedule || b.enabled ? `<button class="ghost" onclick="toggleBatch('${b.id}', ${b.enabled}, ${b.revision})">${b.enabled ? '끄기' : '켜기'}</button>` : '<span class="muted" style="font-size:12.5px;padding:0 8px" title="일정이 있어야 켤 수 있습니다. 지금 실행은 언제든 됩니다.">일정 없음</span>'}
+        ${b.can_disable ? `<button class="ghost" onclick="toggleBatch('${b.id}', true, ${b.revision})">끄기</button>` : b.can_enable ? `<button class="ghost" onclick="toggleBatch('${b.id}', false, ${b.revision})">켜기</button>` : `<span class="muted" style="font-size:12.5px;padding:0 8px" title="${esc(ENABLE_BLOCKED[b.enable_blocked_reason]?.[1] || '')}">${esc(ENABLE_BLOCKED[b.enable_blocked_reason]?.[0] || b.enable_blocked_reason || '')}</span>`}
         <button class="ghost" onclick="openBatchModal('${b.id}')">수정</button><button class="ghost" style="color:var(--bad)" onclick="deleteBatch('${b.id}')">삭제</button></td></tr>`).join('')}</tbody></table>`
     : '<div class="muted">배치가 없습니다. 먼저 스크립트를 등록하고 새 배치를 만드세요.</div>';
 }
+// why a batch cannot be turned on (the server's enable_blocked_reason)
+const ENABLE_BLOCKED = { SCHEDULE_REQUIRED: ['일정 없음', '일정이 있어야 켤 수 있습니다. 지금 실행은 언제든 됩니다.'] };
 // off by its owner, or because the owner was deactivated (pr-batch disabled_reason)
 function batchState(b) {
   if (b.enabled) return statusBadge('ACTIVE').replace('ACTIVE', '켜짐');
@@ -2027,20 +2028,20 @@ async function runPreview(id) {
   const items = res.data.items, rank = items.findIndex(h => h.workflow.id === id);
   const self = S.workflows.find(x => x.id === id);
   const note = rank >= 0 ? wfMsg([`이 워크플로우가 ${rank + 1}번째로 추천됩니다.`], true)
-    : wfMsg([self && self.lifecycle !== 'template' ? '이 워크플로우는 아직 후보라 추천 대상이 아닙니다. 공개(승격)하면 추천됩니다.' : '이 질문으로는 이 워크플로우가 추천되지 않습니다. 추천 질문을 보강해 보세요.']);
+    : wfMsg([self?.not_recommendable_reason || '이 질문으로는 이 워크플로우가 추천되지 않습니다. 추천 질문을 보강해 보세요.']);
   $('wpResult').innerHTML = note + (items.length ? `<table class="tbl"><thead><tr><th>#</th><th>워크플로우</th><th>유사도</th><th>맞은 추천 질문</th></tr></thead><tbody>${items.map((h, i) => `
-    <tr${h.workflow.id === id ? ' style="font-weight:600"' : ''}><td>${i + 1}</td><td>${esc(h.workflow.name)}</td><td>${(h.similarity * 100).toFixed(1)}%</td><td>${esc(h.matched_query)}</td></tr>`).join('')}</tbody></table>` : '<div class="muted">추천되는 워크플로우가 없습니다.</div>');
+    <tr${h.workflow.id === id ? ' style="font-weight:600"' : ''}><td>${i + 1}</td><td>${esc(h.workflow.name)}</td><td>${h.similarity == null ? '<span class="muted" title="임베딩이 없어 단어로 찾았습니다">키워드 검색</span>' : `${(h.similarity * 100).toFixed(1)}%`}</td><td>${esc(h.matched_query)}</td></tr>`).join('')}</tbody></table>` : '<div class="muted">추천되는 워크플로우가 없습니다.</div>');
 }
 
 boot();
 
 /* my info, logout, admin switch ------------------------------------------------ */
 function renderMe() {
-  const u = S.me.user; S.isAdmin = u.role === 'admin';
+  const u = S.me.user, can = S.me.permissions || {};  // the server's permissions
   $('meName').textContent = u.name; $('meId').textContent = u.employee_id; $('avatar').textContent = u.name.slice(0, 1);
-  $('meRole').style.display = S.isAdmin ? '' : 'none';
-  $('navSystem').style.display = S.isAdmin ? '' : 'none';
-  if (!S.isAdmin && $('systemView').style.display !== 'none') showChat();
+  $('meRole').style.display = u.role === 'admin' ? '' : 'none';
+  $('navSystem').style.display = can.system ? '' : 'none';
+  if (!can.system && $('systemView').style.display !== 'none') showChat();
 }
 function toggleMeMenu(e) { e.stopPropagation(); const m = $('meMenu'); if (m.classList.toggle('open')) drawMeMenu(); }
 document.addEventListener('click', () => $('meMenu').classList.remove('open'));
@@ -2055,9 +2056,10 @@ function drawMeMenu() {
 }
 async function switchRole() {
   const role = S.me.user.role === 'admin' ? 'user' : 'admin';
-  S.me.user = await api('/auth/dev/role', { method: 'POST', body: { role } });
+  await api('/auth/dev/role', { method: 'POST', body: { role } });
+  S.me = await api('/users/me');  // permissions follow the new role
   $('meMenu').classList.remove('open'); renderMe();
-  if (role === 'admin') showSystem();
+  if (S.me.permissions?.system) showSystem();
 }
 async function logout() {
   await api('/auth/logout', { method: 'POST' });
@@ -2087,7 +2089,7 @@ const projectName = id => (S.projects.find(p => p.id === id) || {}).name;
 const qs = o => Object.entries(o).filter(([, v]) => v !== '' && v != null).map(([k, v]) => `${k}=${encodeURIComponent(v)}`).join('&');
 
 function showSystem() {
-  if (!S.isAdmin) return;
+  if (!S.me.permissions?.system) return;
   showPage('systemView', 'navSystem');
   sysTab(SYS.tab);
 }
@@ -2124,9 +2126,9 @@ async function userFilter(text) {
 }
 function renderExecutions() {
   const statuses = ['', 'QUEUED', 'DISPATCHED', 'RUNNING', 'WAITING_FOR_OPERATION', 'FINALIZING', 'CANCEL_REQUESTED', 'CANCELLED', 'SUCCEEDED', 'FAILED'];
-  $('execScope').textContent = S.isAdmin ? '채팅 분석 실행 (배치 실행은 배치 메뉴) · 관리자: 전체 사용자' : '내 채팅 분석 실행 (배치 실행은 배치 메뉴)';
+  $('execScope').textContent = S.me.permissions?.all_executions ? '채팅 분석 실행 (배치 실행은 배치 메뉴) · 관리자: 전체 사용자' : '내 채팅 분석 실행 (배치 실행은 배치 메뉴)';
   $('execListBody').innerHTML = `<div class="toolbar">
-      ${S.isAdmin ? '<input id="fxUser" placeholder="사용자 (이름·사번·ID)" style="width:170px">' : ''}
+      ${S.me.permissions?.all_executions ? '<input id="fxUser" placeholder="사용자 (이름·사번·ID)" style="width:170px">' : ''}
       <select id="fxProject"><option value="">모든 프로젝트</option>${S.projects.map(p => `<option value="${esc(p.id)}">${esc(p.name)}</option>`).join('')}</select>
       <input id="fxSession" placeholder="세션 ID" style="width:200px">
       <input id="fxExec" placeholder="실행 ID로 바로 열기" style="width:240px" onkeydown="if (event.key === 'Enter' && this.value.trim()) openExecution(this.value.trim())">
@@ -2153,12 +2155,12 @@ async function loadExecutions(more = false) {
   $('execMore').innerHTML = page.has_more ? '<button class="ghost" onclick="loadExecutions(true)">더 보기</button>' : '';
 }
 
-const ADMIN_EXEC_TABS = ['diagnostics', 'attempts'];
+const INTERNAL_EXEC_TABS = ['diagnostics', 'attempts'];  // permissions.execution_internals
 const EXEC_TABS = [['overview', '개요'], ['steps', '단계'], ['events', '이벤트'], ['result', '결과'], ['notebook', '노트북'], ['artifacts', '산출물'], ['diagnostics', '진단'], ['attempts', '시도']];
 function openExecution(id) {
   SYS.exec = id;
   $('execTitle').innerHTML = `실행 <span class="mono" style="font-size:13px;font-weight:400">${esc(id)}</span> <button class="ghost" title="복사" onclick="navigator.clipboard.writeText('${esc(id)}')">복사</button>`;
-  $('execTabs').innerHTML = EXEC_TABS.filter(([k]) => S.isAdmin || !ADMIN_EXEC_TABS.includes(k)).map(([k, label]) => `<button class="systab" data-ex="${k}" onclick="execTab('${k}')">${label}</button>`).join('');
+  $('execTabs').innerHTML = EXEC_TABS.filter(([k]) => S.me.permissions?.execution_internals || !INTERNAL_EXEC_TABS.includes(k)).map(([k, label]) => `<button class="systab" data-ex="${k}" onclick="execTab('${k}')">${label}</button>`).join('');
   $('execModal').classList.add('open'); execTab('overview');
 }
 async function execTab(tab) {

@@ -1,14 +1,16 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from sqlalchemy import select
 
 from src.dtest.api_service.deps import (
     AdminDep,
     ServicesDep,
     UserDep,
+    caller_of,
     forget_user,
 )
 from src.dtest.api_service.schemas.users import (
     Me,
+    MePermissions,
     UserAdminUpdate,
     UserBrief,
     UserRead,
@@ -29,7 +31,7 @@ router = APIRouter(tags=["users"])
 
 
 @router.get("/users/me", response_model=Me)
-async def me(services: ServicesDep, user: UserDep):
+async def me(request: Request, services: ServicesDep, user: UserDep):
     async with services.db.sessions() as db:
         default_project = await db.scalar(
             select(Project.id)
@@ -46,6 +48,19 @@ async def me(services: ServicesDep, user: UserDep):
         default_project_id=default_project,
         can_switch_role=settings.env == "local"
         and settings.sso_adapter == "dev",
+        permissions=permissions(request, user),
+    )
+
+
+def permissions(request: Request, user: User) -> MePermissions:
+    """The same rules as the routes: admin APIs need an administrator's
+    SSO login (deps.admin_user); the executor relay shows administrators
+    every user's executions and their internals."""
+    admin = user.role == "admin"
+    return MePermissions(
+        system=admin and caller_of(request) is None,
+        all_executions=admin,
+        execution_internals=admin,
     )
 
 

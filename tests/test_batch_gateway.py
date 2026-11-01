@@ -94,3 +94,55 @@ def test_relay_streams_and_maps_connection_errors(client, monkeypatch):
     assert ok.headers["etag"] == "v1"
     down = client.get("/api/v1/batch/scripts", headers={"X-Api-Key": "x"})
     assert down.status_code == 502
+
+
+def test_batches_say_what_the_caller_may_do(client, monkeypatch):
+    import httpx
+
+    async def identity(*args, **kwargs):
+        return None, "u1", None
+
+    async def who(*args, **kwargs):
+        return None
+
+    listing = {
+        "items": [
+            {"id": "a", "enabled": True, "schedule": {"cron": "0 * * * *"}},
+            {"id": "b", "enabled": False, "schedule": {"cron": "0 * * * *"}},
+            {"id": "c", "enabled": False, "schedule": None},
+        ],
+        "next_cursor": None,
+    }
+
+    def handler(request):
+        if request.url.path.endswith("/enable"):
+            return httpx.Response(
+                200,
+                json={"id": ID, "enabled": True, "schedule": {}},
+                headers={"etag": '"3"'},
+            )
+        return httpx.Response(200, json=listing)
+
+    upstream = httpx.AsyncClient(
+        base_url="http://batch", transport=httpx.MockTransport(handler)
+    )
+    monkeypatch.setattr(batch, "key_identity", identity)
+    monkeypatch.setattr(batch, "gateway_identity", who)
+    monkeypatch.setattr(batch, "batch_headers", lambda s, w: {})
+    monkeypatch.setattr(batch, "_client", lambda services: upstream)
+    items = client.get(
+        "/api/v1/batch/batches", headers={"X-Api-Key": "x"}
+    ).json()["items"]
+    assert [
+        (b["can_enable"], b["can_disable"], b["enable_blocked_reason"])
+        for b in items
+    ] == [
+        (False, True, None),
+        (True, False, None),
+        (False, False, "SCHEDULE_REQUIRED"),
+    ]
+    enabled = client.post(
+        f"/api/v1/batch/batches/{ID}/enable", headers={"X-Api-Key": "x"}
+    )
+    assert enabled.headers["etag"] == '"3"'
+    assert enabled.json()["can_disable"] is True

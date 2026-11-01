@@ -6,6 +6,7 @@ import pytest
 from fastapi import HTTPException
 from langgraph.store.memory import InMemoryStore
 
+from src.dtest.api_service.errors import ApiError
 from src.dtest.api_service.routers import projects
 from src.dtest.api_service.schemas.projects import (
     MemoryContentWrite,
@@ -431,7 +432,7 @@ def test_api_get_put_history_revert(api):
 )
 def test_api_refusals(api, topic, content, version, status):
     memory, user = api
-    with pytest.raises(HTTPException) as refused:
+    with pytest.raises((HTTPException, ApiError)) as refused:
         run(
             projects.put_memory_content(
                 "p",
@@ -441,7 +442,13 @@ def test_api_refusals(api, topic, content, version, status):
                 user,
             )
         )
-    assert refused.value.status_code == status
+    assert _status(refused.value) == status
+    if status == 422:  # next to the field: body.content
+        assert refused.value.details[0]["location"] == ["body", "content"]
+
+
+def _status(exc: Exception) -> int:
+    return exc.status if isinstance(exc, ApiError) else exc.status_code
 
 
 # --- topics -----------------------------------------------------------------
@@ -843,9 +850,30 @@ def test_api_topics_refusals(api, topics, version, status):
     body = MemoryTopicsWrite.model_validate(
         {"topics": topics, "expected_version": version}
     )
-    with pytest.raises(HTTPException) as refused:
+    with pytest.raises((HTTPException, ApiError)) as refused:
         run(projects.put_memory_topics("p", body, _services(memory), user))
-    assert refused.value.status_code == status
+    assert _status(refused.value) == status
+
+
+def test_api_topics_refusals_name_every_field(api):
+    memory, user = api
+    body = MemoryTopicsWrite.model_validate(
+        {
+            "topics": [
+                {"title": "x" * 41, "max_chars": 100},
+                {"title": "ok", "description": "d" * 201, "max_chars": 99},
+            ],
+            "expected_version": 0,
+        }
+    )
+    with pytest.raises(ApiError) as refused:
+        run(projects.put_memory_topics("p", body, _services(memory), user))
+    assert refused.value.status == 422
+    assert [d["location"] for d in refused.value.details] == [
+        ["body", "topics", 0, "title"],
+        ["body", "topics", 1, "description"],
+        ["body", "topics", 1, "max_chars"],
+    ]
 
 
 # --- agent tools ----------------------------------------------------------

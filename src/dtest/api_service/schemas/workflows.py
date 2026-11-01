@@ -56,6 +56,13 @@ class WorkflowSummary(Model):
     call_count: int
     mine: bool
     can_promote: bool  # a candidate this caller may promote
+    can_delete: bool  # the author, or an administrator (any workflow)
+    recommendable: bool = Field(
+        description="search_workflows (and /workflows/search) can find it"
+    )
+    not_recommendable_reason: str | None = Field(
+        None, description="why not, for the screen (recommendable false)"
+    )
     created_at: datetime
     updated_at: datetime
 
@@ -66,6 +73,9 @@ class WorkflowDetail(WorkflowRead):
     calls: list[dict[str, Any]]
     mine: bool
     can_promote: bool
+    can_delete: bool
+    recommendable: bool
+    not_recommendable_reason: str | None = None
 
 
 class WorkflowClone(Model):

@@ -2,6 +2,7 @@ from fastapi import APIRouter, HTTPException, Query, Response
 from sqlalchemy import select
 
 from src.dtest.api_service.deps import ServicesDep, UserDep, project_for
+from src.dtest.api_service.errors import ApiError, detail
 from src.dtest.api_service.schemas.projects import (
     MemoryContentWrite,
     MemoryHistoryRead,
@@ -98,7 +99,17 @@ async def delete_project(
 # --- project shared memory -------------------------------------------------
 
 
-def _memory_error(exc: MemoryEditError) -> HTTPException:
+def _memory_error(exc: MemoryEditError) -> Exception:
+    if exc.details:  # 422: each problem next to the field it is about
+        return ApiError(
+            exc.status,
+            "invalid_body",
+            str(exc),
+            [
+                detail(["body", *location], "invalid_memory", message)
+                for location, message in exc.details
+            ],
+        )
     return HTTPException(exc.status, str(exc))
 
 

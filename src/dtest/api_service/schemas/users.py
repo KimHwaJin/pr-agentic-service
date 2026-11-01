@@ -2,6 +2,8 @@
 
 from typing import Literal
 
+from pydantic import Field
+
 from src.dtest.api_service.schemas.base import Model
 from src.dtest.core.config import ModelSpec
 
@@ -30,11 +32,26 @@ class ModelList(Model):
     items: list[ModelSpec]
 
 
+class MePermissions(Model):
+    """What this login may open; a client shows menus and tabs by these."""
+
+    system: bool = Field(
+        False, description="시스템 화면 (관리자 API: 사용자, runtime, 정비)"
+    )
+    all_executions: bool = Field(
+        False, description="모든 사용자의 실행 보기 (사용자 필터)"
+    )
+    execution_internals: bool = Field(
+        False, description="실행의 진단·시도(attempts) 탭"
+    )
+
+
 class Me(Model):
     user: UserRead
     default_project_id: str | None
     # local dev login only: POST /auth/dev/role switches user <-> admin
     can_switch_role: bool = False
+    permissions: MePermissions = Field(default_factory=MePermissions)
 
 
 class UserAdminUpdate(Model):
