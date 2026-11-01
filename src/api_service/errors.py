@@ -12,15 +12,23 @@ active run of a busy session, the models to choose from); left out when
 there are none.
 """
 
+import inspect
 import logging
+from collections.abc import Awaitable, Callable
 from typing import Any
 
 import httpx
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, Response
+from fastapi import HTTPException as FastAPIHTTPException
+from fastapi.exception_handlers import (
+    http_exception_handler,
+    request_validation_exception_handler,
+)
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException
 
+from api_service.paths import is_own
 from core.db import NotFound
 
 log = logging.getLogger(__name__)
@@ -103,12 +111,52 @@ def error_response(
     )
 
 
+Handler = Callable[[Request, Exception], Response | Awaitable[Response]]
+
+
 def install(app: FastAPI) -> None:
-    app.add_exception_handler(ApiError, _api_error)
-    app.add_exception_handler(RequestValidationError, _invalid_body)
-    app.add_exception_handler(NotFound, _not_found)
-    app.add_exception_handler(HTTPException, _http_error)
-    app.add_exception_handler(httpx.TransportError, _upstream_down)
+    """Our error shape on our paths (``paths.is_own``). The app may be
+    shared with the gaia template's own APIs, whose errors keep the
+    handler they had before ours (or FastAPI's default)."""
+    handlers = app.exception_handlers
+    starlette_http = handlers.get(HTTPException, http_exception_handler)
+    for cls, handler, previous in (
+        (ApiError, _api_error, handlers.get(ApiError, _reraise)),
+        (NotFound, _not_found, handlers.get(NotFound, _reraise)),
+        (
+            RequestValidationError,
+            _invalid_body,
+            handlers.get(RequestValidationError, _invalid_body_default),
+        ),
+        (HTTPException, _http_error, starlette_http),
+        # FastAPI's subclass, in case the app registered a handler for it
+        (
+            FastAPIHTTPException,
+            _http_error,
+            handlers.get(FastAPIHTTPException, starlette_http),
+        ),
+        (httpx.TransportError, _upstream_down, _reraise),
+    ):
+        app.add_exception_handler(cls, _scoped(handler, previous))
+
+
+def _scoped(own: Handler, other: Handler) -> Handler:
+    async def handle(request: Request, exc: Exception) -> Response:
+        handler = own if is_own(request.url.path) else other
+        response = handler(request, exc)
+        return await response if inspect.isawaitable(response) else response
+
+    return handle
+
+
+async def _invalid_body_default(request: Request, exc: Exception) -> Response:
+    assert isinstance(exc, RequestValidationError)
+    return await request_validation_exception_handler(request, exc)
+
+
+async def _reraise(request: Request, exc: Exception) -> Response:
+    """Not ours to answer: on to the app's 500 handling."""
+    raise exc
 
 
 async def _http_error(request: Request, exc: Exception) -> JSONResponse:

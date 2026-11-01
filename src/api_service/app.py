@@ -5,12 +5,14 @@ from fastapi import APIRouter, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException
+from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from api_service import API_PREFIX, errors
 from api_service.auth.adapters import load_adapter
 from api_service.auth.service import SsoService
 from api_service.auth.store import AuthStore
+from api_service.paths import OwnPaths, is_own
 from api_service.routers import (
     api_clients,
     artifacts,
@@ -129,20 +131,27 @@ def mount_api(app: FastAPI, settings: Settings) -> None:
     errors.install(app)
     _caller_headers_together(app)
 
-    app.add_middleware(BodyLimit, max_bytes=settings.request_max_bytes)
+    # Every middleware below runs on our paths only (OwnPaths): the gaia
+    # template's own APIs share this app and must not get any of it.
+    app.add_middleware(
+        OwnPaths, middleware=BodyLimit, max_bytes=settings.request_max_bytes
+    )
 
     tenant = settings.executor_tenant_id
 
-    @app.middleware("http")
     async def audit_requests(request: Request, call_next):
         """One audit line per key call and per SSO write (see audit_line)."""
         response = await call_next(request)
         audit_line(request, response.status_code, tenant)
         return response
 
+    app.add_middleware(
+        OwnPaths, middleware=BaseHTTPMiddleware, dispatch=audit_requests
+    )
     if settings.cors_origins:
         app.add_middleware(
-            CORSMiddleware,
+            OwnPaths,
+            middleware=CORSMiddleware,
             allow_origins=settings.cors_origins,
             allow_credentials=True,
             allow_methods=["*"],
@@ -150,7 +159,7 @@ def mount_api(app: FastAPI, settings: Settings) -> None:
             expose_headers=[REQUEST_ID_HEADER],
         )
     # outermost: every log line of the request, even a 413, carries the id
-    app.add_middleware(RequestId)
+    app.add_middleware(OwnPaths, middleware=RequestId)
     if settings.env in {"local", "dev"}:
         app.mount(
             "/dev",
@@ -201,7 +210,8 @@ def _caller_headers_together(app: FastAPI) -> None:
     """OpenAPI: X-Api-Key and X-User-Id as one requirement (sent together).
 
     FastAPI lists two security schemes as alternatives; Swagger would then
-    send only one of them.
+    send only one of them. Our paths only; other APIs on the app are left
+    as they are.
     """
     build = app.openapi
 
@@ -209,8 +219,10 @@ def _caller_headers_together(app: FastAPI) -> None:
         if app.openapi_schema:
             return app.openapi_schema
         schema = build()
-        for path in schema.get("paths", {}).values():
-            for operation in path.values():
+        for path, item in schema.get("paths", {}).items():
+            if not is_own(path):
+                continue
+            for operation in item.values():
                 if isinstance(operation, dict) and operation.get("security"):
                     merged: dict = {}
                     for requirement in operation["security"]:
