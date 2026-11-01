@@ -2379,33 +2379,35 @@ async function setUser(id, change, name = '') {
 }
 
 /* API keys of other services and agents (X-Api-Key + X-User-Id) */
-const CLIENT_STATE = { pending: '대기', active: '사용 중', revoked: '폐기' };
+const CLIENT_STATE = { pending: '대기(옛 상태)', active: '사용 중', revoked: '폐기' };
 async function renderApiClients() {
   const clients = await api('/admin/api-clients');
   $('sysBody').innerHTML = `<div class="toolbar"><button class="btn primary" onclick="openClientModal()">새 키 발급</button></div>
     <div class="muted" style="font-size:12.5px;margin:-4px 0 12px;line-height:1.6">다른 서비스·에이전트가 이 서비스(채팅·배치·executor 입구)를 부를 때 쓰는 키입니다. 호출자는 <span class="mono">X-Api-Key</span>와 <span class="mono">X-User-Id</span>(우리 사용자 ID)를 보냅니다.
-      우리 tenant 키는 바로 사용 중이 되고, 다른 tenant 키는 executor·pr-batch의 허용 tenant에 반영된 뒤 활성화하세요. 폐기는 최대 1분 안에 모든 서버에 반영됩니다.</div>
+      어떤 tenant가 executor·pr-batch를 쓸 수 있는지는 여기서만 정합니다. 발급한 키는 바로 사용 중이 되고, executor·pr-batch 설정을 바꾸거나 다시 배포할 필요가 없습니다. 폐기(키 하나 또는 tenant 전체)는 최대 1분 안에 모든 서버에 반영됩니다.</div>
     ${clients.length ? `<table class="tbl"><thead><tr><th>이름</th><th>tenant</th><th>키</th><th>상태</th><th>마지막 사용</th><th>발급</th><th></th></tr></thead><tbody>${clients.map(c => `
       <tr><td><b>${esc(c.name)}</b>${c.description ? `<br><span class="muted">${esc(c.description)}</span>` : ''}</td><td class="mono">${esc(c.tenant)}</td><td class="mono">${esc(c.key_prefix)}…</td>
         <td>${c.status === 'active' ? statusBadge('ACTIVE').replace('ACTIVE', CLIENT_STATE.active) : `<span class="badge ${c.status === 'revoked' ? 'bad' : ''}">${CLIENT_STATE[c.status] || esc(c.status)}</span>`}</td>
         <td>${c.last_used_at ? fmtTime(c.last_used_at) : '<span class="muted">-</span>'}</td><td>${fmtTime(c.created_at)}</td>
-        <td style="white-space:nowrap">${c.status === 'pending' ? `<button class="ghost" onclick="clientAction('${c.id}', 'activate')">활성화</button>` : ''}
-          ${c.status !== 'revoked' ? `<button class="ghost" style="color:var(--bad)" onclick="clientAction('${c.id}', 'revoke', '${esc(c.name)}')">폐기</button>` : ''}</td></tr>`).join('')}</tbody></table>`
+        <td style="white-space:nowrap">${c.status !== 'revoked' ? `<button class="ghost" style="color:var(--bad)" onclick="clientAction('${c.id}', 'revoke', '${esc(c.name)}')">폐기</button>
+          <button class="ghost" style="color:var(--bad)" onclick="revokeTenant('${esc(c.tenant)}')">tenant 전체 폐기</button>` : ''}</td></tr>`).join('')}</tbody></table>`
       : '<div class="muted">발급한 키가 없습니다.</div>'}`;
 }
 function openClientModal() {
-  $('acName').value = ''; $('acTenant').value = ''; $('acDesc').value = '';
+  $('acName').value = ''; $('acTenant').value = ''; $('acDesc').value = ''; $('acOwn').checked = false;
   $('acForm').hidden = false; $('acIssued').hidden = true; $('acSave').hidden = false;
   $('clientModal').classList.add('open'); $('acName').focus();
 }
 async function issueClient() {
   const name = $('acName').value.trim(), tenant = $('acTenant').value.trim(), description = $('acDesc').value.trim();
   if (!name) return $('acName').focus();
+  if (!tenant) return $('acTenant').focus();
+  const own_tenant = $('acOwn').checked;
   $('acSave').disabled = true;
   try {
-    const issued = await api('/admin/api-clients', { method: 'POST', body: { name, ...(tenant ? { tenant } : {}), ...(description ? { description } : {}) } });
+    const issued = await api('/admin/api-clients', { method: 'POST', body: { name, tenant, ...(own_tenant ? { own_tenant } : {}), ...(description ? { description } : {}) } });
     $('acKey').value = issued.api_key;
-    $('acState').textContent = issued.client.status === 'active' ? '바로 쓸 수 있습니다.' : `tenant ${issued.client.tenant}가 executor·pr-batch에 반영된 뒤 목록에서 활성화하세요.`;
+    $('acState').textContent = '바로 쓸 수 있습니다.';
     $('acForm').hidden = true; $('acIssued').hidden = false; $('acSave').hidden = true;
     renderApiClients();
   } finally { $('acSave').disabled = false; }
@@ -2415,6 +2417,12 @@ async function clientAction(id, action, name = '') {
   await api(`/admin/api-clients/${id}/${action}`, { method: 'POST' });
   renderApiClients();
 }
+async function revokeTenant(tenant) {
+  if (!confirm(`tenant ${tenant}의 키를 모두 폐기할까요? 되돌릴 수 없고, 이 tenant는 executor·pr-batch도 더는 쓸 수 없습니다.`)) return;
+  const done = await api(`/admin/api-clients/tenants/${encodeURIComponent(tenant)}/revoke`, { method: 'POST' });
+  alert(`${done.revoked}개 키를 폐기했습니다.`);
+  renderApiClients();
+}
 </script>
 <div class="modal-back" id="clientModal" onclick="if (event.target === this) this.classList.remove('open')">
   <div class="modal" style="width:min(560px,100%)">
@@ -2422,7 +2430,8 @@ async function clientAction(id, action, name = '') {
     <div class="modal-body">
       <div id="acForm">
         <div class="field"><label>이름</label><input id="acName" maxlength="64" placeholder="호출하는 서비스·에이전트 (예: report-agent)"></div>
-        <div class="field"><label>tenant (선택)</label><input id="acTenant" maxlength="64" placeholder="비우면 이 서비스의 tenant · 소문자·숫자·- (예: report-agent)"></div>
+        <div class="field"><label>tenant</label><input id="acTenant" maxlength="64" placeholder="소문자·숫자·- (예: report-agent)"></div>
+        <label class="muted" style="display:flex;gap:6px;align-items:flex-start;font-size:12.5px;margin:-4px 0 10px"><input type="checkbox" id="acOwn"> 이 서비스의 tenant로 발급합니다. 이 키는 우리 사용자의 executor 실행을 모두 조회할 수 있습니다.</label>
         <div class="field"><label>설명 (선택)</label><input id="acDesc" maxlength="2000"></div>
         <div class="muted" style="font-size:12px;line-height:1.6">tenant는 그 호출자의 executor 실행·배치가 속하는 공간입니다. 다른 tenant의 실행·이벤트는 서로 보이지 않습니다.</div>
       </div>

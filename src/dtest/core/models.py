@@ -427,9 +427,10 @@ class ApiClient(Timestamped, Base):
     """A service or agent that calls this API with ``X-Api-Key``.
 
     Only the SHA-256 of the key is kept; the key is shown once when issued.
-    ``tenant`` is the executor tenant its executions and batches go to
-    (executor and pr-batch list it in our key's allowed_tenants). A new
-    client stays ``pending`` until those lists are deployed.
+    ``tenant`` is the executor tenant its executions and batches go to.
+    Our keys at the executor and pr-batch are allowed every tenant, so a
+    client is active once issued; ``pending`` is no longer given (it was
+    the state before 2026-11-01) and is refused like ``revoked``.
     """
 
     __tablename__ = "api_clients"
@@ -438,8 +439,8 @@ class ApiClient(Timestamped, Base):
     tenant: Mapped[str] = mapped_column(String(64))
     key_prefix: Mapped[str] = mapped_column(String(32))
     key_sha256: Mapped[str] = mapped_column(String(64), unique=True)
-    # pending | active | revoked
-    status: Mapped[str] = mapped_column(String(16), default="pending")
+    # active | revoked
+    status: Mapped[str] = mapped_column(String(16), default="active")
     description: Mapped[str | None] = mapped_column(Text)
     created_by: Mapped[str] = mapped_column(ID)
     revoked_at: Mapped[datetime | None] = mapped_column(

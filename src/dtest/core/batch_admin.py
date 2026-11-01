@@ -20,17 +20,20 @@ async def disable_batches_of(settings: Settings, owner_id: str) -> int:
     their manual runs (409 ``OWNER_DEACTIVATED``). Idempotent: batches
     already off are not counted again. Reactivating the user does not turn
     them back on; the owner does.
+
+    With our key no ``X-Tenant-Id`` is sent: pr-batch then turns them off
+    in every tenant our key may use (``allowed_tenants: ["*"]``), since a
+    user of ours can own batches under external tenants too. Without a key
+    (header mode, local/dev) a missing tenant means pr-batch's ``dev``, so
+    ours is named as before.
     """
+    tenant = None if settings.batch_api_key else settings.executor_tenant_id
     async with httpx.AsyncClient(
         base_url=settings.batch_base_url, timeout=30
     ) as http:
         response = await http.post(
             "/api/v1/batches:disable-by-owner",
-            # our tenant named: the same rule as the gateway's calls
-            headers=with_key(
-                settings.batch_api_key,
-                Identity(tenant=settings.executor_tenant_id),
-            ),
+            headers=with_key(settings.batch_api_key, Identity(tenant=tenant)),
             json={"owner_id": owner_id, "reason": "USER_DEACTIVATED"},
         )
     response.raise_for_status()

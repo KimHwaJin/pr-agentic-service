@@ -24,7 +24,7 @@
 | `X-User-Id` | 소문자로 바꾼 뒤 `^[a-z0-9][a-z0-9._-]{0,63}$`. 값은 우리 `users.id`(uuid4 소문자 문자열, 그대로 통과) |
 | `X-Project-Id` | 선택. `^[A-Za-z0-9][A-Za-z0-9._-]{0,254}$`, `unscoped` 금지 |
 | `X-Session-Id` | 선택. 있으면 `X-Project-Id` 필수. pr-batch는 무시 |
-| `X-Tenant-Id` | relay key만, `allowed_tenants` 안의 값만 |
+| `X-Tenant-Id` | relay key만, `allowed_tenants` 안의 값만. 우리 key는 executor·pr-batch에서 `["*"]`(형식에 맞고 예약어가 아닌 모든 tenant, 2026-11-01) |
 
 - 신원 헤더는 **항상 우리가 검증한 값으로 새로 만든다.** 브라우저나 외부 호출자가 보낸 `X-*` 헤더를 넘기지 않는다.
 - 상태 코드: key 문제 401, 신원 헤더 문제 400 `INVALID_IDENTITY`, 허용되지 않은 tenant·권한 403, 남의 리소스·없는 리소스 404.
@@ -48,10 +48,11 @@
 
 ### 3.3 외부 호출자 key 발급
 
-- SSO admin 전용 API·화면. 테이블 `api_clients`: `id`, `name`, `tenant`, `key_prefix`, `key_sha256`, `status`(`pending`·`active`·`revoked`), `created_by`, `created_at`, `revoked_at`, `last_used_at`.
+- SSO admin 전용 API·화면. 테이블 `api_clients`: `id`, `name`, `tenant`, `key_prefix`, `key_sha256`, `status`(`active`·`revoked`. 옛 `pending`은 마이그레이션 0006에서 `active`로 바뀜), `created_by`, `created_at`, `revoked_at`, `last_used_at`.
 - key는 32바이트 이상 무작위 + 접두어 `pas_live_…`(dev `pas_dev_…`). 원문은 발급 응답에서 한 번만 보여 주고 SHA-256 해시만 저장. 비교는 `hmac.compare_digest`.
-- `tenant`는 관리자가 정한다. executor `TENANT_ID_PATTERN`, 예약어 `dlq`·`work`. 비우면 `pr-agentic-service`.
-- 새 외부 tenant는 **executor와 pr-batch의 `allowed_tenants`에 추가·재배포된 뒤** `active`로 바꾼다. 그 전에는 `pending`(이 상태의 key는 401).
+- `tenant`는 관리자가 반드시 정한다. executor `TENANT_ID_PATTERN`, 예약어 `dlq`·`work`. 우리 tenant(`pr-agentic-service`)는 `own_tenant: true`를 함께 줄 때만 발급한다(그 key는 우리 사용자 실행 전체를 시스템 조회로 읽는다).
+- **tenant 승인은 우리만 한다** (2026-11-01). executor와 pr-batch는 우리 key에 `allowed_tenants: ["*"]`를 주므로, 발급한 key는 바로 `active`이고 두 서비스의 설정 변경·재배포가 없다. 그만큼 게이트웨이(3.4·3.5)가 tenant의 유일한 경계이고, `EXECUTOR_API_KEY`·`BATCH_API_KEY`는 모든 tenant 권한을 가진 비밀이다(stg·prd는 배포 Secret으로만 주입).
+- tenant를 끊을 때는 그 tenant의 key를 한 번에 폐기한다: `POST /admin/api-clients/tenants/{tenant}/revoke`.
 - 폐기는 `revoked`로 즉시 반영(검증 캐시 최대 60초). key 경로 요청은 감사 로그에 client, user_id, 메서드, 경로, 결과 코드를 남긴다.
 
 ### 3.4 게이트웨이
@@ -62,7 +63,7 @@
 | `/api/v1/executor/{path}` (신규, 필수) | executor | 3.5 참고 |
 
 - 호출자의 tenant를 `X-Tenant-Id`로 붙인다. SSO 사용자는 `pr-agentic-service`.
-- pr-batch에는 **모든 호출에** `X-Tenant-Id`를 보낸다(`GET /runtimes` 제외). pr-batch는 스크립트·배치를 (tenant, 사용자)로 찾으므로, 스크립트 등록·배치 등록·이후 조회와 변경이 모두 같은 tenant를 말해야 한다. 빠뜨리면 key의 기본 tenant(header 모드면 `dev`)에서 찾아 404가 된다. `scripts/from-notebook`, 스크립트 화면, `disable-by-owner`도 우리 tenant를 붙인다.
+- pr-batch에는 **모든 호출에** `X-Tenant-Id`를 보낸다(`GET /runtimes` 제외). pr-batch는 스크립트·배치를 (tenant, 사용자)로 찾으므로, 스크립트 등록·배치 등록·이후 조회와 변경이 모두 같은 tenant를 말해야 한다. 빠뜨리면 key의 기본 tenant(header 모드면 `dev`)에서 찾아 404가 된다. `scripts/from-notebook`, 스크립트 화면도 우리 tenant를 붙인다. `disable-by-owner`만 예외로, key가 있으면 `X-Tenant-Id`를 보내지 않는다. 그러면 pr-batch가 우리 key가 쓸 수 있는 모든 tenant(`["*"]`)에서 그 사용자의 배치를 끈다. key가 없는 header 모드(local·dev)에서는 tenant가 `dev`로 잡히므로 우리 tenant를 붙인다.
 - `X-Project-Id`는 배치 등록 때만 의미가 있다. pr-batch는 project를 바꿀 수 없으므로 우리 화면에서도 배치의 프로젝트 이동은 "새 배치 만들기"로 안내한다.
 
 ### 3.5 executor 게이트웨이 상세 (필수 범위)
@@ -183,7 +184,7 @@ REDIS_URL: "redis://…"              # 지금과 같음 (세션·큐·executor 
 
 - pr-batch·executor 호출에 key와 헤더가 붙고, 본문에 `context`·`tenant_id`가 없다. 조회에 `user_id`·`tenant_id` 파라미터가 없다.
 - 브라우저·외부 호출자가 보낸 `X-*` 헤더가 그대로 전달되지 않는다.
-- key 경로: 모르는 key 401, `pending`·`revoked` key 401, `X-User-Id` 없음·형식 오류 400, 미등록·비활성 사용자 403, 관리자 API 403, 경로와 다른 `X-Project-Id` 400, 멤버가 아닌 프로젝트 404.
+- key 경로: 모르는 key 401, `revoked` key 401, `X-User-Id` 없음·형식 오류 400, 미등록·비활성 사용자 403, 관리자 API 403, 경로와 다른 `X-Project-Id` 400, 멤버가 아닌 프로젝트 404.
 - 쿠키 경로는 기존과 같고, 쿠키와 key가 함께 오면 쿠키로 판정한다.
 - 게이트웨이: 외부 호출자는 그 tenant로, SSO 사용자는 `pr-agentic-service`로 넘어간다. pr-batch PATCH에는 `X-Tenant-Id`가 없다. executor 운영 경로는 404.
 - 이벤트: DB에 없는 대화형 `execution_id`는 버린다. 배치 이벤트는 executor 재조회로 확인한 경우에만 리포트를 만들고, payload의 `context`를 위조해도 owner는 재조회 값이다.
@@ -195,7 +196,7 @@ REDIS_URL: "redis://…"              # 지금과 같음 (세션·큐·executor 
 세 서비스를 같은 시점에 배포한다. 배포 사이의 호출 실패는 허용한다.
 
 - 개발 단계라 하위호환·데이터 이관은 하지 않는다. Executor DB·공유 PV, pr-batch DB가 초기화되므로 우리 DB도 필요하면 같이 초기화한다(이전 실행을 가리키는 run·리포트·링크는 정리하지 않음).
-- 배포 전 확인: 세 서비스 `AUTH_CLIENTS`에 서로의 key 해시, executor·pr-batch의 `allowed_tenants` 일치.
+- 배포 전 확인: 세 서비스 `AUTH_CLIENTS`에 서로의 key 해시, executor·pr-batch의 우리 key 항목이 `allowed_tenants: ["*"]`인지(executor는 pr-batch key 항목도).
 
 ## 10. 작업량
 
@@ -215,12 +216,14 @@ REDIS_URL: "redis://…"              # 지금과 같음 (세션·큐·executor 
 
 스펙과 다르게 또는 더 구체적으로 정한 부분입니다.
 
-- **tenant 값**: 우리 tenant는 설정 `EXECUTOR_TENANT_ID`(`dtest-agent-service`, 2026-11-01)입니다. 이 문서의 `pr-agentic-service`는 그 값을 가리킵니다. executor·pr-batch의 우리 key 항목(`tenant`, `allowed_tenants`)도 같은 이름이어야 합니다.
+- **tenant 값**: 우리 tenant는 설정 `EXECUTOR_TENANT_ID`(`dtest-agent-service`, 2026-11-01)입니다. 이 문서의 `pr-agentic-service`는 그 값을 가리킵니다. executor·pr-batch의 우리 key 항목 `tenant`도 같은 이름이어야 합니다.
 - **executor 게이트웨이와 브라우저**: `/api/v1/executor/{path}`는 key 호출자의 입구이면서, 기존처럼 브라우저(SSO)의 조회 중계도 계속 맡습니다(실행 이력·시스템 화면). 쿠키 요청은 403이 아니라 기존 규칙(멤버십 확인 후 시스템 조회, 관리자 경로)으로 처리합니다. 쓰기와 `/artifacts/*`는 key 호출자만 씁니다.
 - **runtime·maintenance**: executor의 admin 전용 API라 운영 key `EXECUTOR_ADMIN_API_KEY`로 부릅니다. `EXECUTOR_API_KEY`는 있는데 운영 key가 비어 있으면 시스템 화면의 그 탭은 503 `EXECUTOR_ADMIN_KEY_MISSING`입니다. 둘 다 비어 있으면(로컬 header 모드 executor) key 없이 부릅니다.
-- **tenant 헤더**: 우리 executor 호출은 모두 `X-Tenant-Id: EXECUTOR_TENANT_ID`를 붙입니다(운영 API 제외). header 모드 executor는 key가 없으면 tenant를 `dev`로 잡기 때문입니다. 그래서 우리 relay key의 `allowed_tenants`에 우리 tenant가 있어야 합니다.
+- **tenant 헤더**: 우리 executor 호출은 모두 `X-Tenant-Id: EXECUTOR_TENANT_ID`를 붙입니다(운영 API 제외). header 모드 executor는 key가 없으면 tenant를 `dev`로 잡기 때문입니다. 우리 relay key는 `allowed_tenants: ["*"]`라 따로 맞출 것이 없습니다.
 - **관리자 실행 목록의 사용자 필터**: executor가 `user_id` 파라미터를 받지 않으므로 그 값을 `X-User-Id`로 바꿔 보냅니다.
 - **비활성화 재시도**: 사용자 비활성화 때 바로 `disable-by-owner`를 부르고, 실패하면 `users.batches_disable_pending`이 남아 워커가 5분마다 다시 부릅니다.
-- **key 발급 상태**: 우리 tenant 키는 바로 `active`, 다른 tenant 키는 `pending`으로 만들어 관리자가 활성화합니다. 접두어는 `pas_live_`(stg·prd)·`pas_dev_`(local·dev).
+- **key 발급 상태** (2026-11-01 변경): 모든 키는 발급하면 바로 `active`입니다. 활성화 단계(`/activate`)는 없앴습니다. 접두어는 `pas_live_`(stg·prd)·`pas_dev_`(local·dev).
 - **X-User-Id 범위** (2026-10-29 결정): 우리 API와 우리 tenant 키는 우리 활성 사용자만 받고, `users.id` 또는 사번을 받아 `users.id`로 바꿔 넘깁니다. 다른 tenant 키가 executor·배치 게이트웨이를 부를 때는 형식만 확인하고 받은 값을 그대로 넘깁니다(그 tenant 공간 안의 사용자).
 - **이벤트 확인**: wake 이벤트(`operation_completed`, `completed`)는 executor 타임라인에서 같은 `event_id`를 찾아 그 값으로 씁니다. 못 찾으면 버립니다. 배치 리포트는 `GET /executions/{id}`(시스템 조회)로 상태·trigger·owner를 정합니다.
+- **외부 tenant 배치의 리포트** (2026-11-01): 외부 tenant로 등록된 배치의 실행 이벤트는 `executor.events.<그 tenant>`로 가고, 우리는 우리 tenant 스트림만 읽습니다. 누락 복구(`BatchReportRecovery`)도 우리 key의 기본 tenant만 조회합니다. 그래서 배치 리포트는 우리 tenant 배치에만 만들어지고, 외부 tenant 배치는 리포트 대상이 아닙니다. 외부 호출자는 실행 결과를 executor 게이트웨이로 조회합니다.
+- **pr-batch PATCH의 다른 tenant**: pr-batch는 배치를 (tenant, 사용자)로 찾으므로, 저장된 tenant와 다른 tenant로 부르면 403이 아니라 404입니다(존재 여부를 드러내지 않음).

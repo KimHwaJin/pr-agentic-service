@@ -196,8 +196,8 @@ class Settings(BaseSettings):
     # the events of our executions and of the batches registered through
     # us come to <executor_event_stream>.<tenant>. The same in every
     # environment (config.yml); a local run against a shared executor can
-    # change it to keep its events apart. Executor and pr-batch list it in
-    # our key's allowed_tenants.
+    # change it to keep its events apart. Executor and pr-batch allow our
+    # key every tenant (["*"]), so it is set here only.
     executor_tenant_id: str = Field(
         "dtest-agent-service", pattern=r"^[a-z][a-z0-9-]{1,62}[a-z0-9]$"
     )

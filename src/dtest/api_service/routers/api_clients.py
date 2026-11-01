@@ -1,9 +1,14 @@
 """Administration of the keys other services and agents call us with.
 
-A client of our own tenant is active at once. A client of another tenant
-stays ``pending`` until that tenant is in our keys' ``allowed_tenants`` at
-the executor and pr-batch (their deploy); an administrator then activates
-it. A pending or revoked key is refused (401).
+We are the only place that decides which tenants may use the executor
+and pr-batch: our keys there are allowed every tenant
+(``allowed_tenants: ["*"]``), so issuing a key here is all a new tenant
+takes, and a key is active at once. Revoking it (or every key of a
+tenant) is how a tenant is cut off. A revoked key is refused (401).
+
+The tenant is always named. Our own tenant is given only on purpose
+(``own_tenant``): its key reads every execution of our users as a system
+read.
 """
 
 from fastapi import APIRouter, HTTPException
@@ -14,6 +19,7 @@ from src.dtest.api_service.schemas.api_clients import (
     ApiClientCreate,
     ApiClientIssued,
     ApiClientRead,
+    TenantRevoked,
 )
 from src.dtest.api_service.services import api_clients
 from src.dtest.core.config import RESERVED_TENANT_IDS
@@ -38,9 +44,15 @@ async def issue_client(
     body: ApiClientCreate, services: ServicesDep, admin: AdminDep
 ):
     settings = services.settings
-    tenant = body.tenant or settings.executor_tenant_id
+    tenant = body.tenant
     if tenant in RESERVED_TENANT_IDS:
         raise HTTPException(422, f"Tenant {tenant!r} is reserved.")
+    if tenant == settings.executor_tenant_id and not body.own_tenant:
+        raise HTTPException(
+            422,
+            f"Tenant {tenant!r} is this service's own; "
+            "set own_tenant to issue a key for it.",
+        )
     key = api_clients.new_key(settings.env)
     async with services.db.sessions() as db:
         if await db.scalar(
@@ -52,9 +64,7 @@ async def issue_client(
             tenant=tenant,
             key_prefix=key[: len(api_clients.key_prefix(settings.env)) + 4],
             key_sha256=api_clients.digest(key),
-            status="active"
-            if tenant == settings.executor_tenant_id
-            else "pending",
+            status="active",
             description=body.description,
             created_by=admin.id,
         )
@@ -66,31 +76,41 @@ async def issue_client(
     )
 
 
-@router.post("/{client_id}/activate", response_model=ApiClientRead)
-async def activate_client(
-    client_id: str, services: ServicesDep, admin: AdminDep
-):
-    return await _set_status(services, client_id, "active")
-
-
 @router.post("/{client_id}/revoke", response_model=ApiClientRead)
 async def revoke_client(
     client_id: str, services: ServicesDep, admin: AdminDep
 ):
-    return await _set_status(services, client_id, "revoked")
-
-
-async def _set_status(services, client_id: str, status: str) -> ApiClient:
     async with services.db.sessions() as db:
         client = await db.get(ApiClient, client_id)
         if client is None:
             raise HTTPException(404, "Client not found.")
         if client.status == "revoked":
-            raise HTTPException(409, "A revoked key cannot change.")
-        client.status = status
-        if status == "revoked":
-            client.revoked_at = utcnow()
+            raise HTTPException(409, "The key is already revoked.")
+        client.status = "revoked"
+        client.revoked_at = utcnow()
         await db.commit()
         await db.refresh(client)
     api_clients.forget(client.key_sha256)
     return client
+
+
+@router.post("/tenants/{tenant}/revoke", response_model=TenantRevoked)
+async def revoke_tenant(tenant: str, services: ServicesDep, admin: AdminDep):
+    """Revokes every key of ``tenant`` at once: the tenant is cut off from
+    us, and so from the executor and pr-batch. Revoked keys are kept."""
+    async with services.db.sessions() as db:
+        clients = (
+            await db.scalars(
+                select(ApiClient).where(
+                    ApiClient.tenant == tenant, ApiClient.status != "revoked"
+                )
+            )
+        ).all()
+        now = utcnow()
+        for client in clients:
+            client.status = "revoked"
+            client.revoked_at = now
+        await db.commit()
+    for client in clients:
+        api_clients.forget(client.key_sha256)
+    return TenantRevoked(tenant=tenant, revoked=len(clients))
