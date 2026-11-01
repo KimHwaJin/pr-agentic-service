@@ -27,7 +27,7 @@ def test_browser_routes():
     assert _access("GET", "executions") == ("list", True)
     route = _match("GET", f"executions/{E}/steps")
     assert route and route[1] == "execution" and route[0]["execution"] == E
-    assert _access("GET", f"executions/{E}/attempts") == ("admin", True)
+    assert _access("GET", f"executions/{E}/attempts") == ("admin", False)
     assert _access("POST", "runtime-targets") == ("ops", False)
     assert _access("POST", f"runtime-targets/{E}/drain") == ("ops", False)
     assert _access("POST", "maintenance/drain") == ("ops", False)
@@ -247,3 +247,13 @@ def test_admin_user_filter_becomes_the_user_header():
     )
     assert sent[0].headers["x-user-id"] == "u-7"
     assert dict(sent[0].url.params) == {"trigger_type": "INTERACTIVE"}
+
+
+def test_relay_docs_list_the_key_routes():
+    text = relay.relay_description()
+    keyed = text.split("may use:")[1].split("Runtime,")[0]
+    assert "| POST | `/executions` |" in keyed
+    assert "| GET | `/executions/{execution_id}/steps/{id}` |" in keyed
+    assert "`/executions/{execution_id}/notebook/cells/{n}`" in keyed
+    for internal in ("attempts", "diagnostics", "runtime-", "maintenance"):
+        assert internal not in keyed
