@@ -6,8 +6,9 @@ are found by header name, in any order: Tool (`name` in backticks),
 실행 방식, 실행 조건, condition_tool, 역할 (or execution, condition, role).
 Any other column is kept per tool in ``SkillTool.extra``.
 Tools: ``<root>/<category>/<tool>.py`` holding one top-level function named
-like the file. Imports live inside the function; the executor receives the
-function without its docstring.
+like the file, plus any helpers it needs. The executor receives the file's
+definitions (imports, functions, classes, assignments) without docstrings;
+shared helpers come from ``<root>/_lib`` (see ``LIB`` below).
 """
 
 import ast
@@ -83,6 +84,9 @@ class Tool:
     param_docs: dict[str, str] = field(
         default_factory=dict
     )  # Google-style "Args:" lines
+    # other top-level names the cell binds in the kernel (helpers,
+    # constants), with their source, for the catalog-wide clash check
+    names: tuple[tuple[str, str], ...] = ()
 
     @property
     def summary(self) -> str:
@@ -200,7 +204,267 @@ def tool_table(body: str) -> tuple[list[SkillTool], list[str]]:
     return rows, problems
 
 
-def _parse_tool(path: Path) -> Tool:
+# --- tool files -> cell code ------------------------------------------------
+#
+# A tool file is ``<tool>.py`` with one top-level function named like the
+# file (the tool) and any number of helpers. The cell sent to the executor
+# holds only the definitions: imports, functions, classes and assignments,
+# in file order, with every docstring removed. Notes (bare strings), the
+# ``if __name__ == "__main__":`` block and comments between definitions are
+# left out; any other top-level statement (a call, a loop) breaks the tool,
+# because the cell would behave differently from the file.
+#
+# Shared helpers live in ``<root>/_lib/<module>.py`` and are imported as
+# ``from _lib.<module> import name``. That line is replaced by the helpers
+# the tool uses (and what they use in turn), so each cell runs on its own.
+
+LIB = "_lib"
+OBSERVE_HELPER = "_agentic_observe"
+# names the generated code itself binds in the kernel
+_RESERVED = re.compile(rf"^(?:{OBSERVE_HELPER}|_r_s\d+_t\d+)$")
+_DEFS = (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)
+_IMPORTS = (ast.Import, ast.ImportFrom)
+_KEPT = (*_DEFS, *_IMPORTS, ast.Assign, ast.AnnAssign)
+
+
+def _is_note(node: ast.stmt) -> bool:
+    return (
+        isinstance(node, ast.Expr)
+        and isinstance(node.value, ast.Constant)
+        and isinstance(node.value.value, str)
+    )
+
+
+def _is_main_guard(node: ast.stmt) -> bool:
+    test = node.test if isinstance(node, ast.If) else None
+    return (
+        isinstance(test, ast.Compare)
+        and isinstance(test.left, ast.Name)
+        and test.left.id == "__name__"
+        and len(test.comparators) == 1
+        and isinstance(test.comparators[0], ast.Constant)
+        and test.comparators[0].value == "__main__"
+    )
+
+
+def _from_lib(node: ast.AST) -> bool:
+    if isinstance(node, ast.ImportFrom):
+        return node.level == 0 and (node.module or "").split(".")[0] == LIB
+    return isinstance(node, ast.Import) and any(
+        a.name.split(".")[0] == LIB for a in node.names
+    )
+
+
+def _bound(node: ast.stmt) -> list[str]:
+    """Top-level names a kept statement binds."""
+    if isinstance(node, _DEFS):
+        return [node.name]
+    if isinstance(node, ast.Import):
+        return [(a.asname or a.name).split(".")[0] for a in node.names]
+    if isinstance(node, ast.ImportFrom):
+        return [a.asname or a.name for a in node.names]
+    targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+    return [
+        n.id for t in targets for n in ast.walk(t) if isinstance(n, ast.Name)
+    ]
+
+
+def _without_docstrings(lines: list[str], node: ast.stmt) -> str:
+    """Source of ``node`` (decorators included) minus every docstring."""
+    first = (
+        node.decorator_list[0].lineno
+        if isinstance(node, _DEFS) and node.decorator_list
+        else node.lineno
+    )
+    last = node.end_lineno or node.lineno
+    text = {n: lines[n - 1] for n in range(first, last + 1)}
+    for inner in ast.walk(node):
+        if not isinstance(inner, _DEFS) or not ast.get_docstring(inner):
+            continue
+        doc = inner.body[0]
+        start, end = doc.lineno, doc.end_lineno or doc.lineno
+        head = text[start][: doc.col_offset]
+        tail = text[end][doc.end_col_offset or 0 :]
+        if head.strip() or tail.split("#")[0].strip():
+            raise ValueError(
+                f"{inner.name}: docstring은 줄을 따로 써야 합니다 ({start}행)"
+            )
+        for n in range(start, end + 1):
+            text[n] = None
+        if len(inner.body) == 1:
+            text[start] = head + "pass"
+    return "\n".join(t for t in text.values() if t is not None)
+
+
+@dataclass(frozen=True)
+class _Unit:
+    """One kept top-level statement."""
+
+    code: str
+    names: tuple[str, ...]
+    uses: frozenset[str]
+    is_import: bool
+    is_def: bool
+    # (module, name) for ``from _lib.<module> import name``
+    lib: tuple[tuple[str, str], ...] = ()
+
+
+def _units(path: Path, source: str) -> tuple[list[_Unit], list[str]]:
+    """Kept statements of a file, and warnings."""
+    module = ast.parse(source)
+    lines = source.splitlines()
+    units, warnings = [], []
+    for node in module.body:
+        if _is_note(node) or _is_main_guard(node):
+            continue
+        if not isinstance(node, _KEPT):
+            raise ValueError(
+                f"{path.name} {node.lineno}행: 파일 최상위에는 import, 함수, "
+                f"클래스, 변수 대입만 둘 수 있습니다 ({type(node).__name__})"
+            )
+        for inner in ast.walk(node):
+            if inner is not node and _from_lib(inner):
+                raise ValueError(
+                    f"{path.name} {inner.lineno}행: {LIB} 헬퍼는 파일 "
+                    "최상위에서 가져옵니다"
+                )
+        lib: list[tuple[str, str]] = []
+        if isinstance(node, ast.ImportFrom) and (
+            node.level or (node.module or "").split(".")[0] == LIB
+        ):
+            if node.level or node.module == LIB:
+                raise ValueError(
+                    f"{path.name} {node.lineno}행: 헬퍼는 "
+                    f"'from {LIB}.<모듈> import 이름'으로 가져옵니다"
+                )
+            for alias in node.names:
+                if alias.asname or alias.name == "*":
+                    raise ValueError(
+                        f"{path.name} {node.lineno}행: {LIB} 헬퍼는 "
+                        "별칭(as)이나 *로 가져올 수 없습니다"
+                    )
+                lib.append((node.module[len(LIB) + 1 :], alias.name))
+        elif isinstance(node, ast.Import) and any(
+            a.name.split(".")[0] == LIB for a in node.names
+        ):
+            raise ValueError(
+                f"{path.name} {node.lineno}행: 헬퍼는 "
+                f"'from {LIB}.<모듈> import 이름'으로 가져옵니다"
+            )
+        if isinstance(node, ast.Assign | ast.AnnAssign) and any(
+            isinstance(n, ast.Call) for n in ast.walk(node)
+        ):
+            warnings.append(
+                f"{path.name} {node.lineno}행: 최상위 대입에 함수 호출이 있어 "
+                "툴을 실행할 때마다 다시 계산됩니다"
+            )
+        units.append(
+            _Unit(
+                code=_without_docstrings(lines, node),
+                names=tuple(_bound(node)),
+                uses=frozenset(
+                    n.id for n in ast.walk(node) if isinstance(n, ast.Name)
+                ),
+                is_import=isinstance(node, _IMPORTS),
+                is_def=isinstance(node, _DEFS),
+                lib=tuple(lib),
+            )
+        )
+    return units, warnings
+
+
+class _Library:
+    """``_lib`` helper modules: dotted name (``stats``, ``io.excel``) ->
+    file. Pieces are cut per tool and cached per module."""
+
+    def __init__(self, files: dict[str, Path] | None = None):
+        self.files = files or {}
+        self._parsed: dict[str, list[_Unit]] = {}
+
+    @classmethod
+    def of(cls, roots: Sequence[Path]) -> "_Library":
+        """Later roots replace a module of the same name."""
+        files: dict[str, Path] = {}
+        for root in roots:
+            base = root / LIB
+            if base.is_dir():
+                for path in sorted(base.rglob("*.py")):
+                    parts = path.relative_to(base).with_suffix("").parts
+                    if not any(p.startswith("_") for p in parts):
+                        files[".".join(parts)] = path
+        return cls(files)
+
+    def _module(self, name: str) -> list[_Unit]:
+        if name not in self._parsed:
+            if name not in self.files:
+                raise ValueError(f"헬퍼 모듈 {LIB}.{name}이 없습니다")
+            path = self.files[name]
+            units, warnings = _units(path, path.read_text("utf-8"))
+            for warning in warnings:
+                log.warning("tool_helper_warning %s: %s", path, warning)
+            self._parsed[name] = units
+        return self._parsed[name]
+
+    def pieces(
+        self, wanted: Sequence[tuple[str, str]]
+    ) -> list[tuple[str, list[_Unit]]]:
+        """Helper statements a tool needs, per module, dependencies first."""
+        chosen: dict[str, set[int]] = {}
+        order: list[str] = []
+
+        def need(module: str, name: str, stack: tuple[str, ...]) -> None:
+            if module in stack:
+                cycle = " -> ".join((*stack, module))
+                raise ValueError(f"헬퍼가 서로를 가져옵니다: {cycle}")
+            units = self._module(module)
+            todo = [i for i, u in enumerate(units) if name in u.names]
+            if not todo:
+                raise ValueError(f"{LIB}.{module}에 {name}이(가) 없습니다")
+            picked = chosen.setdefault(module, set())
+            while todo:
+                i = todo.pop()
+                if i in picked:
+                    continue
+                picked.add(i)
+                for dep_module, dep_name in units[i].lib:
+                    need(dep_module, dep_name, (*stack, module))
+                for used in units[i].uses - set(units[i].names):
+                    todo += [j for j, u in enumerate(units) if used in u.names]
+            if module not in order:
+                order.append(module)
+
+        for module, name in wanted:
+            need(module, name, ())
+        return [
+            (
+                module,
+                [
+                    u
+                    for i, u in enumerate(self._module(module))
+                    if i in chosen[module] and not u.lib
+                ],
+            )
+            for module in order
+        ]
+
+
+def _join(units: Sequence[_Unit]) -> str:
+    out = ""
+    for prev, unit in zip([None, *units], units, strict=False):
+        if prev is not None:
+            if prev.is_def or unit.is_def:
+                out += "\n\n\n"
+            elif prev.is_import != unit.is_import:
+                out += "\n\n"
+            else:
+                out += "\n"
+        out += unit.code
+    return out
+
+
+def _parse_tool(
+    path: Path, library: _Library | None = None
+) -> tuple["Tool", list[str]]:
     source = path.read_text("utf-8")
     module = ast.parse(source)
     funcs = [
@@ -212,24 +476,28 @@ def _parse_tool(path: Path) -> Tool:
         raise ValueError(f"{path}: expected one function named {path.stem}")
     fn = funcs[0]
     docstring = ast.get_docstring(fn) or ""
-    lines = source.splitlines()
-    body_start = fn.body[0]
-    if docstring and isinstance(body_start, ast.Expr):
-        del lines[body_start.lineno - 1 : body_start.end_lineno]
-        if len(fn.body) == 1:
-            lines.insert(
-                body_start.lineno - 1, " " * body_start.col_offset + "pass"
-            )
-    start = (
-        fn.decorator_list[0].lineno if fn.decorator_list else fn.lineno
-    ) - 1
-    docstring_lines = (
-        (body_start.end_lineno or body_start.lineno) - body_start.lineno + 1
-        if docstring
-        else 0
+    units, warnings = _units(path, source)
+    own = [u for u in units if not u.lib]
+    helpers = (library or _Library()).pieces(
+        [pair for u in units for pair in u.lib]
     )
-    end = (fn.end_lineno or fn.lineno) - docstring_lines
-    code = "\n".join(lines[start:end])
+    if helpers:
+        code = "\n\n\n".join(
+            [
+                f"# --- {LIB}/{module.replace('.', '/')}.py ---\n{_join(us)}"
+                for module, us in helpers
+            ]
+            + [f"# --- {path.name} ---\n{_join(own)}"]
+        )
+    else:
+        code = _join(own)
+    names = tuple(
+        (name, unit.code)
+        for unit in [*own, *(u for _, us in helpers for u in us)]
+        if not unit.is_import
+        for name in unit.names
+        if name != fn.name
+    )
 
     args = fn.args
     defaults = [None] * (len(args.args) - len(args.defaults)) + list(
@@ -266,7 +534,8 @@ def _parse_tool(path: Path) -> Tool:
     signature = f"{fn.name}({ast.unparse(fn.args)})" + (
         f" -> {ast.unparse(fn.returns)}" if fn.returns else ""
     )
-    return Tool(
+    compile(code, str(path), "exec")
+    tool = Tool(
         fn.name,
         path.parent.name,
         signature,
@@ -275,7 +544,9 @@ def _parse_tool(path: Path) -> Tool:
         tuple(keys) or ("result",),
         code,
         _arg_docs(docstring),
+        names,
     )
+    return tool, warnings
 
 
 def _arg_docs(docstring: str) -> dict[str, str]:
@@ -305,36 +576,88 @@ class ToolCatalog:
     # says "failed to load" instead of "no such tool"
     broken: dict[str, str] = field(default_factory=dict)
 
+    # tool file -> notes that do not stop it from loading
+    warnings: dict[str, list[str]] = field(default_factory=dict)
+
     @classmethod
-    def load(cls, root: Path) -> "ToolCatalog":
+    def load(
+        cls, root: Path, library: "_Library | None" = None, *, check=True
+    ) -> "ToolCatalog":
+        """Tools under ``root``; any path part starting with ``_`` (such as
+        ``_lib/``) is not a tool. Helpers come from ``library`` (default:
+        ``root/_lib``)."""
         catalog = cls()
+        library = library or _Library.of([root])
         for path in sorted(root.rglob("*.py")):
-            if path.name.startswith("_"):
+            if any(p.startswith("_") for p in path.relative_to(root).parts):
                 continue
             try:
-                tool = _parse_tool(path)
+                tool, warnings = _parse_tool(path, library)
                 catalog.tools[tool.name] = tool
+                if warnings:
+                    catalog.warnings[str(path)] = warnings
+                    for warning in warnings:
+                        log.warning("tool_load_warning %s", warning)
             except (SyntaxError, ValueError, UnicodeDecodeError) as exc:
                 catalog.errors[str(path)] = str(exc)
                 catalog.broken[path.stem] = str(exc)
                 log.warning("tool_load_failed %s: %s", path, exc)
+        if check:
+            catalog._check_names()
         return catalog
 
     @classmethod
     def load_many(cls, roots: Sequence[Path]) -> "ToolCatalog":
-        """Roots in order; a later root replaces a tool of the same name."""
+        """Roots in order; a later root replaces a tool of the same name,
+        and a ``_lib`` helper module of the same name."""
         catalog = cls()
+        roots = [r for r in roots if r.exists()]
+        library = _Library.of(roots)
         for root in roots:
-            if root.exists():
-                part = cls.load(root)
-                for name in part.tools:
-                    catalog.broken.pop(name, None)
-                for name in part.broken:
-                    catalog.tools.pop(name, None)
-                catalog.tools.update(part.tools)
-                catalog.errors.update(part.errors)
-                catalog.broken.update(part.broken)
+            part = cls.load(root, library, check=False)
+            for name in part.tools:
+                catalog.broken.pop(name, None)
+            for name in part.broken:
+                catalog.tools.pop(name, None)
+            catalog.tools.update(part.tools)
+            catalog.errors.update(part.errors)
+            catalog.broken.update(part.broken)
+            catalog.warnings.update(part.warnings)
+        catalog._check_names()
         return catalog
+
+    def _check_names(self) -> None:
+        """Cells share one kernel: a helper must not replace another tool,
+        the generated code's own names, or a different helper of the same
+        name. Each offending tool is marked broken."""
+        seen: dict[str, dict[str, str]] = {}  # name -> source -> tool
+        for tool in self.tools.values():
+            for name, source in tool.names:
+                seen.setdefault(name, {}).setdefault(source, tool.name)
+        problems: dict[str, list[str]] = {}
+        for tool in self.tools.values():
+            for name, source in tool.names:
+                if name in self.tools:
+                    why = f"'{name}'은(는) 다른 tool 이름입니다"
+                elif _RESERVED.match(name):
+                    why = f"'{name}'은(는) 생성 코드가 쓰는 이름입니다"
+                elif len(seen[name]) > 1:
+                    others = sorted(
+                        t for s, t in seen[name].items() if s != source
+                    )
+                    why = (
+                        f"'{name}'이(가) {', '.join(others)}에서 "
+                        "다르게 정의되어 있습니다"
+                    )
+                else:
+                    continue
+                problems.setdefault(tool.name, []).append(why)
+        for name, whys in problems.items():
+            message = "커널 이름 충돌: " + "; ".join(whys)
+            del self.tools[name]
+            self.broken[name] = message
+            self.errors[name] = message
+            log.warning("tool_load_failed %s: %s", name, message)
 
     def missing(self, name: str) -> str:
         """Why ``name`` is not usable, in Korean for the model."""
