@@ -19,7 +19,7 @@ def _settings(**over):
     values = {
         "plan_candidates": 5,
         "plan_recommend_mode": "mixed",
-        "workflow_auto_run_similarity": 0.97,
+        "workflow_auto_run_similarity": 0.77,
     }
     return SimpleNamespace(**(values | over))
 
@@ -174,7 +174,7 @@ def test_two_candidates_always_show_the_card(skills, tools, template, asked):
 def test_similarity_below_the_auto_run_bar_shows_the_card(
     skills, tools, template, asked
 ):
-    wf = Workflows({"w1": template}, [_hit("w1", 0.95, template)])
+    wf = Workflows({"w1": template}, [_hit("w1", 0.75, template)])
     runtime = _runtime(skills, tools, wf)
     _search(runtime)
     _propose(runtime, [_template_candidate("w1", template, tools)])
@@ -212,7 +212,7 @@ def test_similarity_comes_from_this_runs_search_only(
 def test_reject_is_offered_only_when_every_candidate_is_a_template(
     skills, tools, template, asked
 ):
-    wf = Workflows({"w1": template}, [_hit("w1", 0.95, template)])
+    wf = Workflows({"w1": template}, [_hit("w1", 0.75, template)])
     runtime = _runtime(skills, tools, wf)
     _search(runtime)
     _propose(runtime, [_template_candidate("w1", template, tools)])
@@ -228,7 +228,7 @@ def test_reject_is_offered_only_when_every_candidate_is_a_template(
 def test_rejected_templates_are_refused_for_the_rest_of_the_run(
     skills, tools, template, asked
 ):
-    wf = Workflows({"w1": template}, [_hit("w1", 0.95, template)])
+    wf = Workflows({"w1": template}, [_hit("w1", 0.75, template)])
     runtime = _runtime(skills, tools, wf)
     _search(runtime)
     asked.reply["value"] = {"action": "reject_templates"}
@@ -334,7 +334,8 @@ def test_analyst_prompt_takes_the_mode_text():
 
 def test_auto_run_similarity_is_not_below_workflow_similarity():
     assert Settings().plan_recommend_mode == "mixed"
-    assert Settings().workflow_auto_run_similarity == 0.97
+    assert Settings().workflow_similarity == 0.70
+    assert Settings().workflow_auto_run_similarity == 0.77
     with pytest.raises(ValidationError, match="WORKFLOW_AUTO_RUN"):
         Settings(workflow_similarity=0.93, workflow_auto_run_similarity=0.9)
     with pytest.raises(ValidationError):

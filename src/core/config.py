@@ -257,7 +257,7 @@ class Settings(BaseSettings):
 
     default_code_level: int = Field(3, ge=1, le=4)
     plan_candidates: int = Field(5, ge=1, le=10)
-    workflow_similarity: float = 0.93
+    workflow_similarity: float = 0.70
     # how propose_plans offers templates: mixed = recommended templates
     # first, new plans for the rest of plan_candidates, in one card;
     # recommend_first = only the recommended templates first (new plans
@@ -265,7 +265,7 @@ class Settings(BaseSettings):
     plan_recommend_mode: Literal["mixed", "recommend_first"] = "mixed"
     # a template runs without the approval card only when it is the one
     # candidate and its search similarity (embedding search) reaches this
-    workflow_auto_run_similarity: float = 0.97
+    workflow_auto_run_similarity: float = 0.77
     # who may promote a candidate workflow to a template for every user:
     # its author, or administrators only (any workflow)
     workflow_promotion: Literal["author", "admin"] = "author"

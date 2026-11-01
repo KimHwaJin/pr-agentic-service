@@ -179,7 +179,7 @@ Swagger(`/docs`)에서는 Authorize 버튼에 `X-Api-Key`·`X-User-Id`가 있고
 
 `reject_templates`는 "추천 말고 새로 만들기"입니다. 추천 워크플로우를 모두 거절하고 Agent에게 새 계획을 설계해 다시 제안하게 합니다. 같은 턴에서 Agent는 등록된 워크플로우를 다시 후보로 낼 수 없고, 새 `plan_approval`이 옵니다. `allow_reject_templates`가 false인 질문에 보내면 422 `INVALID_ANSWER`(`location` 끝이 `action`)입니다. 버튼은 `allow_reject_templates`가 true일 때만 보여 주세요.
 
-계획 승인 카드 없이 바로 실행되는 경우(`plan_auto_approved` 이벤트)는 후보가 등록된 워크플로우 하나뿐이고, 그 워크플로우가 즉시 실행을 허용하고(`allow_immediate_execution`), 필수 입력이 모두 요청에서 채워졌고, 서버의 임베딩 검색 유사도가 `WORKFLOW_AUTO_RUN_SIMILARITY`(기본 0.97) 이상일 때뿐입니다. 키워드 검색(임베딩 없음)에서는 항상 카드가 옵니다.
+계획 승인 카드 없이 바로 실행되는 경우(`plan_auto_approved` 이벤트)는 후보가 등록된 워크플로우 하나뿐이고, 그 워크플로우가 즉시 실행을 허용하고(`allow_immediate_execution`), 필수 입력이 모두 요청에서 채워졌고, 서버의 임베딩 검색 유사도가 `WORKFLOW_AUTO_RUN_SIMILARITY`(기본 0.77) 이상일 때뿐입니다. 키워드 검색(임베딩 없음)에서는 항상 카드가 옵니다.
 
 `input_values`의 키는 `"<step_index>.<tool_index>.<파라미터>"`입니다. 값은 입력칸 글자 그대로 문자열로 보내도 됩니다. 서버가 파라미터 `type`에 맞춰 바꿉니다. 예를 들어 `int`이면 `"500"`을 500으로, `list`이면 `"[1, 2]"`를 목록으로, 빈 글자는 `None`을 허용하는 칸에서 null로 바꿉니다. `str` 칸은 `"123"`도 글자 그대로 둡니다. 바꿀 수 없는 값은 422 `INVALID_ANSWER`이고 `details`에 기대한 타입이 나옵니다. JSON 값(숫자, 목록)을 직접 보내도 됩니다. `required`가 true인 칸이 비어 있으면 승인되지 않습니다.
 
