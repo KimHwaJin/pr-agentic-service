@@ -84,6 +84,7 @@ PER_ENV_KEYS = {
     "executor_base_url",
     "executor_api_key",
     "executor_admin_api_key",
+    "service_keys_enabled",
     "batch_base_url",
     "batch_api_key",
 }
@@ -185,4 +186,52 @@ def test_executor_test_mode_is_refused_in_stg(root, monkeypatch):
     )
     monkeypatch.setenv("APP_ENV", "stg")
     with pytest.raises(ValueError, match="EXECUTOR_IO_MODE=api"):
+        Settings()
+
+
+@pytest.mark.parametrize("key", ["<exe-key>", "REPLACE_EXECUTOR_KEY"])
+def test_a_placeholder_key_does_not_start(root, monkeypatch, key):
+    # a template value left in config.{env}.yml passed the empty check and
+    # failed only at the first call (401)
+    (root / "config.stg.yml").write_text(
+        "sso_adapter: idp\ncookie_secure: true\n"
+        f"executor_api_key: '{key}'\nbatch_api_key: bat\n"
+    )
+    monkeypatch.setenv("APP_ENV", "stg")
+    with pytest.raises(ValueError, match="EXECUTOR_API_KEY is still a"):
+        Settings()
+
+
+def test_dev_may_send_no_keys(root, monkeypatch):
+    (root / "config.dev.yml").write_text(
+        "sso_adapter: idp\nservice_keys_enabled: false\n"
+        "executor_api_key: <exe-key>\nbatch_api_key: <bat-key>\n"
+        "executor_admin_api_key: <op-key>\n"
+    )
+    monkeypatch.setenv("APP_ENV", "dev")
+    settings = Settings()
+    assert (
+        settings.executor_api_key,
+        settings.executor_admin_api_key,
+        settings.batch_api_key,
+    ) == ("", "", "")
+
+
+def test_dev_with_keys_on_needs_real_ones(root, monkeypatch):
+    (root / "config.dev.yml").write_text(
+        "sso_adapter: idp\nservice_keys_enabled: true\n"
+        "executor_api_key: exe_dev_k\nbatch_api_key: <bat-key>\n"
+    )
+    monkeypatch.setenv("APP_ENV", "dev")
+    with pytest.raises(ValueError, match="BATCH_API_KEY is still a"):
+        Settings()
+
+
+def test_keys_cannot_be_turned_off_in_prd(root, monkeypatch):
+    (root / "config.prd.yml").write_text(
+        "sso_adapter: idp\ncookie_secure: true\nservice_keys_enabled: false\n"
+        "executor_api_key: exe\nbatch_api_key: bat\n"
+    )
+    monkeypatch.setenv("APP_ENV", "prd")
+    with pytest.raises(ValueError, match="SERVICE_KEYS_ENABLED=false"):
         Settings()

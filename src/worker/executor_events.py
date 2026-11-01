@@ -151,7 +151,7 @@ class ExecutorEventConsumer:
                 )
                 for _, messages in batches or []:
                     for message_id, fields in messages:
-                        await self._handle(message_id, fields)
+                        await self._handle_one(message_id, fields)
             except asyncio.CancelledError:
                 raise
             except Exception:  # noqa: BLE001 - keep consuming; failed entries stay pending
@@ -171,7 +171,23 @@ class ExecutorEventConsumer:
             for message_id, fields in await self.redis.xclaim(
                 self.stream, self.group, self.consumer, 60000, stale
             ):
-                await self._handle(message_id, fields)
+                await self._handle_one(message_id, fields)
+
+    async def _handle_one(
+        self, message_id: str, fields: dict[str, str]
+    ) -> None:
+        """One entry; a failure leaves it pending (reclaimed a minute later).
+
+        Caught per entry, so one that keeps failing (the oldest pending one
+        comes first in every reclaim) never holds back the entries read or
+        reclaimed with it.
+        """
+        try:
+            await self._handle(message_id, fields)
+        except asyncio.CancelledError:
+            raise
+        except Exception:  # noqa: BLE001 - stays pending, retried later
+            log.exception("executor_event_failed message_id=%s", message_id)
 
     async def _handle(self, message_id: str, fields: dict[str, str]) -> None:
         try:
@@ -218,7 +234,11 @@ class ExecutorEventConsumer:
                 event["execution_id"], event["event_sequence"]
             )
         except ExecutorError as exc:
-            if exc.status == 404:  # not an execution of our tenant
+            # 404: not an execution of our tenant; 400/422: an id or a
+            # sequence the executor cannot even read (a forged or broken
+            # entry). Neither changes on a retry: drop it. 5xx and
+            # connection errors stay pending and are tried again.
+            if exc.status in {400, 404, 422}:
                 return None
             raise
         if item is None or str(item.get("event_id")) != event["event_id"]:

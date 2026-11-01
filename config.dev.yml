@@ -15,6 +15,10 @@ ADMIN_EMPLOYEE_IDS: []
 LLM_API_KEY: <llm-api-key>
 
 EXECUTOR_BASE_URL: http://<executor-host>:8000
+# false: no X-Api-Key goes to the executor / pr-batch (both in
+# AUTH_MODE=header on dev); the keys below are ignored. true: the
+# issued keys below, as on stg.
+SERVICE_KEYS_ENABLED: false
 # Our keys at the executor (relay) and its operator key (시스템 page
 # runtime views; may stay empty). Secrets: better as Deployment env.
 EXECUTOR_API_KEY: <exe-key>

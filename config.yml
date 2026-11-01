@@ -4,7 +4,7 @@
 # FRONTEND_ORIGIN, CORS_ORIGINS, COOKIE_SECURE, ADMIN_EMPLOYEE_IDS,
 # LLM_API_KEY, MODELS, EXECUTOR_BASE_URL, BATCH_BASE_URL, and our keys at
 # the executor and pr-batch (EXECUTOR_API_KEY, EXECUTOR_ADMIN_API_KEY,
-# BATCH_API_KEY).
+# BATCH_API_KEY, SERVICE_KEYS_ENABLED).
 # Locally (APP_ENV empty) the docker-compose.yml environment or .env adds the
 # local values. Precedence: environment > .env > config.{APP_ENV}.yml > this
 # file. Relative paths are under the repo root. RUN_MODE and PHOENIX_* are
@@ -12,10 +12,11 @@
 
 # Database / Redis.
 REDIS_NAMESPACE: agentic
-DB_POOL_SIZE: 5
+# Shared PostgreSQL (max_connections 100) with the executor and pr-batch.
+DB_POOL_SIZE: 3
 # checkpointer/store pool; per pod PG connections = DB_POOL_SIZE * 2 +
-# CHECKPOINT_POOL_SIZE (docs/load-design.md)
-CHECKPOINT_POOL_SIZE: 16
+# CHECKPOINT_POOL_SIZE = 14, x maxReplicas 4 = 56 (docs/load-design.md)
+CHECKPOINT_POOL_SIZE: 8
 CHECKPOINT_POOL_TIMEOUT_SECONDS: 30
 AUTO_MIGRATE: true
 # /docs, /redoc, /openapi.json: off on dev/stg/prd (internal network rules);
@@ -61,10 +62,10 @@ EMBEDDING_DIMS: 1024
 # (mounted here), STORAGE_EXECUTOR_PATH: the same folder relative to the
 # executor's INPUT_STORAGE_ROOT, EXECUTOR_RESULT_ROOT: the mount of its
 # SHARED_STORAGE_ROOT.
-EXECUTOR_TENANT_ID: pr-agentic
-STORAGE_ROOT: /mnt/data/agent/pr-agentic-service
-STORAGE_EXECUTOR_PATH: pr-agentic-service
-EXECUTOR_RESULT_ROOT: /mnt/data/executor
+EXECUTOR_TENANT_ID: dtest-agent-service
+STORAGE_ROOT: /mnt/data/dtest/dtest-agent-service
+STORAGE_EXECUTOR_PATH: dtest-agent-service
+EXECUTOR_RESULT_ROOT: /mnt/data/dtest/executor
 EXECUTOR_EVENT_STREAM: executor.events
 EXECUTOR_EVENT_RECOVERY_SECONDS: 120
 EXECUTOR_RUNTIME_PROFILE: default
@@ -129,7 +130,8 @@ MEMORY_WORKER_MAX_INPUT_TOKENS: 8000
 MEMORY_WORKER_CONCURRENCY: 1
 
 # Run scheduler.
-RUN_CONCURRENCY: 32
+# at most CHECKPOINT_POOL_SIZE x 2 (each running turn writes checkpoints)
+RUN_CONCURRENCY: 16
 RUN_USER_CONCURRENCY: 4
 RUN_LEASE_SECONDS: 60
 RUN_POLL_SECONDS: 5.0
