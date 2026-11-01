@@ -6,7 +6,7 @@ import httpx
 from sqlalchemy import update
 
 from core.config import Settings
-from core.models import User
+from core.models import ApiClient, User
 from core.service_headers import Identity, with_key
 from core.services import Services
 
@@ -24,7 +24,7 @@ async def disable_batches_of(settings: Settings, owner_id: str) -> int:
     With our key no ``X-Tenant-Id`` is sent: pr-batch then turns them off
     in every tenant our key may use (``allowed_tenants: ["*"]``), since a
     user of ours can own batches under external tenants too. Without a key
-    (header mode, local/dev) a missing tenant means pr-batch's ``dev``, so
+    (header mode, local only) a missing tenant means pr-batch's ``dev``, so
     ours is named as before.
     """
     tenant = None if settings.batch_api_key else settings.executor_tenant_id
@@ -55,4 +55,44 @@ async def tell_batch(services: Services, user_id: str) -> bool:
         )
         await db.commit()
     log.info("batch_disabled_by_owner user=%s batches=%s", user_id, disabled)
+    return True
+
+
+async def disable_batches_of_tenant(settings: Settings, tenant: str) -> int:
+    """Turns off every batch of a revoked tenant at pr-batch.
+
+    pr-batch marks them ``disabled_reason=TENANT_REVOKED``, skips their
+    waiting runs and refuses manual runs; executions already submitted
+    keep running. Idempotent. ``X-Tenant-Id`` is required there.
+    """
+    async with httpx.AsyncClient(
+        base_url=settings.batch_base_url, timeout=30
+    ) as http:
+        response = await http.post(
+            "/api/v1/batches:disable-by-tenant",
+            headers=with_key(settings.batch_api_key, Identity(tenant=tenant)),
+            json={"reason": "TENANT_REVOKED"},
+        )
+    response.raise_for_status()
+    return response.json().get("disabled", 0)
+
+
+async def tell_batch_tenant(services: Services, tenant: str) -> bool:
+    """One disable-by-tenant call; clears the tenant's pending marks on
+    success (unless a key of it became active again meanwhile)."""
+    try:
+        disabled = await disable_batches_of_tenant(services.settings, tenant)
+    except (httpx.HTTPError, ValueError) as exc:
+        log.warning(
+            "batch_tenant_disable_failed tenant=%s error=%s", tenant, exc
+        )
+        return False
+    async with services.db.sessions() as db:
+        await db.execute(
+            update(ApiClient)
+            .where(ApiClient.tenant == tenant)
+            .values(batches_disable_pending=False)
+        )
+        await db.commit()
+    log.info("batch_disabled_by_tenant tenant=%s batches=%s", tenant, disabled)
     return True

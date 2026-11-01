@@ -29,7 +29,7 @@
 | `X-User-Id` | 우리 사용자의 `users.id` 또는 사번(우리가 `users.id`로 바꿔 넘김). 없거나 형식 오류 400 `INVALID_IDENTITY`, 미등록·비활성 사용자 403. `users.id`는 소문자 SSO 사번입니다. 다른 tenant 키가 executor·배치 게이트웨이를 부를 때는 **SSO 사번**(시스템 호출은 `svc-…`)을 보내야 하고, 형식(설정 시 `EMPLOYEE_ID_PATTERN`)만 확인해 그대로 넘깁니다 |
 | `X-Project-Id`, `X-Session-Id` | 선택. 경로의 프로젝트·세션과 다르면 400. executor 입구에서는 그 호출자의 tenant가 우리면 멤버십을 확인하고, 다른 tenant면 형식만 봅니다 |
 
-Swagger(`/docs`)에서는 Authorize 버튼에 `X-Api-Key`·`X-User-Id`가 있고, 각 API에 `X-Project-Id`·`X-Session-Id` 입력칸이 있습니다. 같은 브라우저에 SSO 로그인 쿠키가 있으면 쿠키가 우선이라 헤더는 무시됩니다. 관리자 API(`/admin/...`)는 key로 부를 수 없습니다(403). key 요청은 감사 로그(`api_service.audit`)에 남습니다. 로컬·dev의 `AUTH_MODE=header`에서는 key 없이 `X-User-Id`만으로 부를 수 있습니다.
+Swagger(`/docs`)에서는 Authorize 버튼에 `X-Api-Key`·`X-User-Id`가 있고, 각 API에 `X-Project-Id`·`X-Session-Id` 입력칸이 있습니다. 같은 브라우저에 SSO 로그인 쿠키가 있으면 쿠키가 우선이라 헤더는 무시됩니다. 관리자 API(`/admin/...`)는 key로 부를 수 없습니다(403). key 요청은 감사 로그(`api_service.audit`)에 남습니다. 로컬의 `AUTH_MODE=header`에서는 key 없이 `X-User-Id`만으로 부를 수 있습니다.
 
 관리자용: `GET /api/v1/admin/api-clients`, `POST /api/v1/admin/api-clients` `{name, tenant, own_tenant?, description?}` → `{client, api_key}`(key 원문은 이때 한 번만, 바로 active), `POST /api/v1/admin/api-clients/{id}/revoke`, `POST /api/v1/admin/api-clients/tenants/{tenant}/revoke` → `{tenant, revoked}`. `tenant`는 필수이고, 우리 tenant로 발급하려면 `own_tenant: true`가 필요합니다(없으면 422).
 
@@ -216,7 +216,7 @@ Swagger(`/docs`)에서는 Authorize 버튼에 `X-Api-Key`·`X-User-Id`가 있고
 | POST | `/runtime-targets/{id}/probe`, `/drain`, `/activate`, `/disable`, `/purge` | 관리자. 다시 점검 / 새 작업 배정 중지(진행 중은 마저) / 배정 복귀 / 사용 중지 / 사용 중지된 대상 제거 |
 | POST | `/maintenance/drain`, `/maintenance/activate`, `/maintenance/runs` | 관리자. executor 전체의 새 실행 접수 중지 / 재개 / 진행 중 실행을 멈추는 점검 작업 생성 |
 
-runtime·maintenance 경로는 executor 운영 key(`EXECUTOR_ADMIN_API_KEY`)가 없으면 503 `EXECUTOR_ADMIN_KEY_MISSING`입니다. POST의 `actor`는 클라이언트 값 대신 서버가 요청한 관리자(`{"type": "USER", "id": <users.id>}`)로 채웁니다. executor·pr-batch에 넘기는 사용자 ID(`X-User-Id`, `context.user_id`, actor)는 모두 사번이 아닌 `users.id`(UUID)입니다. 화면에 이름·사번이 필요하면 `/users`로 찾습니다. 나머지 본문(`idempotency_key` 등)은 executor 형식 그대로입니다.
+runtime·maintenance 경로는 executor 운영 key(`EXECUTOR_ADMIN_API_KEY`)가 없으면 503 `EXECUTOR_ADMIN_KEY_MISSING`입니다. POST의 `actor`는 클라이언트 값 대신 서버가 요청한 관리자(`{"type": "USER", "id": <users.id>}`)로 채웁니다. executor·pr-batch에 넘기는 사용자 ID(`X-User-Id`, `context.user_id`, actor)는 모두 `users.id`이고, 이 값은 소문자 사번입니다(2026-11-01부터). 화면에 이름이 필요하면 `/users`로 찾습니다. 나머지 본문(`idempotency_key` 등)은 executor 형식 그대로입니다.
 
 **API key 호출자** (executor를 직접 부르지 않고 여기로 부릅니다)
 

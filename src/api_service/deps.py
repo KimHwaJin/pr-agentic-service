@@ -37,7 +37,7 @@ USER_HEADER = APIKeyHeader(
     scheme_name="X-User-Id",
     auto_error=False,
     description="Our users.id the key caller acts for (required with "
-    "X-Api-Key; alone in AUTH_MODE=header, local/dev).",
+    "X-Api-Key; alone in AUTH_MODE=header, local only).",
 )
 
 
@@ -92,7 +92,7 @@ async def current_user(
     A request with the session cookie is decided by SSO alone (CSRF
     included). Without it, ``X-Api-Key`` names an active api client and
     ``X-User-Id`` one of our active users (``users.id`` or employee id);
-    ``AUTH_MODE=header`` (local/dev)
+    ``AUTH_MODE=header`` (local only)
     trusts ``X-User-Id`` without a key. The caller is kept on
     ``request.state.api_client`` (None for SSO).
     """
@@ -156,9 +156,10 @@ async def key_identity(
     ``X-User-Id`` names one of our active users (``users.id`` or employee
     id, sent on as ``users.id``). ``any_user_outside`` (the executor and
     batch gateways): a client of another tenant works in that tenant's own
-    space, so its user ids are its own and only checked for form (no user
-    of ours). ``user_required`` False (gateway reads): without
-    ``X-User-Id`` the request is a system read over the client's tenant.
+    space; its user ids are SSO employee ids, checked for form, and one of
+    our users we deactivated is refused (unknown ones pass).
+    ``user_required`` False (gateway reads): without ``X-User-Id`` the
+    request is a system read over the client's tenant.
     """
     caller = await _caller(request, services)
     request.state.api_client = caller
@@ -173,6 +174,11 @@ async def key_identity(
         and caller.tenant != services.settings.executor_tenant_id
     ):
         _check_employee_id(services.settings, user_id)
+        # the same employee id is the same person in every tenant: one we
+        # deactivated is stopped here too (unknown ones pass)
+        known = await _user(services, user_id)
+        if known is not None and not known.is_active:
+            raise HTTPException(403, "Unknown or inactive user.")
         request.state.caller_user_id = user_id
         return caller, user_id, None
     user = await _user(services, user_id)

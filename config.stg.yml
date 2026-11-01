@@ -7,16 +7,18 @@ REDIS_URL: redis://<redis-host>:6379/0
 PUBLIC_API_ORIGIN: https://<api-host>
 FRONTEND_ORIGIN: https://<front-host>
 CORS_ORIGINS: ["https://<front-host>"]
+# SSO login page origin(s) (scheme://host); empty = every login 502.
+# A refused one is logged as sso_login_url_rejected origin=...
+SSO_ALLOWED_ORIGINS: ["https://<sso-host>"]
 COOKIE_SECURE: true
 
-# employee ids with the admin role
+# employee ids with the admin role, as SSO sends them; given at a user's
+# first login only, so fill before the administrators first log in
 ADMIN_EMPLOYEE_IDS: []
 
 LLM_API_KEY: <llm-api-key>
 
 EXECUTOR_BASE_URL: http://<executor-host>:8000
-# true only: stg/prd always send the issued keys below.
-SERVICE_KEYS_ENABLED: true
 # Our keys at the executor (relay) and its operator key (시스템 page
 # runtime views; may stay empty). Secrets: better as Deployment env.
 EXECUTOR_API_KEY: <exe-key>
