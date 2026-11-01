@@ -188,8 +188,8 @@ async def _for_user(
     if access in {"admin", "ops"} and user.role != "admin":
         raise HTTPException(403, "Administrator only.")
     executor = services.executor
-    # no key at all: an executor in header mode, where that is an operator
-    if access == "ops" and executor.api_key and not executor.admin_api_key:
+    # operator calls need the executor's operator key
+    if access == "ops" and not executor.admin_api_key:
         raise ApiError(
             503,
             "executor_admin_key_missing",

@@ -171,18 +171,6 @@ def test_stg_needs_our_service_keys(root, monkeypatch):
         Settings()
 
 
-@pytest.mark.parametrize("env", ["dev", "prd"])
-def test_header_mode_only_locally(root, monkeypatch, env):
-    assert Settings(auth_mode="header").auth_mode == "header"  # local
-    (root / f"config.{env}.yml").write_text(
-        SSO + "cookie_secure: true\n"
-        "executor_api_key: exe\nbatch_api_key: bat\nauth_mode: header\n"
-    )
-    monkeypatch.setenv("APP_ENV", env)
-    with pytest.raises(ValueError, match="AUTH_MODE=header"):
-        Settings()
-
-
 def test_executor_test_mode_is_refused_in_stg(root, monkeypatch):
     (root / "config.stg.yml").write_text(
         SSO + "cookie_secure: true\nexecutor_api_key: exe\n"
@@ -207,31 +195,10 @@ def test_a_placeholder_key_does_not_start(root, monkeypatch, key):
 
 
 def test_dev_needs_our_service_keys_too(root, monkeypatch):
-    # dev is key mode like stg and prd (2026-11-01)
+    # key mode only, dev included (2026-11-01)
     (root / "config.dev.yml").write_text(SSO)
     monkeypatch.setenv("APP_ENV", "dev")
     with pytest.raises(ValueError, match="EXECUTOR_API_KEY and BATCH_API_KEY"):
-        Settings()
-
-
-def test_only_a_local_run_may_send_no_keys(root, monkeypatch):
-    settings = Settings(
-        service_keys_enabled=False,
-        executor_api_key="<exe-key>",
-        batch_api_key="<bat-key>",
-        executor_admin_api_key="<op-key>",
-    )
-    assert (
-        settings.executor_api_key,
-        settings.executor_admin_api_key,
-        settings.batch_api_key,
-    ) == ("", "", "")
-    (root / "config.dev.yml").write_text(
-        SSO + "service_keys_enabled: false\n"
-        "executor_api_key: exe\nbatch_api_key: bat\n"
-    )
-    monkeypatch.setenv("APP_ENV", "dev")
-    with pytest.raises(ValueError, match="SERVICE_KEYS_ENABLED=false"):
         Settings()
 
 
@@ -291,11 +258,12 @@ def test_no_administrators_is_a_warning(root, monkeypatch, caplog):
     assert "admin_employee_ids_empty" in caplog.text
 
 
-def test_keys_cannot_be_turned_off_in_prd(root, monkeypatch):
-    (root / "config.prd.yml").write_text(
-        SSO + "cookie_secure: true\nservice_keys_enabled: false\n"
-        "executor_api_key: exe\nbatch_api_key: bat\n"
-    )
-    monkeypatch.setenv("APP_ENV", "prd")
-    with pytest.raises(ValueError, match="SERVICE_KEYS_ENABLED=false"):
+@pytest.mark.parametrize(
+    "key", ["auth_mode: header", "service_keys_enabled: false"]
+)
+def test_keyless_switches_are_gone(root, monkeypatch, key):
+    # an old AUTH_MODE / SERVICE_KEYS_ENABLED is ignored: keys still needed
+    (root / "config.dev.yml").write_text(SSO + key + "\n")
+    monkeypatch.setenv("APP_ENV", "dev")
+    with pytest.raises(ValueError, match="EXECUTOR_API_KEY and BATCH_API_KEY"):
         Settings()

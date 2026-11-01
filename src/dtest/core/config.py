@@ -208,26 +208,21 @@ class Settings(BaseSettings):
     embedding_model: str = ""
     embedding_dims: int = 1024
 
-    # Service-to-service auth (docs/specs/service-auth.md).
-    # api_key: callers other than the browser send X-Api-Key (a key of
-    # api_clients) and X-User-Id. header: X-User-Id is trusted without a
-    # key (local only, for testers).
-    auth_mode: Literal["api_key", "header"] = "api_key"
+    # Service-to-service auth (docs/specs/service-auth.md): callers other
+    # than the browser always send X-Api-Key (a key of api_clients) and
+    # X-User-Id; there is no keyless mode (2026-11-01), here or at the
+    # executor and pr-batch.
     # how long a verified caller key is cached (revocation delay)
     api_client_cache_seconds: float = Field(60, ge=0, le=300)
 
     # Executor.
     executor_base_url: str = "http://localhost:8000"
-    # Our key at the executor (X-Api-Key, a relay key). Empty only against
-    # an executor in header mode (local only).
+    # Our key at the executor (X-Api-Key, a relay key). Required when
+    # APP_ENV is set; locally the executor compose's local key.
     executor_api_key: str = ""
     # The operator key of the executor's runtime and maintenance APIs, for
     # the 시스템 page; empty = those pages answer 503.
     executor_admin_api_key: str = ""
-    # Send our keys (X-Api-Key) to the executor and pr-batch. false: no key
-    # goes out, for an executor / pr-batch in AUTH_MODE=header (local
-    # only); the keys above are then ignored.
-    service_keys_enabled: bool = True
     # The executor tenant of this service (the default tenant of our key):
     # the events of our executions and of the batches registered through
     # us come to <executor_event_stream>.<tenant>. The same in every
@@ -393,7 +388,7 @@ class Settings(BaseSettings):
     # pr-batch.
     batch_base_url: str = "http://localhost:8100"
     # Our key at pr-batch (X-Api-Key; a relay key with admin, for
-    # disable-by-owner). Empty only against pr-batch in header mode.
+    # disable-by-owner). Required when APP_ENV is set.
     batch_api_key: str = ""
     # Reports of successful BATCH executions (worker.batch_reports).
     # empty = the default model
@@ -444,18 +439,8 @@ class Settings(BaseSettings):
             )
         if self.executor_io_mode == "api" and self.env in {"stg", "prd"}:
             raise ValueError("EXECUTOR_IO_MODE=api is for test environments")
-        # Deployed (dev, stg, prd) is always key mode, both ways
-        # (2026-11-01): header mode and keyless calls are local only.
-        if self.auth_mode == "header" and self.env != "local":
-            raise ValueError("AUTH_MODE=header is only allowed locally")
-        if not self.service_keys_enabled:
-            if self.env != "local":
-                raise ValueError(
-                    "SERVICE_KEYS_ENABLED=false is only allowed locally"
-                )
-            # validate_assignment is off: no re-run of this validator
-            self.executor_api_key = self.executor_admin_api_key = ""
-            self.batch_api_key = ""
+        # Key mode only, both ways (2026-11-01): our keys at the executor
+        # and pr-batch are required whenever APP_ENV is set.
         if self.env != "local" and not (
             self.executor_api_key and self.batch_api_key
         ):
@@ -470,8 +455,8 @@ class Settings(BaseSettings):
         ):
             if is_placeholder(getattr(self, name)):
                 raise ValueError(
-                    f"{name.upper()} is still a placeholder; set the issued "
-                    "key (or SERVICE_KEYS_ENABLED=false locally)"
+                    f"{name.upper()} is still a placeholder; set the "
+                    "issued key"
                 )
         if self.env != "local":
             left = placeholders(self.model_dump())

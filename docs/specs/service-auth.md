@@ -63,7 +63,7 @@
 | `/api/v1/executor/{path}` (신규, 필수) | executor | 3.5 참고 |
 
 - 호출자의 tenant를 `X-Tenant-Id`로 붙인다. SSO 사용자는 `pr-agentic-service`.
-- pr-batch에는 **모든 호출에** `X-Tenant-Id`를 보낸다(`GET /runtimes` 제외). pr-batch는 스크립트·배치를 (tenant, 사용자)로 찾으므로, 스크립트 등록·배치 등록·이후 조회와 변경이 모두 같은 tenant를 말해야 한다. 빠뜨리면 key의 기본 tenant(header 모드면 `dev`)에서 찾아 404가 된다. `scripts/from-notebook`, 스크립트 화면도 우리 tenant를 붙인다. `disable-by-owner`만 예외로, key가 있으면 `X-Tenant-Id`를 보내지 않는다. 그러면 pr-batch가 우리 key가 쓸 수 있는 모든 tenant(`["*"]`)에서 그 사용자의 배치를 끈다. key가 없는 header 모드(로컬)에서는 tenant가 `dev`로 잡히므로 우리 tenant를 붙인다.
+- pr-batch에는 **모든 호출에** `X-Tenant-Id`를 보낸다(`GET /runtimes` 제외). pr-batch는 스크립트·배치를 (tenant, 사용자)로 찾으므로, 스크립트 등록·배치 등록·이후 조회와 변경이 모두 같은 tenant를 말해야 한다. 빠뜨리면 key의 기본 tenant에서 찾아 404가 될 수 있다. `scripts/from-notebook`, 스크립트 화면도 우리 tenant를 붙인다. `disable-by-owner`만 예외로 `X-Tenant-Id`를 보내지 않는다. 그러면 pr-batch가 우리 key가 쓸 수 있는 모든 tenant(`["*"]`)에서 그 사번의 배치를 끈다.
 - `X-Project-Id`는 배치 등록 때만 의미가 있다. pr-batch는 project를 바꿀 수 없으므로 우리 화면에서도 배치의 프로젝트 이동은 "새 배치 만들기"로 안내한다.
 
 ### 3.5 executor 게이트웨이 상세 (필수 범위)
@@ -168,15 +168,13 @@ Redis ACL은 쓰지 않는다(운영 Redis에서 불가). 그래서 **이벤트�
 ## 7. 설정과 기동 검사
 
 ```yaml
-AUTH_MODE: api_key          # api_key | header
 BATCH_API_KEY: "bat_live_…"
 EXECUTOR_API_KEY: "exe_live_…"
 REDIS_URL: "redis://…"              # 지금과 같음 (세션·큐·executor 이벤트)
 ```
 
-- `AUTH_MODE: header`는 로컬(`APP_ENV` 없음)에서만. dev·stg·prd면 기동 거부(2026-11-01부터 dev 포함).
-- stg·prd에서 `BATCH_API_KEY`·`EXECUTOR_API_KEY`가 비면 기동 거부. 템플릿 값(`<exe-key>`처럼 `<`로 시작하거나 `REPLACE`가 들어간 값)이 남아 있어도 기동 거부.
-- `SERVICE_KEYS_ENABLED: false`(로컬 전용): executor·pr-batch에 key를 보내지 않는다(둘 다 header 모드일 때). 이때 위 key 값은 무시한다. `APP_ENV`가 있으면(dev·stg·prd) false는 기동 거부이고 key가 필수다(2026-11-01부터 dev도 api_key 모드).
+- **key 방식만 있다** (2026-11-01): 헤더 모드(`AUTH_MODE: header`, `SERVICE_KEYS_ENABLED: false`)는 코드에서 삭제했다. 들어오는 쪽은 언제나 `X-Api-Key`, 나가는 쪽도 언제나 우리 key를 보낸다. executor·pr-batch도 헤더 모드를 삭제한다. 옛 설정 키가 남아 있어도 무시된다.
+- `APP_ENV`가 있으면(dev·stg·prd) `BATCH_API_KEY`·`EXECUTOR_API_KEY`가 비면 기동 거부. 설정 어디에든 템플릿 값(`<...>`, `REPLACE`)이 남아 있거나, `SSO_ADAPTER: idp`인데 `SSO_ALLOWED_ORIGINS`가 비어 있어도 기동 거부. 로컬은 executor compose의 로컬 key를 쓴다(`docker-compose.yml`, `.env.example`).
 - 로그 마스킹: `X-Api-Key`, `pas_*`·`exe_*`·`bat_*` 패턴을 접근·오류·httpx 로그에서 지운다.
 
 ## 8. 테스트
@@ -188,7 +186,7 @@ REDIS_URL: "redis://…"              # 지금과 같음 (세션·큐·executor 
 - 게이트웨이: 외부 호출자는 그 tenant로, SSO 사용자는 `pr-agentic-service`로 넘어간다. pr-batch PATCH에는 `X-Tenant-Id`가 없다. executor 운영 경로는 404.
 - 이벤트: DB에 없는 대화형 `execution_id`는 버린다. 배치 이벤트는 executor 재조회로 확인한 경우에만 리포트를 만들고, payload의 `context`를 위조해도 owner는 재조회 값이다.
 - 사용자 비활성화 시 `disable-by-owner`가 호출되고, 실패하면 재시도한다.
-- 기동: `APP_ENV` 있음(dev·stg·prd) + `AUTH_MODE: header`면 실패.
+- 기동: `APP_ENV` 있음(dev·stg·prd) + key 없음·템플릿 값·빈 `SSO_ALLOWED_ORIGINS`면 실패.
 
 ## 9. 배포
 
@@ -217,12 +215,12 @@ REDIS_URL: "redis://…"              # 지금과 같음 (세션·큐·executor 
 
 - **tenant 값**: 우리 tenant는 설정 `EXECUTOR_TENANT_ID`(`dtest-agent-service`, 2026-11-01)입니다. 이 문서의 `pr-agentic-service`는 그 값을 가리킵니다. executor·pr-batch의 우리 key 항목 `tenant`도 같은 이름이어야 합니다.
 - **executor 게이트웨이와 브라우저**: `/api/v1/executor/{path}`는 key 호출자의 입구이면서, 기존처럼 브라우저(SSO)의 조회 중계도 계속 맡습니다(실행 이력·시스템 화면). 쿠키 요청은 403이 아니라 기존 규칙(멤버십 확인 후 시스템 조회, 관리자 경로)으로 처리합니다. 쓰기와 `/artifacts/*`는 key 호출자만 씁니다.
-- **runtime·maintenance**: executor의 admin 전용 API라 운영 key `EXECUTOR_ADMIN_API_KEY`로 부릅니다. `EXECUTOR_API_KEY`는 있는데 운영 key가 비어 있으면 시스템 화면의 그 탭은 503 `EXECUTOR_ADMIN_KEY_MISSING`입니다. 둘 다 비어 있으면(로컬 header 모드 executor) key 없이 부릅니다.
-- **tenant 헤더**: 우리 executor 호출은 모두 `X-Tenant-Id: EXECUTOR_TENANT_ID`를 붙입니다(운영 API 제외). header 모드 executor는 key가 없으면 tenant를 `dev`로 잡기 때문입니다. 우리 relay key는 `allowed_tenants: ["*"]`라 따로 맞출 것이 없습니다.
+- **runtime·maintenance**: executor의 admin 전용 API라 운영 key `EXECUTOR_ADMIN_API_KEY`로 부릅니다. `EXECUTOR_API_KEY`는 있는데 운영 key가 비어 있으면 시스템 화면의 그 탭은 503 `EXECUTOR_ADMIN_KEY_MISSING`입니다. key 없이 부르는 경우는 없습니다.
+- **tenant 헤더**: 우리 executor 호출은 모두 `X-Tenant-Id: EXECUTOR_TENANT_ID`를 붙입니다(운영 API 제외). 범위가 key의 기본 tenant에 기대지 않게 하기 위해서입니다. 우리 relay key는 `allowed_tenants: ["*"]`라 따로 맞출 것이 없습니다.
 - **관리자 실행 목록의 사용자 필터**: executor가 `user_id` 파라미터를 받지 않으므로 그 값을 `X-User-Id`로 바꿔 보냅니다.
 - **비활성화 재시도**: 사용자 비활성화 때 바로 `disable-by-owner`를 부르고, 실패하면 `users.batches_disable_pending`이 남아 워커가 5분마다 다시 부릅니다.
 - **key 발급 상태** (2026-11-01 변경): 모든 키는 발급하면 바로 `active`입니다. 활성화 단계(`/activate`)는 없앴습니다. 접두어는 `pas_live_`(stg·prd)·`pas_dev_`(local·dev).
-- **dev도 key 모드** (2026-11-01 변경): dev·stg·prd 모두 들어오는 쪽은 `AUTH_MODE: api_key`, 나가는 쪽은 발급받은 key를 보냅니다. `AUTH_MODE: header`와 `SERVICE_KEYS_ENABLED: false`는 로컬(`APP_ENV` 없음)에서만 됩니다.
+- **헤더 모드 삭제** (2026-11-01 변경): 로컬을 포함한 모든 환경이 key 방식만 씁니다. `AUTH_MODE`·`SERVICE_KEYS_ENABLED` 설정은 없어졌습니다(남아 있어도 무시).
 - **tenant 폐기와 배치** (2026-11-01): 다른 tenant의 마지막 active key가 폐기되면(개별 폐기나 `POST /admin/api-clients/tenants/{tenant}/revoke`) pr-batch `POST /api/v1/batches:disable-by-tenant`(`X-Tenant-Id`, `{"reason": "TENANT_REVOKED"}`)를 부릅니다. 실패하면 `api_clients.batches_disable_pending`이 남고 워커가 5분마다 다시 부릅니다(멱등). 우리 tenant는 대상이 아닙니다.
 - **비활성 사번은 다른 tenant 키로도 막음** (2026-11-01): executor·배치 게이트웨이에서 다른 tenant 키가 보낸 `X-User-Id`가 우리가 비활성화한 사용자의 사번이면 403입니다. 우리 사용자 목록에 없는 사번은 그대로 통과합니다.
 - **X-User-Id 범위** (2026-10-29 결정): 우리 API와 우리 tenant 키는 우리 활성 사용자만 받고, `users.id` 또는 사번을 받아 `users.id`로 바꿔 넘깁니다. 다른 tenant 키가 executor·배치 게이트웨이를 부를 때는 형식만 확인하고 받은 값을 그대로 넘깁니다(그 tenant 공간 안의 사용자).

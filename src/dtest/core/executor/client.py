@@ -45,8 +45,8 @@ class ExecutorClient:
     the original receipt.
 
     ``tenant`` (our ``EXECUTOR_TENANT_ID``) goes as ``X-Tenant-Id`` on every
-    call that names no other: an executor in header mode (local only) has no
-    key to take it from and would file our executions under its default.
+    call that names no other, so the scope never depends on the key's
+    default tenant.
     """
 
     def __init__(
