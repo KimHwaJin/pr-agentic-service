@@ -22,7 +22,7 @@ from uuid import UUID
 
 import httpx
 from fastapi import APIRouter, HTTPException, Request, Response
-from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
+from fastapi.responses import HTMLResponse, StreamingResponse
 
 from api_service.deps import (
     PROJECT_ID,
@@ -192,43 +192,6 @@ _ALLOWED: list[tuple[str, str]] = [
     ("POST", rf"batches/{_ID}/runs/{_ID}/cancel"),
 ]
 ROUTES = [(m, re.compile(p)) for m, p in _ALLOWED]
-# answers that are a batch (or a list of them): what the caller may do with
-# it is added here, so a client never works it out from the other fields
-BATCH_VIEWS = re.compile(rf"batches(/{_ID}(/(enable|disable))?)?")
-
-
-def with_actions(batch: dict) -> dict:
-    """A pr-batch batch plus can_enable / can_disable.
-
-    pr-batch refuses to enable a batch without a schedule
-    (409 SCHEDULE_REQUIRED); enable_blocked_reason names that code.
-    """
-    enabled = bool(batch.get("enabled"))
-    blocked = (
-        "SCHEDULE_REQUIRED"
-        if not enabled and batch.get("schedule") is None
-        else None
-    )
-    return {
-        **batch,
-        "can_enable": not enabled and blocked is None,
-        "can_disable": enabled,
-        "enable_blocked_reason": blocked,
-    }
-
-
-def _batch_views(body):
-    if isinstance(body, dict) and isinstance(body.get("items"), list):
-        return {
-            **body,
-            "items": [
-                with_actions(b) if isinstance(b, dict) else b
-                for b in body["items"]
-            ],
-        }
-    if isinstance(body, dict) and "enabled" in body:
-        return with_actions(body)
-    return body
 
 
 def relayed(method: str, path: str) -> bool:
@@ -320,21 +283,6 @@ async def batch_gateway(
         for k, v in result.headers.items()
         if k.lower() in {"etag", "location", "content-type"}
     }
-    if (
-        BATCH_VIEWS.fullmatch(path)
-        and request.method != "DELETE"
-        and "json" in result.headers.get("content-type", "")
-    ):
-        try:
-            await result.aread()
-        finally:
-            await result.aclose()
-        passthrough.pop("content-type", None)
-        return JSONResponse(
-            _batch_views(result.json()),
-            status_code=result.status_code,
-            headers=passthrough,
-        )
 
     async def chunks():
         try:

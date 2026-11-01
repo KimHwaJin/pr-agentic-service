@@ -96,7 +96,9 @@ def test_relay_streams_and_maps_connection_errors(client, monkeypatch):
     assert down.status_code == 502
 
 
-def test_batches_say_what_the_caller_may_do(client, monkeypatch):
+def test_batch_flags_come_from_pr_batch_as_sent(client, monkeypatch):
+    """can_enable / can_disable / enable_blocked_reason are pr-batch's:
+    the gateway relays them untouched (no rule of its own)."""
     import httpx
 
     async def identity(*args, **kwargs):
@@ -107,9 +109,24 @@ def test_batches_say_what_the_caller_may_do(client, monkeypatch):
 
     listing = {
         "items": [
-            {"id": "a", "enabled": True, "schedule": {"cron": "0 * * * *"}},
-            {"id": "b", "enabled": False, "schedule": {"cron": "0 * * * *"}},
-            {"id": "c", "enabled": False, "schedule": None},
+            {
+                "id": "a",
+                "enabled": False,
+                "schedule": None,
+                "can_enable": False,
+                "can_disable": False,
+                "enable_blocked_reason": "SCHEDULE_REQUIRED",
+            },
+            {
+                # pr-batch knows the runtime is gone; a schedule is not
+                # enough, and the gateway does not second-guess it
+                "id": "b",
+                "enabled": False,
+                "schedule": {"cron": "0 * * * *"},
+                "can_enable": False,
+                "can_disable": False,
+                "enable_blocked_reason": "UNKNOWN_RUNTIME",
+            },
         ],
         "next_cursor": None,
     }
@@ -118,7 +135,7 @@ def test_batches_say_what_the_caller_may_do(client, monkeypatch):
         if request.url.path.endswith("/enable"):
             return httpx.Response(
                 200,
-                json={"id": ID, "enabled": True, "schedule": {}},
+                json={"id": ID, "enabled": True, "can_disable": True},
                 headers={"etag": '"3"'},
             )
         return httpx.Response(200, json=listing)
@@ -130,19 +147,10 @@ def test_batches_say_what_the_caller_may_do(client, monkeypatch):
     monkeypatch.setattr(batch, "gateway_identity", who)
     monkeypatch.setattr(batch, "batch_headers", lambda s, w: {})
     monkeypatch.setattr(batch, "_client", lambda services: upstream)
-    items = client.get(
-        "/api/v1/batch/batches", headers={"X-Api-Key": "x"}
-    ).json()["items"]
-    assert [
-        (b["can_enable"], b["can_disable"], b["enable_blocked_reason"])
-        for b in items
-    ] == [
-        (False, True, None),
-        (True, False, None),
-        (False, False, "SCHEDULE_REQUIRED"),
-    ]
+    got = client.get("/api/v1/batch/batches", headers={"X-Api-Key": "x"})
+    assert got.json() == listing
     enabled = client.post(
         f"/api/v1/batch/batches/{ID}/enable", headers={"X-Api-Key": "x"}
     )
     assert enabled.headers["etag"] == '"3"'
-    assert enabled.json()["can_disable"] is True
+    assert enabled.json() == {"id": ID, "enabled": True, "can_disable": True}

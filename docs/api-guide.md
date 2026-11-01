@@ -271,7 +271,7 @@ executor가 응답하지 않으면 502 `EXECUTOR_UNAVAILABLE`, 시간 초과는 
 
 ## 8. 배치 (pr-batch 진입점)
 
-- `/api/v1/batch/{path}` → pr-batch `/api/v1/{path}`로 그대로 중계됩니다(`Idempotency-Key`, `If-Match` 헤더 전달). 배치를 돌려주는 응답(`GET /batches`의 `items[]`, `GET·PATCH /batches/{id}`, `POST /batches`, `POST /batches/{id}/enable|disable`)에는 서버가 `can_enable`, `can_disable`, `enable_blocked_reason`(켤 수 없는 이유 코드, 예: `SCHEDULE_REQUIRED` = 일정이 없음, 아니면 null)을 붙입니다. 켜기·끄기 버튼은 이 값으로만 보여 줍니다. 사용자 인증은 이 서비스가 처리하고, pr-batch에는 우리 key와 `X-User-Id`를 붙입니다. API key 호출자도 같은 경로를 씁니다.
+- `/api/v1/batch/{path}` → pr-batch `/api/v1/{path}`로 그대로 중계됩니다(`Idempotency-Key`, `If-Match` 헤더 전달). 배치 객체에는 pr-batch가 주는 `can_enable`(지금 켜기가 되는지), `can_disable`(지금 끄기가 되는지), `enable_blocked_reason`(꺼져 있고 켤 수 없을 때 켜기가 돌려줄 오류 코드, 아니면 null)이 있고, 이 서비스는 그대로 전달합니다. 코드: `EXECUTOR_NOT_CONFIGURED`(503), `SCHEDULE_REQUIRED`(409, 일정 없음), `RUNTIMES_NOT_CONFIGURED`(503), `RUNTIME_NOT_SUPPORTED`(422), `UNKNOWN_RUNTIME`(422), `NO_FUTURE_OCCURRENCE`(422, 남은 실행 시각 없음). 켜기·끄기 버튼은 이 값으로만 보여 줍니다. `can_enable`이 true여도 그사이 시간이 지나거나 배치가 바뀌면 켜기가 거절될 수 있으니, 켜기 응답의 오류는 그대로 보여 주세요. 사용자 인증은 이 서비스가 처리하고, pr-batch에는 우리 key와 `X-User-Id`를 붙입니다. API key 호출자도 같은 경로를 씁니다.
 - 배치 등록(`POST /batches`)에만 tenant(`X-Tenant-Id`: 브라우저는 우리, key 호출자는 그 tenant)와 프로젝트(요청의 `X-Project-Id`, 우리 tenant면 멤버만)가 붙습니다. 본문에 `tenant_id`를 넣으면 pr-batch가 422로 거부합니다. 배치의 프로젝트는 바꿀 수 없어서 옮기려면 새로 만듭니다.
 - 사용자가 비활성화되면 그 사람의 배치가 꺼집니다(`disabled_reason: USER_DEACTIVATED`). 그 배치의 수동 실행은 409 `OWNER_DEACTIVATED`입니다.
 - `POST /api/v1/batch/scripts/from-notebook` `{artifact_id, name?}`: 세션 노트북을 배치 스크립트로 등록합니다.
