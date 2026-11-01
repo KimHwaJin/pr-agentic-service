@@ -178,16 +178,38 @@ async def search_tools(query: str, runtime: Runtime) -> str:
     return "\n".join(lines) or "없음"
 
 
+def _recommend(runtime: Runtime) -> dict[str, Any]:
+    """This run's search results and rejection (state ``recommend``)."""
+    found = runtime.state.get("recommend") or {}
+    if found.get("run_id") != runtime.context.run_id:
+        return {"run_id": runtime.context.run_id, "similarity": {}}
+    return found
+
+
 @tool
-async def search_workflows(query: str, runtime: Runtime) -> str:
+async def search_workflows(query: str, runtime: Runtime) -> Command:
     """Search registered (promoted) workflow templates similar to the
     user's request."""
     ctx = runtime.context
     hits = await ctx.services.workflows.search(
         query, limit=ctx.services.settings.plan_candidates
     )
+    # the similarity the server measured decides an auto-run later, never
+    # a number the model passes on
+    found = _recommend(runtime)
+    recommend = {
+        **found,
+        "similarity": {
+            **found["similarity"],
+            **{h["workflow"].id: h["similarity"] for h in hits},
+        },
+    }
     if not hits:
-        return "추천할 워크플로우가 없습니다. 새로 계획하세요."
+        return _reply(
+            runtime,
+            "추천할 워크플로우가 없습니다. 새로 계획하세요.",
+            recommend=recommend,
+        )
     lines = []
     for h in hits:
         w = h["workflow"]
@@ -199,7 +221,7 @@ async def search_workflows(query: str, runtime: Runtime) -> str:
             f"name={w.name}\n"
             f"  user_request: {w.user_request}\n  calls: {calls}"
         )
-    return "\n".join(lines)
+    return _reply(runtime, "\n".join(lines), recommend=recommend)
 
 
 # --- planning ----------------------------------------------------------------
@@ -235,6 +257,22 @@ async def propose_plans(
     """
     ctx = runtime.context
     services = ctx.services
+    settings = services.settings
+    recommend = _recommend(runtime)
+    if recommend.get("rejected"):
+        refused = [
+            f"후보 {i} ({c.get('title') or f'계획 {i + 1}'})"
+            for i, c in enumerate(candidates)
+            if c.get("workflow_id")
+        ]
+        if refused:
+            return _reply(
+                runtime,
+                "계획 검증 실패. 사용자가 추천 워크플로우를 거절했으므로 "
+                f"workflow_id 후보를 쓸 수 없습니다: {', '.join(refused)}. "
+                f"calls로 새 계획을 {settings.plan_candidates}개 설계해 "
+                "다시 제안하세요.",
+            )
     skills, tools = services.skills("analysis"), services.tool_catalog()
     prepared, problems = [], []
     references: dict[str, set[str]] = {}
@@ -309,17 +347,8 @@ async def propose_plans(
     if not prepared:
         return _reply(runtime, "제안할 계획이 없습니다.")
 
-    first = prepared[0]
-    missing = [
-        s["key"]
-        for s in first["input_slots"]
-        if s["required"] and s["value"] is None
-    ]
-    if (
-        first["source"]
-        and first["document"]["workflow"]["allow_immediate_execution"]
-        and not missing
-    ):
+    if _auto_run(prepared, recommend, settings.workflow_auto_run_similarity):
+        first = prepared[0]
         choice: Any = {
             "action": "approve",
             "index": 0,
@@ -330,12 +359,28 @@ async def propose_plans(
             {"title": first["title"], "source": first["source"]},
         )
     else:
-        choice = interrupt({"type": "plan_approval", "candidates": prepared})
+        choice = interrupt(
+            {
+                "type": "plan_approval",
+                "candidates": prepared,
+                # every candidate a template: "none of these, design anew"
+                "allow_reject_templates": all(c["source"] for c in prepared),
+            }
+        )
 
     if not isinstance(choice, dict) or choice.get("action") == "cancel":
         return _reply(
             runtime,
             "사용자가 계획을 취소했습니다. 이유를 묻거나 분석을 종료하세요.",
+        )
+    if choice.get("action") == "reject_templates":
+        return _reply(
+            runtime,
+            "사용자가 추천 워크플로우를 거절했습니다. workflow_id 후보는 "
+            "쓰지 말고, calls로 새 계획을 "
+            f"{settings.plan_candidates}개 설계해 propose_plans로 다시 "
+            "제안하세요.",
+            recommend={**recommend, "rejected": True},
         )
     if choice.get("action") == "revise":
         return _reply(
@@ -405,6 +450,25 @@ async def propose_plans(
         "run_plan으로 실행하세요.",
         plan=plan,
     )
+
+
+def _auto_run(
+    prepared: list[dict[str, Any]],
+    recommend: dict[str, Any],
+    threshold: float,
+) -> bool:
+    """Run without the approval card: one template candidate the template
+    allows to run at once, every required input given, and a search
+    similarity of this run at least ``threshold`` (keyword search: none)."""
+    if len(prepared) != 1 or not prepared[0]["source"]:
+        return False
+    first = prepared[0]
+    if not first["document"]["workflow"]["allow_immediate_execution"]:
+        return False
+    if any(s["required"] and s["value"] is None for s in first["input_slots"]):
+        return False
+    similarity = recommend["similarity"].get(first["source"]["workflow_id"])
+    return similarity is not None and similarity >= threshold
 
 
 def _by_call_index(errors: list[str], keys: list[str]) -> list[str]:

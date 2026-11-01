@@ -166,16 +166,20 @@ Swagger(`/docs`)에서는 Authorize 버튼에 `X-Api-Key`·`X-User-Id`가 있고
 
 ## 4. HITL (사용자 확인)
 
-`hitl_request.type`별 화면과 `POST /sessions/{id}/runs`의 `command.resume.value`입니다. 질문 종류마다 답(reply) 모델이 정해져 있고 OpenAPI(`Resume.value`)에 나옵니다: `PlanApproveReply`·`PlanReviseReply`·`PlanCancelReply`(`action`으로 구분), `CodeApprovalReply`, `WorkflowSaveReply`, question은 문자열 또는 객체(`QuestionReply`).
+`hitl_request.type`별 화면과 `POST /sessions/{id}/runs`의 `command.resume.value`입니다. 질문 종류마다 답(reply) 모델이 정해져 있고 OpenAPI(`Resume.value`)에 나옵니다: `PlanApproveReply`·`PlanReviseReply`·`PlanCancelReply`·`PlanRejectTemplatesReply`(`action`으로 구분), `CodeApprovalReply`, `WorkflowSaveReply`, question은 문자열 또는 객체(`QuestionReply`).
 
 서버는 run이 기다리는 질문 종류의 모델로 답을 검사합니다(모르는 항목, 틀린 타입은 거절). 그다음 질문 내용과 맞는지 검사합니다(후보 번호 범위, 필수 입력칸, 계획에 없는 파라미터). 맞지 않으면 422 `INVALID_ANSWER`와 `details[]`(`location`, `message`)를 돌려줍니다. `location`은 `["body", "command", "resume", "value", ...]`이고, 입력칸 키(`0.1.lot_cd`)는 한 칸으로 들어갑니다. 문자열도 객체도 아닌 값(숫자, 목록 등)은 본문 검사에서 422 `INVALID_BODY`가 됩니다.
 
 | type | 받는 데이터 | value |
 | --- | --- | --- |
 | `question` | `question`, `options[]`, `fields[]` | 문자열 답변, 또는 fields가 있으면 `{<key>: 값, ...}` |
-| `plan_approval` | `candidates[]`: `{title, rationale, source(워크플로우 출처 또는 null), document(Workflow 1.0), calls[], input_slots[]}`. `calls[]`: `{index, key, skill, skill_description, tool, summary, execution, condition, params[]}`, `params[]`: `{name, type, required, doc, key, source(literal\|input\|tool_output\|default), value, default, ref}` | `{"action": "approve", "index": 0, "input_values": {"0.0.lot_cd": "L1"}, "overrides": {"1.0.sample_size": 500}}` / `{"action": "revise", "feedback": "..."}` / `{"action": "cancel"}` |
+| `plan_approval` | `allow_reject_templates`(후보가 모두 등록된 워크플로우일 때만 true), `candidates[]`: `{title, rationale, source(워크플로우 출처 또는 null), document(Workflow 1.0), calls[], input_slots[]}`. `calls[]`: `{index, key, skill, skill_description, tool, summary, execution, condition, params[]}`, `params[]`: `{name, type, required, doc, key, source(literal\|input\|tool_output\|default), value, default, ref}` | `{"action": "approve", "index": 0, "input_values": {"0.0.lot_cd": "L1"}, "overrides": {"1.0.sample_size": 500}}` / `{"action": "revise", "feedback": "..."}` / `{"action": "cancel"}` / `{"action": "reject_templates"}`(`allow_reject_templates`가 true일 때만) |
 | `code_approval` | `purpose`, `code`, `code_level` | `{"approve": true, "code": "수정한 코드(선택)"}` / `{"approve": false, "feedback": "..."}` |
 | `workflow_save` | `name`, `user_queries[]`, `tags[]`, `document`, `excluded_custom_steps` | `{"approve": true, "name": "...", "user_queries": [...]}` / `{"approve": false}` |
+
+`reject_templates`는 "추천 말고 새로 만들기"입니다. 추천 워크플로우를 모두 거절하고 Agent에게 새 계획을 설계해 다시 제안하게 합니다. 같은 턴에서 Agent는 등록된 워크플로우를 다시 후보로 낼 수 없고, 새 `plan_approval`이 옵니다. `allow_reject_templates`가 false인 질문에 보내면 422 `INVALID_ANSWER`(`location` 끝이 `action`)입니다. 버튼은 `allow_reject_templates`가 true일 때만 보여 주세요.
+
+계획 승인 카드 없이 바로 실행되는 경우(`plan_auto_approved` 이벤트)는 후보가 등록된 워크플로우 하나뿐이고, 그 워크플로우가 즉시 실행을 허용하고(`allow_immediate_execution`), 필수 입력이 모두 요청에서 채워졌고, 서버의 임베딩 검색 유사도가 `WORKFLOW_AUTO_RUN_SIMILARITY`(기본 0.97) 이상일 때뿐입니다. 키워드 검색(임베딩 없음)에서는 항상 카드가 옵니다.
 
 `input_values`의 키는 `"<step_index>.<tool_index>.<파라미터>"`입니다. 값은 입력칸 글자 그대로 문자열로 보내도 됩니다. 서버가 파라미터 `type`에 맞춰 바꿉니다. 예를 들어 `int`이면 `"500"`을 500으로, `list`이면 `"[1, 2]"`를 목록으로, 빈 글자는 `None`을 허용하는 칸에서 null로 바꿉니다. `str` 칸은 `"123"`도 글자 그대로 둡니다. 바꿀 수 없는 값은 422 `INVALID_ANSWER`이고 `details`에 기대한 타입이 나옵니다. JSON 값(숫자, 목록)을 직접 보내도 됩니다. `required`가 true인 칸이 비어 있으면 승인되지 않습니다.
 

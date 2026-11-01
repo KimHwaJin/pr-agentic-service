@@ -188,6 +188,15 @@ def _plan(waiting: Waiting, value: Any) -> Errors:
     action = value["action"]
     if action == "cancel":
         return []
+    if action == "reject_templates":
+        if waiting.get("allow_reject_templates"):
+            return []
+        return [
+            _err(
+                "value.action",
+                "추천 워크플로우만 있는 계획에서만 거절할 수 있습니다",
+            )
+        ]
     if action == "revise":
         if _empty(value.get("feedback")):
             return [_err("value.feedback", "수정 요청 내용을 입력하세요")]

@@ -172,7 +172,7 @@ sequenceDiagram
 
 | 도구 | 내용 |
 | --- | --- |
-| `propose_plans` | 모델은 평평한 호출 목록(`{"skill","tool","args"}`, `"$input"`, `"@0.data"`)만 쓰고, 서버가 Workflow 1.0 문서로 바꾸고 검증합니다(`plan_format.py`, `core/workflows/spec.py`). 추천 템플릿은 그대로 후보에 넣습니다. 사용자에게 `plan_approval` interrupt. |
+| `propose_plans` | 모델은 평평한 호출 목록(`{"skill","tool","args"}`, `"$input"`, `"@0.data"`)만 쓰고, 서버가 Workflow 1.0 문서로 바꾸고 검증합니다(`plan_format.py`, `core/workflows/spec.py`). 추천 템플릿은 그대로 후보에 넣습니다. 사용자에게 `plan_approval` interrupt. 후보가 템플릿 하나뿐이고 즉시 실행 허용·필수 입력 완비·이 run의 `search_workflows` 유사도(서버가 state `recommend`에 기록)가 `WORKFLOW_AUTO_RUN_SIMILARITY` 이상이면 카드 없이 승인합니다. 후보가 모두 템플릿이면 `reject_templates`(추천 거절)를 받을 수 있고, 거절 뒤 같은 run에서 `workflow_id` 후보는 검증 오류입니다. 추천 방식은 `PLAN_RECOMMEND_MODE`(mixed \| recommend_first)가 프롬프트 3번 문구를 고릅니다. |
 | `run_plan` | 승인된 계획에서 아직 안 한 호출을 조건부 호출 앞까지 묶어(segment) executor에 한 operation으로 보냅니다. 조건부 호출은 모델이 `decisions`로 실행 여부를 정해 다시 부릅니다. |
 | `run_custom_code` | 코드 레벨이 허락하면 모델이 쓴 코드를 `code_approval` interrupt로 승인받고 실행합니다. |
 | `revise_call` | 실행 중 실패한 호출의 인자만 고칩니다. |

@@ -127,6 +127,12 @@ class PlanCandidate(View):
 class PlanApprovalRequest(Pause):
     type: Literal["plan_approval"]
     candidates: list[PlanCandidate]
+    allow_reject_templates: bool = Field(
+        False,
+        description="후보가 모두 등록된 워크플로우(source 있음)일 때만 "
+        'true: action "reject_templates"로 추천을 거절하고 새 계획을 '
+        "요청할 수 있음",
+    )
 
 
 class CodeApprovalRequest(Pause):

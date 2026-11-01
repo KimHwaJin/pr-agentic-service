@@ -243,6 +243,7 @@ def test_openapi_documents_the_reply_models():
         "PlanApproveReply",
         "PlanReviseReply",
         "PlanCancelReply",
+        "PlanRejectTemplatesReply",
         "CodeApprovalReply",
         "WorkflowSaveReply",
     ]:
