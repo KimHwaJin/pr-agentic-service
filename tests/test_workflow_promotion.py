@@ -72,3 +72,61 @@ def test_can_promote_follows_the_mode():
     assert not workflows._can_promote(
         by_admin, _request(caller=object()), theirs, admin
     )
+
+
+def test_recommendable_is_decided_by_the_server():
+    def seen(lifecycle, index_state, embedder):
+        services = SimpleNamespace(
+            workflows=SimpleNamespace(embedder=embedder)
+        )
+        workflow = SimpleNamespace(
+            lifecycle=lifecycle, index_state=index_state
+        )
+        return workflows._recommendation(services, workflow)
+
+    assert seen("template", "ready", object()) == {
+        "recommendable": True,
+        "not_recommendable_reason": None,
+    }
+    # keyword search needs no index
+    assert seen("template", "not_indexed", None)["recommendable"]
+    candidate = seen("candidate", "ready", object())
+    assert not candidate["recommendable"]
+    assert "후보" in candidate["not_recommendable_reason"]
+    unindexed = seen("template", "failed", object())
+    assert not unindexed["recommendable"]
+    assert "색인" in unindexed["not_recommendable_reason"]
+
+
+def test_can_delete_matches_the_delete_rule():
+    mine = SimpleNamespace(author_id="u1")
+    user = SimpleNamespace(id="u1", role="user")
+    other = SimpleNamespace(id="u2", role="user")
+    admin = SimpleNamespace(id="u3", role="admin")
+    assert workflows._can_delete(mine, user)
+    assert not workflows._can_delete(mine, other)
+    assert workflows._can_delete(mine, admin)
+
+
+def test_me_permissions_follow_the_admin_routes():
+    from api_service.routers import users
+
+    def perms(role, caller=None):
+        request = cast(
+            Any, SimpleNamespace(state=SimpleNamespace(api_client=caller))
+        )
+        user = cast(Any, SimpleNamespace(role=role))
+        return users.permissions(request, user).model_dump()
+
+    assert perms("user") == {
+        "system": False,
+        "all_executions": False,
+        "execution_internals": False,
+    }
+    assert perms("admin") == {
+        "system": True,
+        "all_executions": True,
+        "execution_internals": True,
+    }
+    # admin APIs need an SSO login, not a service key
+    assert perms("admin", caller=object())["system"] is False

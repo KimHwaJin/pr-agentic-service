@@ -11,7 +11,7 @@
 | 3 | 이후 모든 호출 | `credentials: "include"`로 쿠키를 보냅니다. GET 외 요청에는 `X-CSRF-Token: <csrf_token>` 헤더가 필요합니다. |
 | - | `POST /api/v1/auth/logout` | 서비스 세션만 종료합니다(SSO 전체 로그아웃 아님). |
 
-`GET /api/v1/users/me` → `{user, default_project_id, can_switch_role}`
+`GET /api/v1/users/me` → `{user, default_project_id, can_switch_role, permissions}`. `permissions`: `{system, all_executions, execution_internals}`. 화면은 메뉴·필터·탭을 이 값으로 보여 줍니다. `system`은 시스템 화면(관리자 API, SSO 로그인 관리자만), `all_executions`는 실행 목록의 사용자 필터(모든 사용자의 실행), `execution_internals`는 실행의 진단·시도 탭입니다. 역할(`user.role`)을 비교해 판단하지 마세요
 
 `GET /api/v1/users/lookup?ids=a,b` → `{id: {id, employee_id, name, department}}`. executor 실행의 `context.user_id`처럼 화면에 나오는 사용자 ID를 이름·사번으로 바꿀 때 씁니다(한 번에 200개까지, 일반 사용자는 본인 ID만, 관리자는 전체).
 
@@ -112,7 +112,7 @@ Swagger(`/docs`)에서는 Authorize 버튼에 `X-Api-Key`·`X-User-Id`가 있고
 ```
 
 - 응답 202 `{run, resumed}`. 새 턴이면 `resumed: false`와 새 run, 재개면 `resumed: true`와 기다리던 그 run(같은 id)입니다. 진행은 SSE로 받습니다.
-- **이미지:** `image/png`, `image/jpeg`, `image/webp`만, 장당 10MB, 합계 20MB, 장수는 모델의 `max_images`까지. 긴 변이 1568px를 넘으면 서버가 줄입니다. 대화 기록에서는 `GET /api/v1/images/{image_id}`로 보여 줍니다. 모델은 최근 3턴의 이미지까지 봅니다.
+- **이미지:** `image/png`, `image/jpeg`, `image/webp`만, 장당 10MB, 합계 20MB, 장수는 모델의 `max_images`까지(넘으면 422 `INVALID_IMAGE`, `details[].context`에 `limit`·`requested`; 형식이 다르면 422). 화면은 미리 막지 말고 보내고, 서버 오류를 보여 줍니다. 긴 변이 1568px를 넘으면 서버가 줄입니다. 대화 기록에서는 `GET /api/v1/images/{image_id}`로 보여 줍니다. 모델은 최근 3턴의 이미지까지 봅니다.
 - **확인 대기 중에 `input`을 보내면** 그 글이 기다리던 확인에 대한 답이 됩니다: `question`은 답, `plan_approval`은 수정 요청 피드백, `code_approval`·`workflow_save`는 거절 + 그 글을 에이전트에게 전달. 응답은 `resumed: true`이고, 글은 대화 기록에 user 메시지로 남습니다.
 
 | 상태 | code | 언제 |
@@ -248,9 +248,9 @@ executor가 응답하지 않으면 502 `EXECUTOR_UNAVAILABLE`, 시간 초과는 
 | Method | Path | 설명 |
 | --- | --- | --- |
 | GET | `/projects/{id}/memory` | `{topics: [{topic, title, description, max_chars, content, lines[], version, updated_at}], topics_version, total_max_chars, limits}`. 주제 순서대로, 빈 주제 포함(`content: ""`, `version: 0`). `lines[]`: `{id, text, author(user\|agent), updated_at, source}` |
-| GET | `/projects/{id}/memory/topics` | `{topics: [{id, title, description, max_chars}], version, updated_at, total_max_chars, limits}`. `version: 0`은 기본 주제(고친 적 없음). `limits`: `{max_topics, min_topic_chars, title_max_chars, description_max_chars, total_max_chars}`로, PUT이 받아 주는 한도입니다. 화면에서 미리 검사할 때 이 값을 씁니다(숫자를 화면에 고정하지 않음) |
-| PUT | `/projects/{id}/memory/topics` | `{topics: [{id?, title, description?, max_chars, replace?}], expected_version}`. 목록 전체를 순서대로 보냅니다. **수정**: 기존 `id` 그대로 → 제목·설명·한도만 바뀌고 본문 유지(한도를 본문보다 낮춰도 됨: 그 뒤 줄이는 쓰기만 허용). **새 주제**: `id` 없음 → 새 id, 빈 본문(다음 대화부터 채워짐). **교체**: 기존 `id` + `replace: true` → 새 id·빈 본문. **삭제**: 목록에서 뺌. 교체·삭제된 본문은 이력(`topic_replaced`/`topic_removed`)에 남아 복원할 수 있습니다. 409 버전 불일치, 422 제한 위반·모르는 id |
-| PUT | `/projects/{id}/memory/{topic}` | `{content, expected_version}`. 주제 본문 전체를 바꿉니다. 바뀌지 않은 줄은 작성자를 유지하고, 새로 쓰거나 고친 줄은 `author=user`. 404 없는 주제, 409 버전 불일치, 422 한도 초과 또는 `# `·`## ` 제목 줄 |
+| GET | `/projects/{id}/memory/topics` | `{topics: [{id, title, description, max_chars}], version, updated_at, total_max_chars, limits}`. `version: 0`은 기본 주제(고친 적 없음). `limits`: `{max_topics, min_topic_chars, title_max_chars, description_max_chars, total_max_chars}`로, PUT이 받아 주는 한도입니다. 안내 문구(남은 글자 수, "최대 n개")에만 쓰고 저장 버튼을 막는 데 쓰지 않습니다. 판단은 PUT의 422가 합니다 |
+| PUT | `/projects/{id}/memory/topics` | `{topics: [{id?, title, description?, max_chars, replace?}], expected_version}`. 목록 전체를 순서대로 보냅니다. **수정**: 기존 `id` 그대로 → 제목·설명·한도만 바뀌고 본문 유지(한도를 본문보다 낮춰도 됨: 그 뒤 줄이는 쓰기만 허용). **새 주제**: `id` 없음 → 새 id, 빈 본문(다음 대화부터 채워짐). **교체**: 기존 `id` + `replace: true` → 새 id·빈 본문. **삭제**: 목록에서 뺌. 교체·삭제된 본문은 이력(`topic_replaced`/`topic_removed`)에 남아 복원할 수 있습니다. 409 버전 불일치, 422 `INVALID_BODY`: 제한 위반·모르는 id를 한 번에 모두 `details[]`로 돌려줍니다. `location`은 `["body", "topics", <순번>, "title"\|"description"\|"max_chars"\|"id"]`(그 칸 옆에 `message` 표시), 목록 전체 문제(개수, 한도 합계)는 `["body", "topics"]` |
+| PUT | `/projects/{id}/memory/{topic}` | `{content, expected_version}`. 주제 본문 전체를 바꿉니다. 바뀌지 않은 줄은 작성자를 유지하고, 새로 쓰거나 고친 줄은 `author=user`. 404 없는 주제, 409 버전 불일치, 422 한도 초과 또는 `# `·`## ` 제목 줄(`details[].location`이 `["body", "content"]`) |
 | GET | `/projects/{id}/memory/history?topic=&removed=&limit=` | 변경 이력(최신 먼저): `{id, topic, title, action(update\|delete\|revert\|migrate\|topic_removed\|topic_replaced\|topic_restored), before, after, version, replaced_by, actor{type,id}, session_id, run_id, created_at}`. `removed=true`면 교체·삭제된 주제만 |
 | POST | `/projects/{id}/memory/{topic}/revert` | `{history_id, expected_version?}`. 그 변경 직전 본문으로 되돌립니다(새 버전, 이력에 `revert`로 남음) |
 | POST | `/projects/{id}/memory/history/{history_id}/restore` | 교체·삭제된 주제를 그때의 제목·설명·한도·본문 그대로 목록 끝에 되살립니다(이력 `topic_restored`). 응답은 GET `/memory`와 같습니다. 개수·합계 제한을 넘으면 422(다른 주제를 줄이거나 지운 뒤 다시), 이미 있으면 409, 같은 제목이 있으면 제목 뒤에 " (복원)" |
@@ -262,16 +262,16 @@ executor가 응답하지 않으면 502 `EXECUTOR_UNAVAILABLE`, 시간 초과는 
 | Method | Path | 설명 |
 | --- | --- | --- |
 | POST | `/workflows` | `{document, user_queries[], tags[]}` → candidate (작성자만 보임) |
-| GET | `/workflows?lifecycle=&q=&tag=` | template 전체 + 내 candidate. 가벼운 요약: `steps`(skill 순서와 tool), `call_count`, `mine` (문서 본문 없음) |
+| GET | `/workflows?lifecycle=&q=&tag=` | template 전체 + 내 candidate. 가벼운 요약: `steps`(skill 순서와 tool), `call_count`, `mine`, `can_promote`, `can_delete`(작성자 또는 관리자: 삭제 버튼), `recommendable`(검색·추천에 걸릴 수 있는지), `not_recommendable_reason`(아니면 그 이유, 화면에 그대로 표시) (문서 본문 없음). 상세(`GET /workflows/{id}`)에도 같은 필드가 있습니다 |
 | POST | `/workflows/validate` | 문서 검증만 |
-| POST | `/workflows/search` | `{query}` → 승격된 template만 유사도 순 |
+| POST | `/workflows/search` | `{query}` → `{items: [{workflow, similarity, matched_query}]}`, 승격된 template만 유사도 순. 임베딩이 없는 키워드 검색이면 `similarity`·`matched_query`가 null입니다(0%로 보여 주지 말고 "키워드 검색"처럼 표시) |
 | GET/PATCH/DELETE | `/workflows/{id}` | GET은 문서 전체 + `calls`(tool별 설명·파라미터 출처·앞 단계 참조, 계획 승인 화면과 같은 형식) + `mine`. PATCH는 `expected_revision` 필수. DELETE는 작성자, 또는 관리자(template·candidate 모두) |
 | POST | `/workflows/{id}/promote` | candidate → template (검색·추천 대상). `WORKFLOW_PROMOTION=author`(기본)이면 작성자가 자기 워크플로를, `admin`이면 관리자만(SSO 로그인) 아무 워크플로나 승격합니다. 목록·상세의 `can_promote`가 true면 승격 버튼을 보여 주면 됩니다. `admin` 모드의 관리자(SSO)에게는 목록·상세에 다른 사람의 candidate도 보입니다. |
 | POST | `/workflows/{id}/clone`, `/workflows/{id}/reindex` | |
 
 ## 8. 배치 (pr-batch 진입점)
 
-- `/api/v1/batch/{path}` → pr-batch `/api/v1/{path}`로 그대로 중계됩니다(`Idempotency-Key`, `If-Match` 헤더 전달). 사용자 인증은 이 서비스가 처리하고, pr-batch에는 우리 key와 `X-User-Id`를 붙입니다. API key 호출자도 같은 경로를 씁니다.
+- `/api/v1/batch/{path}` → pr-batch `/api/v1/{path}`로 그대로 중계됩니다(`Idempotency-Key`, `If-Match` 헤더 전달). 배치를 돌려주는 응답(`GET /batches`의 `items[]`, `GET·PATCH /batches/{id}`, `POST /batches`, `POST /batches/{id}/enable|disable`)에는 서버가 `can_enable`, `can_disable`, `enable_blocked_reason`(켤 수 없는 이유 코드, 예: `SCHEDULE_REQUIRED` = 일정이 없음, 아니면 null)을 붙입니다. 켜기·끄기 버튼은 이 값으로만 보여 줍니다. 사용자 인증은 이 서비스가 처리하고, pr-batch에는 우리 key와 `X-User-Id`를 붙입니다. API key 호출자도 같은 경로를 씁니다.
 - 배치 등록(`POST /batches`)에만 tenant(`X-Tenant-Id`: 브라우저는 우리, key 호출자는 그 tenant)와 프로젝트(요청의 `X-Project-Id`, 우리 tenant면 멤버만)가 붙습니다. 본문에 `tenant_id`를 넣으면 pr-batch가 422로 거부합니다. 배치의 프로젝트는 바꿀 수 없어서 옮기려면 새로 만듭니다.
 - 사용자가 비활성화되면 그 사람의 배치가 꺼집니다(`disabled_reason: USER_DEACTIVATED`). 그 배치의 수동 실행은 409 `OWNER_DEACTIVATED`입니다.
 - `POST /api/v1/batch/scripts/from-notebook` `{artifact_id, name?}`: 세션 노트북을 배치 스크립트로 등록합니다.

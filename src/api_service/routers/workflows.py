@@ -1,4 +1,5 @@
 import re
+from typing import Any
 
 from fastapi import APIRouter, Request, Response
 
@@ -63,6 +64,27 @@ def _can_promote(services, request: Request, workflow, user) -> bool:
     return workflow.author_id == user.id
 
 
+def _can_delete(workflow, user) -> bool:
+    """What delete_workflow allows: the author, or any administrator."""
+    return workflow.author_id == user.id or user.role == "admin"
+
+
+def _recommendation(services, workflow) -> dict[str, Any]:
+    """Whether a search can find it, and why not (shown as written)."""
+    reason = None
+    if workflow.lifecycle != "template":
+        reason = "아직 후보라 추천 대상이 아닙니다. 공개(승격)하면 추천됩니다."
+    elif services.workflows.embedder and workflow.index_state != "ready":
+        reason = (
+            "추천 질문이 아직 색인되지 않아 추천되지 않습니다. "
+            "재색인하거나 잠시 뒤 다시 확인하세요."
+        )
+    return {
+        "recommendable": reason is None,
+        "not_recommendable_reason": reason,
+    }
+
+
 def _summary(services, request: Request, workflow, user) -> WorkflowSummary:
     steps = steps_summary(workflow.document)
     return WorkflowSummary.model_validate(
@@ -76,6 +98,8 @@ def _summary(services, request: Request, workflow, user) -> WorkflowSummary:
             "call_count": sum(len(s["tools"]) for s in steps),
             "mine": workflow.author_id == user.id,
             "can_promote": _can_promote(services, request, workflow, user),
+            "can_delete": _can_delete(workflow, user),
+            **_recommendation(services, workflow),
         }
     )
 
@@ -93,6 +117,8 @@ def _detail(services, request: Request, workflow, user) -> WorkflowDetail:
             "calls": calls,
             "mine": workflow.author_id == user.id,
             "can_promote": _can_promote(services, request, workflow, user),
+            "can_delete": _can_delete(workflow, user),
+            **_recommendation(services, workflow),
         }
     )
 

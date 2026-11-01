@@ -87,9 +87,24 @@ TOPIC_ACTIONS = ("topic_removed", "topic_replaced")
 
 
 class MemoryEditError(Exception):
-    def __init__(self, status: int, message: str):
+    """``details``: (location, message) per offending value, so a client
+    shows each next to its field (location as in the request body)."""
+
+    def __init__(
+        self,
+        status: int,
+        message: str,
+        details: list[tuple[list[str | int], str]] | None = None,
+    ):
         super().__init__(message)
         self.status = status
+        self.details = details or []
+
+    @classmethod
+    def invalid(
+        cls, details: list[tuple[list[str | int], str]]
+    ) -> "MemoryEditError":
+        return cls(422, "; ".join(m for _, m in details), details)
 
 
 @dataclass(frozen=True)
@@ -129,17 +144,21 @@ def check_content(topic: Topic, content: str, before: int = 0) -> None:
     """422 past the limit, unless the body shrinks (``before`` = old
     length; a migrated body or a lowered limit may start over it)."""
     max_chars = topic["max_chars"]
+    problems: list[tuple[list[str | int], str]] = []
     if len(content) > max_chars and len(content) > before:
-        raise MemoryEditError(
-            422,
-            f"{topic['title']} exceeds {max_chars} characters "
-            f"({len(content)})",
-        )
-    for line in content.split("\n"):
-        if HEADING.match(line):
-            raise MemoryEditError(
-                422, "'# ' and '## ' headings are not allowed; use '###'"
+        problems.append(
+            (
+                ["content"],
+                f"{topic['title']} exceeds {max_chars} characters "
+                f"({len(content)})",
             )
+        )
+    if any(HEADING.match(line) for line in content.split("\n")):
+        problems.append(
+            (["content"], "'# ' and '## ' headings are not allowed; use '###'")
+        )
+    if problems:
+        raise MemoryEditError.invalid(problems)
 
 
 def diff_lines(
@@ -191,35 +210,43 @@ def check_topics(
     A topic with an ``id`` must be one of ``known`` (ids are generated
     here, never chosen by the client).
     """
+    problems: list[tuple[list[str | int], str]] = []
     if not topics:
-        raise MemoryEditError(422, "at least one topic is needed")
+        problems.append((["topics"], "at least one topic is needed"))
     if len(topics) > MAX_TOPICS:
-        raise MemoryEditError(422, f"at most {MAX_TOPICS} topics")
+        problems.append((["topics"], f"at most {MAX_TOPICS} topics"))
     out, ids, titles = [], set(), set()
-    for raw in topics:
+    for i, raw in enumerate(topics):
+        at = ["topics", i]
         topic_id = raw.get("id") or None
         if topic_id is not None:
             if topic_id not in known:
-                raise MemoryEditError(422, f"unknown topic id: {topic_id}")
-            if topic_id in ids:
-                raise MemoryEditError(422, f"topic {topic_id} given twice")
+                problems.append(([*at, "id"], f"unknown topic id: {topic_id}"))
+            elif topic_id in ids:
+                problems.append(([*at, "id"], f"topic {topic_id} given twice"))
             ids.add(topic_id)
         title = " ".join(str(raw.get("title") or "").split())
         if not title:
-            raise MemoryEditError(422, "a topic needs a title")
-        if len(title) > TITLE_MAX_CHARS:
-            raise MemoryEditError(
-                422, f"title over {TITLE_MAX_CHARS} characters: {title}"
+            problems.append(([*at, "title"], "a topic needs a title"))
+        elif len(title) > TITLE_MAX_CHARS:
+            problems.append(
+                (
+                    [*at, "title"],
+                    f"title over {TITLE_MAX_CHARS} characters: {title}",
+                )
             )
-        if title.casefold() in titles:
-            raise MemoryEditError(422, f"two topics are titled {title}")
-        titles.add(title.casefold())
+        elif title.casefold() in titles:
+            problems.append(([*at, "title"], f"two topics are titled {title}"))
+        if title:
+            titles.add(title.casefold())
         description = " ".join(str(raw.get("description") or "").split())
         if len(description) > DESCRIPTION_MAX_CHARS:
-            raise MemoryEditError(
-                422,
-                f"{title}: description over {DESCRIPTION_MAX_CHARS} "
-                "characters",
+            problems.append(
+                (
+                    [*at, "description"],
+                    f"{title}: description over {DESCRIPTION_MAX_CHARS} "
+                    "characters",
+                )
             )
         max_chars = raw.get("max_chars")
         if (
@@ -227,9 +254,13 @@ def check_topics(
             or isinstance(max_chars, bool)
             or max_chars < MIN_TOPIC_CHARS
         ):
-            raise MemoryEditError(
-                422, f"{title}: max_chars must be at least {MIN_TOPIC_CHARS}"
+            problems.append(
+                (
+                    [*at, "max_chars"],
+                    f"{title}: max_chars must be at least {MIN_TOPIC_CHARS}",
+                )
             )
+            max_chars = 0
         out.append(
             {
                 "id": topic_id,
@@ -241,11 +272,15 @@ def check_topics(
         )
     total = sum(t["max_chars"] for t in out)
     if total > total_max_chars:
-        raise MemoryEditError(
-            422,
-            f"limits add up to {total} characters, over the total "
-            f"{total_max_chars}",
+        problems.append(
+            (
+                ["topics"],
+                f"limits add up to {total} characters, over the total "
+                f"{total_max_chars}",
+            )
         )
+    if problems:
+        raise MemoryEditError.invalid(problems)
     return out
 
 
