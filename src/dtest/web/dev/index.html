@@ -335,7 +335,6 @@
   .cand > .cand-tab { border: 0; border-radius: 0; background: transparent; box-shadow: none !important; }
   .cand .cand-pane { display: none; padding: 4px 12px 12px; border-top: 1px solid var(--line); background: var(--panel); }
   .cand.on .cand-pane { display: block; }
-  .cand .ct .state { margin-left: auto; font-size: 11.5px; }
   .state.need { color: var(--accent); background: #fde9df; border-radius: 999px; padding: 2px 8px; font-size: 11.5px; }
   .state.ok { color: var(--ok); }
   .badge.rec { background: #fde9df; color: var(--accent); }
@@ -385,6 +384,7 @@
   .param input { width: 100%; border: 1px solid var(--line); border-radius: 8px; padding: 6px 9px; background: var(--bg); font-size: 13px; outline: none; }
   .param input:focus { border-color: var(--faint); }
   .param.need input { background: #fff8f3; border-color: #f0c9b3; }
+  .field-err { color: var(--bad); font-size: 12px; margin-top: 4px; }
   .param.need input:not(:placeholder-shown) { background: var(--bg); border-color: var(--line); }
   .param .help { grid-column: 2; font-size: 11.5px; color: var(--faint); margin-top: -2px; }
   .tag { font-size: 10.5px; padding: 1px 6px; border-radius: 6px; margin-left: 4px; vertical-align: 1px; }
@@ -813,7 +813,7 @@ async function api(path, opts = {}) {
     // opts.errorText: this call's own wording by status (e.g. 409 on delete)
     const text = opts.errorText?.[r.status] || CODE_TEXT[err.code] || err.message;
     showError(`${text}${err.code ? ` (${err.code})` : ''}${fields ? ` · ${fields}` : ''}`, r.headers.get('x-request-id'));
-    throw new Error(r.status);
+    throw Object.assign(new Error(r.status), { api: err });
   }
   return data;
 }
@@ -1173,13 +1173,16 @@ async function renderMessages(sessionId, cursor = null) {
   if (!cursor) { log.appendChild(frag); scrollDown(); }
   return frag;
 }
+// plan_auto_approved: the server skipped the approval card for a close template
+const autoRunText = d => `승인 없이 바로 실행 · 등록된 워크플로우 「${d.source?.name || d.title}」${d.source?.similarity != null ? ` (유사도 ${(d.source.similarity * 100).toFixed(1)}%)` : ''}`;
 async function runHistory(runId) {
-  const { items } = await api(`/runs/${runId}/events?types=tool_call,plan_approved,execution_completed,context_summarized`);
+  const { items } = await api(`/runs/${runId}/events?types=tool_call,plan_auto_approved,plan_approved,execution_completed,context_summarized`);
   const out = [];
   const steps = items.filter(e => e.type !== 'execution_completed');
   if (steps.length) {
     const act = document.createElement('details'); act.className = 'activity'; act.dataset.done = '1';
     const line = e => e.type === 'plan_approved' ? ['✓', `계획 승인 · ${e.data.title}`]
+      : e.type === 'plan_auto_approved' ? ['✓', autoRunText(e.data)]
       : e.type === 'context_summarized' ? ['✓', `이전 대화 정리 · 메시지 ${e.data.messages}개를 요약`]
       : ['·', toolText(e.data)];
     act.innerHTML = `<summary><span class="done-ico"></span><span class="t">작업 ${steps.length}단계</span><span class="chev">›</span></summary><div class="steps">${steps.map(e => { const [ico, text] = line(e);
@@ -1274,7 +1277,7 @@ function openStream() {
   on('tool_call', e => { if (S.answerEl) { const raw = S.answerEl.dataset.raw.trim(); S.answerEl.remove(); if (raw) note(raw); } S.answerEl = null; step('tool', toolText(e.data)); });
   on('agent_switched', e => step('switch', e.data.agent === 'analyst' ? '분석 담당이 이어서 진행' : '대화 담당으로 복귀'));
   on('plan_approved', e => step('ok', `계획 승인 · ${e.data.title}`));
-  on('plan_auto_approved', e => step('ok', `등록된 워크플로우로 바로 실행 · ${e.data.title}`));
+  on('plan_auto_approved', e => step('ok', autoRunText(e.data)));
   on('plan_revised', e => step('tool', `파라미터 수정 · #${e.data.call}`));
   on('execution_progress', e => { if (e.data.event_type === 'execution.step_completed') step(e.data.status === 'SUCCEEDED' ? 'ok' : 'bad', `단계 ${e.data.step?.sequence ?? ''} ${e.data.status === 'SUCCEEDED' ? '완료' : '실패'}`); });
   on('execution_completed', e => renderResults(e.data));
@@ -1442,15 +1445,15 @@ function renderPlanApproval(w, resume) {
   // Accordion: plan -> its tools (grouped by skill) -> a tool's parameters
   const items = w.candidates.map((c, i) => `<div class="cand ${i === 0 ? 'on' : ''}" data-i="${i}">
       <button class="cand-tab ${i === 0 ? 'on' : ''}" data-i="${i}">
-        <div class="ct"><span class="n">${i + 1}</span><b>${esc(c.title)}</b>${c.source ? `<span class="badge rec" title="등록된 워크플로우: ${esc(c.source.name)} (r${c.source.revision})">추천 워크플로우</span>` : '<span class="badge">새 계획</span>'}<span class="state"></span></div>
-        ${c.source ? `<div class="crat">등록된 워크플로우 「${esc(c.source.name)}」를 바탕으로 한 계획입니다.</div>` : ''}
+        <div class="ct"><span class="n">${i + 1}</span><b>${esc(c.title)}</b>${c.source ? `<span class="badge rec" title="등록된 워크플로우: ${esc(c.source.name)} (r${c.source.revision})">추천 워크플로우</span>` : '<span class="badge">새 계획</span>'}</div>
+        ${c.source ? `<div class="crat">등록된 워크플로우 「${esc(c.source.name)}」를 바탕으로 한 계획입니다.${c.source.similarity != null ? ` 요청과의 유사도 ${(c.source.similarity * 100).toFixed(1)}%` : ''}</div>` : ''}
         ${c.rationale ? `<div class="crat">${esc(c.rationale)}</div>` : ''}
       </button>
       <div class="cand-pane">
         ${groupsOf(c).map((g, gi) => `<div class="skill-head"><span class="seq">${gi + 1}</span><b>${esc(g.skill)}</b><span>${esc(g.desc)}</span></div>
           ${g.calls.map(call => {
             const shown = call.params.filter(p => p.source !== 'default'), defaults = call.params.filter(p => p.source === 'default');
-            return `<details class="tool-row"><summary><span class="chev">›</span><span class="no">#${call.index}</span><b>${esc(call.tool)}</b>${call.execution === 'conditional' ? '<span class="badge">조건부</span>' : ''}<span class="tsum">${esc(call.summary)}</span><span class="state"></span></summary>
+            return `<details class="tool-row"><summary><span class="chev">›</span><span class="no">#${call.index}</span><b>${esc(call.tool)}</b>${call.execution === 'conditional' ? '<span class="badge">조건부</span>' : ''}<span class="tsum">${esc(call.summary)}</span></summary>
               <div class="tool-body">
                 ${call.condition ? `<div class="cond">실행 조건: ${esc(call.condition)} — 앞 단계 결과를 보고 Agent가 판단합니다.</div>` : ''}
                 ${shown.map(p => paramRow(p)).join('') || '<div class="tsum">설정할 파라미터가 없습니다.</div>'}
@@ -1461,25 +1464,29 @@ function renderPlanApproval(w, resume) {
     </div>`).join('');
   body.innerHTML = `<div class="cand-tabs">${items}</div>`;
   foot.innerHTML = `<div class="row"><input id="fb" placeholder="수정 요청 (예: 표본을 500개로, 상관분석도 추가)"><button class="btn" id="rev">수정 요청</button></div>
-    <div class="row" style="justify-content:flex-end"><span id="need" style="flex:1;font-size:12px;color:var(--accent)"></span><button class="btn" id="no">취소</button>${w.allow_reject_templates ? '<button class="btn" id="anew">추천 말고 새로 만들기</button>' : ''}<button class="btn primary" id="ok">승인하고 실행</button></div>`;
+    <div class="row" style="justify-content:flex-end"><span id="need" style="flex:1;font-size:12px;color:var(--bad)"></span><button class="btn" id="no">취소</button>${w.allow_reject_templates ? '<button class="btn" id="anew">추천 말고 새로 만들기</button>' : ''}<button class="btn primary" id="ok">승인하고 실행</button></div>`;
+  // Whether a plan can run is the server's call: approve always sends, and a
+  // 422 INVALID_ANSWER puts its details next to the fields it names.
   let current = 0;
   const pane = () => body.querySelector(`.cand[data-i="${current}"] .cand-pane`);
-  const check = () => {
-    const missingIn = el => [...el.querySelectorAll('input[data-required="1"]')].filter(i => !i.value.trim()).length;
-    body.querySelectorAll('.tool-row').forEach(t => { const n = missingIn(t.querySelector('.tool-body')); t.querySelector(':scope > summary .state').outerHTML = n ? `<span class="state need">입력 ${n}</span>` : '<span class="state"></span>'; });
-    body.querySelectorAll('.cand').forEach(c => { const n = missingIn(c.querySelector('.cand-pane')); c.querySelector('.ct .state').outerHTML = n ? `<span class="state need">입력 필요 ${n}</span>` : '<span class="state ok">✓ 준비됨</span>'; });
-    const missing = [...pane().querySelectorAll('input[data-required="1"]')].filter(i => !i.value.trim()).length;
-    foot.querySelector('#need').textContent = missing ? `입력이 필요한 값 ${missing}개` : '';
-    foot.querySelector('#ok').disabled = !!missing; foot.querySelector('#ok').style.opacity = missing ? .45 : 1;
+  const clearErrors = () => { body.querySelectorAll('.field-err').forEach(e => e.remove()); foot.querySelector('#need').textContent = ''; };
+  const showErrors = err => {
+    const rest = [];
+    for (const d of err?.details || []) {
+      const [field, key] = (d.location || []).slice(4);  // body.command.resume.value.<field>.<key>
+      const el = key && pane().querySelector(`input[data-key="${CSS.escape(key)}"]`);
+      if (el) { el.closest('.param').insertAdjacentHTML('beforeend', `<div class="field-err">${esc(d.message)}</div>`); el.closest('details.tool-row')?.setAttribute('open', ''); }
+      else rest.push(d.message);
+    }
+    foot.querySelector('#need').textContent = rest.join(' · ');
   };
+  const send = async value => { clearErrors(); try { await resume(value); } catch (e) { if (e.api) showErrors(e.api); } };
   body.querySelectorAll('.cand-tab').forEach(t => t.onclick = () => {
     const item = t.closest('.cand'), reopen = !item.classList.contains('on');
-    current = +t.dataset.i;
+    current = +t.dataset.i; clearErrors();
     body.querySelectorAll('.cand').forEach(x => { x.classList.toggle('on', x === item && reopen); x.querySelector('.cand-tab').classList.toggle('on', x === item); });
     if (!reopen) item.classList.remove('on');  // clicking the open plan folds it; it stays the selected one
-    check();
   });
-  body.addEventListener('input', check); check();
   foot.querySelector('#ok').onclick = () => {
     const input_values = {}, overrides = {};
     for (const el of pane().querySelectorAll('input[data-key]')) {
@@ -1487,12 +1494,12 @@ function renderPlanApproval(w, resume) {
       if (el.dataset.source === 'input') { if (value !== null) input_values[el.dataset.key] = value; }
       else if (el.value !== el.dataset.initial && value !== null) overrides[el.dataset.key] = value;
     }
-    resume({ action: 'approve', index: current, input_values, overrides });
+    send({ action: 'approve', index: current, input_values, overrides });
   };
-  foot.querySelector('#rev').onclick = () => resume({ action: 'revise', feedback: foot.querySelector('#fb').value });
-  foot.querySelector('#no').onclick = () => resume({ action: 'cancel' });
-  const anew = foot.querySelector('#anew');  // only when every candidate is a template
-  if (anew) anew.onclick = () => resume({ action: 'reject_templates' });
+  foot.querySelector('#rev').onclick = () => send({ action: 'revise', feedback: foot.querySelector('#fb').value });
+  foot.querySelector('#no').onclick = () => send({ action: 'cancel' });
+  const anew = foot.querySelector('#anew');  // shown when the server sets allow_reject_templates
+  if (anew) anew.onclick = () => send({ action: 'reject_templates' });
 }
 
 function paramRow(p) {
@@ -1501,8 +1508,7 @@ function paramRow(p) {
   if (p.source === 'tool_output') return `<div class="param">${label}<div class="ref">← #${p.ref.call} ${esc(p.ref.tool)} · ${esc(p.ref.output)}</div>${help}</div>`;
   const initial = fmt(p.value);
   if (p.source === 'input') {
-    const need = p.required && p.value == null;
-    return `<div class="param ${need ? 'need' : ''}">${label.replace('</div>', `${p.required ? '<span class="tag user">입력 필요</span>' : '<span class="tag opt">선택 입력</span>'}</div>`)}
+    return `<div class="param ${p.required ? 'need' : ''}">${label.replace('</div>', `${p.required ? '<span class="tag user">입력 필요</span>' : '<span class="tag opt">선택 입력</span>'}</div>`)}
       <input data-key="${esc(p.key)}" data-type="${esc(p.type || '')}" data-source="input" data-required="${p.required ? 1 : 0}" data-initial="${esc(initial)}" value="${esc(initial)}" placeholder="${p.required ? '값을 입력하세요' : '비워두면 기본값'}">${help}</div>`;
   }
   if (p.source === 'literal') return `<div class="param">${label.replace('</div>', '<span class="tag agent">Agent</span></div>')}<input data-key="${esc(p.key)}" data-type="${esc(p.type || '')}" data-source="literal" data-initial="${esc(initial)}" value="${esc(initial)}">${help}</div>`;

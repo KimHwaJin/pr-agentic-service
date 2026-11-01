@@ -151,7 +151,8 @@ Swagger(`/docs`)에서는 Authorize 버튼에 `X-Api-Key`·`X-User-Id`가 있고
 | `message_final` | `{content}` | 확정 답변 (Markdown) |
 | `tool_call` | `{name, args, label}` | 백그라운드 메시지 (Agent가 하는 일). 화면에는 `label`(예: "실행 계획 작성", "분석 skill 확인 · eda")을 그대로 보여 줍니다. 도구 이름별 문구 표를 프론트가 따로 둘 필요가 없습니다. 리포트를 쓰는 동안에는 리포트 에이전트가 Step 결과를 다시 읽는 `read_step`("Step 3 결과 확인")이 올 수 있습니다 |
 | `agent_switched` | `{agent: main\|analyst, task?}` | 담당 전환 표시 |
-| `plan_approved`, `plan_auto_approved`, `plan_revised` | 계획 정보 | 백그라운드 메시지 |
+| `plan_approved`, `plan_revised` | 계획 정보 | 백그라운드 메시지 |
+| `plan_auto_approved` | `{title, source{workflow_id, revision, name, similarity}}` | 승인 카드 없이 등록된 워크플로우로 바로 실행됨. 사용자가 알 수 있게 표시합니다(예: "승인 없이 바로 실행 · 워크플로우 이름 (유사도)"). 이어서 `plan_approved`가 옵니다 |
 | `execution_progress` | `{event_type, status, step, error, reason?, paused_seconds?, finished_during_handover?}` | executor 단계별 진행. `event_type`이 `execution.step_handover_started`면 실행 중인 단계를 다른 executor 워커가 넘겨받는 중(`reason`: `EXECUTOR_SHUTDOWN`\|`EXECUTOR_UNRESPONSIVE`, 커널은 계속 실행되고 코드가 다시 돌지 않음), `execution.step_handover_completed`면 넘겨받기 완료(`paused_seconds`: 멈춰 있던 초). 둘 다 정보 표시용이며 이어서 같은 단계의 `execution.step_completed`가 옵니다 |
 | `execution_completed` | `{execution_id, results: [{call, tool, status, observations, stdout, images[], error}], error}` | 실행 순서대로 담긴 단계 결과. `call`은 계획의 tool 번호(사용자 코드는 null, 대신 `id`). 이미지는 5장 참고 |
 | `hitl_request` | `{interrupt_id, type, ...}` | 사용자 입력 카드 (4장) |
@@ -173,7 +174,7 @@ Swagger(`/docs`)에서는 Authorize 버튼에 `X-Api-Key`·`X-User-Id`가 있고
 | type | 받는 데이터 | value |
 | --- | --- | --- |
 | `question` | `question`, `options[]`, `fields[]` | 문자열 답변, 또는 fields가 있으면 `{<key>: 값, ...}` |
-| `plan_approval` | `allow_reject_templates`(후보가 모두 등록된 워크플로우일 때만 true), `candidates[]`: `{title, rationale, source(워크플로우 출처 또는 null), document(Workflow 1.0), calls[], input_slots[]}`. `calls[]`: `{index, key, skill, skill_description, tool, summary, execution, condition, params[]}`, `params[]`: `{name, type, required, doc, key, source(literal\|input\|tool_output\|default), value, default, ref}` | `{"action": "approve", "index": 0, "input_values": {"0.0.lot_cd": "L1"}, "overrides": {"1.0.sample_size": 500}}` / `{"action": "revise", "feedback": "..."}` / `{"action": "cancel"}` / `{"action": "reject_templates"}`(`allow_reject_templates`가 true일 때만) |
+| `plan_approval` | `allow_reject_templates`(후보가 모두 등록된 워크플로우일 때만 true), `candidates[]`: `{title, rationale, source(워크플로우 출처 `{workflow_id, revision, name, similarity}` 또는 null; similarity는 서버가 잰 검색 유사도 0~1, 키워드 검색이면 null), document(Workflow 1.0), calls[], input_slots[]}`. `calls[]`: `{index, key, skill, skill_description, tool, summary, execution, condition, params[]}`, `params[]`: `{name, type, required, doc, key, source(literal\|input\|tool_output\|default), value, default, ref}` | `{"action": "approve", "index": 0, "input_values": {"0.0.lot_cd": "L1"}, "overrides": {"1.0.sample_size": 500}}` / `{"action": "revise", "feedback": "..."}` / `{"action": "cancel"}` / `{"action": "reject_templates"}`(`allow_reject_templates`가 true일 때만) |
 | `code_approval` | `purpose`, `code`, `code_level` | `{"approve": true, "code": "수정한 코드(선택)"}` / `{"approve": false, "feedback": "..."}` |
 | `workflow_save` | `name`, `user_queries[]`, `tags[]`, `document`, `excluded_custom_steps` | `{"approve": true, "name": "...", "user_queries": [...]}` / `{"approve": false}` |
 
@@ -181,7 +182,7 @@ Swagger(`/docs`)에서는 Authorize 버튼에 `X-Api-Key`·`X-User-Id`가 있고
 
 계획 승인 카드 없이 바로 실행되는 경우(`plan_auto_approved` 이벤트)는 후보가 등록된 워크플로우 하나뿐이고, 그 워크플로우가 즉시 실행을 허용하고(`allow_immediate_execution`), 필수 입력이 모두 요청에서 채워졌고, 서버의 임베딩 검색 유사도가 `WORKFLOW_AUTO_RUN_SIMILARITY`(기본 0.77) 이상일 때뿐입니다. 키워드 검색(임베딩 없음)에서는 항상 카드가 옵니다.
 
-`input_values`의 키는 `"<step_index>.<tool_index>.<파라미터>"`입니다. 값은 입력칸 글자 그대로 문자열로 보내도 됩니다. 서버가 파라미터 `type`에 맞춰 바꿉니다. 예를 들어 `int`이면 `"500"`을 500으로, `list`이면 `"[1, 2]"`를 목록으로, 빈 글자는 `None`을 허용하는 칸에서 null로 바꿉니다. `str` 칸은 `"123"`도 글자 그대로 둡니다. 바꿀 수 없는 값은 422 `INVALID_ANSWER`이고 `details`에 기대한 타입이 나옵니다. JSON 값(숫자, 목록)을 직접 보내도 됩니다. `required`가 true인 칸이 비어 있으면 승인되지 않습니다.
+`input_values`의 키는 `"<step_index>.<tool_index>.<파라미터>"`입니다. 값은 입력칸 글자 그대로 문자열로 보내도 됩니다. 서버가 파라미터 `type`에 맞춰 바꿉니다. 예를 들어 `int`이면 `"500"`을 500으로, `list`이면 `"[1, 2]"`를 목록으로, 빈 글자는 `None`을 허용하는 칸에서 null로 바꿉니다. `str` 칸은 `"123"`도 글자 그대로 둡니다. 바꿀 수 없는 값은 422 `INVALID_ANSWER`이고 `details`에 기대한 타입이 나옵니다. JSON 값(숫자, 목록)을 직접 보내도 됩니다. `required`가 true인 칸이 비어 있으면 승인되지 않습니다. 승인할 수 있는지는 서버가 판단합니다. 화면은 승인 버튼을 막지 말고 보내고, 422 `details`의 `location`(`[..., "value", "input_values", "<키>"]`)으로 해당 칸 옆에 `message`를 보여 주면 됩니다.
 
 ## 5. 결과물
 

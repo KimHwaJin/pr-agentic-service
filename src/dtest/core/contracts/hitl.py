@@ -58,6 +58,11 @@ class WorkflowSource(View):
     workflow_id: str
     revision: int
     name: str
+    similarity: float | None = Field(
+        None,
+        description="이번 턴의 워크플로우 검색에서 서버가 잰 유사도 (0~1). "
+        "키워드 검색(임베딩 없음)이거나 검색 없이 쓰인 워크플로우면 null",
+    )
 
 
 class ParamRef(View):

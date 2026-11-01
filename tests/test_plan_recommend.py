@@ -152,6 +152,7 @@ def test_one_template_close_enough_runs_at_once(
     assert asked.seen == []
     assert runtime.events == ["plan_auto_approved", "plan_approved"]
     assert result.update["plan"]["source"]["workflow_id"] == "w1"
+    assert result.update["plan"]["source"]["similarity"] == 0.98
 
 
 def test_two_candidates_always_show_the_card(skills, tools, template, asked):
@@ -179,6 +180,8 @@ def test_similarity_below_the_auto_run_bar_shows_the_card(
     _search(runtime)
     _propose(runtime, [_template_candidate("w1", template, tools)])
     assert len(asked.seen) == 1
+    # the card shows the similarity the server measured
+    assert asked.seen[0]["candidates"][0]["source"]["similarity"] == 0.75
 
 
 def test_keyword_search_never_runs_at_once(skills, tools, template, asked):
@@ -204,6 +207,12 @@ def test_similarity_comes_from_this_runs_search_only(
     runtime = _runtime(skills, tools, wf, state=stale)
     _propose(runtime, [_template_candidate("w1", template, tools)])
     assert len(asked.seen) == 2
+    assert [
+        p["candidates"][0]["source"]["similarity"] for p in asked.seen
+    ] == [
+        None,
+        None,
+    ]
 
 
 # --- allow_reject_templates and reject_templates -------------------------
