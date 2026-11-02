@@ -1713,12 +1713,14 @@ async function loadRuns(id) {
       <td>${esc(r.trigger)}</td><td>${fmtTime(start) || '<span class="muted">-</span>'}</td><td>${fmtTime(end) || '<span class="muted">-</span>'}</td><td>${dur(start, end)}</td>
       <td onclick="event.stopPropagation()">${nb ? `<a target="_blank" href="/view/artifacts/${nb}">보기</a>` : '<span class="muted">-</span>'}</td>
       <td onclick="event.stopPropagation()">${rep ? `<a href="#" onclick="event.preventDefault(); $('runsModal').classList.remove('open'); openReport('${rep.id}')">${reportBadge(rep.state)}</a>` : `<span class="muted">${r.status === 'COMPLETED' ? '대기 중' : '-'}</span>`}</td>
-      <td onclick="event.stopPropagation()">${CANCELLABLE.includes(r.status) && !r.cancel_requested ? `<button class="ghost" style="color:var(--bad)" onclick="cancelRun('${id}', '${r.id}')">취소</button>` : (r.cancel_requested && !['CANCELLED', 'COMPLETED', 'FAILED'].includes(r.status) ? '<span class="muted">취소 중</span>' : '')}</td></tr>`;
+      <td onclick="event.stopPropagation()">${CANCELLABLE.includes(r.status) && !r.cancel_requested ? `<button class="ghost" style="color:var(--bad)" onclick="cancelBatchRun('${id}', '${r.id}')">취소</button>` : (r.cancel_requested && !['CANCELLED', 'COMPLETED', 'FAILED'].includes(r.status) ? '<span class="muted">취소 중</span>' : '')}</td></tr>`;
   }).join('')}</tbody></table>` : '<div class="muted">아직 실행이 없습니다.</div>';
 }
 // pr-batch cancels waiting, queued and running runs (the executor run too)
 const CANCELLABLE = ['WAITING', 'QUEUED', 'RUNNING'];
-async function cancelRun(batchId, runId) {
+// not cancelRun: that name is the chat's stop button, and a second
+// declaration of it would replace that one
+async function cancelBatchRun(batchId, runId) {
   if (!confirm('이 실행을 취소할까요? executor에서 돌고 있으면 함께 멈춥니다.')) return;
   await api(`/batch/batches/${batchId}/runs/${runId}/cancel`, { method: 'POST', headers: idemKey() });
   loadRuns(batchId);
