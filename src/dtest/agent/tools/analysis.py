@@ -832,6 +832,20 @@ async def _submit_now(
     return [receipt, execution]
 
 
+def _operation_steps(receipt: dict, execution: dict) -> dict[str, str]:
+    """{label: step_id} of the steps this operation submitted.
+
+    Read from the receipt's step list, not from execution["steps"]: that
+    map holds every step of the execution, and a call run again has a
+    step under the same label each time. Its order cannot pick the newest
+    either: it comes back from the store (jsonb), which sorts the keys.
+    """
+    return {
+        execution["steps"][s["step_id"]]: s["step_id"]
+        for s in receipt["operation"]["steps"]
+    }
+
+
 def _wait_operation(execution: dict, receipt: dict) -> dict[str, Any]:
     """Pause until the executor reports the operation.
 
@@ -1010,9 +1024,7 @@ async def run_plan(
     event = _wait_operation(execution, receipt)
     execution, results, error = _apply_event(execution, event)
 
-    by_label = {
-        label: step_id for step_id, label in execution["steps"].items()
-    }
+    by_label = _operation_steps(receipt, execution)
     report: dict[str, Any] = {}
     ordered: list[dict[str, Any]] = []  # event payload: jsonb drops key order
     for call in segment:

@@ -1,4 +1,4 @@
-from src.dtest.agent.tools.analysis import _segment
+from src.dtest.agent.tools.analysis import _operation_steps, _segment
 from src.dtest.core.workflows import spec
 
 
@@ -80,3 +80,27 @@ def test_compact_plan_to_workflow(skills, tools):
         "0.0.data_type": "nce"
     }
     assert plan_format.describe(document)[1]["args"] == {"data": "@0.data"}
+
+
+def test_a_call_run_again_is_read_from_its_newest_step():
+    # 1.1 ran three times; the store (jsonb) hands execution["steps"]
+    # back with its keys sorted, so the newest step is not the last one
+    old, older, newest = (
+        "f0000000-0000-0000-0000-000000000000",
+        "e0000000-0000-0000-0000-000000000000",
+        "10000000-0000-0000-0000-000000000000",
+    )
+    execution = {
+        "steps": dict(
+            sorted(
+                {
+                    older: "1.1",
+                    old: "1.1",
+                    "a0000000-0000-0000-0000-000000000000": "1.2",
+                    newest: "1.1",
+                }.items()
+            )
+        )
+    }
+    receipt = {"operation": {"steps": [{"sequence": 7, "step_id": newest}]}}
+    assert _operation_steps(receipt, execution) == {"1.1": newest}
