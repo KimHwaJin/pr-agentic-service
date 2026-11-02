@@ -99,22 +99,30 @@ class SharedStorage:
     ) -> Path | None:
         """A result file of one execution, or None.
 
-        ``relative_path`` (under the shared root, as events give it) must
-        stay inside ``executions/<execution_id>/`` once resolved: a path
-        such as ``executions/<mine>/../<other>/...`` would otherwise reach
-        any execution's files on the shared volume.
+        ``relative_path`` comes from the browser, as events gave it: the
+        executor's path relative to the shared root, used as is (e.g.
+        ``executor/executions/<id>/...`` or ``executions/<id>/...``).
+        Once resolved it must stay under the shared root, outside our own
+        input folder, and inside an ``executions/<execution_id>/`` folder:
+        a path such as ``executions/<mine>/../<other>/...`` would otherwise
+        reach any execution's files on the shared volume.
         """
-        own = (self.result_root / "executions" / execution_id).resolve()
+        if "/" in execution_id or execution_id in {"", ".", ".."}:
+            return None
+        root = self.result_root.resolve()
         path = (self.result_root / relative_path).resolve()
         if (
-            "/" in execution_id
-            or execution_id in {"", ".", ".."}
-            or path == own
-            or not path.is_relative_to(own)
+            not path.is_relative_to(root)
+            or path.is_relative_to(self.storage_root.resolve())
             or not path.is_file()
         ):
             return None
-        return path
+        parts = path.relative_to(root).parts
+        owned = any(
+            parts[i] == "executions" and parts[i + 1] == execution_id
+            for i in range(len(parts) - 2)
+        )
+        return path if owned else None
 
     def resolve_result(self, relative_path: str) -> Path:
         path = (self.result_root / relative_path).resolve()

@@ -95,6 +95,9 @@ def test_only_our_own_sources_are_read(tmp_path):
 
 def test_result_ref_names_the_execution_and_step():
     assert step_of(REF) == (EXECUTION, STEP)
+    # relative to the common root, under the executor's folder
+    prefixed = {"relative_path": "executor/" + REF["relative_path"]}
+    assert step_of(prefixed) == (EXECUTION, STEP)
     assert step_of({"relative_path": "elsewhere/x.json"}) is None
     assert step_of(None) is None
 

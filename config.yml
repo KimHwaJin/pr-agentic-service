@@ -65,12 +65,12 @@ EMBEDDING_DIMS: 1024
 
 # Executor. STORAGE_ROOT: this service's folder on the executor input PV
 # (mounted here), STORAGE_EXECUTOR_PATH: the same folder relative to the
-# executor's INPUT_STORAGE_ROOT, EXECUTOR_RESULT_ROOT: the mount of its
-# SHARED_STORAGE_ROOT.
+# executor's INPUT_STORAGE_ROOT, EXECUTOR_RESULT_ROOT: the mount of the
+# common root (/mnt/data/dtest) the executor's result paths are relative to.
 EXECUTOR_TENANT_ID: dtest-agent-service
 STORAGE_ROOT: /mnt/data/dtest/dtest-agent-service
 STORAGE_EXECUTOR_PATH: dtest-agent-service
-EXECUTOR_RESULT_ROOT: /mnt/data/dtest/executor
+EXECUTOR_RESULT_ROOT: /mnt/data/dtest
 EXECUTOR_EVENT_STREAM: executor.events
 EXECUTOR_EVENT_RECOVERY_SECONDS: 120
 EXECUTOR_RUNTIME_PROFILE: default
