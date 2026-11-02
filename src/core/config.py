@@ -322,6 +322,9 @@ class Settings(BaseSettings):
     # a tool failing with the same error this many times in a row in one
     # turn is not run again; the model explains the error instead
     agent_tool_failure_limit: int = Field(3, ge=1)
+    # ... and failing this many times in a row with any errors (a failed
+    # execution's traceback changes with every new try of the code)
+    agent_tool_failure_any_limit: int = Field(5, ge=1)
     # model calls of the report agent writing an analysis report inside a
     # chat turn (the user waits; batch reports have their own limit)
     report_model_call_limit: int = Field(8, ge=2)

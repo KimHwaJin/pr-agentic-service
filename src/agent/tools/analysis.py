@@ -53,12 +53,20 @@ Runtime = ToolRuntime[RunContext, AnalysisState]
 EXECUTION_TOOLS = ("run_plan", "run_custom_code")
 
 
-def _reply(runtime: Runtime, content: str, **update: Any) -> Command:
+def _reply(
+    runtime: Runtime, content: str, failed: bool = False, **update: Any
+) -> Command:
+    """failed: the result is an error (a failed execution), so the
+    failure limit counts it."""
     return Command(
         update={
             **update,
             "messages": [
-                ToolMessage(content, tool_call_id=runtime.tool_call_id)
+                ToolMessage(
+                    content,
+                    tool_call_id=runtime.tool_call_id,
+                    status="error" if failed else "success",
+                )
             ],
         }
     )
@@ -1035,6 +1043,8 @@ async def run_plan(
     return _reply(
         runtime,
         json.dumps(summary, ensure_ascii=False, default=str),
+        failed=bool(error)
+        or any(r["status"] not in ("SUCCEEDED", "NOT_RUN") for r in ordered),
         plan=plan,
         execution=execution,
     )
@@ -1131,7 +1141,8 @@ async def run_custom_code(
         ensure_ascii=False,
         default=str,
     )
-    return _reply(runtime, body, plan=plan, execution=execution)
+    failed = bool(error) or view["status"] != "SUCCEEDED"
+    return _reply(runtime, body, failed=failed, plan=plan, execution=execution)
 
 
 # --- wrap-up -----------------------------------------------------------------

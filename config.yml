@@ -107,9 +107,13 @@ WORKFLOW_AUTO_RUN_SIMILARITY: 0.77
 # author: the author promotes their own; admin: administrators only
 WORKFLOW_PROMOTION: author
 AGENT_RECURSION_LIMIT: 200
+# model calls of one user turn, counted across executor waits and approvals
 AGENT_MODEL_CALL_LIMIT: 40
 # same tool, same error, this many times in a row in one turn: not run again
 AGENT_TOOL_FAILURE_LIMIT: 3
+# same tool, any errors, this many times in a row in one turn (a failed
+# execution's traceback changes with each new try of the code)
+AGENT_TOOL_FAILURE_ANY_LIMIT: 5
 # model calls of the report agent for an analysis report (read_step rounds
 # plus submit_report); the user waits for it inside the turn
 REPORT_MODEL_CALL_LIMIT: 8

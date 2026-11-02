@@ -7,12 +7,19 @@ from langchain_core.language_models.fake_chat_models import (
 )
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 from langchain_core.tools import tool
+from langgraph.checkpoint.memory import InMemorySaver
+from langgraph.types import Command, interrupt
 
 from agent.graph import tool_error
 from agent.middleware.tool_failures import (
     STOPPED,
     ToolFailureLimitMiddleware,
+    error_streak,
     failure_streak,
+)
+from agent.middleware.turn_limit import (
+    LIMIT_PREFIX,
+    TurnModelCallLimitMiddleware,
 )
 
 
@@ -105,3 +112,77 @@ def test_the_agent_stops_running_a_tool_that_keeps_failing():
     ]
     assert "3번 연속" in str(results[3].content)
     assert state["messages"][-1].content == "저장 실패로 중단"
+
+
+def test_any_errors_in_a_row_stop_a_tool_too():
+    # a failed execution: new code, new traceback every try
+    messages = [HumanMessage("q")]
+    for n, text in enumerate(["KeyError: 'a'", "ValueError: b", "oops"], 1):
+        messages += [_call(n), _result(n, text)]
+    assert failure_streak(messages, "run_plan")[0] == 1
+    assert error_streak(messages, "run_plan")[0] == 3
+    ok = messages + [_call(4), _result(4, "완료", "success")]
+    assert error_streak(ok, "run_plan")[0] == 0
+
+
+def test_the_agent_stops_a_tool_failing_differently_each_time():
+    runs = []
+
+    @tool
+    def run_custom_code() -> str:
+        """Runs code."""
+        runs.append(1)
+        raise ValueError(f"error kind {'abcdefg'[len(runs)]}")
+
+    calls = [_call(n, "run_custom_code") for n in range(1, 8)]
+    model = _Model(
+        messages=iter(calls + [AIMessage("중단")]), disable_streaming=True
+    )
+    agent = create_agent(
+        model,
+        tools=[run_custom_code],
+        middleware=[
+            ToolFailureLimitMiddleware(3, any_limit=5),
+            ToolErrorMiddleware(on_error=tool_error),
+        ],
+    )
+    asyncio.run(agent.ainvoke({"messages": [HumanMessage("분석해줘")]}))
+    assert len(runs) == 5
+
+
+def test_the_turn_limit_holds_across_resumes():
+    # run_plan waits for the executor with an interrupt; every resume is a
+    # new graph run, which reset ModelCallLimitMiddleware's run count
+    @tool
+    def run_plan() -> str:
+        """Runs the plan."""
+        return str(interrupt("executor_wait"))
+
+    model = _Model(
+        messages=iter([_call(n) for n in range(1, 20)]),
+        disable_streaming=True,
+    )
+    agent = create_agent(
+        model,
+        tools=[run_plan],
+        middleware=[TurnModelCallLimitMiddleware(3)],
+        checkpointer=InMemorySaver(),
+    )
+    config = {"configurable": {"thread_id": "t"}}
+
+    async def turn():
+        state = await agent.ainvoke(
+            {"messages": [HumanMessage("분석해줘")]}, config
+        )
+        resumes = 0
+        while state.get("__interrupt__") and resumes < 10:
+            resumes += 1
+            state = await agent.ainvoke(Command(resume="FAILED"), config)
+        return state, resumes
+
+    state, resumes = asyncio.run(turn())
+    assert resumes == 3
+    assert state["messages"][-1].content.startswith(LIMIT_PREFIX)
+    # a new user message starts a new count
+    state, resumes = asyncio.run(turn())
+    assert resumes == 3
