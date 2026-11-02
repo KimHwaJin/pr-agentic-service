@@ -1,8 +1,8 @@
 """Step results from the executor notebook API (test environments only).
 
-A Step's result_ref names a manifest on the executor's result volume::
+A Step's result_ref names a manifest on the executor's shared root::
 
-    executions/<execution>/operations/<op>/steps/<step>/attempts/...
+    [<executor folder>/]executions/<execution>/operations/<op>/steps/<step>/...
 
 Without the volume the execution and step ids are taken from that path,
 and the step's notebook cell is read instead. The executor writes one
@@ -26,13 +26,13 @@ from core.executor.storage import TEXT_TYPES, SharedStorage
 from core.service_headers import Identity, with_key
 
 _RESULT_PATH = re.compile(
-    r"executions/(?P<execution>[^/]+)/operations/[^/]+/steps/(?P<step>[^/]+)/"
+    r"(?:^|/)executions/(?P<execution>[^/]+)/operations/[^/]+/steps/(?P<step>[^/]+)/"
 )
 
 
 def step_of(result_ref: dict[str, Any] | None) -> tuple[str, str] | None:
     """(execution id, step id) of a result_ref, or None."""
-    match = _RESULT_PATH.match((result_ref or {}).get("relative_path", ""))
+    match = _RESULT_PATH.search((result_ref or {}).get("relative_path", ""))
     return (match["execution"], match["step"]) if match else None
 
 

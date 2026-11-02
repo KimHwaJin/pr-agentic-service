@@ -240,9 +240,10 @@ STORAGE_ROOT: /mnt/data/dtest/dtest-agent-service
 # 기본값: agentic
 STORAGE_EXECUTOR_PATH: dtest-agent-service
 
-# [공통] executor 결과 볼륨(SHARED_STORAGE_ROOT)이 이 pod 에 마운트된 경로.
-# 기본값: .local/shared
-EXECUTOR_RESULT_ROOT: /mnt/data/dtest/executor
+# [공통] executor 가 결과 경로(result_ref, manifest)를 상대경로로 주는 기준 루트(모든
+# 서비스 공통 루트)가 이 pod 에 마운트된 경로. 받은 경로를 이 루트에 그대로 붙여 읽음
+# (예: executor/executions/...). 기본값: .local/shared
+EXECUTOR_RESULT_ROOT: /mnt/data/dtest
 
 # [공통] executor 의 REDIS_EVENT_STREAM (tenant 스트림 이름의 접두어).
 EXECUTOR_EVENT_STREAM: executor.events
