@@ -20,8 +20,11 @@ class InlineExecutorClient(ExecutorClient):
         api_key: str,
         storage: SharedStorage,
         tenant: str = "",
+        admin_api_key: str = "",
     ):
-        super().__init__(base_url, timeout, api_key, tenant=tenant)
+        super().__init__(
+            base_url, timeout, api_key, admin_api_key, tenant=tenant
+        )
         self.storage = storage
 
     async def submit(

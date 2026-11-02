@@ -241,3 +241,15 @@ def test_source_copies_stay_short_for_windows_paths(tmp_path):
 
     storage.delete_source(source["path"])
     assert not files[0].exists()
+
+
+def test_build_keeps_the_admin_key(tmp_path):
+    client, _ = build(
+        Settings(
+            executor_io_mode="api",
+            executor_api_key="svc",
+            executor_admin_api_key="ops",
+            storage_root=tmp_path,
+        )
+    )
+    assert (client.api_key, client.admin_api_key) == ("svc", "ops")

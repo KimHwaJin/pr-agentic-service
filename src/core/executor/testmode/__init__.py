@@ -48,5 +48,6 @@ def build(
         settings.executor_api_key,
         storage,
         settings.executor_tenant_id,
+        settings.executor_admin_api_key,
     )
     return client, storage
