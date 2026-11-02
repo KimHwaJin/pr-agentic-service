@@ -100,11 +100,11 @@ class SharedStorage:
         """A result file of one execution, or None.
 
         ``relative_path`` comes from the browser, as events gave it: the
-        executor's path relative to the shared root, used as is (e.g.
-        ``executor/executions/<id>/...`` or ``executions/<id>/...``).
+        executor's path relative to the common root, used as is (e.g.
+        ``executor/executions/<id>/...``).
         Once resolved it must stay under the shared root, outside our own
         input folder, and inside an ``executions/<execution_id>/`` folder:
-        a path such as ``executions/<mine>/../<other>/...`` would otherwise
+        a path such as ``.../executions/<mine>/../<other>/...`` would otherwise
         reach any execution's files on the shared volume.
         """
         if "/" in execution_id or execution_id in {"", ".", ".."}:
