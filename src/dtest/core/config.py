@@ -237,7 +237,9 @@ class Settings(BaseSettings):
     # Code sent to the executor lives under <root>/sources/.
     storage_root: Path = ROOT / ".local/shared/agentic"
     storage_executor_path: str = "agentic"
-    # local mount of the executor's SHARED_STORAGE_ROOT (results)
+    # local mount of the root the executor's result paths (result_ref,
+    # manifests) are relative to: the common root shared by all services.
+    # Those paths are used as given (e.g. executor/executions/...).
     executor_result_root: Path = ROOT / ".local/shared"
     # the executor's REDIS_EVENT_STREAM (prefix of the tenant streams)
     executor_event_stream: str = "executor.events"

@@ -35,7 +35,7 @@ LLM_API_KEY: sk-…
 EXECUTOR_BASE_URL: http://executor.prd.internal:8000
 STORAGE_ROOT: /mnt/data/agent/pr-agentic-service
 STORAGE_EXECUTOR_PATH: pr-agentic-service
-EXECUTOR_RESULT_ROOT: /mnt/data/executor
+EXECUTOR_RESULT_ROOT: /mnt/data/dtest   # 공통 루트, executor 결과 경로는 이 기준
 NOTEBOOK_LAB_BASE_URL: https://executor-jupyter-lab.frodo.com
 BATCH_BASE_URL: http://pr-batch.prd.internal:8100
 EXECUTOR_API_KEY: exe_live_…
