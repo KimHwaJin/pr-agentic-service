@@ -4,6 +4,7 @@
   stall recovery)
 - json_arguments: nested arguments that arrive as JSON strings
 - tool_failures: stops a tool failing the same way again and again
+- turn_limit: model calls of one user turn, across resumes
 - compaction: generic; trims the tool traffic of finished segments
   (our rules: compaction_rules)
 - summarization: LangChain's summary with progress events
@@ -18,6 +19,9 @@ from src.dtest.agent.middleware.summarization import (
     ReportingSummarizationMiddleware,
 )
 from src.dtest.agent.middleware.tool_failures import ToolFailureLimitMiddleware
+from src.dtest.agent.middleware.turn_limit import (
+    TurnModelCallLimitMiddleware,
+)
 
 __all__ = [
     "JsonArgumentsMiddleware",
@@ -25,4 +29,5 @@ __all__ = [
     "ReportingSummarizationMiddleware",
     "ToolFailureLimitMiddleware",
     "ToolResultCompactionMiddleware",
+    "TurnModelCallLimitMiddleware",
 ]
