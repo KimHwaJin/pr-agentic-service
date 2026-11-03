@@ -11,9 +11,12 @@ descriptions are put in the prompt; formats such as "starts with a date"
 live in the descriptions, which the user may edit).
 
 The model may only keep durable facts, preferences, interests and events
-the USER stated; code checks every edit (``plan_topic``) and drops the
-ones that fail, keeping the rest. A chunk that keeps failing is skipped
-after ``MAX_ATTEMPTS`` so a project is never stuck.
+the USER stated, and says of each add/replace whether it lasts beyond
+this chat (``lasting``). Code checks what it can check without reading
+meaning (the quote is in a USER message, no URL/path/heading, ids exist;
+``plan_topic``) and drops the edits that fail, keeping the rest. A chunk
+that keeps failing is skipped after ``MAX_ATTEMPTS`` so a project is
+never stuck.
 """
 
 import asyncio
@@ -61,12 +64,6 @@ FETCH_LIMIT = 500
 # per message in the model input (user text is checked in full)
 USER_CHARS, ASSISTANT_CHARS = 3000, 1000
 
-ONE_OFF = re.compile(
-    r"이번\s*(?:만|에만|세션|대화|분석|보고서|리포트|결과)|이\s*(?:보고서|리포트|분석|세션)\s*만"
-    r"|오늘만|지금만|당분간|임시로"
-    r"|this\s+(?:time|session|report|analysis)|just\s+for\s+now|for\s+now",
-    re.I,
-)
 URL = re.compile(r"https?://|www\.", re.I)
 PATH = re.compile(
     r"[A-Za-z]:\\|\\\\|(?:^|[\s(])~?/[\w.-]+/|\b[\w.-]+/[\w./-]*\.[A-Za-z]\w{0,4}\b"
@@ -214,8 +211,6 @@ def check_text(text: str) -> str | None:
         return "empty text"
     if HEADING.match(text):
         return "heading"
-    if ONE_OFF.search(text):
-        return "one-off phrasing"
     if URL.search(text):
         return "url"
     if PATH.search(text):
@@ -245,8 +240,10 @@ def check_op(
         return "no quote"
     if not any(quote in normalize(t) for t in user_texts):
         return "quote not in a user message"
-    if ONE_OFF.search(quote):
-        return "one-off phrasing"
+    # whether it holds beyond this chat is the model's call, made per op
+    # ("이번만", "다음 분기까지" ...): no word list can tell
+    if op.get("lasting") not in (True, "true"):
+        return "not lasting"
     if kind == "replace" and normalize(text) == normalize(
         index[op["line_id"]]["text"]
     ):

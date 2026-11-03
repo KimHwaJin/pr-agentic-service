@@ -89,3 +89,24 @@ def test_summary_prompt_keeps_the_messages_slot():
     body = prompt.render(max_chars=6000)
     assert "\n<messages>\n" in body and "6000자" in body
     assert body.format(messages="X").count("X") == 1  # no stray braces
+
+
+def test_execution_mode_is_one_of_the_names_not_a_word_in_it():
+    from core.assets import tool_table
+
+    rows, problems = tool_table(
+        "| Tool | 실행 방식 |\n"
+        "|---|---|\n"
+        "| `a` | 조건부 실행 |\n"
+        "| `b` | conditional |\n"
+        "| `c` |  |\n"
+        "| `d` | 조건 없이 항상 |\n"
+    )
+    assert [r.execution for r in rows] == [
+        "conditional",
+        "conditional",
+        "always",
+        "always",
+    ]
+    # "조건" in the cell no longer makes it conditional; it is reported
+    assert len(problems) == 1 and "`d`" in problems[0]

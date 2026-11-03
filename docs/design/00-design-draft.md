@@ -151,7 +151,7 @@ migrations/  web/dev/  scripts/  tests/  deploy/kubernetes/
    - 입력: 커서 이후 그 프로젝트(삭제되지 않은 세션)의 user/assistant 메시지를 시간순으로, `MEMORY_WORKER_MAX_INPUT_TOKENS`(8000, 글자 수/4) 안에서 가장 오래된 묶음만. 남으면 dirty를 유지해 다음에 이어 간다. 현재 주제 본문은 주제 id·제목·사용량, 줄 id와 함께 준다.
    - 사용자 메시지가 인사·짧은 맞장구뿐이면 LLM 없이 커서만 넘긴다.
    - LLM 호출 1회(`prompts/memory_worker.md`; 주제 목록 "id: 제목 — 설명 (한도 N자)"을 프로젝트 주제로 만들어 넣고, 제목·설명에 맞는 주제에만 넣고 맞는 주제가 없으면 저장하지 말라고 지시). 프로젝트에는 모델 설정이 없으므로 묶음의 마지막 run 모델, 없거나 목록에 없으면 기본 모델. 출력 `{"ops": [{op: add|replace|delete, topic, line_id?, text?, quote}]}` (예전 이름 `section`도 받음).
-   - 코드 검증(어긴 op만 버리고 나머지는 적용): 주제 id 유효, add/replace는 입력 USER 메시지에 (공백 정규화 후) 그대로 있는 quote 필수, 일회성 표현(이번만·이번 세션·이 보고서만·오늘만 …) 거절, URL·파일 경로 거절, `#`/`##` 거절, line_id 존재, 바뀌지 않는 replace·중복 add 거절. 날짜·정렬 같은 형식 규칙은 코드에 두지 않고 주제 설명으로 모델에 맡긴다. 적용 후 주제 한도를 넘으면 늘리는 op를 뒤에서부터 버린다.
+   - 코드 검증(어긴 op만 버리고 나머지는 적용): 주제 id 유효, add/replace는 입력 USER 메시지에 (공백 정규화 후) 그대로 있는 quote 필수, add/replace마다 모델이 판단한 `lasting`(대화가 끝나도 유효한지)이 true가 아니면 거절(일회성은 단어 목록이 아니라 모델이 뜻으로 판단), URL·파일 경로 거절, `#`/`##` 거절, line_id 존재, 바뀌지 않는 replace·중복 add 거절. 날짜·정렬 같은 형식 규칙은 코드에 두지 않고 주제 설명으로 모델에 맡긴다. 적용 후 주제 한도를 넘으면 늘리는 op를 뒤에서부터 버린다.
    - 적용: 주제별 version CAS, 충돌 시 다시 읽어 한 번 더. actor = agent `memory_worker`, source = `{session_ids, run_ids}`. 바뀌면 관련 세션에 `memory_updated`.
    - 실패: backoff(30초부터 두 배)로 최대 3번, 그래도 실패하면 `last_error`를 남기고 그 묶음을 건너뛴다(프로젝트가 막히지 않게).
 
@@ -214,7 +214,7 @@ pr-batch(`/Users/a10054/SKAX_PROJECT/pr-batch`, 개발 중)는 사용자 스크�
 
 ### 9.7 확정
 
-- `allow_immediate_execution=true` template 하나만 후보 + 질문에서 입력값이 모두 채워짐 + 서버 임베딩 검색 유사도 `WORKFLOW_AUTO_RUN_SIMILARITY`(기본 0.77) 이상 → 승인 HITL 생략. 후보가 둘 이상이거나 키워드 검색이면 항상 승인. Agent 작성 코드가 섞이면 항상 승인.
+- `allow_immediate_execution=true` template 하나만 후보 + 질문에서 입력값이 모두 채워짐 + 서버 임베딩 검색 유사도 `WORKFLOW_AUTO_RUN_SIMILARITY`(기본 0.77) 이상 → 승인 HITL 생략. 후보가 둘 이상이거나 임베딩 없이 모델이 고른 검색이면 항상 승인. Agent 작성 코드가 섞이면 항상 승인.
 - 추천 검색 대상: 승격된 template만. candidate(저장했지만 승격 전, 작성자만 보는 워크플로우)는 검색 풀에 넣지 않는다.
 - **계획 후보 수**: 한 번에 제안하는 실행 계획 수는 설정값 `PLAN_CANDIDATES`(기본 5). 검색으로 template k개가 추천되면 나머지 5-k개를 analyst가 새로 생성해 함께 보여준다. 사용자는 승인 화면에서 하나를 골라 입력값을 확인·수정하고 승인한다. 추천 template 후보에는 출처와 유사도를 표시한다. 이 방식이 `PLAN_RECOMMEND_MODE=mixed`(기본)이고, `recommend_first`는 추천 template만 먼저 보여 주고 사용자가 "추천 말고 새로 만들기"(`reject_templates`)를 고르면 새 계획 `PLAN_CANDIDATES`개를 제안한다. 추천이 없으면 처음부터 새 계획을 제안한다.
 
