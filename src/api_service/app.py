@@ -12,7 +12,7 @@ from api_service import API_PREFIX, errors
 from api_service.auth.adapters import load_adapter
 from api_service.auth.service import SsoService
 from api_service.auth.store import AuthStore
-from api_service.paths import OwnPaths, is_own
+from api_service.paths import OwnPaths, is_own, skip_gaia_auth
 from api_service.routers import (
     api_clients,
     artifacts,
@@ -130,6 +130,8 @@ def mount_api(app: FastAPI, settings: Settings) -> None:
     )
     errors.install(app)
     _caller_headers_together(app)
+    # gaia's access key check (dev and up) stays on the template's APIs
+    skip_gaia_auth(app)
 
     # Every middleware below runs on our paths only (OwnPaths): the gaia
     # template's own APIs share this app and must not get any of it.
