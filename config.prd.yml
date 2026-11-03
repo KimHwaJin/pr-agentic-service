@@ -35,3 +35,9 @@ MODELS:
     LABEL: <display name>
     DEFAULT: true
     INPUT: [text]
+
+# Phoenix tracing (docs/phoenix-tracing.md); empty endpoint = off. The gaia
+# template's names: the Deployment env may set them for both. Key: secret.
+PHOENIX_ENDPOINT: ""
+PHOENIX_API_KEY: ""
+SERVICE_ID: pr-agentic-service-prd

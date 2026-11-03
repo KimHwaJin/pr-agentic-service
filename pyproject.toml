@@ -34,6 +34,9 @@ dependencies = [
 # root and imports src.dtest.* (src/dtest/local.py outside the network).
 [tool.uv]
 package = false
+# `uv run` / `uv sync` install Phoenix tracing too, so PHOENIX_ENDPOINT in a
+# config file is all it takes to turn it on (docs/phoenix-tracing.md)
+default-groups = ["dev", "phoenix"]
 
 [tool.ruff]
 target-version = "py311"

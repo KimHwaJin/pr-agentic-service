@@ -29,7 +29,7 @@
 - 우리 것은 우리 경로(`/api/v1/`, `/view/`, `/dev/`)에만 걸립니다(`src/dtest/api_service/paths.py`). 인증, CSRF, API 키는 우리 라우터의 의존성이고, 앱 전체에 붙이는 미들웨어(`X-Request-ID`, 요청 크기 제한 413, CORS, 감사 로그)는 `OwnPaths`로 감싸 gaia 경로 요청은 그대로 지나갑니다. 에러 응답 형식도 우리 경로에만 쓰고, 다른 경로는 원래 핸들러(gaia가 등록한 것 또는 FastAPI 기본)를 씁니다(`errors.py`). OpenAPI의 보안 헤더 합치기도 우리 operation만 고칩니다. 예외는 `DOCS_ENABLED=false`일 때 gaia의 `/docs`, `/redoc`, `/openapi.json`도 끄는 것 하나입니다(내부망 규칙).
 - CORS: `CORS_ORIGINS`는 우리 경로에만 적용됩니다. 우리 화면이 다른 도메인에서 우리 API를 부를 때만 채우고, gaia 경로의 CORS는 gaia가 맡습니다.
 - 로깅: gaia/HCP가 맡습니다. `attach`는 로깅 설정을 하지 않습니다.
-- Phoenix: gaia가 `PHOENIX_ENDPOINT`, `PHOENIX_API_KEY`로 등록합니다. 우리는 에이전트 단계 계측만 켜고 `PHOENIX_COLLECTOR_ENDPOINT`는 쓰지 않습니다([phoenix-tracing.md](phoenix-tracing.md)).
+- Phoenix: gaia는 자기 워크플로우 파일 안에서만 등록하므로 우리 run은 거기에 잡히지 않습니다. 같은 키 `PHOENIX_ENDPOINT`, `PHOENIX_API_KEY`, `SERVICE_ID`(프로젝트 이름)로 우리가 직접 등록합니다([phoenix-tracing.md](phoenix-tracing.md)).
 
 ## gaia 채팅에서 쓰기 (workflow)
 

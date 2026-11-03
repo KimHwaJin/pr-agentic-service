@@ -5,11 +5,12 @@
 # ADMIN_EMPLOYEE_IDS,
 # LLM_API_KEY, MODELS, EXECUTOR_BASE_URL, BATCH_BASE_URL, and our keys at
 # the executor and pr-batch (EXECUTOR_API_KEY, EXECUTOR_ADMIN_API_KEY,
-# BATCH_API_KEY).
+# BATCH_API_KEY), and Phoenix tracing (PHOENIX_ENDPOINT, PHOENIX_API_KEY,
+# SERVICE_ID).
 # Locally (APP_ENV empty) the docker-compose.yml environment or .env adds the
 # local values. Precedence: environment > .env > config.{APP_ENV}.yml > this
-# file. Relative paths are under the repo root. RUN_MODE and PHOENIX_* are
-# read from the environment only. config.example.yml explains every key.
+# file. Relative paths are under the repo root. RUN_MODE is read from the
+# environment only. config.example.yml explains every key.
 
 # Database / Redis.
 REDIS_NAMESPACE: agentic

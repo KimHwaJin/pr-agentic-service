@@ -90,6 +90,9 @@ PER_ENV_KEYS = {
     "sso_allowed_origins",
     "batch_base_url",
     "batch_api_key",
+    "phoenix_endpoint",
+    "phoenix_api_key",
+    "service_id",
 }
 
 

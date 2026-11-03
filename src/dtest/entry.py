@@ -63,7 +63,7 @@ def attach(app: FastAPI) -> None:
     use_selector_loop()
     install_log_field()  # record.request_id for HCP's formatter too
     settings = get_settings()
-    tracing_phoenix.setup()
+    tracing_phoenix.setup(settings)
     api_enabled, _ = run_mode()
     if api_enabled:
         mount_api(app, settings)

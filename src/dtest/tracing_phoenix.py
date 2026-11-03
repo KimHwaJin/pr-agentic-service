@@ -2,29 +2,25 @@
 
 Self-contained and removable: this file, the ``tracing_phoenix.setup()``
 call in ``entry.py``, the ``phoenix`` dependency group, and the PHOENIX_*
-lines in docker-compose.yml / Dockerfile. See docs/phoenix-tracing.md.
+settings. See docs/phoenix-tracing.md.
 
-Outside the company network: off unless PHOENIX_COLLECTOR_ENDPOINT is set;
-then this registers its own tracer provider (standard Phoenix environment:
-PHOENIX_COLLECTOR_ENDPOINT, PHOENIX_API_KEY, PHOENIX_PROJECT_NAME).
-
-Inside it the gaia template registers Phoenix itself from PHOENIX_ENDPOINT
-and PHOENIX_API_KEY. With PHOENIX_ENDPOINT set this only instruments
-LangChain/LangGraph on the global tracer provider, and only if nothing has
-yet (the instrumentor is a singleton, so whichever comes second skips).
+Off unless PHOENIX_ENDPOINT is set. The settings are the gaia template's
+names, read like every other setting (environment > .env > config files):
+PHOENIX_ENDPOINT, PHOENIX_API_KEY, and SERVICE_ID as the Phoenix project.
+The template registers Phoenix only inside its own workflow files, so our
+API and worker runs are traced by this provider, not the template's.
 """
 
 import logging
-import os
+
+from src.dtest.core.config import Settings
 
 log = logging.getLogger(__name__)
 
 
-def setup() -> None:
-    endpoint = os.environ.get("PHOENIX_COLLECTOR_ENDPOINT")
+def setup(settings: Settings) -> None:
+    endpoint = settings.phoenix_endpoint.strip()
     if not endpoint:
-        if os.environ.get("PHOENIX_ENDPOINT"):
-            _instrument_on_template_provider()
         return
     try:
         from openinference.instrumentation.langchain import (
@@ -41,29 +37,20 @@ def setup() -> None:
     provider = register(
         endpoint=traces,
         protocol="http/protobuf",
-        project_name=os.environ.get(
-            "PHOENIX_PROJECT_NAME", "pr-agentic-service"
-        ),
+        project_name=settings.service_id,
+        api_key=settings.phoenix_api_key or None,
         batch=True,  # export in the background, never on the request path
         set_global_tracer_provider=False,
         verbose=False,
     )
-    LangChainInstrumentor().instrument(tracer_provider=provider)
-    log.info("phoenix_tracing_on endpoint=%s", endpoint)
-
-
-def _instrument_on_template_provider() -> None:
-    try:
-        from openinference.instrumentation.langchain import (
-            LangChainInstrumentor,
-        )
-    except ImportError:
-        log.warning("phoenix_tracing_skipped: install the 'phoenix' group")
-        return
     instrumentor = LangChainInstrumentor()
     if instrumentor.is_instrumented_by_opentelemetry:
+        # one instrumentor per process: whoever comes first keeps it
+        log.warning("phoenix_tracing_skipped: LangChain already instrumented")
         return
-    # the global provider; a tracer taken before the template registers
-    # its provider forwards to it once registered
-    instrumentor.instrument()
-    log.info("phoenix_tracing_on provider=template")
+    instrumentor.instrument(tracer_provider=provider)
+    log.info(
+        "phoenix_tracing_on endpoint=%s project=%s",
+        endpoint,
+        settings.service_id,
+    )

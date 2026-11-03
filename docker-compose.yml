@@ -51,9 +51,9 @@ x-app-env: &app-env
   # {"chat_template_kwargs": {"enable_thinking": false}}.
   MODELS: '[{"name": "qwen38-27b-nvfp4", "label": "Qwen 3.8 27B", "default": true, "input": ["text", "image"], "max_images": 8}]'
   # Phoenix tracing (optional, docs/phoenix-tracing.md): set these in .env
-  PHOENIX_COLLECTOR_ENDPOINT: ${PHOENIX_COLLECTOR_ENDPOINT:-}
+  PHOENIX_ENDPOINT: ${PHOENIX_ENDPOINT:-}
   PHOENIX_API_KEY: ${PHOENIX_API_KEY:-}
-  PHOENIX_PROJECT_NAME: ${PHOENIX_PROJECT_NAME:-pr-agentic-service-local}
+  SERVICE_ID: ${SERVICE_ID:-pr-agentic-service-local}
 
 services:
   db-init:

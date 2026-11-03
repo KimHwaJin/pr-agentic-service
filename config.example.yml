@@ -474,6 +474,24 @@ BATCH_REPORT_RECOVERY_INTERVAL_SECONDS: 600
 BATCH_REPORT_RECOVERY_LOOKBACK_DAYS: 14
 
 
+# -----------------------------------------------------------------------------
+# 15. Phoenix 트레이싱 (선택, docs/phoenix-tracing.md)
+# -----------------------------------------------------------------------------
+# gaia 템플릿과 같은 이름. gaia 는 자기 워크플로우 파일 안에서만 Phoenix 를
+# 등록하므로, 우리 API/워커 run 은 이 설정으로 우리가 직접 등록해 보냄.
+
+# [환경별] Phoenix 주소 (OTLP HTTP, /v1/traces 는 붙여 줌). 비우면 트레이싱 꺼짐.
+# 기본값: ""
+PHOENIX_ENDPOINT: http://<phoenix-host>
+
+# [환경별][비밀] Phoenix API 키. 필요할 때만. 기본값: ""
+PHOENIX_API_KEY: <phoenix-key>
+
+# [환경별] Phoenix 프로젝트 이름(트레이스가 모이는 곳). 기본값: pr-agentic-service
+# 예) 로컬은 pr-agentic-service-local
+SERVICE_ID: pr-agentic-service
+
+
 # =============================================================================
 # 부록 A. 환경변수로만 읽는 값 (설정 파일에 써도 무시됨)
 # =============================================================================
@@ -481,12 +499,6 @@ BATCH_REPORT_RECOVERY_LOOKBACK_DAYS: 14
 #                              비우면 local (k8s 에서 비어 있으면 기동 거부).
 #                              Deployment env: 또는 Dockerfile --build-arg APP_ENV=...
 # RUN_MODE                     all(기본, API + 워커 한 프로세스) | api | worker (src/dtest/entry.py)
-# PHOENIX_COLLECTOR_ENDPOINT   Phoenix 트레이싱 수집 주소. 비우면 트레이싱 꺼짐.
-#                              예) http://phoenix.frodo.com:6006 (docs/phoenix-tracing.md)
-# PHOENIX_API_KEY              [비밀] Phoenix API 키 (필요할 때만)
-# PHOENIX_PROJECT_NAME         Phoenix 프로젝트 이름. 기본값: pr-agentic-service
-# PHOENIX_ENDPOINT             internal/gaia 전용: gaia 템플릿이 Phoenix 를 등록할 때,
-#                              우리는 LangChain 계측만 얹음
 # PORT                         internal/gaia 전용: 로컬 진입점(src/dtest/local.py) 포트, 기본 8080
 # KUBERNETES_SERVICE_HOST      k8s 가 자동으로 넣음 (APP_ENV 누락 검사에 사용, 직접 설정 X)
 #
@@ -499,7 +511,8 @@ BATCH_REPORT_RECOVERY_LOOKBACK_DAYS: 14
 #                      기본 executor / executor / agentic
 # EXECUTOR_SHARED_DIR  executor 공유 폴더의 호스트 경로. 기본 ../executor/shared_dir
 # LLM_API_KEY, EXECUTOR_API_KEY, EXECUTOR_ADMIN_API_KEY, BATCH_API_KEY,
-# PHOENIX_*            compose 가 .env 에서 받아 컨테이너 환경변수로 넘김
+# PHOENIX_ENDPOINT, PHOENIX_API_KEY, SERVICE_ID
+#                      compose 가 .env 에서 받아 컨테이너 환경변수로 넘김
 #
 # 스크립트 (scripts/run_scenarios.py, scripts/seed_test_workflows.py)
 # BASE_URL             대상 서비스 주소. 기본 http://localhost:8080

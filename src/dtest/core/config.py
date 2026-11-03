@@ -413,6 +413,14 @@ class Settings(BaseSettings):
     batch_report_recovery_interval_seconds: float = Field(600, ge=60)
     batch_report_recovery_lookback_days: int = Field(14, ge=1, le=90)
 
+    # Phoenix tracing of the agent's LangChain/LangGraph runs; off while
+    # PHOENIX_ENDPOINT is empty. Same names as the gaia template, which
+    # traces only its own workflow files, not our runs
+    # (docs/phoenix-tracing.md).
+    phoenix_endpoint: str = ""
+    phoenix_api_key: str = ""
+    service_id: str = "pr-agentic-service"  # the Phoenix project
+
     @model_validator(mode="after")
     def _guard(self) -> "Settings":
         self._env = app_env() or "local"
