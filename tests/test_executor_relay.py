@@ -10,7 +10,7 @@ from starlette.requests import Request
 
 from src.dtest.api_service.errors import ApiError
 from src.dtest.api_service.routers import executor as relay
-from src.dtest.api_service.routers.executor import _as_user, _match
+from src.dtest.api_service.routers.executor import _match
 from src.dtest.api_service.services.api_clients import Caller
 from src.dtest.core.config import Settings
 from src.dtest.core.executor.client import ExecutorClient
@@ -61,14 +61,6 @@ def test_key_callers_may_write_but_not_operate():
     ]:
         route = _access("GET", path)
         assert route is not None and route[1] is False
-
-
-def test_runtime_registration_is_recorded_as_the_admin():
-    user = cast(Any, SimpleNamespace(id="u-1"))
-    body = _as_user(
-        json.dumps({"name": "x", "actor": {"id": "spoof"}}).encode(), user
-    )
-    assert json.loads(body)["actor"] == {"type": "USER", "id": "u-1"}
 
 
 # --- forwarding ------------------------------------------------------------
@@ -245,3 +237,35 @@ def test_relay_docs_list_the_key_routes():
     assert "`/executions/{execution_id}/notebook/cells/{n}`" in keyed
     for internal in ("attempts", "diagnostics", "runtime-", "maintenance"):
         assert internal not in keyed
+
+
+def _operator_post(path: str, body: bytes) -> httpx.Request:
+    match = _match("POST", path)
+    assert match is not None
+    admin = cast(Any, SimpleNamespace(id="a-1", role="admin"))
+    sent: list[httpx.Request] = []
+    asyncio.run(
+        relay._for_user(
+            cast(Any, _services(sent, admin_key="exe_ops")),
+            _request("POST", path, {}, body),
+            path,
+            match,
+            admin,
+        )
+    )
+    return sent[0]
+
+
+def test_operator_writes_go_unchanged_as_the_admin():
+    body = json.dumps({"idempotency_key": "k", "name": "x"}).encode()
+    sent = _operator_post("runtime-targets", body)
+    # the executor records the admin from X-User-Id; the body is theirs
+    assert sent.content == body
+    assert sent.headers["x-user-id"] == "a-1"
+    assert sent.headers["x-api-key"] == "exe_ops"
+
+
+def test_operator_post_without_a_body_sends_none():
+    sent = _operator_post(f"runtime-targets/{E}/probe", b"")
+    assert sent.content == b""
+    assert "content-type" not in sent.headers

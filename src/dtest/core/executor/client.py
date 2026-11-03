@@ -12,8 +12,6 @@ from src.dtest.core.service_headers import SYSTEM, Identity, with_key
 
 log = logging.getLogger(__name__)
 
-SERVICE_ACTOR = {"type": "AGENT", "id": "pr-agentic-service"}
-
 
 def trigger_type(execution: dict[str, Any]) -> str | None:
     """INTERACTIVE | BATCH of an execution or an event's ``execution``."""
@@ -122,7 +120,7 @@ class ExecutorClient:
         body = {
             "idempotency_key": idempotency_key,
             "lifecycle": lifecycle,
-            "trigger": {"type": trigger, "actor": SERVICE_ACTOR},
+            "trigger": {"type": trigger},
             "runtime": {"type": "JUPYTER", "profile": profile},
             "operation": {"spec": {"schema_version": "1.0", "steps": steps}},
             "metadata": metadata or {},
@@ -142,7 +140,6 @@ class ExecutorClient:
             "idempotency_key": idempotency_key,
             "expected_version": expected_version,
             "spec": {"schema_version": "1.0", "steps": steps},
-            "actor": SERVICE_ACTOR,
         }
         return await self._call(
             "POST", f"/executions/{execution_id}/operations", who, json=body
@@ -159,7 +156,6 @@ class ExecutorClient:
         body = {
             "idempotency_key": idempotency_key,
             "expected_version": expected_version,
-            "actor": SERVICE_ACTOR,
         }
         return await self._call(
             "POST", f"/executions/{execution_id}/finalize", who, json=body
@@ -176,7 +172,6 @@ class ExecutorClient:
         body = {
             "idempotency_key": idempotency_key,
             "reason": reason,
-            "actor": SERVICE_ACTOR,
         }
         return await self._call(
             "POST", f"/executions/{execution_id}/cancel", who, json=body
@@ -307,7 +302,6 @@ class ExecutorClient:
             "media_type": "text/markdown",
             "append_to_notebook": True,
             "metadata": metadata,
-            "actor": SERVICE_ACTOR,
         }
         return await self._call(
             "POST", f"/executions/{execution_id}/artifacts", who, json=body

@@ -15,7 +15,6 @@ The executor gets our key and identity headers made here from what we
 verified, never the caller's own ``X-*`` headers.
 """
 
-import json
 import logging
 import re
 from typing import Literal
@@ -183,7 +182,7 @@ async def _for_user(
     params = {
         k: v for k, v in request.query_params.items() if k not in SCOPE_PARAMS
     }
-    # operator calls name the admin (the executor matches a USER actor)
+    # operator calls name the admin (the executor records X-User-Id)
     who = Identity(user_id=user.id) if access == "ops" else SYSTEM
     if access in {"admin", "ops"} and user.role != "admin":
         raise HTTPException(403, "Administrator only.")
@@ -206,8 +205,6 @@ async def _for_user(
     if access == "execution" and user.role != "admin":
         await check_execution(services, user, match["execution"])
     body = await request.body() if request.method == "POST" else None
-    if body is not None:
-        body = _as_user(body, user)
     headers = services.executor.headers(who, admin=access == "ops")
     return await _forward(
         services, request.method, path, params, body, headers
@@ -265,17 +262,6 @@ async def _for_caller(
             response.status_code,
         )
     return response
-
-
-def _as_user(body: bytes, user: User) -> bytes:
-    """Mutations are recorded as done by this user, not by the client."""
-    try:
-        data = json.loads(body or b"{}")
-    except ValueError:
-        return body  # the executor answers with its validation error
-    if isinstance(data, dict):
-        data["actor"] = {"type": "USER", "id": user.id}
-    return json.dumps(data).encode()
 
 
 def _match(method: str, path: str) -> tuple[re.Match, Sso, bool] | None:

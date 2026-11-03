@@ -60,12 +60,42 @@ def test_submission_names_its_user_in_headers_not_the_body():
     )
     body = json.loads(sent[0].content)
     assert "context" not in body and "tenant_id" not in body
+    # who did it is the key (client) and X-User-Id, not a body actor
+    assert body["trigger"] == {"type": "INTERACTIVE"}
     headers = sent[0].headers
     assert headers["x-api-key"] == "exe_test_k"
     assert headers["x-user-id"] == "u-1"
     assert headers["x-project-id"] == "p-1"
     assert headers["x-session-id"] == "s-1"
     assert headers["x-tenant-id"] == "pr-agentic"  # ours, named
+
+
+def test_writes_carry_no_actor():
+    sent: list[httpx.Request] = []
+    client, who = _client(sent, 200), Identity(user_id="u-1")
+
+    async def writes():
+        await client.append_operation(
+            "x-1", who=who, idempotency_key="k", expected_version=1, steps=[]
+        )
+        await client.finalize(
+            "x-1", who=who, idempotency_key="k", expected_version=1
+        )
+        await client.cancel("x-1", who=who, idempotency_key="k", reason="r")
+        await client.create_report(
+            "x-1",
+            who=who,
+            idempotency_key="k",
+            markdown="# r",
+            name="r.md",
+            metadata={},
+        )
+
+    asyncio.run(writes())
+    assert len(sent) == 4
+    for request in sent:
+        assert "actor" not in json.loads(request.content)
+        assert request.headers["x-user-id"] == "u-1"
 
 
 def test_reads_are_system_calls():

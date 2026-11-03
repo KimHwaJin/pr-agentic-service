@@ -216,7 +216,7 @@ Swagger(`/docs`)에서는 Authorize 버튼에 `X-Api-Key`·`X-User-Id`가 있고
 | POST | `/runtime-targets/{id}/probe`, `/drain`, `/activate`, `/disable`, `/purge` | 관리자. 다시 점검 / 새 작업 배정 중지(진행 중은 마저) / 배정 복귀 / 사용 중지 / 사용 중지된 대상 제거 |
 | POST | `/maintenance/drain`, `/maintenance/activate`, `/maintenance/runs` | 관리자. executor 전체의 새 실행 접수 중지 / 재개 / 진행 중 실행을 멈추는 점검 작업 생성 |
 
-runtime·maintenance 경로는 executor 운영 key(`EXECUTOR_ADMIN_API_KEY`)가 없으면 503 `EXECUTOR_ADMIN_KEY_MISSING`입니다. POST의 `actor`는 클라이언트 값 대신 서버가 요청한 관리자(`{"type": "USER", "id": <users.id>}`)로 채웁니다. executor·pr-batch에 넘기는 사용자 ID(`X-User-Id`, `context.user_id`, actor)는 모두 `users.id`이고, 이 값은 소문자 사번입니다(2026-11-01부터). 화면에 이름이 필요하면 `/users`로 찾습니다. 나머지 본문(`idempotency_key` 등)은 executor 형식 그대로입니다.
+runtime·maintenance 경로는 executor 운영 key(`EXECUTOR_ADMIN_API_KEY`)가 없으면 503 `EXECUTOR_ADMIN_KEY_MISSING`입니다. POST 본문은 그대로 넘기고, 누가 했는지는 서버가 붙이는 `X-User-Id`(요청한 관리자)로 executor에 기록됩니다. executor는 본문의 `actor`를 받지 않습니다(보내면 422 `REQUEST_VALIDATION_ERROR`). executor·pr-batch에 넘기는 사용자 ID(`X-User-Id`, `context.user_id`)는 모두 `users.id`이고, 이 값은 소문자 사번입니다(2026-11-01부터). 화면에 이름이 필요하면 `/users`로 찾습니다. 나머지 본문(`idempotency_key` 등)은 executor 형식 그대로입니다.
 
 **API key 호출자** (executor를 직접 부르지 않고 여기로 부릅니다)
 
