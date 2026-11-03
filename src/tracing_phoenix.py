@@ -2,21 +2,24 @@
 
 Self-contained and removable: this file, the ``tracing_phoenix.setup()``
 call in ``main.py``, the ``phoenix`` dependency group, and the PHOENIX_*
-lines in docker-compose.yml / Dockerfile. See docs/phoenix-tracing.md.
+settings. See docs/phoenix-tracing.md.
 
-Off unless PHOENIX_COLLECTOR_ENDPOINT is set. Configuration is the standard
-Phoenix environment: PHOENIX_COLLECTOR_ENDPOINT, PHOENIX_API_KEY,
-PHOENIX_PROJECT_NAME.
+Off unless PHOENIX_ENDPOINT is set. The settings are the gaia template's
+names, read like every other setting (environment > .env > config files):
+PHOENIX_ENDPOINT, PHOENIX_API_KEY, and SERVICE_ID as the Phoenix project.
+The template registers Phoenix only inside its own workflow files, so our
+API and worker runs are traced by this provider, not the template's.
 """
 
 import logging
-import os
+
+from core.config import Settings
 
 log = logging.getLogger(__name__)
 
 
-def setup() -> None:
-    endpoint = os.environ.get("PHOENIX_COLLECTOR_ENDPOINT")
+def setup(settings: Settings) -> None:
+    endpoint = settings.phoenix_endpoint.strip()
     if not endpoint:
         return
     try:
@@ -34,12 +37,20 @@ def setup() -> None:
     provider = register(
         endpoint=traces,
         protocol="http/protobuf",
-        project_name=os.environ.get(
-            "PHOENIX_PROJECT_NAME", "pr-agentic-service"
-        ),
+        project_name=settings.service_id,
+        api_key=settings.phoenix_api_key or None,
         batch=True,  # export in the background, never on the request path
         set_global_tracer_provider=False,
         verbose=False,
     )
-    LangChainInstrumentor().instrument(tracer_provider=provider)
-    log.info("phoenix_tracing_on endpoint=%s", endpoint)
+    instrumentor = LangChainInstrumentor()
+    if instrumentor.is_instrumented_by_opentelemetry:
+        # one instrumentor per process: whoever comes first keeps it
+        log.warning("phoenix_tracing_skipped: LangChain already instrumented")
+        return
+    instrumentor.instrument(tracer_provider=provider)
+    log.info(
+        "phoenix_tracing_on endpoint=%s project=%s",
+        endpoint,
+        settings.service_id,
+    )
