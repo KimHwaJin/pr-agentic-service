@@ -191,8 +191,16 @@ async def validate_workflow(
 async def search_workflows(
     body: WorkflowSearch, services: ServicesDep, user: UserDep
 ):
+    # the model picks templates without embeddings
+    from src.dtest.agent.llm import chat_model
+
+    settings = services.settings
     hits = await services.workflows.search(
-        body.query, limit=services.settings.plan_candidates
+        body.query,
+        limit=settings.plan_candidates,
+        chooser=None
+        if services.workflows.embedder
+        else chat_model(settings, settings.default_model.name),
     )
     return {
         "items": [

@@ -32,6 +32,8 @@ def template(static):
 
 
 class Workflows:
+    embedder = "stub"  # search by similarity
+
     def __init__(self, documents: dict[str, dict], hits: list[dict]):
         self.documents, self.hits = documents, hits
 
@@ -43,7 +45,7 @@ class Workflows:
             document=copy.deepcopy(self.documents[workflow_id]),
         )
 
-    async def search(self, query, limit):
+    async def search(self, query, limit, chooser=None):
         return self.hits[:limit]
 
 
@@ -184,7 +186,9 @@ def test_similarity_below_the_auto_run_bar_shows_the_card(
     assert asked.seen[0]["candidates"][0]["source"]["similarity"] == 0.75
 
 
-def test_keyword_search_never_runs_at_once(skills, tools, template, asked):
+def test_model_picked_search_never_runs_at_once(
+    skills, tools, template, asked
+):
     wf = Workflows({"w1": template}, [_hit("w1", None, template)])
     runtime = _runtime(skills, tools, wf)
     _search(runtime)

@@ -57,7 +57,7 @@ LLM_TEMPERATURE: 0.2
 LLM_TIMEOUT_SECONDS: 120.0
 LLM_ENABLE_THINKING: false
 
-# none (keyword search) | openai (gateway) | mock (local, hashed n-grams)
+# none (the chat model picks templates) | openai (gateway) | mock (local, hashed n-grams)
 EMBEDDING_PROVIDER: none
 EMBEDDING_BASE_URL: ""
 EMBEDDING_API_KEY: EMPTY
@@ -105,7 +105,7 @@ WORKFLOW_SIMILARITY: 0.70
 PLAN_RECOMMEND_MODE: mixed
 # a template runs without the approval card only when it is the only
 # candidate and its embedding search similarity is at least this (never on
-# keyword search); at least WORKFLOW_SIMILARITY
+# model-picked search); at least WORKFLOW_SIMILARITY
 WORKFLOW_AUTO_RUN_SIMILARITY: 0.77
 # author: the author promotes their own; admin: administrators only
 WORKFLOW_PROMOTION: author

@@ -150,6 +150,18 @@ def _cells(line: str) -> list[str]:
     return [c.strip() for c in line.strip().strip("|").split("|")]
 
 
+# the 실행 방식 cell, one of these exactly (an empty cell: always); no
+# guessing from words in it
+EXECUTION_MODES = {
+    "": "always",
+    "항상 실행": "always",
+    "always": "always",
+    "조건부 실행": "conditional",
+    "conditional": "conditional",
+}
+EXECUTION_NAMES = {"항상 실행", "조건부 실행"}
+
+
 def tool_table(body: str) -> tuple[list[SkillTool], list[str]]:
     """Rows of the tables whose header has a Tool column, and what could
     not be read (rows without a backticked tool name, missing cells)."""
@@ -190,13 +202,19 @@ def tool_table(body: str) -> tuple[list[SkillTool], list[str]]:
                 )
                 continue
             mode = values.get("execution", "")
+            execution = EXECUTION_MODES.get(mode.strip().casefold())
+            if execution is None:
+                problems.append(
+                    f"실행 방식을 알 수 없는 행: {values['tool']} ({mode}); "
+                    f"{', '.join(sorted(EXECUTION_NAMES))} 중 하나로 쓰세요. "
+                    "항상 실행으로 읽습니다."
+                )
+                execution = "always"
             cond_tool = values.get("condition_tool", "")
             rows.append(
                 SkillTool(
                     tool=match.group(1),
-                    execution="conditional"
-                    if "조건" in mode or "conditional" in mode
-                    else "always",
+                    execution=execution,
                     condition=values.get("condition", ""),
                     condition_tool=cond_tool.strip("`")
                     if cond_tool not in {"", "없음", "-"}

@@ -174,13 +174,13 @@ Swagger(`/docs`)에서는 Authorize 버튼에 `X-Api-Key`·`X-User-Id`가 있고
 | type | 받는 데이터 | value |
 | --- | --- | --- |
 | `question` | `question`, `options[]`, `fields[]` | 문자열 답변, 또는 fields가 있으면 `{<key>: 값, ...}` |
-| `plan_approval` | `allow_reject_templates`(후보가 모두 등록된 워크플로우일 때만 true), `candidates[]`: `{title, rationale, source(워크플로우 출처 `{workflow_id, revision, name, similarity}` 또는 null; similarity는 서버가 잰 검색 유사도 0~1, 키워드 검색이면 null), document(Workflow 1.0), calls[], input_slots[]}`. `calls[]`: `{index, key, skill, skill_description, tool, summary, execution, condition, params[]}`, `params[]`: `{name, type, required, doc, key, source(literal\|input\|tool_output\|default), value, default, ref}` | `{"action": "approve", "index": 0, "input_values": {"0.0.lot_cd": "L1"}, "overrides": {"1.0.sample_size": 500}}` / `{"action": "revise", "feedback": "..."}` / `{"action": "cancel"}` / `{"action": "reject_templates"}`(`allow_reject_templates`가 true일 때만) |
+| `plan_approval` | `allow_reject_templates`(후보가 모두 등록된 워크플로우일 때만 true), `candidates[]`: `{title, rationale, source(워크플로우 출처 `{workflow_id, revision, name, similarity}` 또는 null; similarity는 서버가 잰 검색 유사도 0~1, 임베딩 없이 모델이 고른 검색이면 null), document(Workflow 1.0), calls[], input_slots[]}`. `calls[]`: `{index, key, skill, skill_description, tool, summary, execution, condition, params[]}`, `params[]`: `{name, type, required, doc, key, source(literal\|input\|tool_output\|default), value, default, ref}` | `{"action": "approve", "index": 0, "input_values": {"0.0.lot_cd": "L1"}, "overrides": {"1.0.sample_size": 500}}` / `{"action": "revise", "feedback": "..."}` / `{"action": "cancel"}` / `{"action": "reject_templates"}`(`allow_reject_templates`가 true일 때만) |
 | `code_approval` | `purpose`, `code`, `code_level` | `{"approve": true, "code": "수정한 코드(선택)"}` / `{"approve": false, "feedback": "..."}` |
 | `workflow_save` | `name`, `user_queries[]`, `tags[]`, `document`, `excluded_custom_steps` | `{"approve": true, "name": "...", "user_queries": [...]}` / `{"approve": false}` |
 
 `reject_templates`는 "추천 말고 새로 만들기"입니다. 추천 워크플로우를 모두 거절하고 Agent에게 새 계획을 설계해 다시 제안하게 합니다. 같은 턴에서 Agent는 등록된 워크플로우를 다시 후보로 낼 수 없고, 새 `plan_approval`이 옵니다. `allow_reject_templates`가 false인 질문에 보내면 422 `INVALID_ANSWER`(`location` 끝이 `action`)입니다. 버튼은 `allow_reject_templates`가 true일 때만 보여 주세요.
 
-계획 승인 카드 없이 바로 실행되는 경우(`plan_auto_approved` 이벤트)는 후보가 등록된 워크플로우 하나뿐이고, 그 워크플로우가 즉시 실행을 허용하고(`allow_immediate_execution`), 필수 입력이 모두 요청에서 채워졌고, 서버의 임베딩 검색 유사도가 `WORKFLOW_AUTO_RUN_SIMILARITY`(기본 0.77) 이상일 때뿐입니다. 키워드 검색(임베딩 없음)에서는 항상 카드가 옵니다.
+계획 승인 카드 없이 바로 실행되는 경우(`plan_auto_approved` 이벤트)는 후보가 등록된 워크플로우 하나뿐이고, 그 워크플로우가 즉시 실행을 허용하고(`allow_immediate_execution`), 필수 입력이 모두 요청에서 채워졌고, 서버의 임베딩 검색 유사도가 `WORKFLOW_AUTO_RUN_SIMILARITY`(기본 0.77) 이상일 때뿐입니다. 임베딩이 없어 모델이 후보를 고른 검색에서는 항상 카드가 옵니다.
 
 `input_values`의 키는 `"<step_index>.<tool_index>.<파라미터>"`입니다. 값은 입력칸 글자 그대로 문자열로 보내도 됩니다. 서버가 파라미터 `type`에 맞춰 바꿉니다. 예를 들어 `int`이면 `"500"`을 500으로, `list`이면 `"[1, 2]"`를 목록으로, 빈 글자는 `None`을 허용하는 칸에서 null로 바꿉니다. `str` 칸은 `"123"`도 글자 그대로 둡니다. 바꿀 수 없는 값은 422 `INVALID_ANSWER`이고 `details`에 기대한 타입이 나옵니다. JSON 값(숫자, 목록)을 직접 보내도 됩니다. `required`가 true인 칸이 비어 있으면 승인되지 않습니다. 승인할 수 있는지는 서버가 판단합니다. 화면은 승인 버튼을 막지 말고 보내고, 422 `details`의 `location`(`[..., "value", "input_values", "<키>"]`)으로 해당 칸 옆에 `message`를 보여 주면 됩니다.
 
@@ -264,7 +264,7 @@ executor가 응답하지 않으면 502 `EXECUTOR_UNAVAILABLE`, 시간 초과는 
 | POST | `/workflows` | `{document, user_queries[], tags[]}` → candidate (작성자만 보임) |
 | GET | `/workflows?lifecycle=&q=&tag=` | template 전체 + 내 candidate. 가벼운 요약: `steps`(skill 순서와 tool), `call_count`, `mine`, `can_promote`, `can_delete`(작성자 또는 관리자: 삭제 버튼), `recommendable`(검색·추천에 걸릴 수 있는지), `not_recommendable_reason`(아니면 그 이유, 화면에 그대로 표시) (문서 본문 없음). 상세(`GET /workflows/{id}`)에도 같은 필드가 있습니다 |
 | POST | `/workflows/validate` | 문서 검증만 |
-| POST | `/workflows/search` | `{query}` → `{items: [{workflow, similarity, matched_query}]}`, 승격된 template만 유사도 순. 임베딩이 없는 키워드 검색이면 `similarity`·`matched_query`가 null입니다(0%로 보여 주지 말고 "키워드 검색"처럼 표시) |
+| POST | `/workflows/search` | `{query}` → `{items: [{workflow, similarity, matched_query}]}`, 승격된 template만 유사도 순. 임베딩이 없으면 기본 모델이 최근 template을 읽고 요청에 맞는 것만 맞는 순서로 고르며, 이때 `similarity`·`matched_query`가 null입니다(0%로 보여 주지 말고 "모델 추천"처럼 표시) |
 | GET/PATCH/DELETE | `/workflows/{id}` | GET은 문서 전체 + `calls`(tool별 설명·파라미터 출처·앞 단계 참조, 계획 승인 화면과 같은 형식) + `mine`. PATCH는 `expected_revision` 필수. DELETE는 작성자, 또는 관리자(template·candidate 모두) |
 | POST | `/workflows/{id}/promote` | candidate → template (검색·추천 대상). `WORKFLOW_PROMOTION=author`(기본)이면 작성자가 자기 워크플로를, `admin`이면 관리자만(SSO 로그인) 아무 워크플로나 승격합니다. 목록·상세의 `can_promote`가 true면 승격 버튼을 보여 주면 됩니다. `admin` 모드의 관리자(SSO)에게는 목록·상세에 다른 사람의 candidate도 보입니다. |
 | POST | `/workflows/{id}/clone`, `/workflows/{id}/reindex` | |

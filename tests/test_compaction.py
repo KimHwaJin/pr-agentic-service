@@ -125,16 +125,26 @@ def test_execution_brief_keeps_status_variables_and_errors():
     assert "x" * 50 not in brief
 
 
-def test_report_brief_keeps_summary_and_results():
+def test_report_brief_keeps_sections_in_order_while_they_fit():
     content = (
         "리포트 게시 완료 (report=a, notebook=b).\n\n# 제목\n\n"
-        "## 1. 요약\n상관 0.33\n\n## 2. 수행한 분석\n긴 설명\n\n"
-        "## 3. 주요 결과\nSN OPEN 0.3256\n\n## 6. 한계\n샘플"
+        "## 1. 결론\n상관 0.33\n\n## 2. 결과\nSN OPEN 0.3256\n\n"
+        "## 3. 분석 과정\n" + "긴 설명 " * 400 + "\n\n## 4. 한계\n샘플"
     )
     brief = report_brief(content)
     assert brief.startswith("리포트 게시 완료 (report=a, notebook=b).")
+    # headings are not matched by name ("요약" is not needed)
     assert "상관 0.33" in brief and "SN OPEN 0.3256" in brief
     assert "긴 설명" not in brief and "샘플" not in brief
+    assert "## 3. 분석 과정" in brief and "## 4. 한계" in brief
+    assert brief.endswith("(나머지 내용은 리포트 참고)")
+
+
+def test_report_brief_cuts_one_long_first_section():
+    content = "ids\n\n## 요약\n" + "가" * 5000
+    brief = report_brief(content)
+    assert brief.startswith("ids\n\n## 요약\n가")
+    assert len(brief) < 1700 and "...(생략)" in brief
 
 
 def test_end_tool_update_carries_the_compacted_segment():

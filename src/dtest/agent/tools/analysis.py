@@ -37,6 +37,7 @@ from src.dtest.agent.codegen import (
     tool_step_code,
 )
 from src.dtest.agent.context import AnalysisState, RunContext
+from src.dtest.agent.llm import chat_model
 from src.dtest.agent.reporter import collect_evidence, generate_report
 from src.dtest.core.assets import SkillCatalog, ToolCatalog
 from src.dtest.core.db import new_id
@@ -199,8 +200,14 @@ async def search_workflows(query: str, runtime: Runtime) -> Command:
     """Search registered (promoted) workflow templates similar to the
     user's request."""
     ctx = runtime.context
-    hits = await ctx.services.workflows.search(
-        query, limit=ctx.services.settings.plan_candidates
+    settings, workflows = ctx.services.settings, ctx.services.workflows
+    hits = await workflows.search(
+        query,
+        limit=settings.plan_candidates,
+        # without an embedding model the chat model picks the templates
+        chooser=None
+        if workflows.embedder
+        else chat_model(settings, ctx.model),
     )
     # the similarity the server measured decides an auto-run later, never
     # a number the model passes on
@@ -465,7 +472,7 @@ def _auto_run(prepared: list[dict[str, Any]], threshold: float) -> bool:
     """Run without the approval card: one template candidate the template
     allows to run at once, every required input given, and a search
     similarity of this run (``source.similarity``, measured by the server;
-    none on keyword search) at least ``threshold``."""
+    none when the model picked them) at least ``threshold``."""
     if len(prepared) != 1 or not prepared[0]["source"]:
         return False
     first = prepared[0]
