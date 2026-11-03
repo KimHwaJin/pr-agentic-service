@@ -108,7 +108,16 @@
   /* main */
   main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
   header { height: 52px; flex: none; display: flex; align-items: center; gap: 10px; padding: 0 20px; }
-  header .title { font-weight: 500; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: text; }
+  header .head-main { flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: center; }
+  header .title { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: text; }
+  /* project · session · run ids under the title, click copies the full id */
+  .ids { display: flex; gap: 10px; font-size: 11px; color: var(--faint); white-space: nowrap; overflow: hidden; }
+  .ids:empty { display: none; }
+  .idtag { cursor: copy; }
+  .idtag .mono { font-size: 11px; }
+  .idtag:hover { color: var(--muted); }
+  .runid { margin: 0 0 18px; font-size: 11px; color: var(--faint); }
+  .answer + .runid, .files + .runid { margin-top: -12px; }
   .chip { display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px; border: 1px solid var(--line); border-radius: 999px; font-size: 13px; color: var(--muted); background: var(--panel); }
   .chip select { border: 0; background: transparent; outline: none; }
   .ghost { padding: 6px 10px; border-radius: 8px; color: var(--muted); font-size: 13px; }
@@ -511,7 +520,7 @@
 
 <main>
   <header>
-    <div class="title" id="title" title="클릭해서 이름 바꾸기" onclick="renameSession()">새 대화</div>
+    <div class="head-main"><div class="title" id="title" title="클릭해서 이름 바꾸기" onclick="renameSession()">새 대화</div><div class="ids" id="ids"></div></div>
   </header>
   <div id="scroll"><div id="log"></div></div>
   <div id="systemView" style="display:none;flex:1;overflow:auto">
@@ -856,7 +865,7 @@ async function selectProject(id) {
   S.project = id; try { localStorage.setItem('agentic.project', id); } catch {}
   const p = S.projects.find(x => x.id === id);
   $('projectName').textContent = p ? p.name : '-';
-  showChat(); newSession(); loadWorkflows();
+  showChat(); newSession(); loadWorkflows(); renderIds();
 }
 
 let sessionCache = [];
@@ -1119,14 +1128,14 @@ function emptyState() {
 }
 function useIdea(b) { $('input').value = b.textContent; autosize(); $('input').focus(); }
 
-function newSession() { showChat(); closeHitl(); S.session = null; S.run = null; S.answerEl = S.activity = S.notes = null; S.waiting = false; closeStream(); setBusy(false); $('title').textContent = '새 대화'; $('level').value = ''; emptyState(); loadSessions(); }
+function newSession() { showChat(); closeHitl(); S.session = null; S.run = null; S.answerEl = S.activity = S.notes = null; S.waiting = false; closeStream(); setBusy(false); $('title').textContent = '새 대화'; $('level').value = ''; emptyState(); renderIds(); loadSessions(); }
 
 async function openSession(id) {
   showChat(); closeHitl(); S.session = id; closeStream(); $('log').innerHTML = ''; S.answerEl = S.activity = S.notes = null;
   const session = await api(`/sessions/${id}`);
   $('title').textContent = session.title; $('level').value = session.code_level ?? '';
   await renderMessages(id);
-  S.run = session.active_run_id; setBusy(!!S.run);
+  S.run = session.active_run_id; setBusy(!!S.run); renderIds();
   if (S.run) { const run = await api(`/runs/${S.run}`); if (run.status === 'waiting_input') renderHitl(run.id, run.waiting); }
   openStream(); loadSessions();
 }
@@ -1163,6 +1172,7 @@ async function renderMessages(sessionId, cursor = null) {
     if (m.run_id) for (const el of await runHistory(m.run_id)) append(el);
     const d = document.createElement('div'); d.className = 'answer'; d.dataset.raw = m.content; d.innerHTML = md(m.content); append(d);
     if (m.attachments?.length) { const f = document.createElement('div'); f.className = 'files'; f.innerHTML = fileCards(m.attachments); append(f); }
+    if (m.run_id) append(runTag(m.run_id));
   }
   if (page.next_cursor) {
     const more = document.createElement('button'); more.className = 'ghost'; more.style.cssText = 'display:block;margin:0 auto 8px';
@@ -1245,10 +1255,10 @@ async function send() {
     if (!S.session) {
       const level = $('level').value ? +$('level').value : null;
       const r = await api(`/projects/${S.project}/sessions`, { method: 'POST', body: { input: { content }, model: $('model').value, code_level: level } });
-      S.session = r.session.id; S.run = r.run.id; $('title').textContent = r.session.title; openStream(); loadSessions();
+      S.session = r.session.id; S.run = r.run.id; $('title').textContent = r.session.title; renderIds(); openStream(); loadSessions();
     } else {
       const r = await api(`/sessions/${S.session}/runs`, { method: 'POST', body: answering ? { input: { content } } : { input: { content }, model: $('model').value } });
-      S.run = r.run.id;
+      S.run = r.run.id; renderIds();
     }
   } catch (e) {
     if (!answering) { setBusy(false); finishActivity(true); }
@@ -1264,13 +1274,13 @@ function openStream() {
   S.es = new EventSource(`${API}/sessions/${S.session}/events`, { withCredentials: true });
   const on = (type, fn) => S.es.addEventListener(type, e => fn(JSON.parse(e.data)));
   on('run_status', e => {
-    S.run = e.run_id; const st = e.data.status; S.waiting = st === 'waiting_input';
+    S.run = e.run_id; const st = e.data.status; S.waiting = st === 'waiting_input'; renderIds();
     // queued: not claimed yet (e.g. the user's other turns fill RUN_USER_CONCURRENCY)
     if (st === 'queued' || st === 'running') { setBusy(true); startActivity(); setActivityTitle(st === 'queued' ? '실행 대기 중' : '생각하는 중'); }
     if (st === 'waiting_executor') setActivityTitle(`코드 실행 중 · ${(e.data.steps || []).length}단계`);
     if (st === 'waiting_input') { setActivityTitle('확인을 기다리는 중'); setBusy(true); }
     // a turn that ended without message_final keeps its partial answer on screen, not as the next turn's start
-    if (['succeeded', 'failed', 'cancelled'].includes(st)) { S.answerEl = null; setBusy(false); finishActivity(st !== 'succeeded'); loadSessions(); if (st === 'cancelled') showError('작업을 중지했습니다.'); }
+    if (['succeeded', 'failed', 'cancelled'].includes(st)) { S.answerEl = null; setBusy(false); finishActivity(st !== 'succeeded'); addRunTag(e.run_id); loadSessions(); if (st === 'cancelled') showError('작업을 중지했습니다.'); }
   });
   on('token', e => { if (!S.answerEl) S.answerEl = addAnswer(''); S.answerEl.dataset.raw += e.data.text; S.answerEl.innerHTML = md(S.answerEl.dataset.raw); scrollDown(); });
   on('message_final', e => { if (S.answerEl) S.answerEl.remove(); S.answerEl = null; finishActivity(false); addAnswer(e.data.content); });
@@ -1313,6 +1323,20 @@ function addFiles(items) {
   const wrap = document.createElement('div'); wrap.className = 'files'; wrap.innerHTML = fileCards(items);
   logEl().appendChild(wrap); scrollDown();
 }
+// ids: shown short, the full id goes to the clipboard on click
+function idTag(label, id) {
+  const t = document.createElement('span'); t.className = 'idtag'; t.title = `${id} (클릭하면 복사)`;
+  t.innerHTML = `${label} <span class="mono">${esc(String(id).slice(0, 8))}</span>`;
+  t.onclick = () => { navigator.clipboard?.writeText(id); t.innerHTML = `${label} 복사됨`; setTimeout(() => t.innerHTML = `${label} <span class="mono">${esc(String(id).slice(0, 8))}</span>`, 1200); };
+  return t;
+}
+function renderIds() {
+  const box = $('ids'); box.innerHTML = '';
+  [['프로젝트', S.project], ['세션', S.session], ['런', S.run]].forEach(([l, id]) => { if (id) box.appendChild(idTag(l, id)); });
+}
+function runTag(runId) { const d = document.createElement('div'); d.className = 'runid'; d.dataset.run = runId; d.appendChild(idTag('런', runId)); return d; }
+// a finished turn gets its run id once, under its answer
+function addRunTag(runId) { if (!runId || logEl().querySelector(`.runid[data-run="${runId}"]`)) return; logEl().appendChild(runTag(runId)); scrollDown(); }
 // requestId (X-Request-ID): the same id is in the server log, click copies it
 function showError(msg, requestId) {
   const d = document.createElement('div'); d.className = 'error'; d.textContent = msg;
