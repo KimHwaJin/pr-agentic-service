@@ -97,6 +97,10 @@ def test_only_our_own_sources_are_read(tmp_path):
 
 def test_result_ref_names_the_execution_and_step():
     assert step_of(REF) == (EXECUTION, STEP)
+    # an executor that still gives paths from its own root (no folder)
+    bare = REF["relative_path"].removeprefix("executor/")
+    assert step_of({"relative_path": bare}) == (EXECUTION, STEP)
+    assert step_of({"relative_path": f"x{bare}"}) is None
     assert step_of({"relative_path": "elsewhere/x.json"}) is None
     assert step_of(None) is None
 

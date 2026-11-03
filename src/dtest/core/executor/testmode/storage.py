@@ -1,8 +1,11 @@
 """Step results from the executor notebook API (test environments only).
 
-A Step's result_ref names a manifest relative to the common root::
+A Step's result_ref names a manifest relative to the executor's root::
 
-    <executor folder>/executions/<execution>/operations/<op>/steps/<step>/...
+    [<executor folder>/]executions/<execution>/operations/<op>/steps/<step>/...
+
+The ids are found wherever that part sits in the path, so a path with or
+without the folder in front both work.
 
 Without the volume the execution and step ids are taken from that path,
 and the step's notebook cell is read instead. The executor writes one
@@ -26,7 +29,7 @@ from src.dtest.core.executor.storage import TEXT_TYPES, SharedStorage
 from src.dtest.core.service_headers import Identity, with_key
 
 _RESULT_PATH = re.compile(
-    r"/executions/(?P<execution>[^/]+)/operations/[^/]+/steps/(?P<step>[^/]+)/"
+    r"(?:^|/)executions/(?P<execution>[^/]+)/operations/[^/]+/steps/(?P<step>[^/]+)/"
 )
 
 
