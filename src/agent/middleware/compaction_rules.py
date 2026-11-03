@@ -1,7 +1,7 @@
 """What stays of an analysis once finish_analysis has closed it.
 
 Kept: the task, the analyst's conclusions, report ids and the report's
-summary/results, what ran and how it ended, skill/tool documents (latest
+first sections, what ran and how it ended, skill/tool documents (latest
 copy of each). Cleared: search results, raw observations; their
 originals stay in the notebook, run events, executor and catalog.
 
@@ -16,7 +16,6 @@ from agent.middleware.compaction import Rule, ToolResultCompactionMiddleware
 
 PLACEHOLDER = "[정리됨] 끝난 분석의 {tool} 결과 (필요하면 다시 조회)"
 SUPERSEDED = "[정리됨] 같은 {tool} 결과가 뒤에 다시 있음"
-REPORT_SECTIONS = ("요약", "주요 결과")
 REPORT_MAX = 1500
 TABLES = ("DataFrame", "Series", "ndarray")
 
@@ -61,19 +60,38 @@ def _variable(observation: Any) -> str:
 
 
 def report_brief(content: str) -> str:
-    """write_report result -> ids line + summary and results sections."""
+    """write_report result -> ids line + the report's sections in order.
+
+    No section is chosen by its heading's words (the model may name them
+    otherwise): whole sections are kept from the top (the reporter puts
+    the summary first) while they fit ``REPORT_MAX``; the rest keep only
+    their heading, so the next analysis knows they exist.
+    """
     head, _, markdown = content.partition("\n\n")
-    kept, keep = [], False
+    sections: list[list[str]] = [[]]
     for line in markdown.splitlines():
-        if line.startswith("#"):
-            keep = any(s in line for s in REPORT_SECTIONS)
-            if not keep:
-                continue
-        if keep:
-            kept.append(line)
-    body = "\n".join(kept).strip()
-    if len(body) > REPORT_MAX:
-        body = body[:REPORT_MAX] + " ...(생략, 전체는 리포트 참고)"
+        if line.startswith("#") and sections[-1]:
+            sections.append([])
+        sections[-1].append(line)
+    kept: list[str] = []
+    used, full = 0, True
+    for section in sections:
+        text = "\n".join(section).strip()
+        if not text:
+            continue
+        if full and used + len(text) <= REPORT_MAX:
+            kept.append(text)
+            used += len(text)
+            continue
+        if full and not kept:  # one long first section: its start
+            kept.append(text[:REPORT_MAX] + " ...(생략)")
+            used = REPORT_MAX
+        elif section[0].startswith("#"):
+            kept.append(section[0])
+        full = False
+    if not full:
+        kept.append("(나머지 내용은 리포트 참고)")
+    body = "\n\n".join(kept).strip()
     return f"{head}\n\n{body}" if body else head
 
 

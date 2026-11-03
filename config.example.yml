@@ -195,7 +195,7 @@ LLM_ENABLE_THINKING: false
 # 5. 임베딩 (워크플로우 템플릿 검색)
 # -----------------------------------------------------------------------------
 
-# [공통] none = 키워드 검색 | openai = 게이트웨이 임베딩 | mock = 로컬용 해시 n-gram.
+# [공통] none = 모델이 template을 읽고 고름(단어 매칭 아님) | openai = 게이트웨이 임베딩 | mock = 로컬용 해시 n-gram.
 # openai 면 EMBEDDING_BASE_URL, EMBEDDING_MODEL 필수.
 EMBEDDING_PROVIDER: none
 
@@ -321,7 +321,7 @@ WORKFLOW_SIMILARITY: 0.70
 PLAN_RECOMMEND_MODE: mixed
 
 # [공통] 후보가 템플릿 하나뿐이고 임베딩 유사도가 이 값 이상이면 승인 카드 없이 바로 실행
-# (키워드 검색일 때는 안 함). WORKFLOW_SIMILARITY 이상이어야 함.
+# (임베딩 없이 모델이 고른 검색일 때는 안 함). WORKFLOW_SIMILARITY 이상이어야 함.
 WORKFLOW_AUTO_RUN_SIMILARITY: 0.77
 
 # [공통] 후보 워크플로우를 전체 사용자용 템플릿으로 승격할 수 있는 사람.

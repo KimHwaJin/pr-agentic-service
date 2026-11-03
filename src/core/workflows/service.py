@@ -2,19 +2,20 @@
 
 Search embeds the user's question and compares it with each template's
 example questions (``user_queries``) through a pgvector HNSW index; without
-an embedding model it falls back to keyword matching so local development
-still works.
+an embedding model the chat model reads the newest templates and names the
+ones that fit (``core.workflows.pick``), never word overlap.
 """
 
 from typing import Any
 
 from langchain_core.embeddings import Embeddings
-from sqlalchemy import Text, cast, func, or_, select, text, update
+from langchain_core.language_models import BaseChatModel
+from sqlalchemy import or_, select, text, update
 
 from core.assets import SkillCatalog, ToolCatalog
 from core.db import Database, utcnow
 from core.models import Workflow, WorkflowQueryVector
-from core.workflows import spec
+from core.workflows import pick, spec
 
 
 class WorkflowError(Exception):
@@ -259,13 +260,20 @@ class WorkflowService:
         await self._index(workflow)
         return await self.get(workflow_id)
 
-    async def search(self, query: str, limit: int) -> list[dict[str, Any]]:
+    async def search(
+        self,
+        query: str,
+        limit: int,
+        chooser: BaseChatModel | None = None,
+    ) -> list[dict[str, Any]]:
         """Templates only.
 
-        Returns [{workflow, similarity, matched_query}] best first.
+        Returns [{workflow, similarity, matched_query}] best first. Without
+        an embedder ``chooser`` (a chat model) picks them; similarity is
+        then None (so never an auto-run), and without one nothing is found.
         """
         if self.embedder is None:
-            return await self._keyword_search(query, limit)
+            return await self._model_search(query, limit, chooser)
         vector = await self.embedder.aembed_query(query)
         expr = f"(embedding::vector({self.dims}))"
         sql = text(
@@ -307,42 +315,27 @@ class WorkflowService:
             for h in hits
         ]
 
-    async def _keyword_search(
-        self, query: str, limit: int
+    async def _model_search(
+        self, query: str, limit: int, chooser: BaseChatModel | None
     ) -> list[dict[str, Any]]:
-        words = [w for w in query.split() if len(w) >= 2][:8]
-        if not words:
+        if chooser is None:
             return []
-        haystack = func.concat(
-            Workflow.name,
-            " ",
-            Workflow.user_request,
-            " ",
-            cast(Workflow.user_queries, Text),
-        )
         async with self.db.sessions() as db:
-            rows = (
+            pool = (
                 await db.scalars(
-                    select(Workflow).where(
+                    select(Workflow)
+                    .where(
                         Workflow.lifecycle == "template",
                         Workflow.deleted_at.is_(None),
-                        or_(*[haystack.ilike(f"%{w}%") for w in words]),
                     )
+                    .order_by(Workflow.updated_at.desc())
+                    .limit(pick.POOL)
                 )
             ).all()
-        ranked = sorted(
-            rows,
-            key=lambda w: (
-                -sum(
-                    word.lower()
-                    in f"{w.name} {w.user_request} {w.user_queries}".lower()
-                    for word in words
-                )
-            ),
-        )
+        chosen = await pick.pick(chooser, query, list(pool), limit)
         return [
             {"workflow": w, "similarity": None, "matched_query": None}
-            for w in ranked[:limit]
+            for w in chosen
         ]
 
     async def _index(self, workflow: Workflow) -> None:

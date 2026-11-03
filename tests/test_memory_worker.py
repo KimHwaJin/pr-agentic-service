@@ -332,7 +332,13 @@ def _plan(ops, lines=LINES, limit=500):
 
 
 def _add(text, quote="보고서는 표 위주로", topic="preferences"):
-    return {"op": "add", "topic": topic, "text": text, "quote": quote}
+    return {
+        "op": "add",
+        "topic": topic,
+        "text": text,
+        "quote": quote,
+        "lasting": True,
+    }
 
 
 def test_valid_ops_apply_in_order():
@@ -344,6 +350,7 @@ def test_valid_ops_apply_in_order():
                 "line_id": "b2",
                 "text": "- 목표: A라인 수율",
                 "quote": "목표는 A라인 수율 개선",
+                "lasting": True,
             },
             {"op": "delete", "line_id": "a1"},
         ]
@@ -363,16 +370,21 @@ def test_valid_ops_apply_in_order():
     [
         (_add("- 표", quote=""), "no quote"),
         (_add("- 표", quote="그래프로 그려줘"), "quote not in a user message"),
-        (_add("- 이번만 표로"), "one-off phrasing"),
-        (_add("- 이 보고서만 표로"), "one-off phrasing"),
-        (_add("- 오늘만 표로"), "one-off phrasing"),
+        ({**_add("- 표로"), "lasting": False}, "not lasting"),
+        ({**_add("- 표로"), "lasting": None}, "not lasting"),
         (_add("- 참고: https://wiki/x"), "url"),
         (_add("- 데이터: /data/nce/lot.csv"), "file path"),
         (_add("- 데이터: C:\\data\\x.csv"), "file path"),
         (_add("## 제목"), "heading"),
         (_add("- 표 위주"), "duplicate line"),
         (
-            {"op": "replace", "line_id": "zz", "text": "- x", "quote": "목표"},
+            {
+                "op": "replace",
+                "line_id": "zz",
+                "text": "- x",
+                "quote": "목표",
+                "lasting": True,
+            },
             "line_id not found",
         ),
         ({"op": "delete", "line_id": "zz"}, "line_id not found"),
@@ -382,6 +394,7 @@ def test_valid_ops_apply_in_order():
                 "line_id": "a1",
                 "text": "- 표  위주",
                 "quote": "목표",
+                "lasting": True,
             },
             "replace changes nothing",
         ),
@@ -457,9 +470,9 @@ def test_extract_applies_valid_ops_and_tells_the_sessions(monkeypatch):
     model = _Model(
         '{"ops": ['
         '{"op": "add", "topic": "preferences", "text": "- 보고서는 표 위주",'
-        ' "quote": "보고서는 표 위주로 써 줘"},'
+        ' "quote": "보고서는 표 위주로 써 줘", "lasting": true},'
         '{"op": "add", "topic": "overview", "text": "- 분석 결과 편차 큼",'
-        ' "quote": "편차가 큽니다"},'
+        ' "quote": "편차가 큽니다", "lasting": true},'
         '{"op": "add", "topic": "nope", "text": "x", "quote": "x"}'
         "]}"
     )
@@ -634,12 +647,12 @@ def test_extract_uses_the_project_topics(monkeypatch):
     model = _Model(
         '{"ops": ['
         f'{{"op": "add", "topic": "{term}", "text": "- NCE: 불량 분류",'
-        ' "quote": "우리 목표는 A라인 수율 개선"},'
+        ' "quote": "우리 목표는 A라인 수율 개선", "lasting": true},'
         # the name used before topics were editable
         '{"op": "add", "section": "overview", "text": "- A라인 수율 개선",'
-        ' "quote": "우리 목표는 A라인 수율 개선"},'
+        ' "quote": "우리 목표는 A라인 수율 개선", "lasting": true},'
         '{"op": "add", "topic": "preferences", "text": "- 표 위주",'
-        ' "quote": "보고서는 표 위주로 써 줘"}'
+        ' "quote": "보고서는 표 위주로 써 줘", "lasting": true}'
         "]}"
     )
     monkeypatch.setattr(mw, "chat_model", lambda settings, name: model)
