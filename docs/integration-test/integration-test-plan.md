@@ -45,7 +45,7 @@
 | I4 | 우리 → executor (시스템 화면) | `EXECUTOR_ADMIN_API_KEY`(ops) | 런타임·점검 탭, 비어 있으면 503 |
 | I5 | executor → Redis → 우리 워커 | 스트림 `executor.events.dtest-agent-service` | 이벤트를 받고 executor에 다시 물어본 뒤 run 재개, 놓친 이벤트 복구 |
 | I6 | 우리 → pr-batch | `BATCH_API_KEY`(relay + admin) | 스크립트·배치 게이트웨이, `disable-by-owner`, `disable-by-tenant` |
-| I7 | pr-batch → executor | pr-batch의 `EXECUTOR_API_KEY` | `trigger BATCH` + `actor USER(owner)`, 배치의 tenant로 제출 |
+| I7 | pr-batch → executor | pr-batch의 `EXECUTOR_API_KEY` | `trigger {type: BATCH}` + `X-User-Id`(owner), 배치의 tenant로 제출 |
 | I8 | gaia → 우리 (internal/gaia만) | gaia가 넘기는 사번 | gaia 세션 ↔ 우리 세션 매핑, 확인 단계 자동 응답 |
 | I9 | 우리 → SSO(idp) | idp 로그인 페이지·userinfo | `SSO_ALLOWED_ORIGINS`, 사번 표기(대소문자), 관리자 최초 로그인 |
 
@@ -137,7 +137,7 @@
 | --- | --- | --- | --- | --- | --- |
 | D1 | 분석 노트북으로 스크립트 등록(`from-notebook`) | pr-batch 스크립트 생성, owner = 사번 | I1 I3 I6 | L D | P0 |
 | D2 | 일정 있는 배치 생성 | `can_enable: true`, tenant `dtest-agent-service` 저장 | I6 | L D | P0 |
-| D3 | 지금 실행 | run `SUBMITTED → RUNNING → COLLECTING → COMPLETED`, executor `trigger BATCH` + `actor USER id=<사번>` | I6 I7 | L D S | P0 |
+| D3 | 지금 실행 | run `SUBMITTED → RUNNING → COLLECTING → COMPLETED`, executor `trigger {type: BATCH}`, `context.user_id`·`created_by` = `<사번>`, `created_by_client` = pr-batch key 이름 | I6 I7 | L D S | P0 |
 | D4 | 배치 리포트 | `/batch-reports` job `SUCCEEDED` + `artifact_id`, 노트북 마지막 셀에 리포트 | I3 I5 | L D S | P0 |
 | D5 | 일정에 의한 실행(5분 뒤 1회) | 예정 시각 1분 안에 제출, D3·D4와 같은 결과 | I7 | D | P0 |
 | D6 | 실패하는 스크립트 | run `FAILED`, 리포트 job 없음 | I7 | L D | P0 |
