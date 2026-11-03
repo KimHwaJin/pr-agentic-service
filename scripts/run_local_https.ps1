@@ -15,13 +15,17 @@
 #   4. Open https://<HostName>:<Port>/api/v1/auth/login/sso?return_to=/dev/
 #      and accept the certificate warning once.
 #
-# Runs without gaia (uvicorn directly), since gaia's uvicorn.run takes no
-# TLS options. Make a new certificate with -NewCert.
+# With the gaia template (src/gaia/core.py) it runs app.py, so /docs has
+# the template's APIs too; gaia's main() takes no TLS options, so
+# scripts/run_app_tls.py adds them, and the port is gaia's config.PORT
+# (-Port is ignored). Without gaia (main, or -NoGaia) it runs uvicorn
+# directly on -Port. Make a new certificate with -NewCert.
 
 param(
     [Parameter(Mandatory = $true)][string]$HostName,
     [int]$Port = 5000,
-    [switch]$NewCert
+    [switch]$NewCert,
+    [switch]$NoGaia
 )
 
 $ErrorActionPreference = "Stop"
@@ -35,17 +39,25 @@ if ($NewCert -or -not (Test-Path $key) -or -not (Test-Path $cert)) {
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 }
 
+# Same interpreter as `uv run python`: print it so a wrong environment
+# shows up before the app fails on an import.
+uv run python -c "import sys, pgvector; print('python:', sys.executable)"
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+# The gaia template's app.py: its routers and ours, as in the company network.
+if (-not $NoGaia -and (Test-Path (Join-Path $root "src\gaia\core.py"))) {
+    Write-Host "gaia app.py (port: gaia config.PORT)"
+    uv run python scripts/run_app_tls.py $key $cert
+    exit $LASTEXITCODE
+}
+
 # internal/gaia keeps the app in src/dtest; main runs src/main.py.
+Write-Host "without gaia: our routes only"
 if (Test-Path (Join-Path $root "src\dtest\local.py")) {
     $app = @("src.dtest.local:app")
 } else {
     $app = @("main:app", "--app-dir", "src")
 }
-
-# Same interpreter as `uv run python`: print it so a wrong environment
-# shows up before the app fails on an import.
-uv run python -c "import sys, pgvector; print('python:', sys.executable)"
-if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
 # psycopg async needs the selector loop on Windows.
 uv run python -m uvicorn @app --host 0.0.0.0 --port $Port `
