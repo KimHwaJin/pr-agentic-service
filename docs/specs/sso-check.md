@@ -57,5 +57,5 @@ SSO 쿠키는 IdP 도메인 아래 주소에만 오고, 그 도메인은 https�
    ```powershell
    powershell -ExecutionPolicy Bypass -File scripts\run_local_https.ps1 -HostName dtest-local.<idp 도메인>
    ```
-   처음 한 번 `.local/tls/`에 자체 서명 인증서를 만들고(`scripts/make_local_cert.py`), gaia 없이 uvicorn을 TLS로 띄웁니다. 포트는 `-Port`, 인증서 다시 만들기는 `-NewCert`.
+   처음 한 번 `.local/tls/`에 자체 서명 인증서를 만들고(`scripts/make_local_cert.py`), TLS로 띄웁니다. gaia 템플릿(`src/gaia/core.py`)이 있으면 `app.py`를 그대로 실행해 `/docs`에 gaia API와 우리 API가 함께 나옵니다. gaia의 `main()`은 TLS 옵션을 받지 않아 `scripts/run_app_tls.py`가 `uvicorn.run`에 인증서를 넣어 주고, 포트는 gaia의 `config.PORT`를 씁니다. gaia가 없거나 `-NoGaia`를 주면 우리 앱만 uvicorn으로 `-Port`에 띄웁니다. 인증서 다시 만들기는 `-NewCert`.
 4. 브라우저 인증서 경고는 한 번 "고급 → 계속"으로 넘깁니다.
