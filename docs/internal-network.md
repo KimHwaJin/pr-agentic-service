@@ -61,3 +61,7 @@
 - 기능 작업은 어느 쪽에서 해도 됩니다. `main`의 변경은 `git merge main`으로 이 브랜치에 가져옵니다. 파일을 `git mv`로 옮겨 두어 git이 이동을 따라가므로, 대부분 충돌 없이 `src/dtest/` 아래로 들어옵니다.
 - 새 파일을 `main`에 만들면 merge 뒤 `src/dtest/` 아래로 옮기고 import를 `src.dtest.`로 고쳐야 합니다. `tests/test_entry.py`의 import 검사가 빠진 곳을 알려 줍니다.
 - Python은 이 브랜치만 3.11입니다(내부망 이미지). `main`에서 3.12 전용 문법(`def f[T]()` 같은)을 쓰면 merge 때 고쳐야 합니다.
+
+## gaia 접근 키 검사와 우리 경로
+
+`GAIA_DEPLOYMENT=development`부터 gaia 템플릿의 `AuthMiddleware`(gaia/core.py)가 `accesskey` 헤더 없는 요청에 401 `{"detail": "Access key is required"}`를 줍니다. 우리 경로(`/api/v1/`, `/view/`, `/dev/`)는 SSO와 우리 API 키로 따로 막혀 있고 브라우저의 `/dev/`는 그 키를 보낼 수 없으므로, `mount_api`의 `skip_gaia_auth`가 앱이 미들웨어 스택을 만들 때 그 미들웨어를 우리 경로만 건너뛰게 감쌉니다(`api_service/paths.py`). gaia 템플릿 API(`/api/admin/appReady`, `/{workflow}/api/completion` 등)는 그대로 키를 검사합니다. 기동 로그 `gaia_auth_skipped_on_own_paths`가 찍히면 적용된 것입니다.
