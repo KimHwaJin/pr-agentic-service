@@ -2334,7 +2334,8 @@ setRefresh(SYS.refresh);
 const RT_ACTIONS = { probe: '지금 점검합니다', drain: '새 작업 배정을 멈추고, 진행 중인 작업은 마저 끝냅니다', activate: '다시 배정 대상으로 돌립니다', disable: '사용을 중지합니다 (실행 이력은 남음)', purge: '사용 중지된 대상을 목록에서 제거합니다' };
 async function runtimeAction(id, action, name) {
   if (action !== 'probe' && !confirm(`${name}: ${RT_ACTIONS[action]}. 진행할까요?`)) return;
-  const body = ['drain', 'activate', 'disable'].includes(action) ? { idempotency_key: crypto.randomUUID() } : {};
+  // probe and purge take no body
+  const body = ['drain', 'activate', 'disable'].includes(action) ? { idempotency_key: crypto.randomUUID() } : undefined;
   await api(`/executor/runtime-targets/${id}/${action}`, { method: 'POST', body });
   renderRuntimes();
 }

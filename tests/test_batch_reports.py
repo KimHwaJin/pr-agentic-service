@@ -121,7 +121,7 @@ def _inserted(db: _Db) -> dict[str, Any]:
 def _batch_execution(status="SUCCEEDED", trigger="BATCH", owner=OWNER):
     return {
         "state": {"status": status},
-        "trigger": {"type": trigger, "actor": {"type": "USER"}},
+        "trigger": {"type": trigger},
         "context": {"user_id": owner} if owner else {},
         "metadata": {"batch_id": "batch-3", "run_id": "run-7"},
     }
