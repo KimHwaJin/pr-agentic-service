@@ -29,9 +29,14 @@ COPY src ./src
 # UID 1000 matches the Executor image so both can read and write the shared PV.
 RUN uv sync --locked --no-dev --group phoenix \
     && useradd --create-home --uid 1000 agentic \
-    && chown -R agentic:agentic /app
+    && chown -R 1000:1000 /app
 
-USER agentic
+# Numeric, so starting the container never looks the name up in
+# /etc/passwd: a build pipeline that replaces that file (or a base image
+# without the entry) fails with "unable to find user ... no matching
+# entries in passwd file". HOME is set for the same reason.
+ENV HOME=/home/agentic
+USER 1000:1000
 EXPOSE 8080
 
 # The gaia template starts one uvicorn worker on config PORT (8080 here):
