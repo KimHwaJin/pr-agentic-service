@@ -29,6 +29,11 @@ dependencies = [
 requires = ["uv_build>=0.11.29,<0.12.0"]
 build-backend = "uv_build"
 
+[tool.uv]
+# `uv run` / `uv sync` install Phoenix tracing too, so PHOENIX_ENDPOINT in a
+# config file is all it takes to turn it on (docs/phoenix-tracing.md)
+default-groups = ["dev", "phoenix"]
+
 [tool.uv.build-backend]
 module-name = ["core", "api_service", "agent", "worker"]
 

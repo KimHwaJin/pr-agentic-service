@@ -21,7 +21,7 @@ from worker.runtime import Worker
 
 configure_logging()  # logger.yml (or HCP's own inside the company network)
 settings = get_settings()
-tracing_phoenix.setup()
+tracing_phoenix.setup(settings)
 log = logging.getLogger(__name__)
 mode = os.environ.get("RUN_MODE", "all")
 api_enabled, worker_enabled = mode in {"all", "api"}, mode in {"all", "worker"}
