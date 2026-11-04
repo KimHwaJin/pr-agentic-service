@@ -122,7 +122,7 @@
 | RUN-09 | 진행 중 세션에 새 턴 | 409 `SESSION_BUSY` | I1 | O |  | P1 |
 | RUN-10 | 오래된 `interrupt_id`로 재개 | 409 `STALE_INTERRUPT` | I1 | O |  | P1 |
 | RUN-11 | 필수 입력을 비우고 승인 | 계획 카드에 빈 필수 입력 수가 표시되고 승인 버튼은 막히지 않음. 승인하면 422 `INVALID_ANSWER`, `details[].location`이 그 칸 | I1 | O |  | P1 |
-| RUN-12 | 공유 프로젝트에서 B가 A의 세션을 이어 실행 | 이어지는 executor 호출의 `X-User-Id`는 A(실행 소유자) | I1 I3 | O |  | P1 |
+| RUN-12 | 공유 프로젝트에서 B가 A의 세션을 이어 실행 | 이어지는 executor 호출의 `X-User-Id`는 A(실행 소유자) | I1 I3 | X (관리자) |  | P1 |
 | RUN-13 | 실행 중 세션 삭제 | 진행 중 executor 실행 취소 | I1 I3 | O |  | P1 |
 | RUN-14 | 분석 시나리오 묶음 `scripts/run_scenarios.py` | 점수표 JSON, 이전 기준선 이상 | I1 I3 | X (운영) |  | P1 |
 | RUN-15 | 코드 레벨 4로 분석 요청 (세션 또는 프로젝트 설정) | 계획 승인 카드 없이 바로 `run_custom_code` 실행. 레벨 3에서는 기존처럼 plan_approval | I1 I3 I5 | O |  | P1 |
@@ -135,7 +135,7 @@
 | --- | --- | --- | --- | --- | --- | --- |
 | EXEC-01 | 우리 tenant 키 + `X-User-Id`로 `GET /executor/executions` | 본인 실행만 | I2 I3 | O |  | P0 |
 | EXEC-02 | INLINE `print(1+1)` 제출(curl) | result에 `2`. 작업 공간은 PV `tenants/dtest-agent-service/users/<사번>/…`, 결과 경로는 통합 루트 기준 `executor/executions/<id>/…`이고 세션 화면 이미지·단계 결과가 열림 | I2 I3 | O |  | P0 |
-| EXEC-03 | 외부 tenant(`it-ext`) 키로 실행 제출 | `tenants/it-ext/…`에 생성, 이벤트는 `executor.events.it-ext`, 우리 run 변화 없음 | I2 I3 | O |  | P0 |
+| EXEC-03 | 외부 tenant(`it-ext`) 키로 실행 제출 | `tenants/it-ext/…`에 생성, 이벤트는 `executor.events.it-ext`, 우리 run 변화 없음 | I2 I3 | 일부 (운영) |  | P0 |
 | EXEC-04 | 키로 runtime·maintenance·attempts 경로 | 404, executor로 가지 않음 | I2 | O |  | P0 |
 | EXEC-05 | 결과물 `/artifacts/{id}`·`/view/artifacts/{id}` | 프로젝트 멤버만, 비멤버 거부, 외부 tenant 결과물은 안 보임 | I1 I3 | O |  | P0 |
 | EXEC-06 | 우리 tenant 키, `X-User-Id` 없이 GET / POST | GET은 우리 tenant 전체, POST는 400 | I2 I3 | O |  | P1 |
@@ -155,16 +155,16 @@
 | BAT-07 | 같은 배치 2회차 | 리포트가 1회차 요약을 참고(배치 메모리) | I5 | O |  | P1 |
 | BAT-08 | 우리 워커를 내린 채 배치 성공 → 재기동 | 10분 안에 복구 스위프로 리포트 생성 | I3 | 일부 (운영) | 단독 | P1 |
 | BAT-09 | 일정 없는 배치 / 지난 일정만 있는 배치 | `enable_blocked_reason` `SCHEDULE_REQUIRED` / `NO_FUTURE_OCCURRENCE`, 켜기 409 / 422 | I6 | O |  | P1 |
-| BAT-10 | 외부 tenant 키로 배치 등록·실행 | tenant `it-ext`로 저장·제출, 우리 리포트는 만들어지지 않음 | I2 I6 I7 | O |  | P1 |
+| BAT-10 | 외부 tenant 키로 배치 등록·실행 | tenant `it-ext`로 저장·제출, 우리 리포트는 만들어지지 않음 | I2 I6 I7 | 일부 (운영) |  | P1 |
 
 ### E. tenant 폐기·사용자 비활성화 (TEN)
 
 | ID | 시나리오 | 기대 결과 | 경로 | 화면 | 단독 | 우선 |
 | --- | --- | --- | --- | --- | --- | --- |
-| TEN-01 | 외부 tenant `it-ext` 일괄 폐기 (BAT-10 배치가 켜진 상태) | 키 60초 안에 401, `disable-by-tenant`로 배치 꺼짐(`TENANT_REVOKED`), 응답 `batches_disabled: true`(실패 시 `batches_disable_pending: true`), 이미 제출된 실행은 끝까지 | I6 | O | 단독 | P0 |
+| TEN-01 | 외부 tenant `it-ext` 일괄 폐기 (BAT-10 배치가 켜진 상태) | 키 60초 안에 401, `disable-by-tenant`로 배치 꺼짐(`TENANT_REVOKED`), 응답 `batches_disabled: true`(실패 시 `batches_disable_pending: true`), 이미 제출된 실행은 끝까지 | I6 | 일부 (운영) | 단독 | P0 |
 | TEN-02 | pr-batch를 내린 채 tenant 폐기 | `batches_disable_pending: true`, pr-batch 복구 후 5분 안에 재시도로 꺼짐 | I6 | 일부 (운영) | 단독 | P0 |
 | TEN-03 | 사용자 B 비활성화 | 30초 안에 SSO·키 모두 차단, `disable-by-owner`로 B의 배치 꺼짐, 수동 실행 409 `OWNER_DEACTIVATED` | I1 I6 | O | 단독 | P0 |
-| TEN-04 | tenant의 마지막 active 키를 개별 폐기 | TEN-01과 같음 | I6 | O | 단독 | P1 |
+| TEN-04 | tenant의 마지막 active 키를 개별 폐기 | TEN-01과 같음 | I6 | 일부 (운영) | 단독 | P1 |
 | TEN-05 | 우리 tenant 키 폐기 | 그 키만 401, SSO 사용자의 배치는 켜진 채 | I2 | O |  | P1 |
 | TEN-06 | B 재활성화 | 로그인 가능, 배치는 꺼진 채 | I1 | O |  | P1 |
 | TEN-07 | pr-batch를 내린 채 사용자 비활성화 | `batches_disable_pending`, 5분 재시도로 꺼짐 | I6 | 일부 (운영) | 단독 | P1 |
@@ -209,8 +209,9 @@
 
 ## 화면 수행 기준
 
-- 76개 중 우리 화면만으로 되는 것 56개, 화면 + 보조 확인 10개, 화면 밖 10개입니다(PREP 제외). 화면 보완 S1~S6(11/04)을 반영한 수치입니다. 상세는 공유 폴더 `integration-test/screen-coverage-review.md`.
+- 76개 중 우리 화면만으로 되는 것 51개, 화면 + 보조 확인 14개, 화면 밖 11개(보류 1개 포함)입니다(PREP 제외). 화면 보완 S1~S6(11/04)을 반영한 수치입니다. 상세는 공유 폴더 `integration-test/screen-coverage-review.md`.
 - 키 호출 시나리오는 관리자 **시스템 > API 호출 시험** 화면에서 합니다. 시나리오를 고르면 경로·본문·헤더가 채워지고, 서버 응답(상태 코드, request id, 본문)을 그대로 보여 줍니다. 키는 저장하지 않고 요청·응답 기록에서 가립니다.
+- 시나리오별 수행 절차는 [scenarios/](scenarios/README.md)에 있습니다.
 - 화면 밖으로 남는 것은 **운영**(서비스 중지·재시작, 설정 변경, Redis·DB·로그 확인, 부하 스크립트)과 **gaia 화면**입니다. 담당 팀이 수행하고, 결과 확인은 우리 화면에서 같이 합니다.
 - 증빙은 화면 우측 상단 **요청·응답** 창(요청·응답 본문, SSE), 오류 메시지의 request id, 채팅 머리의 프로젝트·세션·run id, 실행 이력 > 개요(tenant, created_by, created_by_client)를 씁니다.
 - 화면에는 판단 로직을 넣지 않습니다. 화면은 백엔드가 준 값(`permissions`, `can_enable`, `enable_blocked_reason`, `allow_reject_templates`, `recommendable`, `can_delete`, `batches_disable_pending` 등)만 보고 그립니다. 화면에서 막힌 것처럼 보여도 서버가 판정한 결과인지 확인합니다.
@@ -269,6 +270,7 @@
 | R10 | 우리 화면 `/dev/`가 `APP_ENV` local·dev에서만 열렸음 | prd에서 화면 시나리오 수행 불가 | `WEB_CONSOLE_ENABLED`(prd는 `true`), 화면 로그인 후 API 호스트의 `/dev/`로 복귀. **오픈 때 `false`로** | 우리 | 완료(11/04, 화면 보완 S1~S6) |
 | R11 | 결과 경로가 통합 루트 기준만 지원(옛 `executions/...` 삭제, `35313b2`) | executor가 옛 버전이면 이미지·단계 결과를 못 읽음 | PREP-07에서 executor 통합 루트 버전 먼저 | executor | 배포 순서에 반영 |
 | R12 | 기본 임베딩이 꺼져 있고(`none`), 게이트웨이 bge-m3는 `dimensions`를 거부 | 임베딩 없으면 RUN-08 자동 실행이 절대 안 일어남 | prd에서 임베딩을 쓸지 정하고 PREP-04에서 확인 | 우리 | 결정 필요 |
+| R13 | 프로젝트에 멤버를 추가하는 화면·API가 없음 | RUN-12(공유 프로젝트) 수행 불가 | 공유 기능을 만들지, 시나리오를 뺄지 결정 | 우리 | 결정 필요(RUN-12 보류) |
 
 **정해야 할 것**
 
@@ -278,6 +280,7 @@
 - [ ] R3 테스트 스크립트 키 모드 진행 여부
 - [ ] 외부 tenant 테스트 이름 `it-ext`를 쓸지, 실제 상위 에이전트 tenant로 할지
 - [ ] 결함번호를 어디서 매길지 (Jira 등)
+- [ ] 프로젝트 공유 기능(R13): 만들지, RUN-12를 뺄지
 
 ## 다른 팀 요청 (복사용)
 
