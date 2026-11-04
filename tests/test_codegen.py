@@ -75,7 +75,7 @@ def test_observation_summarises_multiindex_series(capsys):
     import pytest
 
     pd = pytest.importorskip("pandas")  # in the executor kernel, not here
-    from agent.codegen import SETUP
+    from src.dtest.agent.codegen import SETUP
 
     namespace: dict = {"get_ipython": lambda: None}
     exec(compile(SETUP, "setup", "exec"), namespace)
