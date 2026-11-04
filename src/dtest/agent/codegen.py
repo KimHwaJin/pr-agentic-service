@@ -99,7 +99,10 @@ def _agentic_observe(name, value):
             if isinstance(v, pd.DataFrame):
                 return frame(v)
             if isinstance(v, pd.Series):
-                head = v.head(10).to_dict()
+                # str keys: a MultiIndex (groupby on several columns)
+                # gives tuple keys and a DatetimeIndex Timestamps, which
+                # json.dumps refuses as keys
+                head = {str(k): num(x) for k, x in v.head(10).items()}
                 return {"type": "Series", "len": len(v), "head": head}
         except ImportError:
             pass
@@ -122,12 +125,16 @@ def _agentic_observe(name, value):
             return text if len(text) <= 500 else text[:500] + "..."
         return obj(v)
 
-    try:
+    try:  # never fail the step because of the summary
         summary = brief(value)
-    except Exception as exc:  # never fail the step because of the summary
+        dumped = json.dumps(
+            {"var": name, "value": summary}, default=str, ensure_ascii=False
+        )
+    except Exception as exc:
         summary = f"(요약 실패: {type(exc).__name__}) {repr(value)[:300]}"
-    payload = {"var": name, "value": summary}
-    dumped = json.dumps(payload, default=str, ensure_ascii=False)
+        dumped = json.dumps(
+            {"var": name, "value": summary}, default=str, ensure_ascii=False
+        )
     print(__PREFIX__ + dumped)
 """.strip().replace("__PREFIX__", repr(OBSERVATION_PREFIX))
 

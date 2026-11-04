@@ -67,3 +67,23 @@ def test_observation_summarises_plain_objects(capsys):
     model, nested = (json.loads(line.split(" ", 1)[1]) for line in out)
     assert model["value"]["attrs"] == {"coef_": "[1.5, 2.0]"}
     assert nested["value"] == {"a": {"b": "{'c': 1}"}}
+
+
+def test_observation_summarises_multiindex_series(capsys):
+    import json
+
+    import pytest
+
+    pd = pytest.importorskip("pandas")  # in the executor kernel, not here
+    from agent.codegen import SETUP
+
+    namespace: dict = {"get_ipython": lambda: None}
+    exec(compile(SETUP, "setup", "exec"), namespace)
+    df = pd.DataFrame({"a": ["x", "x", "y"], "b": [1, 2, 1], "v": [1, 2, 3]})
+    series = df.groupby(["a", "b"])["v"].sum()  # tuple keys
+    namespace["_agentic_observe"]("s", series)
+    line = capsys.readouterr().out.strip()
+    value = json.loads(line.split(" ", 1)[1])["value"]
+    assert value["type"] == "Series" and value["len"] == 3
+    assert value["head"]["('x', 1)"] == 1
+
