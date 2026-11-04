@@ -80,7 +80,12 @@ CODE_LEVELS = {
         "3 (tools_first): tool 우선. "
         "맞는 tool이 없거나 실패를 메울 때 새 함수를 작성 가능."
     ),
-    4: "4 (free_code): tool은 참고만 하고 필요한 코드를 자유롭게 작성 가능.",
+    4: (
+        "4 (free_code): 코드를 자유롭게 작성 가능. 계획 제안(`propose_plans`)과 "
+        "`run_plan` 없이 바로 `run_custom_code`로 분석해도 됩니다. skill과 tool은 "
+        "필요할 때만 참고하고, 맞는 것이 없으면 찾느라 시간을 쓰지 말고 바로 "
+        "코드를 작성하세요."
+    ),
 }
 # step 3 of analyst.md per PLAN_RECOMMEND_MODE; {n} = PLAN_CANDIDATES
 PLAN_RECOMMEND = {
