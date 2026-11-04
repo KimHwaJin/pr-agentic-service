@@ -54,7 +54,11 @@ def build_embedder(settings: Settings) -> Embeddings | None:
             model=settings.embedding_model,
             base_url=settings.embedding_base_url,
             api_key=settings.embedding_api_key,
-            dimensions=settings.embedding_dims,
+            dimensions=(
+                settings.embedding_dims
+                if settings.embedding_send_dimensions
+                else None
+            ),
             check_embedding_ctx_length=False,
         )
     return None

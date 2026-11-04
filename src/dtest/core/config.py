@@ -207,6 +207,11 @@ class Settings(BaseSettings):
     embedding_api_key: str = "EMPTY"
     embedding_model: str = ""
     embedding_dims: int = 1024
+    # send EMBEDDING_DIMS as the request's `dimensions`. Only matryoshka
+    # models (text-embedding-3-*) take it; vLLM/TEI serving bge-m3 and the
+    # like answer 400 "dimensions is currently not supported", so it is off
+    # and the model's own size must equal EMBEDDING_DIMS.
+    embedding_send_dimensions: bool = False
 
     # Service-to-service auth (docs/specs/service-auth.md): callers other
     # than the browser always send X-Api-Key (a key of api_clients) and

@@ -211,6 +211,11 @@ EMBEDDING_MODEL: ""
 # [공통] 임베딩 차원. 모델/차원이 바뀌면 다른 벡터 공간으로 취급해 섞지 않음.
 EMBEDDING_DIMS: 1024
 
+# [공통] 요청에 dimensions(=EMBEDDING_DIMS)를 실어 보낼지. 마트로시카 모델(text-embedding-3-*)만 지원하고
+# bge-m3 등은 400 "dimensions is currently not supported"를 내므로 기본 false.
+# false 면 모델 자체 차원이 EMBEDDING_DIMS 와 같아야 함 (scripts/check_embedding.* 로 확인).
+EMBEDDING_SEND_DIMENSIONS: false
+
 
 # -----------------------------------------------------------------------------
 # 6. Executor (코드 실행 서비스)
