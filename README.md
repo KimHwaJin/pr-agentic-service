@@ -26,7 +26,7 @@ src/dtest/
   assets/        skills/(분석 skill .md) tools/(분석 함수 .py) knowledge/(도메인 지식 .md) — 현재 mock
   catalogs/      테스트 카탈로그
   migrations/    Alembic (alembic.ini도 여기)
-  web/dev/       테스트 콘솔(로컬·dev에서 /dev/)
+  web/dev/       테스트 콘솔(/dev/, 로컬·dev 기본, `WEB_CONSOLE_ENABLED`로 켜고 끔)
 scripts/         mock_llm.py(게이트웨이 대역), smoke_e2e.py(종단 점검)
 ```
 

@@ -9,6 +9,7 @@ from src.dtest.api_service.deps import (
     forget_user,
 )
 from src.dtest.api_service.schemas.users import (
+    AdminUserRead,
     Me,
     MePermissions,
     UserAdminUpdate,
@@ -92,7 +93,7 @@ async def users_by_id(services, ids: list[str]) -> dict[str, User]:
     return {u.id: u for u in rows}
 
 
-@router.get("/admin/users", response_model=list[UserRead])
+@router.get("/admin/users", response_model=list[AdminUserRead])
 async def list_users(
     services: ServicesDep, admin: AdminDep, q: str | None = None
 ):
@@ -105,7 +106,7 @@ async def list_users(
         return (await db.scalars(query)).all()
 
 
-@router.patch("/admin/users/{user_id}", response_model=UserRead)
+@router.patch("/admin/users/{user_id}", response_model=AdminUserRead)
 async def update_user(
     user_id: str, body: UserAdminUpdate, services: ServicesDep, admin: AdminDep
 ):

@@ -58,11 +58,20 @@ class SsoService:
             or not any(
                 parsed.path == root
                 or (root != "/" and parsed.path.startswith(root + "/"))
-                for root in s.sso_allowed_return_roots
+                for root in self._return_roots()
             )
         ):
             raise HTTPException(400, "Invalid return_to.")
+        if s.console_enabled and _in_console(parsed.path):
+            # the console is served by this API, not the frontend
+            return s.public_api_origin + return_to
         return s.frontend_origin + return_to
+
+    def _return_roots(self) -> list[str]:
+        roots = list(self.settings.sso_allowed_return_roots)
+        if self.settings.console_enabled and "/dev" not in roots:
+            roots.append("/dev")
+        return roots
 
     def _checked_login_url(self, url: str, callback: str) -> str:
         if url == callback:
@@ -215,3 +224,8 @@ class SsoService:
         response = Response(status_code=204, headers=NO_STORE)
         response.delete_cookie(self.settings.session_cookie_name, path="/")
         return response
+
+
+def _in_console(path: str) -> bool:
+    """The web console's pages (``/dev/``, mounted when console_enabled)."""
+    return path == "/dev" or path.startswith("/dev/")

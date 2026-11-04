@@ -166,6 +166,10 @@ class Settings(BaseSettings):
     # Swagger UI, ReDoc and /openapi.json. Off unless turned on: the internal
     # network rules forbid them even on the dev environment.
     docs_enabled: bool = False
+    # The web console (/dev/). Empty: on for local and dev only. True on prd
+    # while the integration test runs before opening (testers use the
+    # screens); set false when the service opens.
+    web_console_enabled: bool | None = None
 
     # SSO. "dev" returns a fixed employee and is refused outside env=local.
     sso_adapter: Literal["dev", "idp"] = "dev"
@@ -506,6 +510,12 @@ class Settings(BaseSettings):
         if self.env == "local" and os.environ.get("KUBERNETES_SERVICE_HOST"):
             raise ValueError("APP_ENV is not set for this pod")
         return self
+
+    @property
+    def console_enabled(self) -> bool:
+        if self.web_console_enabled is not None:
+            return self.web_console_enabled
+        return self.env in {"local", "dev"}
 
     @property
     def env(self) -> Literal["local", "dev", "stg", "prd"]:

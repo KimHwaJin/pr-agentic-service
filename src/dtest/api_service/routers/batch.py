@@ -26,6 +26,7 @@ from fastapi.responses import HTMLResponse, StreamingResponse
 
 from src.dtest.api_service.deps import (
     PROJECT_ID,
+    AdminDep,
     BatchScopeHeaders,
     IdentityHeaders,
     ServicesDep,
@@ -229,6 +230,36 @@ async def gateway_identity(
     if project and tenant == our_tenant and user is not None:
         await project_for(services, user, project)
     return Identity(user_id=user_id, project_id=project, tenant=tenant)
+
+
+@router.get("/api/v1/admin/users/{user_id}/batches")
+async def user_batches(
+    user_id: str, services: ServicesDep, admin: AdminDep, limit: int = 100
+):
+    """A user's batches in our tenant, as pr-batch shows them to that user
+    (read only): an administrator checks that a deactivated user's batches
+    went off (``disabled_reason``), which that user can no longer log in
+    to see."""
+    async with services.db.sessions() as db:
+        if await db.get(User, user_id) is None:
+            raise HTTPException(404, "User not found.")
+    try:
+        result = await _client(services).get(
+            "/api/v1/batches",
+            params={"limit": max(1, min(limit, 100))},
+            headers=batch_headers(services, ours(services, user_id)),
+        )
+    except httpx.TimeoutException:
+        raise HTTPException(504, "pr-batch did not answer in time.") from None
+    except httpx.HTTPError:
+        raise HTTPException(502, "pr-batch is not reachable.") from None
+    if result.status_code >= 400:
+        return await _batch_error(result)
+    return Response(
+        result.content,
+        result.status_code,
+        media_type=result.headers.get("content-type"),
+    )
 
 
 # one route per method: each gets its own OpenAPI operationId

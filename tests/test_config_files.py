@@ -81,6 +81,7 @@ PER_ENV_KEYS = {
     "frontend_origin",
     "cors_origins",
     "cookie_secure",
+    "web_console_enabled",
     "admin_employee_ids",
     "llm_api_key",
     "models",

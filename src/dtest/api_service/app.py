@@ -162,7 +162,7 @@ def mount_api(app: FastAPI, settings: Settings) -> None:
         )
     # outermost: every log line of the request, even a 413, carries the id
     app.add_middleware(OwnPaths, middleware=RequestId)
-    if settings.env in {"local", "dev"}:
+    if settings.console_enabled:
         app.mount(
             "/dev",
             StaticFiles(directory=DTEST_ROOT / "web/dev", html=True),
