@@ -66,6 +66,10 @@ AUTO_MIGRATE: true
 # 내부망 규정상 dev/stg/prd 모두 false, docker compose 로컬만 true.
 DOCS_ENABLED: false
 
+# [환경별] 웹 화면(/dev/) 노출 여부. 비우면(null) local·dev만 켜짐.
+# prd는 오픈 전 통합테스트 동안 true(config.prd.yml), 오픈 때 false로 바꿈.
+WEB_CONSOLE_ENABLED: null
+
 
 # -----------------------------------------------------------------------------
 # 2. 주소 / CORS / 로그인(SSO) / 쿠키

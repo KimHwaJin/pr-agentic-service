@@ -19,6 +19,13 @@ class UserRead(Model):
     is_active: bool
 
 
+class AdminUserRead(UserRead):
+    """The admin user list: a deactivated user's batches not yet turned
+    off at pr-batch (the worker retries until it hears)."""
+
+    batches_disable_pending: bool = False
+
+
 class UserBrief(Model):
     """Who an id is, for pages that show user ids (executions)."""
 

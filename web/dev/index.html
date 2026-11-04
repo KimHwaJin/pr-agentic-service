@@ -531,6 +531,7 @@
         <button class="systab" data-sys="maintenance" onclick="sysTab('maintenance')">점검</button>
         <button class="systab" data-sys="users" onclick="sysTab('users')">사용자</button>
         <button class="systab" data-sys="apiClients" onclick="sysTab('apiClients')">API 키</button>
+        <button class="systab" data-sys="apiTest" onclick="sysTab('apiTest')">API 호출 시험</button>
       </div>
       <div id="sysBody"></div>
     </div>
@@ -732,7 +733,9 @@ function netBody(b) {
 const _fetch = window.fetch.bind(window);
 window.fetch = async (input, init = {}) => {
   const url = typeof input === 'string' ? input : input.url;
-  const it = netAdd({ kind: 'fetch', method: (init.method || input.method || 'GET').toUpperCase(), url, reqHeaders: init.headers instanceof Headers ? Object.fromEntries(init.headers.entries()) : { ...(init.headers || {}) }, reqBody: netBody(init.body), status: null });
+  const reqHeaders = init.headers instanceof Headers ? Object.fromEntries(init.headers.entries()) : { ...(init.headers || {}) };
+  for (const k of Object.keys(reqHeaders)) if (/^x-api-key$/i.test(k)) reqHeaders[k] = String(reqHeaders[k]).slice(0, 12) + '…(가림)';  // the key never shows in the log
+  const it = netAdd({ kind: 'fetch', method: (init.method || input.method || 'GET').toUpperCase(), url, reqHeaders, reqBody: netBody(init.body), status: null });
   const t0 = performance.now();
   try {
     const r = await _fetch(input, init);
@@ -1681,7 +1684,8 @@ const ENABLE_BLOCKED = {
 function batchState(b) {
   if (b.enabled) return statusBadge('ACTIVE').replace('ACTIVE', '켜짐');
   if (b.disabled_reason === 'USER_DEACTIVATED') return '<span class="badge bad" title="소유자가 비활성화되어 꺼졌습니다. 다시 활성화돼도 자동으로 켜지지 않습니다.">꺼짐 · 사용자 비활성화</span>';
-  return '<span class="badge">꺼짐</span>';
+  if (b.disabled_reason === 'TENANT_REVOKED') return '<span class="badge bad" title="tenant의 키가 모두 폐기되어 꺼졌습니다.">꺼짐 · tenant 폐기</span>';
+  return `<span class="badge"${b.disabled_reason ? ` title="${esc(b.disabled_reason)}"` : ''}>꺼짐</span>`;
 }
 /* why a batch run did not complete, from pr-batch's run fields */
 const SKIP_TEXT = { OVERLAP: '앞 실행이 진행 중이라 건너뜀 (겹침 정책)', SKIPPED_CAPACITY: '대기열이 가득 차 건너뜀' };
@@ -1703,7 +1707,7 @@ function runReason(r) {
 function openRuns(id) {
   const b = BT.batches.find(x => x.id === id); if (!b) return;
   const script = BT.scripts.find(x => x.id === b.script_id);
-  $('runsTitle').innerHTML = `${esc(b.name)} <span class="muted" style="font-size:13px;font-weight:400">${esc(script ? script.name : '')} v${b.script_version_number} · ${esc(scheduleText(b.schedule))}${b.next_run_at ? ` · 다음 실행 ${fmtTime(b.next_run_at)}` : ''}</span>`;
+  $('runsTitle').innerHTML = `${esc(b.name)} <span class="muted" style="font-size:13px;font-weight:400">${esc(script ? script.name : '')} v${b.script_version_number} · ${esc(scheduleText(b.schedule))}${b.next_run_at ? ` · 다음 실행 ${fmtTime(b.next_run_at)}` : ''} · tenant <span class="mono">${esc(b.tenant_id || b.tenant || '-')}</span></span>`;
   BT.runsBatch = id;
   $('runsRefresh').onclick = () => runsTab(BT.runsTab);
   $('runsModal').classList.add('open');
@@ -2141,7 +2145,7 @@ function showSystem() {
 function sysTab(name) {
   SYS.tab = name;
   document.querySelectorAll('.systab[data-sys]').forEach(t => t.classList.toggle('on', t.dataset.sys === name));
-  ({ runtimes: renderRuntimes, maintenance: renderMaintenance, users: renderUsers, apiClients: renderApiClients })[name]()
+  ({ runtimes: renderRuntimes, maintenance: renderMaintenance, users: renderUsers, apiClients: renderApiClients, apiTest: renderApiTest })[name]()
     .catch(() => { $('sysBody').innerHTML = '<div class="muted">불러오지 못했습니다. 화면 위쪽 오류 메시지를 확인하세요.</div>'; });
 }
 
@@ -2171,21 +2175,22 @@ async function userFilter(text) {
 }
 function renderExecutions() {
   const statuses = ['', 'QUEUED', 'DISPATCHED', 'RUNNING', 'WAITING_FOR_OPERATION', 'FINALIZING', 'CANCEL_REQUESTED', 'CANCELLED', 'SUCCEEDED', 'FAILED'];
-  $('execScope').textContent = S.me.permissions?.all_executions ? '채팅 분석 실행 (배치 실행은 배치 메뉴) · 관리자: 전체 사용자' : '내 채팅 분석 실행 (배치 실행은 배치 메뉴)';
+  $('execScope').textContent = S.me.permissions?.all_executions ? 'executor 실행 (채팅 분석 · 배치) · 관리자: 전체 사용자' : '내 executor 실행 (채팅 분석 · 배치)';
   $('execListBody').innerHTML = `<div class="toolbar">
       ${S.me.permissions?.all_executions ? '<input id="fxUser" placeholder="사용자 (이름·사번·ID)" style="width:170px">' : ''}
       <select id="fxProject"><option value="">모든 프로젝트</option>${S.projects.map(p => `<option value="${esc(p.id)}">${esc(p.name)}</option>`).join('')}</select>
       <input id="fxSession" placeholder="세션 ID" style="width:200px">
       <input id="fxExec" placeholder="실행 ID로 바로 열기" style="width:240px" onkeydown="if (event.key === 'Enter' && this.value.trim()) openExecution(this.value.trim())">
       <select id="fxStatus">${statuses.map(s => `<option value="${s}">${s || '모든 상태'}</option>`).join('')}</select>
+      <select id="fxTrigger"><option value="INTERACTIVE">채팅 분석</option><option value="BATCH">배치</option><option value="">채팅 + 배치</option></select>
       <button class="btn" onclick="loadExecutions()">조회</button></div>
     <table class="tbl"><thead><tr><th>상태</th><th>실행</th><th>사용자</th><th>프로젝트 / 세션</th><th>방식</th><th>단계</th><th>시작</th><th>종료</th><th>소요</th></tr></thead><tbody id="execRows"></tbody></table>
     <div style="text-align:center;margin:12px" id="execMore"></div>`;
   loadExecutions();
 }
 async function loadExecutions(more = false) {
-  // batch runs live under 배치
-  const q = qs({ trigger_type: 'INTERACTIVE', user_id: await userFilter($('fxUser')?.value || ''), project_id: $('fxProject').value, session_id: $('fxSession').value.trim(), status: $('fxStatus').value, limit: 30, cursor: more ? SYS.cursor : '' });
+  // chat runs by default; batch runs too when asked (also under 배치 > 실행 이력)
+  const q = qs({ trigger_type: $('fxTrigger').value, user_id: await userFilter($('fxUser')?.value || ''), project_id: $('fxProject').value, session_id: $('fxSession').value.trim(), status: $('fxStatus').value, limit: 30, cursor: more ? SYS.cursor : '' });
   const page = await api(`/executor/executions?${q}`);
   SYS.cursor = page.next_cursor;
   await ensureUsers(page.items.map(e => e.context?.user_id));
@@ -2218,7 +2223,8 @@ async function execTab(tab) {
 async function execOverview(base) {
   const e = await api(base); const c = e.context || {}, r = e.runtime || {}, lc = e.lifecycle || {};
   await ensureUsers([c.user_id]);
-  const kv = [['실행 ID', `<span class="mono">${esc(e.execution_id)}</span>`], ['상태', statusBadge(e.state?.status) + (e.state?.cancellation_reason ? ` ${esc(e.state.cancellation_reason)}` : '')], ['방식', `${esc(lc.operation_mode || '')} · ${esc(e.trigger_type || '')}`],
+  const kv = [['실행 ID', `<span class="mono">${esc(e.execution_id)}</span>`], ['상태', statusBadge(e.state?.status) + (e.state?.cancellation_reason ? ` ${esc(e.state.cancellation_reason)}` : '')], ['방식', `${esc(lc.operation_mode || '')} · ${esc(e.trigger_type || e.trigger?.type || '')}`],
+    ['tenant', `<span class="mono">${esc(e.tenant_id || c.tenant_id || '-')}</span>`], ['요청자 (created_by · created_by_client)', `<span class="mono">${esc(e.created_by || '-')}</span> · <span class="mono">${esc(e.created_by_client || '-')}</span>`],
     ['사용자', `${userLabel(c.user_id)} <span class="mono muted">${esc(c.user_id || '')}</span>`], ['프로젝트', `${esc(projectName(c.project_id) || '')} <span class="mono">${esc(c.project_id || '-')}</span>`], ['세션', `<span class="mono">${esc(c.session_id || '-')}</span>`], ['run (metadata.run_id)', `<span class="mono">${esc((e.metadata || {}).run_id || '-')}</span>`],
     ['런타임', `${esc(r.type)} / ${esc(r.pool)} / ${esc(r.profile)} · target ${short(r.target_id)}`], ['생성', fmtTime(e.created_at)], ['시작 · 종료', `${fmtTime(lc.started_at)} → ${fmtTime(lc.finished_at)} (${dur(lc.started_at, lc.finished_at)})`],
     ['재시도 · 복구', `${esc(e.retry?.strategy)} ${e.retry?.count ?? 0}회 · 복구 ${e.recovery?.count ?? 0}회`], ['노트북', `${esc(e.workspace?.notebook_projection?.status || '-')}`], ['실패', e.failure ? `<span style="color:var(--bad)">${esc(JSON.stringify(e.failure))}</span>` : '-']];
@@ -2406,15 +2412,114 @@ async function loadUsers() {
   const users = await api(`/admin/users${q ? `?q=${encodeURIComponent(q)}` : ''}`);
   $('userRows').innerHTML = users.length ? `<table class="tbl"><thead><tr><th>이름</th><th>사번</th><th>부서</th><th>ID</th><th>권한</th><th>상태</th><th></th></tr></thead><tbody>${users.map(u => `
     <tr><td><b>${esc(u.name)}</b></td><td>${esc(u.employee_id)}</td><td>${esc(u.department || '')}</td><td>${short(u.id)}</td>
-      <td>${u.role === 'admin' ? '관리자' : '일반'}</td><td>${u.is_active ? statusBadge('ACTIVE').replace('ACTIVE', '활성') : '<span class="badge bad">비활성</span>'}</td>
-      <td style="white-space:nowrap">${u.id === S.me.user.id ? '<span class="muted">본인</span>' : `<button class="ghost" onclick="setUser('${u.id}', { role: '${u.role === 'admin' ? 'user' : 'admin'}' })">${u.role === 'admin' ? '일반으로' : '관리자로'}</button>
+      <td>${u.role === 'admin' ? '관리자' : '일반'}</td><td>${u.is_active ? statusBadge('ACTIVE').replace('ACTIVE', '활성') : '<span class="badge bad">비활성</span>'}${u.batches_disable_pending ? ' <span class="badge" title="pr-batch가 아직 답하지 않아 배치 끄기를 다시 시도하고 있습니다(5분 간격).">배치 끄기 재시도 대기</span>' : ''}</td>
+      <td style="white-space:nowrap"><button class="ghost" onclick="showUserBatches('${u.id}', '${esc(u.name)}')">배치 보기</button> ${u.id === S.me.user.id ? '<span class="muted">본인</span>' : `<button class="ghost" onclick="setUser('${u.id}', { role: '${u.role === 'admin' ? 'user' : 'admin'}' })">${u.role === 'admin' ? '일반으로' : '관리자로'}</button>
         <button class="ghost" style="${u.is_active ? 'color:var(--bad)' : ''}" onclick="setUser('${u.id}', { is_active: ${!u.is_active} }, '${esc(u.name)}')">${u.is_active ? '비활성화' : '활성화'}</button>`}</td></tr>`).join('')}</tbody></table>`
     : '<div class="muted">사용자가 없습니다.</div>';
+  $('userRows').insertAdjacentHTML('beforeend', '<div id="userBatches" style="margin-top:16px"></div>');
 }
 async function setUser(id, change, name = '') {
   if (change.is_active === false && !confirm(`${name} 사용자를 비활성화할까요? 그 사람의 배치는 모두 꺼지고, 진행 중인 대화와 코드 실행(커널)도 모두 취소됩니다.`)) return;
-  await api(`/admin/users/${id}`, { method: 'PATCH', body: change });
-  loadUsers();
+  const u = await api(`/admin/users/${id}`, { method: 'PATCH', body: change });
+  if (change.is_active === false) alert(u.batches_disable_pending ? `${name} 사용자를 비활성화했습니다. pr-batch가 답하지 않아 배치 끄기는 다시 시도하고 있습니다(5분 간격).` : `${name} 사용자를 비활성화했습니다. pr-batch에서 배치를 껐습니다.`);
+  await loadUsers();
+  if (change.is_active !== undefined) showUserBatches(id, name);
+}
+/* a user's batches as pr-batch shows them to that user (read only) */
+async function showUserBatches(id, name) {
+  const box = $('userBatches'); if (!box) return;
+  box.innerHTML = '<div class="muted">불러오는 중…</div>';
+  try {
+    const page = await api(`/admin/users/${id}/batches?limit=100`);
+    const items = page.items || [];
+    box.innerHTML = `<h3 style="font-size:14px;margin:0 0 8px">${esc(name)}의 배치 <span class="muted" style="font-weight:400;font-size:12px">pr-batch 기준, 읽기 전용</span></h3>` + (items.length ? `<table class="tbl"><thead><tr><th>이름</th><th>상태</th><th>꺼진 사유</th><th>일정</th><th>tenant</th><th>ID</th></tr></thead><tbody>${items.map(b => `
+      <tr><td><b>${esc(b.name)}</b></td><td>${batchState(b)}</td><td class="mono">${esc(b.disabled_reason || '-')}</td><td>${esc(scheduleText(b.schedule))}</td><td class="mono">${esc(b.tenant_id || b.tenant || '-')}</td><td>${short(b.id)}</td></tr>`).join('')}</tbody></table>` : '<div class="muted">배치가 없습니다.</div>');
+  } catch { box.innerHTML = '<div class="muted">배치를 불러오지 못했습니다. 화면 위쪽 오류 메시지를 확인하세요.</div>'; }
+}
+
+/* API call test (admin): sends one request to our API as a key caller would
+   (X-Api-Key + X-User-Id), or with this login's cookie, and shows the answer
+   as the server gave it. The screen decides nothing: it only sends. The key
+   stays in this page's memory and is masked in the request log. */
+const EXEC_INLINE = { idempotency_key: 'it-<바꿔서>', lifecycle: { operation_mode: 'SINGLE' }, trigger: { type: 'INTERACTIVE' }, runtime: { type: 'JUPYTER', profile: 'default' },
+  operation: { spec: { schema_version: '1.0', steps: [{ sequence: 0, payload: { type: 'PYTHON_EXECUTE', source: { type: 'INLINE', content: 'print(1+1)' } } }] } } };
+const API_PRESETS = [
+  ['', '직접 입력', 'GET', '/api/v1/users/me', null, { key: true, user: true }],
+  ['AUTH-03', '쓰기 요청에 CSRF 토큰 없음 (쿠키만)', 'POST', '/api/v1/projects', { name: 'csrf-test' }, { key: false, user: false, cookie: true, csrf: false }],
+  ['AUTH-04', '키 + X-User-Id로 내 정보', 'GET', '/api/v1/users/me', null, { key: true, user: true }],
+  ['AUTH-05', '없는 사번 / 형식 위반 X-User-Id', 'GET', '/api/v1/users/me', null, { key: true, user: true }, 'X-User-Id를 DB에 없는 사번(403) 또는 "A B!"처럼 형식이 틀린 값(400)으로 바꿔 보냅니다.'],
+  ['AUTH-06', '키로 관리자 API', 'GET', '/api/v1/admin/users', null, { key: true, user: true }],
+  ['AUTH-07', '폐기한 키로 호출', 'GET', '/api/v1/users/me', null, { key: true, user: true }, '시스템 > API 키에서 폐기한 뒤 60초 안에 401 INVALID_API_KEY가 되는지 봅니다.'],
+  ['AUTH-09', '쿠키와 키를 함께', 'GET', '/api/v1/users/me', null, { key: true, user: true, cookie: true }],
+  ['AUTH-11', 'dev 역할 변경 (dev·prd는 404)', 'POST', '/api/v1/auth/dev/role', { role: 'admin' }, { key: false, user: false, cookie: true, csrf: true }],
+  ['RUN-02', '키 호출자로 새 세션 + 분석 요청', 'POST', '/api/v1/projects/<project_id>/sessions', { input: { content: 'nce 데이터 불러와서 기술통계 보여줘' } }, { key: true, user: true }, '이후 GET /api/v1/sessions/<session_id>/events 로 이벤트를 봅니다.'],
+  ['RUN-09', '진행 중 세션에 새 턴', 'POST', '/api/v1/sessions/<session_id>/runs', { input: { content: '하나 더' } }, { key: true, user: true }],
+  ['RUN-10', '오래된 interrupt_id로 재개', 'POST', '/api/v1/sessions/<session_id>/runs', { command: { resume: { interrupt_id: '<지난 interrupt_id>', value: { action: 'approve' } } } }, { key: true, user: true }],
+  ['RUN-07', 'reject_templates를 false 카드에', 'POST', '/api/v1/sessions/<session_id>/runs', { command: { resume: { interrupt_id: '<interrupt_id>', value: { action: 'reject_templates' } } } }, { key: true, user: true }],
+  ['EXEC-01', '우리 tenant 키로 실행 목록', 'GET', '/api/v1/executor/executions?limit=20', null, { key: true, user: true }],
+  ['EXEC-02', 'INLINE print(1+1) 제출', 'POST', '/api/v1/executor/executions', EXEC_INLINE, { key: true, user: true, headers: { 'X-Project-Id': '<project_id>' } }, 'idempotency_key는 보낼 때마다 바꿉니다.'],
+  ['EXEC-03', '외부 tenant 키로 실행 제출', 'POST', '/api/v1/executor/executions', EXEC_INLINE, { key: true, user: true }, '외부 tenant(it-ext) 키를 넣습니다.'],
+  ['EXEC-04', '키로 운영 경로', 'GET', '/api/v1/executor/runtime-targets', null, { key: true, user: true }],
+  ['EXEC-06', 'X-User-Id 없이 GET / POST', 'GET', '/api/v1/executor/executions?limit=20', null, { key: true, user: false }, 'POST로 바꿔 EXEC-02 본문을 보내면 400입니다.'],
+  ['EXEC-07', '남의 프로젝트 헤더', 'GET', '/api/v1/executor/executions?limit=20', null, { key: true, user: true, headers: { 'X-Project-Id': '<남의 project_id>' } }],
+  ['BAT-10', '외부 tenant 키로 배치 목록', 'GET', '/api/v1/batch/batches?limit=20', null, { key: true, user: true }, '외부 tenant 키를 넣습니다.'],
+  ['ADM-02', '일반 사용자 키로 관리자 API', 'GET', '/api/v1/admin/api-clients', null, { key: true, user: true }],
+  ['OPS-08', '없는 모델로 새 세션', 'POST', '/api/v1/projects/<project_id>/sessions', { input: { content: '안녕' }, model: 'no-such-model' }, { key: true, user: true }],
+];
+const AT = { key: '', last: null };
+async function renderApiTest() {
+  $('sysBody').innerHTML = `<div class="muted" style="font-size:12.5px;margin:0 0 12px;line-height:1.6">키 호출자(<span class="mono">X-Api-Key</span> + <span class="mono">X-User-Id</span>)가 보내는 요청을 그대로 보내고 서버 응답을 보여 줍니다. 통합테스트의 API 도구 시나리오용입니다.
+      키는 이 화면에만 잠시 두고 저장하지 않으며, 요청·응답 기록에는 가려서 남습니다. <span class="mono">&lt;...&gt;</span>는 실제 값으로 바꿉니다.</div>
+    <div class="field"><label>시나리오</label><select id="atPreset" onchange="applyPreset()">${API_PRESETS.map((p, i) => `<option value="${i}">${p[0] ? `${p[0]} · ` : ''}${esc(p[1])}</option>`).join('')}</select></div>
+    <div id="atNote" class="muted" style="font-size:12.5px;margin:-4px 0 10px"></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:10px">
+      <div><label style="display:flex;gap:6px;align-items:center;font-size:12.5px;color:var(--muted);margin-bottom:4px"><input type="checkbox" id="atUseKey">X-Api-Key 보내기</label><input id="atKey" type="password" autocomplete="off" placeholder="발급한 키 원문" style="width:100%" oninput="AT.key = this.value"></div>
+      <div><label style="display:flex;gap:6px;align-items:center;font-size:12.5px;color:var(--muted);margin-bottom:4px"><input type="checkbox" id="atUseUser">X-User-Id 보내기</label><input id="atUser" placeholder="소문자 사번" style="width:100%"></div></div>
+    <div class="field"><label>추가 헤더 (JSON)</label><input id="atHeaders" class="mono" placeholder='{"X-Project-Id": "..."}'></div>
+    <div style="display:flex;gap:8px"><select id="atMethod" style="width:110px">${['GET', 'POST', 'PATCH', 'PUT', 'DELETE'].map(m => `<option>${m}</option>`).join('')}</select><input id="atPath" class="mono" style="flex:1" placeholder="/api/v1/..."></div>
+    <div class="field" style="margin-top:8px"><label>본문 (JSON, GET이면 무시)</label><textarea id="atBody" class="mono" rows="6" style="width:100%"></textarea></div>
+    <div style="display:flex;gap:16px;align-items:center;font-size:13px;margin:6px 0 12px">
+      <label><input type="checkbox" id="atCookie"> 이 로그인의 쿠키도 보내기</label>
+      <label><input type="checkbox" id="atCsrf"> X-CSRF-Token 보내기</label>
+      <span style="flex:1"></span><button class="btn primary" id="atSend" onclick="sendApiTest()">요청 보내기</button></div>
+    <div id="atResult"></div>`;
+  $('atKey').value = AT.key;
+  applyPreset();
+}
+function applyPreset() {
+  const [, , method, path, body, o, note] = API_PRESETS[+$('atPreset').value];
+  $('atMethod').value = method; $('atPath').value = path;
+  $('atBody').value = body ? JSON.stringify(body, null, 2) : '';
+  $('atUseKey').checked = !!o.key; $('atUseUser').checked = !!o.user; $('atCookie').checked = !!o.cookie; $('atCsrf').checked = !!o.csrf;
+  $('atHeaders').value = o.headers ? JSON.stringify(o.headers) : '';
+  if (!$('atUser').value && o.user) $('atUser').value = S.me.user.id;
+  $('atNote').textContent = note || '';
+}
+async function sendApiTest() {
+  const headers = {};
+  if ($('atUseKey').checked) headers['X-Api-Key'] = $('atKey').value.trim();
+  if ($('atUseUser').checked) headers['X-User-Id'] = $('atUser').value.trim();
+  if ($('atCsrf').checked && S.csrf) headers['X-CSRF-Token'] = S.csrf;
+  try { Object.assign(headers, $('atHeaders').value.trim() ? JSON.parse($('atHeaders').value) : {}); } catch { return showError('추가 헤더가 JSON이 아닙니다.'); }
+  const method = $('atMethod').value, path = $('atPath').value.trim();
+  if (!path.startsWith('/')) return showError('경로는 /로 시작해야 합니다 (예: /api/v1/users/me).');
+  let body;
+  if (method !== 'GET' && $('atBody').value.trim()) {
+    try { body = JSON.stringify(JSON.parse($('atBody').value)); } catch { return showError('본문이 JSON이 아닙니다.'); }
+    headers['Content-Type'] = 'application/json';
+  }
+  const out = $('atResult'); out.innerHTML = '<div class="muted">보내는 중…</div>';
+  const t0 = performance.now(), sent = new Date();
+  try {
+    const r = await fetch(path, { method, headers, body, credentials: $('atCookie').checked ? 'include' : 'omit' });
+    const ms = Math.round(performance.now() - t0), text = await r.text();
+    let shown = text; try { shown = JSON.stringify(JSON.parse(text), null, 2); } catch {}
+    const rid = r.headers.get('x-request-id') || '';
+    out.innerHTML = `<dl class="kv"><dt>상태</dt><dd><b style="color:var(${r.ok ? '--ok' : '--bad'})">${r.status}</b> ${esc(r.statusText)} · ${ms}ms</dd>
+        <dt>보낸 시각</dt><dd>${esc(sent.toISOString())}</dd><dt>request id</dt><dd class="mono">${esc(rid || '-')}</dd>
+        <dt>보낸 헤더</dt><dd class="mono">${esc(Object.keys(headers).join(', ') || '(없음)')}${$('atCookie').checked ? ' + 쿠키' : ''}</dd></dl>
+      <h4 style="font-size:12px;color:var(--muted);margin:12px 0 4px">응답 본문</h4><pre class="sys-pre">${esc(shown.length > 200000 ? shown.slice(0, 200000) + '\n…' : shown)}</pre>`;
+  } catch (e) { out.innerHTML = `<div style="color:var(--bad)">보내지 못했습니다: ${esc(String(e))}</div>`; }
 }
 
 /* API keys of other services and agents (X-Api-Key + X-User-Id) */
@@ -2426,7 +2531,7 @@ async function renderApiClients() {
       어떤 tenant가 executor·pr-batch를 쓸 수 있는지는 여기서만 정합니다. 발급한 키는 바로 사용 중이 되고, executor·pr-batch 설정을 바꾸거나 다시 배포할 필요가 없습니다. 폐기(키 하나 또는 tenant 전체)는 최대 1분 안에 모든 서버에 반영됩니다.</div>
     ${clients.length ? `<table class="tbl"><thead><tr><th>이름</th><th>tenant</th><th>키</th><th>상태</th><th>마지막 사용</th><th>발급</th><th></th></tr></thead><tbody>${clients.map(c => `
       <tr><td><b>${esc(c.name)}</b>${c.description ? `<br><span class="muted">${esc(c.description)}</span>` : ''}</td><td class="mono">${esc(c.tenant)}</td><td class="mono">${esc(c.key_prefix)}…</td>
-        <td>${c.status === 'active' ? statusBadge('ACTIVE').replace('ACTIVE', CLIENT_STATE.active) : `<span class="badge ${c.status === 'revoked' ? 'bad' : ''}">${CLIENT_STATE[c.status] || esc(c.status)}</span>`}</td>
+        <td>${c.status === 'active' ? statusBadge('ACTIVE').replace('ACTIVE', CLIENT_STATE.active) : `<span class="badge ${c.status === 'revoked' ? 'bad' : ''}">${CLIENT_STATE[c.status] || esc(c.status)}</span>`}${c.batches_disable_pending ? ' <span class="badge" title="tenant의 키가 모두 폐기되어 pr-batch에 배치 끄기를 알리는 중입니다. 답이 없어 5분 간격으로 다시 시도합니다.">배치 끄기 재시도 대기</span>' : ''}</td>
         <td>${c.last_used_at ? fmtTime(c.last_used_at) : '<span class="muted">-</span>'}</td><td>${fmtTime(c.created_at)}</td>
         <td style="white-space:nowrap">${c.status !== 'revoked' ? `<button class="ghost" style="color:var(--bad)" onclick="clientAction('${c.id}', 'revoke', '${esc(c.name)}')">폐기</button>
           <button class="ghost" style="color:var(--bad)" onclick="revokeTenant('${esc(c.tenant)}')">tenant 전체 폐기</button>` : ''}</td></tr>`).join('')}</tbody></table>`
@@ -2453,13 +2558,14 @@ async function issueClient() {
 }
 async function clientAction(id, action, name = '') {
   if (action === 'revoke' && !confirm(`${name} 키를 폐기할까요? 되돌릴 수 없고, 그 키로 오는 호출은 모두 거부됩니다.`)) return;
-  await api(`/admin/api-clients/${id}/${action}`, { method: 'POST' });
+  const c = await api(`/admin/api-clients/${id}/${action}`, { method: 'POST' });
+  if (action === 'revoke' && c.batches_disable_pending) alert(`${name} 키를 폐기했습니다. tenant ${c.tenant}의 마지막 키라 배치를 꺼야 하는데, pr-batch가 답하지 않아 다시 시도하고 있습니다(5분 간격).`);
   renderApiClients();
 }
 async function revokeTenant(tenant) {
   if (!confirm(`tenant ${tenant}의 키를 모두 폐기할까요? 되돌릴 수 없고, 이 tenant는 executor·pr-batch도 더는 쓸 수 없습니다.`)) return;
   const done = await api(`/admin/api-clients/tenants/${encodeURIComponent(tenant)}/revoke`, { method: 'POST' });
-  alert(`${done.revoked}개 키를 폐기했습니다.`);
+  alert(`${done.revoked}개 키를 폐기했습니다. ` + (done.batches_disabled ? 'pr-batch에서 이 tenant의 배치를 껐습니다.' : done.batches_disable_pending ? 'pr-batch가 답하지 않아 배치 끄기를 다시 시도하고 있습니다(5분 간격).' : '이 tenant는 배치를 끄지 않습니다(우리 tenant).'));
   renderApiClients();
 }
 </script>
