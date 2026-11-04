@@ -198,3 +198,57 @@ def test_key_caller_goes_as_its_tenant_with_our_key(monkeypatch):
     assert headers["x-tenant-id"] == "partner"
     assert headers["x-user-id"] == "u1"
     assert "authorization" not in headers
+
+
+def _admin_client(users: set[str]):
+    from contextlib import asynccontextmanager
+
+    from api_service.deps import admin_user
+
+    class Db:
+        async def get(self, model, key):
+            return object() if key in users else None
+
+    @asynccontextmanager
+    async def sessions():
+        yield Db()
+
+    app = FastAPI()
+    app.include_router(batch.router)
+    app.state.services = SimpleNamespace(
+        settings=Settings(batch_api_key="bat-key"),
+        db=SimpleNamespace(sessions=sessions),
+    )
+    app.dependency_overrides[admin_user] = lambda: SimpleNamespace(id="adm")
+    return TestClient(app)
+
+
+def test_admin_reads_a_users_batches_as_that_user(monkeypatch):
+    import httpx
+
+    seen = {}
+
+    def handler(request):
+        seen["path"] = request.url.path
+        seen["user"] = request.headers.get("x-user-id")
+        seen["tenant"] = request.headers.get("x-tenant-id")
+        seen["method"] = request.method
+        return httpx.Response(
+            200, json={"items": [{"disabled_reason": "USER_DEACTIVATED"}]}
+        )
+
+    upstream = httpx.AsyncClient(
+        base_url="http://batch", transport=httpx.MockTransport(handler)
+    )
+    monkeypatch.setattr(batch, "_client", lambda services: upstream)
+    client = _admin_client({"b001"})
+    ok = client.get("/api/v1/admin/users/b001/batches")
+    assert ok.status_code == 200
+    assert ok.json()["items"][0]["disabled_reason"] == "USER_DEACTIVATED"
+    assert seen == {
+        "path": "/api/v1/batches",
+        "user": "b001",
+        "tenant": Settings().executor_tenant_id,
+        "method": "GET",
+    }
+    assert client.get("/api/v1/admin/users/nobody/batches").status_code == 404

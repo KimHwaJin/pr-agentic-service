@@ -10,6 +10,8 @@ CORS_ORIGINS: ["https://<front-host>"]
 # SSO login page origin(s) (scheme://host); empty = every login 502.
 # A refused one is logged as sso_login_url_rejected origin=...
 SSO_ALLOWED_ORIGINS: ["https://<sso-host>"]
+# web console (/dev/): empty = on (local and dev)
+WEB_CONSOLE_ENABLED: null
 COOKIE_SECURE: false
 
 # employee ids with the admin role, as SSO sends them; given at a user's

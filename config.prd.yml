@@ -11,6 +11,9 @@ CORS_ORIGINS: ["https://<front-host>"]
 # A refused one is logged as sso_login_url_rejected origin=...
 SSO_ALLOWED_ORIGINS: ["https://<sso-host>"]
 COOKIE_SECURE: true
+# web console (/dev/) on for the integration test before opening; set false
+# when the service opens
+WEB_CONSOLE_ENABLED: true
 
 # employee ids with the admin role, as SSO sends them; given at a user's
 # first login only, so fill before the administrators first log in
