@@ -19,6 +19,7 @@ from api_service.routers import (
     auth,
     batch,
     batch_reports,
+    catalog,
     executor,
     images,
     models,
@@ -115,6 +116,7 @@ def mount_api(app: FastAPI, settings: Settings) -> None:
         sessions,
         images,
         workflows,
+        catalog,
         executor,
         batch_reports,
     ):

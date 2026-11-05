@@ -6,7 +6,7 @@
 
 | 경로 | 방법 |
 |---|---|
-| 화면 | 워크플로우 탭 → **워크플로우 업로드** → `.json` 파일 선택 또는 문서 붙여넣기 → **검증** → **등록** |
+| 화면 | 워크플로우 탭 → **워크플로우 만들기** → 오른쪽 skill·tool 목록에서 **+ 추가**로 흐름을 쌓거나, `.json` 파일 선택 또는 문서 붙여넣기 → **검증** → **등록** |
 | API | `POST /api/v1/workflows/validate`(검증만) → `POST /api/v1/workflows`(등록) |
 
 등록된 워크플로우는 **후보(candidate)** 다. 작성자에게만 보이고 추천 대상이 아니다. 상세 화면의 **공개(승격)**, 또는 `POST /api/v1/workflows/{id}/promote`로 **공개(template)** 하면 모든 사용자의 계획 추천 후보가 된다. 승격 권한은 `WORKFLOW_PROMOTION` 설정을 따른다. `author`(기본)면 작성자가, `admin`이면 SSO로 로그인한 관리자만 승격한다.
@@ -56,6 +56,10 @@
 | adaptive | `conditional` Tool이 하나 이상 | 파라미터 처리는 static과 같다. executor **MULTI** 실행에서 앞 결과를 보고 conditional Tool의 실행 여부를 에이전트가 그때그때 정한다 |
 
 에이전트가 새로 짠 계획(등록된 워크플로우가 아닌 것)은 이 구분 없이 MULTI로 실행한다.
+
+## 3-2. 쓸 수 있는 skill과 tool 찾기
+
+`GET /api/v1/catalog`가 skill마다 tool의 실행 방식(`always`/`conditional`), 파라미터(필수 여부, 기본값, 설명), 출력 이름을 준다. `steps[].skill`, `tools[].tool`, `tools[].execution`, `tool_output.output`에 이 값을 그대로 쓰면 4절 의미 검증을 통과한다. skill 본문은 `GET /api/v1/catalog/skills/{name}`. 화면의 **워크플로우 만들기**는 같은 정보를 오른쪽 패널에 보여 주고, **+ 추가**를 누르면 그 tool 호출을 문서 끝에 붙인다(같은 skill이면 마지막 step에, 아니면 새 step). 필수 파라미터는 `source: input`으로, 직전 호출의 출력과 이름이 같은 파라미터는 그 출력의 `tool_output`으로 채운다.
 
 ## 4. 서버 검증 규칙
 
