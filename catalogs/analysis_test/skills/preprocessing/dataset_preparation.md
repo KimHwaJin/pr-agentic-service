@@ -31,7 +31,7 @@ description: 둘 이상의 데이터를 공통 키로 결합하거나, 행을 �
 
 ## typical_next_skills
 
-- `eda_analysis`, `statistical_test`, `wafer_map`, `modeling`
+- `eda_analysis`, `statistical_test`, `wafer_map`, `yield_analysis`, `modeling`, `visualization`, `report_export`
 
 ## Tool list
 

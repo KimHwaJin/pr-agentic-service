@@ -104,3 +104,29 @@
   cancel_when: waiting_executor
   expect:
     status: cancelled
+
+- id: s13_yield_commonality
+  title: 수율 저하 공통 요인
+  turns: ["수율 데이터에서 수율이 낮은 쪽과 관련된 설비나 챔버가 있는지 찾아줘"]
+  expect:
+    plan_skills: [yield_analysis]
+    plan_tools: [commonality_analysis]
+    facts: ["ETCH_B"]
+
+- id: s14_outliers
+  title: FDC 이상치
+  turns: ["FDC 데이터에서 GAS_FLOW 이상치를 설비별로 찾아줘"]
+  inputs: {columns: ["GAS_FLOW"]}
+  expect:
+    plan_skills: [anomaly_detection]
+    plan_tools: [detect_outliers]
+    facts: ["GAS_FLOW"]
+
+- id: s15_trend_excel
+  title: drift 추세 검정 후 엑셀 저장
+  turns: ["FDC CH_PRESSURE가 설비별로 꾸준히 오르는 추세가 있는지 검정하고 결과를 엑셀로 저장해줘"]
+  inputs: {value_column: "CH_PRESSURE"}
+  expect:
+    plan_skills: [time_series, report_export]
+    plan_tools: [trend_test, export_excel]
+    facts: ["ETCH_B", "xlsx"]

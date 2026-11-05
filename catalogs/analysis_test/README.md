@@ -16,16 +16,27 @@
 | `data_quality` | `check_missing`, `check_duplicates`, `validate_ranges`, `clean_data` |
 | `dataset_preparation` (덮어씀) | `merge_data`, `sample_data` (기본에서 복사), `filter_rows`, `aggregate_by`, `split_by_zone` |
 | `eda_analysis` (기본 그대로) | `compute_statistics`, `histogram_eda`, `boxplot_eda`, `correlation_analysis` |
-| `statistical_test` | `normality_test`, `compare_groups_ttest`, `compare_groups_nonparametric`, `anova_test`, `chi_square_test` |
-| `time_series` | `resample_series`, `rolling_stats`, `detect_change_points`, `decompose_series` |
-| `spc` | `control_chart`, `process_capability` |
+| `anomaly_detection` | `detect_outliers`, `isolation_forest_outliers` |
+| `statistical_test` | `normality_test`, `compare_groups_ttest`, `compare_groups_nonparametric`, `anova_test`, `kruskal_test`, `tukey_posthoc`, `correlation_test`, `chi_square_test` |
+| `time_series` | `resample_series`, `rolling_stats`, `detect_change_points`, `trend_test`, `decompose_series` |
+| `spc` | `control_chart`, `xbar_s_chart`, `cusum_chart`, `process_capability` |
 | `wafer_map` | `wafer_map_plot`, `zone_statistics`, `edge_effect_test` |
-| `modeling` | `feature_importance`, `linear_regression`, `kmeans_clustering` |
+| `yield_analysis` | `yield_summary`, `bin_pareto`, `commonality_analysis` |
+| `modeling` | `feature_importance`, `xgboost_model`, `decision_tree_rules`, `linear_regression`, `logistic_regression`, `pca_analysis`, `kmeans_clustering` |
+| `visualization` | `scatter_plot`, `pivot_heatmap` |
+| `report_export` | `export_excel`, `export_parquet` |
 | `test_tools` (시험 전용) | `slow_operation`, `fragile_transform` |
 
-지식 문서: `analysis_datasets`, `fdc_sensor_data`, `yield_definitions`, `spc_basics` (기본 `semiconductor_test_data`도 그대로).
+지식 문서: `analysis_datasets`, `fdc_sensor_data`, `yield_definitions`, `spc_basics`, `analysis_method_guide` (기본 `semiconductor_test_data`도 그대로).
 
-tool은 executor 커널에서 pandas, numpy, scipy, scikit-learn, statsmodels, matplotlib을 씁니다(로컬 executor 테스트 환경에 있음).
+## 쓸 수 있는 라이브러리
+
+tool은 executor 커널에서 돌고, 커널에 있는 라이브러리만 import할 수 있습니다.
+
+- numpy, pandas, scipy, scikit-learn, matplotlib, seaborn, xgboost, pyarrow, python-dotenv, requests, minio, lakes, pyspark, openpyxl
+- Python 표준 라이브러리
+
+`tests/test_catalog_extension.py`가 `assets/`와 이 카탈로그의 모든 tool 파일 import를 이 목록과 대조합니다. 목록이 바뀌면 그 테스트의 `RUNTIME_LIBRARIES`도 함께 고치세요. 예전에 statsmodels를 쓰던 `decompose_series`(고전 가법 분해)와 `linear_regression`(OLS, t 분포 p-value)은 numpy·pandas·scipy로 다시 썼고, 이름·인자·반환 키는 그대로입니다.
 
 ## 합성 데이터와 심어 둔 정답
 
@@ -48,3 +59,5 @@ tool은 executor 커널에서 pandas, numpy, scipy, scikit-learn, statsmodels, m
 ```bash
 uv run --group catalog-test pytest tests/test_catalog_extension.py
 ```
+
+`xgboost_model` 테스트는 xgboost가 있을 때만 돕니다. Linux 휠이 300MB짜리 GPU 라이브러리를 끌고 와서 `catalog-test` 그룹에 넣지 않았습니다. 돌려 보려면 `uv pip install xgboost-cpu`(Linux·Windows) 또는 `uv pip install xgboost`(macOS) 후 실행하세요.
