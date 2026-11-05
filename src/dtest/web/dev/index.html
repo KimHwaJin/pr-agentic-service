@@ -140,6 +140,17 @@
   .composer .shot button { position: absolute; top: -6px; right: -6px; width: 18px; height: 18px; border-radius: 50%; border: 0; background: var(--ink); color: #fff; font-size: 11px; line-height: 18px; padding: 0; cursor: pointer; }
   .attach { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: 8px; border: 0; background: transparent; color: var(--muted); cursor: pointer; }
   .attach:hover { background: var(--hover); }
+  .attach.off { opacity: .35; cursor: not-allowed; }
+  .attach.off:hover { background: transparent; }
+  /* what the picked model takes: text only, or text and images */
+  .cap { display: inline-flex; align-items: center; gap: 4px; font-size: 11.5px; padding: 2px 8px; border-radius: 99px; white-space: nowrap; }
+  .cap:empty { display: none; }
+  .cap svg { width: 12px; height: 12px; flex: none; }
+  .cap.vis { background: #e8f0fb; color: #2f6fbf; }
+  .cap.txt { background: var(--code); color: var(--muted); }
+  .model-note { max-width: 780px; margin: 0 auto 8px; background: #fff6e5; border: 1px solid #f0d9a8; color: #8a5a00; font-size: 12.5px; padding: 6px 12px; border-radius: 8px; }
+  .model-note:empty { display: none; }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .cap.vis { background: #24364f; color: #9cc3f0; } :root:not([data-theme="light"]) .model-note { background: #3a3122; border-color: #5c4a2a; color: #f0c674; } }
   .attach svg { width: 17px; height: 17px; }
   .bubble { background: var(--user); padding: 10px 16px; border-radius: 18px; max-width: 80%; white-space: pre-wrap; }
   .answer { margin: 8px 0 18px; font-size: 15.5px; line-height: 1.75; }
@@ -600,13 +611,14 @@
     </div>
   </div>
   <div class="composer-wrap" id="composerWrap">
+    <div class="model-note" id="modelNote"></div>
     <div class="composer">
       <div class="shots" id="shots"></div>
       <textarea id="input" rows="1" placeholder="분석하고 싶은 내용을 입력하세요"></textarea>
       <div class="bar">
-        <button class="attach" id="attach" title="이미지 첨부 (이미지 입력 가능한 모델)" onclick="$('pickImage').click()" style="display:none"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="m21 16-5-5-9 9"/></svg></button>
+        <button class="attach off" id="attach" title="이미지 첨부" onclick="if (!this.classList.contains('off')) $('pickImage').click()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="m21 16-5-5-9 9"/></svg></button>
         <input type="file" id="pickImage" accept="image/png,image/jpeg,image/webp" multiple hidden>
-        <label class="pick" title="모델"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z"/><path d="M12 12l8-4.5M12 12v9M12 12 4 7.5"/></svg><select id="model"></select></label>
+        <label class="pick" title="모델"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z"/><path d="M12 12l8-4.5M12 12v9M12 12 4 7.5"/></svg><select id="model"></select></label><span class="cap" id="modelCap"></span>
         <label class="pick" title="코드 레벨: Agent가 직접 코드를 작성할 수 있는 범위"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="m8 7-5 5 5 5M16 7l5 5-5 5"/></svg><select id="level"><option value="">코드 레벨 · 기본</option><option value="1">1 · tool만</option><option value="2">2 · 연결 코드</option><option value="3">3 · tool 우선</option><option value="4">4 · 자유 코드</option></select></label>
         <span class="hint" id="hint">Enter 전송 · Shift+Enter 줄바꿈</span>
         <button class="send" id="send" onclick="sendOrStop()" title="전송"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 4l7 7-1.4 1.4L13 7.8V20h-2V7.8l-4.6 4.6L5 11z"/></svg></button>
@@ -880,6 +892,7 @@ async function boot() {
   S.me = me; renderMe();
   S.models = (await api('/models')).items;
   $('model').innerHTML = S.models.map(m => `<option value="${esc(m.name)}" ${m.default ? 'selected' : ''}>${esc(m.label || m.name)}</option>`).join('');
+  modelKinds(false);
   syncAttach();
   await loadProjects();
   let saved = null; try { saved = localStorage.getItem('agentic.project'); } catch {}
@@ -1237,12 +1250,32 @@ input.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey &&
 
 /* images: LangChain content blocks, only for models that accept images */
 const currentModel = () => S.models.find(m => m.name === $('model').value);
-function syncAttach() {
-  const m = currentModel(); const ok = !!m && m.input.includes('image');
-  $('attach').style.display = ok ? '' : 'none';
-  if (!ok && S.images.length) { S.images = []; drawShots(); }
+const takesImages = m => !!m && m.input.includes('image');
+const IMG_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="m21 16-5-5-9 9"/></svg>';
+const TXT_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 6h14M5 12h14M5 18h9"/></svg>';
+// The open list names each model's input; the closed picker shows the name only (the badge beside it says the rest).
+function modelKinds(open) {
+  [...$('model').options].forEach((o, i) => { const m = S.models[i]; o.textContent = (m.label || m.name) + (open ? (takesImages(m) ? ' · 텍스트+이미지' : ' · 텍스트만') : ''); });
 }
-$('model').onchange = syncAttach;
+['mousedown', 'focus'].forEach(ev => $('model').addEventListener(ev, () => modelKinds(true)));
+['change', 'blur'].forEach(ev => $('model').addEventListener(ev, () => modelKinds(false)));
+function syncAttach() {
+  const m = currentModel(); const ok = takesImages(m);
+  const cap = $('modelCap'), at = $('attach');
+  cap.className = 'cap ' + (ok ? 'vis' : 'txt');
+  cap.innerHTML = !m ? '' : ok ? `${IMG_ICON}텍스트 + 이미지${m.max_images ? ` · 최대 ${m.max_images}장` : ''}` : `${TXT_ICON}텍스트 전용`;
+  cap.title = ok ? '글과 이미지를 함께 보낼 수 있는 모델입니다.' : '글만 받는 모델입니다. 이미지를 보내려면 텍스트+이미지 모델로 바꾸세요.';
+  at.classList.toggle('off', !ok);
+  at.title = ok ? `이미지 첨부${m.max_images ? ` (최대 ${m.max_images}장)` : ''}` : '이 모델은 이미지를 받지 않습니다. 텍스트+이미지 모델로 바꿔 주세요.';
+  // Images set aside for a text-only model come back when an image model is picked again.
+  if (!ok && S.images.length) {
+    S.heldImages = S.images; S.images = []; drawShots();
+    $('modelNote').textContent = `⚠ 텍스트 전용 모델이라 첨부한 이미지 ${S.heldImages.length}장을 뺐습니다. 다시 텍스트+이미지 모델로 바꾸면 되살립니다.`;
+  } else if (ok && S.heldImages?.length) {
+    S.images = S.heldImages; S.heldImages = null; drawShots(); $('modelNote').textContent = '';
+  }
+}
+$('model').addEventListener('change', syncAttach);
 function drawShots() {
   $('shots').innerHTML = S.images.map((im, i) => `<div class="shot"><img src="${im.url}" title="${esc(im.name)}"><button onclick="S.images.splice(${i},1);drawShots()">×</button></div>`).join('');
 }
@@ -1256,7 +1289,7 @@ async function addImages(files) {
   drawShots();
 }
 $('pickImage').onchange = e => { addImages([...e.target.files]); e.target.value = ''; };
-input.addEventListener('paste', e => { const files = [...e.clipboardData.files].filter(f => f.type.startsWith('image/')); if (files.length && $('attach').style.display !== 'none') { e.preventDefault(); addImages(files); } });
+input.addEventListener('paste', e => { const files = [...e.clipboardData.files].filter(f => f.type.startsWith('image/')); if (files.length && !$('attach').classList.contains('off')) { e.preventDefault(); addImages(files); } });
 
 function setBusy(busy) {
   S.busy = busy; const b = $('send');
@@ -1270,6 +1303,7 @@ function sendOrStop() { S.busy ? cancelRun() : send(); }
 async function send() {
   const text = input.value.trim(); if (!text) return;
   const images = S.images; S.images = []; drawShots();
+  S.heldImages = null; $('modelNote').textContent = '';
   const content = images.length
     ? [{ type: 'text', text }, ...images.map(im => ({ type: 'image', base64: im.base64, mime_type: im.mime_type, name: im.name }))]
     : text;
