@@ -96,11 +96,15 @@ async def execution_of_session(
     return owner == session_id
 
 
-async def owned_artifact(services, user, artifact_id: str) -> dict:
+async def owned_artifact(
+    services, user, artifact_id: str, *, admin_read: bool = False
+) -> dict:
     """A session's artifact for its project members.
 
     A batch execution's artifact (its notebook, its report) for the user
-    who owns the batch.
+    who owns the batch. ``admin_read``: an administrator's SSO login on a
+    read-only page sees any artifact of our tenant, as the executor relay
+    shows them any execution (never for key callers, never for writes).
     """
     try:
         artifact = await services.executor.artifact(artifact_id)
@@ -114,6 +118,8 @@ async def owned_artifact(services, user, artifact_id: str) -> dict:
         raise HTTPException(404, "Artifact not found.") from None
     except httpx.HTTPError:
         raise executor_unavailable() from None
+    if admin_read:
+        return artifact
     context = execution.get("context") or {}
     if trigger_type(execution) == "BATCH":
         if context.get("user_id") != user.id:

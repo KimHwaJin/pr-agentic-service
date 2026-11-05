@@ -8,25 +8,34 @@ from html import escape
 from pathlib import Path
 from urllib.parse import quote
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, StreamingResponse
 
-from api_service.deps import ServicesDep, UserDep
+from api_service.deps import ServicesDep, UserDep, caller_of
 from api_service.services.access import owned_artifact
 from core.notebook_links import lab_url
 
 router = APIRouter(tags=["artifacts"])
 
 
+def admin_read(request: Request, user) -> bool:
+    """An administrator signed in with SSO (not a key caller naming one)."""
+    return (
+        getattr(user, "role", None) == "admin" and caller_of(request) is None
+    )
+
+
 @router.get("/api/v1/artifacts/{artifact_id}")
 async def artifact_detail(
-    artifact_id: str, services: ServicesDep, user: UserDep
+    artifact_id: str, request: Request, services: ServicesDep, user: UserDep
 ):
     """Executor artifact metadata plus ``view_url`` (rendered page).
 
     For notebooks also ``lab_url`` (open in JupyterLab).
     """
-    artifact = await owned_artifact(services, user, artifact_id)
+    artifact = await owned_artifact(
+        services, user, artifact_id, admin_read=admin_read(request, user)
+    )
     return {
         **artifact,
         "view_url": f"/view/artifacts/{artifact_id}",
@@ -46,9 +55,11 @@ def _lab_url(services, user, artifact: dict) -> str | None:
 
 @router.get("/api/v1/artifacts/{artifact_id}/content")
 async def artifact_content(
-    artifact_id: str, services: ServicesDep, user: UserDep
+    artifact_id: str, request: Request, services: ServicesDep, user: UserDep
 ):
-    artifact = await owned_artifact(services, user, artifact_id)
+    artifact = await owned_artifact(
+        services, user, artifact_id, admin_read=admin_read(request, user)
+    )
     response, body = await services.executor.stream_artifact(artifact_id)
     media = artifact["storage"].get("media_type") or response.headers.get(
         "content-type", "application/octet-stream"
@@ -101,14 +112,16 @@ def content_disposition(kind: str, name: str) -> str:
 
 @router.get("/view/artifacts/{artifact_id}", response_class=HTMLResponse)
 async def artifact_view(
-    artifact_id: str, services: ServicesDep, user: UserDep
+    artifact_id: str, request: Request, services: ServicesDep, user: UserDep
 ):
     """Landing page linked from chat and the system view.
 
     Renders reports (.md), notebooks, images, CSV tables and text files;
     anything else gets a download link.
     """
-    artifact = await owned_artifact(services, user, artifact_id)
+    artifact = await owned_artifact(
+        services, user, artifact_id, admin_read=admin_read(request, user)
+    )
     kind = _view_kind(artifact)
     lab = _lab_url(services, user, artifact)
     lab_button = (
