@@ -304,7 +304,14 @@ def _plan_status(state: AnalysisState) -> str:
         else "없음(다음 실행 시 새 커널)"
     )
     status = json.dumps(calls, ensure_ascii=False)
-    return f"계획: {plan['title']}\n호출 상태: {status}\n커널: {kernel}"
+    mode = {
+        "static": "static (등록된 워크플로우: 정의대로 한 번 실행, 개입 없음)",
+        "adaptive": "adaptive (등록된 워크플로우: 조건부 호출만 결정)",
+    }.get(plan.get("mode") or "", "에이전트 계획")
+    return (
+        f"계획: {plan['title']}\n실행 방식: {mode}\n"
+        f"호출 상태: {status}\n커널: {kernel}"
+    )
 
 
 def _isolate(messages: list, persona: str) -> list:
