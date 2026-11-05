@@ -16,7 +16,13 @@ from langgraph.store.base import BaseStore
 
 from agent.context import BatchReportContext
 from agent.report_agent import ReportAgent, ReportMissing, handed_in
-from agent.reporter import collect_evidence, trimmed
+from agent.reporter import (
+    collect_evidence,
+    collect_figures,
+    trimmed,
+    with_figures,
+)
+from core import figures
 from core.config import Settings
 from core.db import utcnow
 
@@ -77,10 +83,19 @@ class BatchReportAgent:
         evidence = await collect_evidence(
             ctx.services, ctx.execution_id, plan=None
         )
+        blocks = await collect_figures(
+            ctx.services,
+            ctx.execution_id,
+            figures.limit(
+                self.settings,
+                ctx.model,
+                self.settings.batch_report_max_images,
+            ),
+        )
         async with ctx.activity("report_writing"):
             return await self.agent.write(
                 ctx,
-                _request(execution, history, evidence),
+                with_figures(_request(execution, history, evidence), blocks),
                 BATCH_TITLE,
                 can_read=trimmed(evidence),
             )

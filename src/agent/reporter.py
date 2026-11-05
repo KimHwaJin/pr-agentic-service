@@ -14,6 +14,7 @@ from typing import Any
 
 from agent.codegen import CUSTOM_SKILL, SETUP_TOOL, parse_observations
 from agent.context import ReportContext
+from core import figures
 from core.services import Services
 
 # what one step shows in full: the read_step view
@@ -56,12 +57,7 @@ async def collect_evidence(
             "## 입력값\n"
             + json.dumps(plan["input_values"], ensure_ascii=False, default=str)
         )
-    steps = [
-        s
-        for o in result.get("operations", [])
-        for s in o.get("steps", [])
-        if (s.get("lineage") or {}).get("tool_name") != SETUP_TOOL
-    ]
+    steps = _steps(result)
     views = [await step_view(services, s) for s in steps]
     full = [step_block(v, trim=False) for v in views]
     budget = budget_total - sum(map(len, head))
@@ -79,6 +75,67 @@ async def collect_evidence(
         parts.append(block)
         budget -= len(block)
     return "\n\n".join(parts)
+
+
+def _steps(result: dict[str, Any]) -> list[dict[str, Any]]:
+    return [
+        s
+        for o in result.get("operations", [])
+        for s in o.get("steps", [])
+        if (s.get("lineage") or {}).get("tool_name") != SETUP_TOOL
+    ]
+
+
+# what the report writer is told when it gets the steps' figures
+FIGURES_NOTE = (
+    "# 실행 결과 그림\n"
+    "아래는 Step이 만든 그림(플롯) 일부입니다. 분포, 추세, 이상치 같은 "
+    "경향을 설명하는 데에만 쓰고, 리포트의 수치는 위 실행 개요의 텍스트에서만 "
+    "가져오세요. 그림을 언급할 때는 Step 번호로 가리키세요."
+)
+
+
+async def collect_figures(
+    services: Services, execution_id: str, count: int
+) -> list[dict[str, Any]]:
+    """Content blocks of the steps' figures for a vision report writer.
+
+    Empty when ``count`` is 0 (a text model, or figures turned off): then
+    nothing is read and the request stays text.
+    """
+    if count <= 0:
+        return []
+    result = await services.executor.result(execution_id)
+    steps = []
+    for step in _steps(result):
+        ref = (step.get("result") or {}).get("result_ref")
+        view = await asyncio.to_thread(
+            services.storage.read_step_outputs, ref, max_chars=0
+        )
+        if view.get("images"):
+            lineage = step.get("lineage") or {}
+            label = (
+                f"{lineage.get('skill_name')}/{lineage.get('tool_name')}"
+                if lineage.get("tool_name")
+                else "code"
+            )
+            steps.append(
+                (f"Step {step.get('sequence')} {label}", view["images"])
+            )
+    chosen = figures.pick(steps, count)
+    loaded = await asyncio.to_thread(figures.load, services.storage, chosen)
+    return figures.blocks(loaded)
+
+
+def with_figures(request: str, blocks: list[dict[str, Any]]) -> Any:
+    """The report request, with the figures after it when there are any."""
+    if not blocks:
+        return request
+    return [
+        {"type": "text", "text": request},
+        {"type": "text", "text": FIGURES_NOTE},
+        *blocks,
+    ]
 
 
 async def step_view(
@@ -215,11 +272,18 @@ async def generate_report(
         model=ctx.model,
         send=ctx.emit,
     )
-    report = await analysis_agent(ctx.services.settings).write(
+    settings = ctx.services.settings
+    request = await analysis_request(
+        ctx, title=title, focus=focus, evidence=evidence
+    )
+    blocks = await collect_figures(
+        ctx.services,
+        execution_id,
+        figures.limit(settings, ctx.model, settings.report_max_images),
+    )
+    report = await analysis_agent(settings).write(
         report_ctx,
-        await analysis_request(
-            ctx, title=title, focus=focus, evidence=evidence
-        ),
+        with_figures(request, blocks),
         title,
         can_read=trimmed(evidence),
     )
