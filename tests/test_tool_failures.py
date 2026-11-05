@@ -21,6 +21,7 @@ from agent.middleware.turn_limit import (
     LIMIT_PREFIX,
     TurnModelCallLimitMiddleware,
 )
+from agent.tool_errors import UserFacingError
 
 
 def _call(n: int, name: str = "run_plan") -> AIMessage:
@@ -132,7 +133,8 @@ def test_the_agent_stops_a_tool_failing_differently_each_time():
     def run_custom_code() -> str:
         """Runs code."""
         runs.append(1)
-        raise ValueError(f"error kind {'abcdefg'[len(runs)]}")
+        # errors meant for the model: their text reaches it, and differs
+        raise UserFacingError(f"error kind {'abcdefg'[len(runs)]}")
 
     calls = [_call(n, "run_custom_code") for n in range(1, 8)]
     model = _Model(

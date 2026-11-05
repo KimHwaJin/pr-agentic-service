@@ -87,3 +87,21 @@ def test_observation_summarises_multiindex_series(capsys):
     assert value["type"] == "Series" and value["len"] == 3
     assert value["head"]["('x', 1)"] == 1
 
+
+def test_observations_have_no_nan():
+    import json as _json
+
+    pd = __import__("pytest").importorskip("pandas")
+    from agent.codegen import SETUP
+
+    printed = []
+    namespace: dict = {"get_ipython": lambda: None, "print": printed.append}
+    exec(compile(SETUP, "setup", "exec"), namespace)
+    one_row = pd.DataFrame({"temp": [25.3], "empty": [float("nan")]})
+    namespace["_agentic_observe"]("df", one_row)
+    # std of one row and an all-NaN column: null, and standard JSON
+    observations, _ = parse_observations(printed[-1])
+    value = observations[0]["value"]
+    assert value["describe"]["temp"][1] is None
+    assert value["head"][0][1] is None
+    _json.dumps(observations, allow_nan=False)
