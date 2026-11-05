@@ -59,7 +59,7 @@
 
 ## 3-2. 쓸 수 있는 skill과 tool 찾기
 
-`GET /api/v1/catalog`가 skill마다 tool의 실행 방식(`always`/`conditional`), 파라미터(필수 여부, 기본값, 설명), 출력 이름을 준다. `steps[].skill`, `tools[].tool`, `tools[].execution`, `tool_output.output`에 이 값을 그대로 쓰면 4절 의미 검증을 통과한다. skill 본문은 `GET /api/v1/catalog/skills/{name}`. 화면의 **워크플로우 만들기**는 같은 정보를 오른쪽 패널에 보여 주고, **+ 추가**를 누르면 그 tool 호출을 문서 끝에 붙인다(같은 skill이면 마지막 step에, 아니면 새 step). 필수 파라미터는 `source: input`으로, 직전 호출의 출력과 이름이 같은 파라미터는 그 출력의 `tool_output`으로 채운다.
+`GET /api/v1/catalog/skills`(skill 목록)와 `GET /api/v1/catalog/tools?skill=`(그 skill의 tool: 실행 방식 `always`/`conditional`, 출력 이름), `GET /api/v1/catalog/tools/{name}?skill=`(파라미터의 필수 여부·기본값·설명)로 찾는다. `GET /api/v1/catalog/tools?q=`는 skill을 가로질러 tool을 검색한다. 목록은 페이지(`next_cursor`)로 나뉜다. `steps[].skill`, `tools[].tool`, `tools[].execution`, `tool_output.output`에 이 값을 그대로 쓰면 4절 의미 검증을 통과한다. skill 본문은 `GET /api/v1/catalog/skills/{name}`. 화면의 **워크플로우 만들기**는 같은 정보를 오른쪽 패널에 보여 준다(skill·tool을 그 자리에서 펼치고, 아래로 내리면 더 불러오며, 검색은 tool 검색). **+ 추가**를 누르면 그 tool 호출을 문서 끝에 붙인다(같은 skill이면 마지막 step에, 아니면 새 step). 필수 파라미터는 `source: input`으로, 직전 호출의 출력과 이름이 같은 파라미터는 그 출력의 `tool_output`으로 채운다.
 
 ## 4. 서버 검증 규칙
 

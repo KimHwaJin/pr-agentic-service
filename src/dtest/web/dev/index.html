@@ -301,6 +301,7 @@
   .wb-params { width: 100%; border-collapse: collapse; } .wb-params td { padding: 3px 6px 3px 0; vertical-align: top; }
   .chip-sm { font-size: 10.5px; padding: 1px 6px; border-radius: 5px; border: 1px solid var(--line); color: var(--muted); }
   .chip-sm.cond { color: var(--accent); border-color: var(--accent); }
+  .wb-more { width: 100%; margin: 4px 0 8px; font-size: 12.5px; }
   .wb-call { display: flex; align-items: baseline; gap: 8px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 8px; margin-bottom: 6px; font-size: 13px; }
   .wb-args { flex: 1; font-size: 12px; overflow-wrap: anywhere; }
   @media (max-width: 900px) { .wb { grid-template-columns: 1fr; } .wb-pane { max-height: none; } .wb-cat { border-left: 0; padding-left: 0; } }
@@ -2105,8 +2106,8 @@ function openWorkflowUpload() {
       <div class="actions"><button class="btn" onclick="$('wfModal').classList.remove('open')">취소</button><button class="btn" onclick="validateWorkflowDoc()">검증</button><button class="btn primary" id="weSave" onclick="saveWorkflowUpload()">등록</button></div>
     </div>
     <div class="wb-pane wb-cat">
-      <div class="wb-cat-head"><b>skill · tool</b><input id="wbQ" placeholder="이름·설명 검색" oninput="renderCatalog()"></div>
-      <div class="muted" style="font-size:12px;margin:6px 0 10px">skill을 펼치면 tool이, tool을 펼치면 파라미터·출력이 이 자리에서 열립니다. 여러 개를 함께 펼쳐 둘 수 있습니다.</div>
+      <div class="wb-cat-head"><b>skill · tool</b><input id="wbQ" placeholder="tool 검색 (모든 skill)" oninput="searchCatalog()"></div>
+      <div class="muted" style="font-size:12px;margin:6px 0 10px">skill을 펼치면 tool이, tool을 펼치면 파라미터·출력이 이 자리에서 열립니다. 여러 개를 함께 펼쳐 둘 수 있고, 아래로 내리면 더 불러옵니다. 검색은 모든 skill의 tool을 찾습니다.</div>
       <div id="wbCat"><div class="muted">불러오는 중…</div></div>
     </div>
   </div>`;
@@ -2116,39 +2117,92 @@ function openWorkflowUpload() {
 function blankWorkflow() {
   return { workflow_version: '1.0', workflow: { actor: { type: 'USER', id: S.me?.user?.employee_id || 'unknown' }, name: '', user_request: '', execution_mode: 'static', allow_immediate_execution: false, steps: [] } };
 }
-/* skill/tool catalog (GET /catalog): one side panel, everything expands in place */
+/* skill/tool catalog: paged lists, details fetched on expand; one side panel where everything expands in place */
+const CAT_PAGE = 50;
 async function loadCatalog() {
-  try { S.catalog = (await api('/catalog')).skills; } catch (e) { $('wbCat').innerHTML = wfMsg([`목록을 불러오지 못했습니다: ${e.message}`]); return; }
-  S.catalogOpen = S.catalogOpen || new Set(); renderCatalog();
+  S.cat = { skills: [], next: undefined, tools: {}, detail: {}, search: null, open: S.cat?.open || new Set() };
+  await moreSkills();
+  const pane = document.querySelector('.wb-cat');
+  if (pane) pane.onscroll = () => { if (pane.scrollTop + pane.clientHeight > pane.scrollHeight - 80) (S.cat.search ? moreSearch() : moreSkills()); };
 }
+async function catGet(path) { return api(path); }
+async function moreSkills() {
+  const c = S.cat; if (c.loading || c.next === null) return; c.loading = true;
+  try {
+    const page = await catGet(`/catalog/skills?limit=${CAT_PAGE}${c.next ? `&cursor=${encodeURIComponent(c.next)}` : ''}`);
+    c.skills.push(...page.items); c.next = page.next_cursor;
+  } catch (e) { $('wbCat').innerHTML = wfMsg([`목록을 불러오지 못했습니다: ${e.message}`]); return; } finally { c.loading = false; }
+  renderCatalog();
+}
+async function moreTools(skill) {
+  const c = S.cat, t = c.tools[skill] || (c.tools[skill] = { items: [], next: undefined });
+  if (t.loading || t.next === null) return; t.loading = true;
+  try { const page = await catGet(`/catalog/tools?skill=${encodeURIComponent(skill)}&limit=${CAT_PAGE}${t.next ? `&cursor=${encodeURIComponent(t.next)}` : ''}`); t.items.push(...page.items); t.next = page.next_cursor; }
+  finally { t.loading = false; }
+  renderCatalog();
+}
+function searchCatalog() {
+  clearTimeout(S.catTimer);
+  S.catTimer = setTimeout(async () => {
+    const q = $('wbQ').value.trim();
+    S.cat.search = q ? { q, items: [], next: undefined } : null;
+    if (q) await moreSearch(); else renderCatalog();
+  }, 250);
+}
+async function moreSearch() {
+  const sr = S.cat.search; if (!sr || sr.loading || sr.next === null) return; sr.loading = true;
+  try { const page = await catGet(`/catalog/tools?q=${encodeURIComponent(sr.q)}&limit=${CAT_PAGE}${sr.next ? `&cursor=${encodeURIComponent(sr.next)}` : ''}`); if (S.cat.search !== sr) return; sr.items.push(...page.items); sr.next = page.next_cursor; }
+  finally { sr.loading = false; }
+  renderCatalog();
+}
+async function toolDetail(skill, name) {
+  const k = `${skill}/${name}`;
+  return S.cat.detail[k] || (S.cat.detail[k] = await catGet(`/catalog/tools/${encodeURIComponent(name)}?skill=${encodeURIComponent(skill)}`));
+}
+function toggleSkill(el, skill) { keepOpen(el); if (el.open && !S.cat.tools[skill]) moreTools(skill); }
+async function toggleTool(el, skill, name) {
+  keepOpen(el); if (!el.open || el.dataset.ready) return;
+  const body = el.querySelector('.wb-tool-body');
+  try { body.innerHTML = toolBody(await toolDetail(skill, name)); el.dataset.ready = '1'; } catch (e) { body.innerHTML = wfMsg([e.message]); }
+}
+const catParam = p => `<tr><td><code>${esc(p.name)}</code>${p.required ? ' <span class="badge" title="기본값 없음: arguments에 꼭 넣어야 함">필수</span>' : ''}</td><td class="muted">${esc(p.type || '')}${p.default != null ? ` = ${esc(p.default)}` : ''}</td></tr>${p.doc ? `<tr><td colspan="2" class="muted" style="padding-top:0">${esc(p.doc)}</td></tr>` : ''}`;
+function toolBody(d) {
+  return `${d.broken ? `<div style="color:var(--bad)">${esc(d.broken)}</div>` : ''}
+    ${d.condition ? `<div><span class="muted">실행 조건</span> ${esc(d.condition)}${d.condition_tool ? ` · 판단 근거 <code>${esc(d.condition_tool)}</code>` : ''}</div>` : ''}
+    ${d.role ? `<div><span class="muted">역할</span> ${esc(d.role)}</div>` : ''}
+    ${d.params.length ? `<table class="wb-params">${d.params.map(catParam).join('')}</table>` : ''}
+    <div><span class="muted">출력 (tool_output.output)</span> ${d.outputs.map(o => `<code>${esc(o)}</code>`).join(' ')}</div>`;
+}
+function keepOpen(el) { const k = el.dataset.k; if (k) el.open ? S.cat.open.add(k) : S.cat.open.delete(k); }
 function renderCatalog() {
-  if (!$('wbCat') || !S.catalog) return;
-  const q = ($('wbQ').value || '').trim().toLowerCase();
-  const hit = (...xs) => !q || xs.join(' ').toLowerCase().includes(q);
-  const list = S.catalog.map(sk => ({ sk, tools: sk.tools.filter(t => hit(sk.name, sk.description) || hit(t.name, t.summary, t.role)) }))
-    .filter(({ sk, tools }) => tools.length || hit(sk.name, sk.description));
-  const param = p => `<tr><td><code>${esc(p.name)}</code>${p.required ? ' <span class="badge" title="기본값 없음: arguments에 꼭 넣어야 함">필수</span>' : ''}</td><td class="muted">${esc(p.type || '')}${p.default != null ? ` = ${esc(p.default)}` : ''}</td></tr>${p.doc ? `<tr><td colspan="2" class="muted" style="padding-top:0">${esc(p.doc)}</td></tr>` : ''}`;
-  const tool = (sk, t) => `<details class="wb-tool" data-k="${esc(sk.name)}/${esc(t.name)}" ${S.catalogOpen.has(`${sk.name}/${t.name}`) ? 'open' : ''} ontoggle="keepOpen(this)">
-      <summary><span class="chip-sm ${t.execution === 'conditional' ? 'cond' : ''}">${t.execution === 'conditional' ? '조건부' : '항상'}</span><b>${esc(t.name)}</b>
-        ${t.broken ? '<span class="badge" style="color:var(--bad)">사용 불가</span>' : `<button class="ghost wb-add" onclick="event.preventDefault();addCall('${esc(sk.name)}','${esc(t.name)}')">+ 추가</button>`}
+  if (!$('wbCat') || !S.cat) return;
+  const c = S.cat, more = (label, fn) => `<button class="ghost wb-more" onclick="${fn}">${label}</button>`;
+  const tool = (t, showSkill) => {
+    const k = `${t.skill}/${t.name}`, d = c.detail[k], a = `'${esc(t.skill)}','${esc(t.name)}'`;
+    return `<details class="wb-tool" data-k="${esc(k)}" ${d ? 'data-ready="1"' : ''} ${c.open.has(k) ? 'open' : ''} ontoggle="toggleTool(this, ${a})">
+      <summary><span class="chip-sm ${t.execution === 'conditional' ? 'cond' : ''}">${t.execution === 'conditional' ? '조건부' : '항상'}</span>${showSkill ? `<span class="muted">${esc(t.skill)} ›</span>` : ''}<b>${esc(t.name)}</b>
+        ${t.broken ? '<span class="badge" style="color:var(--bad)">사용 불가</span>' : `<button class="ghost wb-add" onclick="event.preventDefault();addCall(${a})">+ 추가</button>`}
         <div class="muted wb-sum">${esc(t.summary || t.role)}</div></summary>
-      <div class="wb-tool-body">
-        ${t.broken ? `<div style="color:var(--bad)">${esc(t.broken)}</div>` : ''}
-        ${t.condition ? `<div><span class="muted">실행 조건</span> ${esc(t.condition)}${t.condition_tool ? ` · 판단 근거 <code>${esc(t.condition_tool)}</code>` : ''}</div>` : ''}
-        ${t.role ? `<div><span class="muted">역할</span> ${esc(t.role)}</div>` : ''}
-        ${t.params.length ? `<table class="wb-params">${t.params.map(param).join('')}</table>` : ''}
-        <div><span class="muted">출력 (tool_output.output)</span> ${t.outputs.map(o => `<code>${esc(o)}</code>`).join(' ')}</div>
-      </div></details>`;
-  $('wbCat').innerHTML = list.map(({ sk, tools }) => `<details class="wb-skill" data-k="${esc(sk.name)}" ${q || S.catalogOpen.has(sk.name) ? 'open' : ''} ontoggle="keepOpen(this)">
-      <summary><b>${esc(sk.name)}</b> <span class="muted">tool ${sk.tools.length}</span><div class="muted wb-sum">${esc(sk.description)}</div></summary>
-      ${tools.map(t => tool(sk, t)).join('')}
+      <div class="wb-tool-body">${d ? toolBody(d) : '<div class="muted">불러오는 중…</div>'}</div></details>`;
+  };
+  if (c.search) {
+    const sr = c.search;
+    $('wbCat').innerHTML = (sr.items.map(t => tool(t, true)).join('') || (sr.loading || sr.next === undefined ? '<div class="muted">찾는 중…</div>' : '<div class="muted">맞는 tool이 없습니다.</div>'))
+      + (sr.next ? more('검색 결과 더 보기', 'moreSearch()') : '');
+    return;
+  }
+  $('wbCat').innerHTML = c.skills.map(sk => {
+    const t = c.tools[sk.name];
+    return `<details class="wb-skill" data-k="${esc(sk.name)}" ${c.open.has(sk.name) ? 'open' : ''} ontoggle="toggleSkill(this, '${esc(sk.name)}')">
+      <summary><b>${esc(sk.name)}</b> <span class="muted">tool ${sk.tool_count}</span><div class="muted wb-sum">${esc(sk.description)}</div></summary>
+      ${t ? t.items.map(x => tool(x, false)).join('') + (t.next ? more(`tool 더 보기 (${t.items.length}/${sk.tool_count})`, `moreTools('${esc(sk.name)}')`) : '') : '<div class="muted" style="padding:6px 0">불러오는 중…</div>'}
       <details class="wb-tool" ontoggle="if (this.open) skillBody(this, '${esc(sk.name)}')"><summary class="muted">skill 문서 전체 보기</summary><div class="wb-tool-body"><div class="muted">불러오는 중…</div></div></details>
-    </details>`).join('') || '<div class="muted">맞는 skill·tool이 없습니다.</div>';
+    </details>`;
+  }).join('') + (c.next ? more('skill 더 보기', 'moreSkills()') : '') || '<div class="muted">skill이 없습니다.</div>';
 }
-function keepOpen(el) { const k = el.dataset.k; if (k) el.open ? S.catalogOpen.add(k) : S.catalogOpen.delete(k); }
 async function skillBody(el, name) {
   const box = el.querySelector('.wb-tool-body'); if (box.dataset.loaded) return;
-  try { const d = await api(`/catalog/skills/${encodeURIComponent(name)}`); box.innerHTML = `<pre class="mono" style="white-space:pre-wrap;font-size:12px;margin:0">${esc(d.body)}</pre>`; box.dataset.loaded = '1'; }
+  try { const d = await catGet(`/catalog/skills/${encodeURIComponent(name)}`); box.innerHTML = `<pre class="mono" style="white-space:pre-wrap;font-size:12px;margin:0">${esc(d.body)}</pre>`; box.dataset.loaded = '1'; }
   catch (e) { box.innerHTML = wfMsg([e.message]); }
 }
 /* the flow: the JSON is the source; the call list and + 추가 edit it */
@@ -2160,11 +2214,14 @@ function currentDoc() {
   return doc;
 }
 function writeDoc(doc) { $('weDoc').value = JSON.stringify(doc, null, 2); renderCalls(); }
-function addCall(skill, toolName) {
+async function addCall(skill, toolName) {
   let doc; try { doc = currentDoc(); } catch (e) { $('weResult').innerHTML = wfMsg([`JSON을 읽을 수 없어 추가하지 못했습니다: ${e.message}`]); return; }
-  const t = S.catalog.find(s => s.name === skill).tools.find(x => x.name === toolName);
+  let t, prevTool;
   const steps = doc.workflow.steps, prev = steps.length ? { si: steps.length - 1, ti: steps.at(-1).tools.length - 1 } : null;
-  const prevTool = prev && S.catalog.flatMap(s => s.tools).find(x => x.name === steps[prev.si].tools[prev.ti].tool);
+  try {
+    t = await toolDetail(skill, toolName);
+    if (prev) prevTool = await toolDetail(steps[prev.si].skill, steps[prev.si].tools[prev.ti].tool).catch(() => null);
+  } catch (e) { $('weResult').innerHTML = wfMsg([`tool 정보를 불러오지 못했습니다: ${e.message}`]); return; }
   const args = {};
   for (const p of t.params) {
     // a parameter named like an output of the previous call takes it (data -> data); other required ones are inputs
