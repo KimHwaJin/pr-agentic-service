@@ -53,6 +53,7 @@ workflow
 - `always`는 항상 실행하며, `conditional`은 조건 판단에 따라 실행하거나 생략한다.
 - `static`은 모든 Tool 호출이 `always`인 워크플로우다.
 - `adaptive`는 `conditional` Tool 호출이 하나 이상 있는 워크플로우다.
+- 등록된 워크플로우 중 static은 executor SINGLE 실행으로 정의된 그대로 한 번 실행하고(실패하면 실패로 끝남), adaptive는 MULTI 실행에서 conditional Tool의 실행 여부를 에이전트가 결정한다. 자세한 규칙은 [workflow_upload_spec.md](workflow_upload_spec.md) 3-1절.
 - Tool의 실행 방식과 조건은 등록된 Skill 규칙과 일치해야 한다. 조건 내용과 판단에 사용할 Tool은 Skill 정의를 따른다.
 - `allow_immediate_execution`은 즉각 실행을 허용하는 표시다. 실제 실행 여부는 추천 기준, 필요한 값의 준비 여부 등 서비스 정책에 따라 결정한다.
 

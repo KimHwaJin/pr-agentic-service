@@ -2070,7 +2070,7 @@ function openWorkflowUpload() {
     <div class="field"><label>파일 (.json)</label><input id="wuFile" type="file" accept=".json,application/json" onchange="readWorkflowFile(this)"></div>
     <div class="field"><label>이름</label><input id="weName" placeholder="문서의 workflow.name"></div>
     <div class="field"><label>목적 (사용자 요청)</label><input id="weRequest" placeholder="문서의 workflow.user_request"></div>
-    <div class="field"><label>추천 질문 (한 줄에 하나, 최소 1개)</label><textarea id="weQueries" rows="4"></textarea></div>
+    <div class="field"><label>추천 질문 (필수, 한 줄에 하나) · 사용자가 이렇게 물으면 이 워크플로우를 추천합니다</label><textarea id="weQueries" rows="4" placeholder="예: NCE 표본 뽑아서 기술통계랑 히스토그램 보여줘"></textarea></div>
     <div class="field"><label>태그 (쉼표로 구분)</label><input id="weTags"></div>
     <div class="field"><label>실행 흐름 (Workflow 1.0 문서 JSON)</label>
       <textarea id="weDoc" rows="16" class="mono" style="width:100%;font-size:12px" placeholder='{"workflow_version": "1.0", "workflow": {...}}' onchange="syncUploadFields()"></textarea></div>
@@ -2086,7 +2086,7 @@ function fillUpload({ doc, queries, tags }) {
   const w = doc && doc.workflow && typeof doc.workflow === 'object' ? doc.workflow : {};
   $('weDoc').value = JSON.stringify(doc, null, 2);
   $('weName').value = w.name || ''; $('weRequest').value = w.user_request || '';
-  if (queries.length || !$('weQueries').value.trim()) $('weQueries').value = (queries.length ? queries : (w.user_request ? [w.user_request] : [])).join('\n');
+  if (queries.length) $('weQueries').value = queries.join('\n');  // never guessed: recommendation questions are the author's
   if (tags.length) $('weTags').value = tags.join(', ');
 }
 async function readWorkflowFile(input) {
