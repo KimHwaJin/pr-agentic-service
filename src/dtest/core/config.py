@@ -398,6 +398,16 @@ class Settings(BaseSettings):
     image_context_turns: int = (
         3  # images of the last N user turns reach the model
     )
+    # What one image counts as when the conversation's size is estimated for
+    # summarization (LangChain counts 85; a 1568 px image is ~1-1.5k).
+    image_tokens: int = Field(1500, ge=0)
+    # Figures of executed steps a vision model sees (0: none). The analyst
+    # sees those of the latest tool result before it decides the next step;
+    # report writers see those of the execution they report on. Never more
+    # than the model's max_images.
+    agent_tool_images: int = Field(4, ge=0, le=32)
+    report_max_images: int = Field(6, ge=0, le=32)
+    batch_report_max_images: int = Field(6, ge=0, le=32)
 
     # pr-batch.
     batch_base_url: str = "http://localhost:8100"

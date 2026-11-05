@@ -445,6 +445,17 @@ IMAGE_MAX_TOTAL_BYTES: 20971520
 REQUEST_MAX_BYTES: 33554432
 # [공통] 최근 몇 개 사용자 턴의 이미지까지 모델에 보낼지.
 IMAGE_CONTEXT_TURNS: 3
+# [공통] 대화 요약 시점을 정할 때 이미지 한 장을 몇 토큰으로 셀지.
+# (LangChain 기본 85, 1568px 이미지는 실제 약 1~1.5k)
+IMAGE_TOKENS: 1500
+# [공통] 실행된 Step의 그림(플롯)을 비전 모델에 보여줄 최대 장수. 0이면 끔.
+# 비전 모델(INPUT 에 image)이 아니면 항상 꺼지고, 모델의 MAX_IMAGES 를 넘지 않음.
+# 분석 단계: 가장 최근 도구 결과의 그림을 보고 다음 Step을 정함.
+AGENT_TOOL_IMAGES: 4
+# 채팅 분석 리포트 작성 시.
+REPORT_MAX_IMAGES: 6
+# 배치 리포트 작성 시 (BATCH_REPORT_MODEL 기준).
+BATCH_REPORT_MAX_IMAGES: 6
 
 
 # -----------------------------------------------------------------------------

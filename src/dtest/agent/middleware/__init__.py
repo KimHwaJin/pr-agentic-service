@@ -17,6 +17,7 @@ from src.dtest.agent.middleware.json_arguments import JsonArgumentsMiddleware
 from src.dtest.agent.middleware.persona import PersonaMiddleware
 from src.dtest.agent.middleware.summarization import (
     ReportingSummarizationMiddleware,
+    summary_token_counter,
 )
 from src.dtest.agent.middleware.tool_failures import ToolFailureLimitMiddleware
 from src.dtest.agent.middleware.turn_limit import (
@@ -30,4 +31,5 @@ __all__ = [
     "ToolFailureLimitMiddleware",
     "ToolResultCompactionMiddleware",
     "TurnModelCallLimitMiddleware",
+    "summary_token_counter",
 ]

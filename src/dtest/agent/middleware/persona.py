@@ -33,6 +33,7 @@ from langchain_core.messages import (
 
 from src.dtest.agent.context import AnalysisState, RunContext
 from src.dtest.agent.prompts import Prompt, load_prompt
+from src.dtest.core import figures
 from src.dtest.core.memory.service import render_for_prompt
 from src.dtest.core.workflows import spec
 
@@ -207,8 +208,11 @@ class PersonaMiddleware(AgentMiddleware[AnalysisState, RunContext]):
                         if getattr(t, "name", None) in allowed
                     ],
                     messages=[
-                        *await _with_images(
-                            _isolate(request.messages, persona), ctx
+                        *await _with_figures(
+                            await _with_images(
+                                _isolate(request.messages, persona), ctx
+                            ),
+                            ctx,
                         ),
                         *_notice(request.state),
                     ],
@@ -283,6 +287,55 @@ async def _image_data(ctx: RunContext, image_id: str) -> str | None:
             else None
         )
     return cache[image_id]
+
+
+FIGURES_NOTE = (
+    "[직전 도구 결과의 그림입니다. 다음 Step을 정할 때 분포, 추세, "
+    "이상치 같은 경향의 근거로 참고하세요. 수치는 도구 결과 텍스트를 "
+    "기준으로 합니다.]"
+)
+
+
+async def _with_figures(messages: list, ctx: RunContext) -> list:
+    """The latest tool results' figures, for a vision model, this call only.
+
+    When the model is called right after tool results (the messages end
+    with them) and those results drew figures (``artifact["figures"]``,
+    agent.tools.analysis), a user message with up to AGENT_TOOL_IMAGES of
+    them follows: a tool message cannot carry images on the OpenAI API.
+    The next call no longer ends with those results, so they are sent once.
+    A text model, or AGENT_TOOL_IMAGES 0, gets the messages unchanged.
+    """
+    settings = ctx.services.settings
+    count = figures.limit(settings, ctx.model, settings.agent_tool_images)
+    if count <= 0:
+        return messages
+    tail = []
+    for message in reversed(messages):
+        if not isinstance(message, ToolMessage):
+            break
+        tail.append(message)
+    steps: dict[str, list[str]] = {}  # call label -> its figures, in order
+    for message in reversed(tail):
+        artifact = message.artifact
+        for label, path in (
+            artifact.get("figures") or [] if isinstance(artifact, dict) else []
+        ):
+            steps.setdefault(str(label), []).append(str(path))
+    chosen = figures.pick(list(steps.items()), count)
+    if not chosen:
+        return messages
+    loaded = await asyncio.to_thread(
+        figures.load, ctx.services.storage, chosen
+    )
+    if not loaded:
+        return messages
+    return [
+        *messages,
+        HumanMessage(
+            [{"type": "text", "text": FIGURES_NOTE}, *figures.blocks(loaded)]
+        ),
+    ]
 
 
 def _notice(state: Any) -> list[HumanMessage]:

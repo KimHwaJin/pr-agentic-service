@@ -27,6 +27,7 @@ from src.dtest.agent.middleware import (
     ToolFailureLimitMiddleware,
     TurnModelCallLimitMiddleware,
     compaction_rules,
+    summary_token_counter,
 )
 from src.dtest.agent.middleware.turn_limit import LIMIT_PREFIX
 from src.dtest.agent.prompts import load_prompt
@@ -125,6 +126,7 @@ class AgentGraphs:
             middleware.append(
                 ReportingSummarizationMiddleware(
                     model,
+                    token_counter=summary_token_counter(self.settings, name),
                     trigger=("tokens", trigger),
                     # by tokens, so a summary always lands below the trigger
                     # (a message count can stay above it and re-summarize on
