@@ -82,3 +82,58 @@ def test_executions_without_a_project_belong_to_their_user(monkeypatch):
         )
     )
     assert params == {}  # the executor scopes it by X-User-Id
+
+
+def test_an_admin_reading_sees_anyones_artifact(monkeypatch):
+    async def session_for(services, user, session_id):
+        raise HTTPException(404, "Project not found.")
+
+    monkeypatch.setattr(access, "session_for", session_for)
+    services = cast(
+        Any,
+        SimpleNamespace(
+            executor=_Executor(
+                {
+                    "trigger_type": "INTERACTIVE",
+                    "context": {"user_id": OWNER, "session_id": "s-1"},
+                }
+            )
+        ),
+    )
+    admin = cast(Any, SimpleNamespace(id="a-1", role="admin"))
+    found = asyncio.run(
+        access.owned_artifact(services, admin, "a-1", admin_read=True)
+    )
+    assert found["artifact_id"] == "a-1"
+    with pytest.raises(HTTPException):  # without the flag: membership
+        asyncio.run(access.owned_artifact(services, admin, "a-1"))
+    batch = cast(
+        Any,
+        SimpleNamespace(
+            executor=_Executor(
+                {"trigger": {"type": "BATCH"}, "context": {"user_id": OWNER}}
+            )
+        ),
+    )
+    found = asyncio.run(
+        access.owned_artifact(batch, admin, "a-1", admin_read=True)
+    )
+    assert found["artifact_id"] == "a-1"
+
+
+@pytest.mark.parametrize(
+    ("role", "caller", "expected"),
+    [
+        ("admin", None, True),
+        ("admin", object(), False),  # a key caller naming an admin
+        ("user", None, False),
+    ],
+)
+def test_admin_read_is_an_admins_sso_login(role, caller, expected):
+    from src.dtest.api_service.routers.artifacts import admin_read
+
+    request = cast(
+        Any, SimpleNamespace(state=SimpleNamespace(api_client=caller))
+    )
+    user = SimpleNamespace(id="u", role=role)
+    assert admin_read(request, user) is expected
