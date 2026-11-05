@@ -282,6 +282,28 @@
   .tab { padding: 8px 12px; font-size: 14px; color: var(--muted); border-bottom: 2px solid transparent; margin-bottom: -1px; }
   .tab.on { color: var(--ink); border-color: var(--accent); font-weight: 500; }
   .modal-body { padding: 18px 22px; overflow: auto; flex: 1; }
+  .modal.wide { width: min(1240px, 100%) !important; }
+  /* workflow builder: form left, skill/tool catalog right, each scrolling on its own */
+  .wb { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(320px, 1fr); gap: 18px; }
+  .wb-pane { min-width: 0; max-height: calc(88vh - 110px); overflow: auto; padding-right: 4px; }
+  .wb-cat { border-left: 1px solid var(--line); padding-left: 16px; }
+  .wb-cat-head { display: flex; gap: 8px; align-items: center; position: sticky; top: 0; background: var(--panel); padding-bottom: 6px; z-index: 1; }
+  .wb-cat-head b { white-space: nowrap; }
+  .wb-cat-head input { flex: 1; min-width: 0; border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; background: var(--bg); }
+  .wb-skill { border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; margin-bottom: 8px; }
+  .wb-skill > summary, .wb-tool > summary { cursor: pointer; list-style: none; }
+  .wb-tool { border-top: 1px solid var(--line); padding: 7px 0 7px 6px; margin-top: 6px; }
+  .wb-tool > summary { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+  .wb-sum { flex-basis: 100%; font-size: 12px; margin-top: 2px; }
+  .wb-tool > summary b { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+  .wb-add { margin-left: auto; white-space: nowrap; font-size: 12px; padding: 2px 8px; }
+  .wb-tool-body { font-size: 12.5px; padding: 6px 0 2px 4px; display: grid; gap: 6px; }
+  .wb-params { width: 100%; border-collapse: collapse; } .wb-params td { padding: 3px 6px 3px 0; vertical-align: top; }
+  .chip-sm { font-size: 10.5px; padding: 1px 6px; border-radius: 5px; border: 1px solid var(--line); color: var(--muted); }
+  .chip-sm.cond { color: var(--accent); border-color: var(--accent); }
+  .wb-call { display: flex; align-items: baseline; gap: 8px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 8px; margin-bottom: 6px; font-size: 13px; }
+  .wb-args { flex: 1; font-size: 12px; overflow-wrap: anywhere; }
+  @media (max-width: 900px) { .wb { grid-template-columns: 1fr; } .wb-pane { max-height: none; } .wb-cat { border-left: 0; padding-left: 0; } }
   .modal-foot { display: flex; gap: 8px; justify-content: flex-end; padding: 14px 22px; border-top: 1px solid var(--line); }
   .form-row { margin-bottom: 16px; }
   .form-row label { display: block; font-size: 13px; font-weight: 500; margin-bottom: 6px; }
@@ -541,7 +563,7 @@
       <div class="page-head"><h1>워크플로우</h1>
         <select class="sort" id="wfFilter"><option value="">전체</option><option value="template">공개</option><option value="candidate">후보</option></select>
         <select class="sort" id="wfSort"><option value="updated">최근 수정순</option><option value="name">이름순</option></select>
-        <button class="btn primary" onclick="openWorkflowUpload()">워크플로우 업로드</button></div>
+        <button class="btn primary" onclick="openWorkflowUpload()">워크플로우 만들기</button></div>
       <div class="muted" style="font-size:13px;margin:-8px 0 14px">분석 담당이 저장한 실행 흐름입니다. 공개된 것은 비슷한 질문이 오면 계획 후보로 추천됩니다.</div>
       <label class="page-search"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><input id="wfSearch" placeholder="워크플로우 검색 (이름, 목적, skill, tool)"></label>
       <div class="grid" id="wfGrid"></div>
@@ -1592,6 +1614,7 @@ document.addEventListener('click', () => $('wfLegend').classList.remove('open'))
 $('workflowsView').addEventListener('scroll', () => $('wfLegend').classList.remove('open'));
 ['wfSearch', 'wfFilter', 'wfSort'].forEach(id => $(id).addEventListener(id === 'wfSearch' ? 'input' : 'change', renderWorkflows));
 async function openWorkflow(id) {
+  $('wfModal').querySelector('.modal').classList.remove('wide');
   $('wfTitle').textContent = '불러오는 중…'; $('wfBody').innerHTML = ''; $('wfModal').classList.add('open');
   const w = await api(`/workflows/${id}`);
   $('wfTitle').innerHTML = `${esc(w.name)} ${w.lifecycle === 'template' ? '<span class="badge rec">공개</span>' : '<span class="badge">내 후보</span>'}`;
@@ -2011,7 +2034,7 @@ function wfErrors(res) {
 const wfMsg = (lines, ok = false) => `<div style="margin:8px 0;padding:8px 12px;border-radius:8px;font-size:13px;background:${ok ? '#e3f1e7' : '#fdecea'};color:${ok ? 'var(--ok)' : 'var(--bad)'}">${lines.map(esc).join('<br>')}</div>`;
 async function editWorkflow(id) {
   const w = await api(`/workflows/${id}`);
-  S.wfEdit = w; $('wfModal').classList.add('open');
+  S.wfEdit = w; $('wfModal').classList.add('open'); $('wfModal').querySelector('.modal').classList.remove('wide');
   $('wfTitle').textContent = `워크플로우 수정 · ${w.name}`;
   $('wfBody').innerHTML = `
     <div class="field"><label>이름</label><input id="weName" value="${esc(w.name)}"></div>
@@ -2063,19 +2086,107 @@ async function cloneWorkflow(id) {
 }
 /* manual upload: a Workflow 1.0 JSON file (docs/specs/workflow-1.0/workflow_upload_spec.md) -> POST /workflows */
 function openWorkflowUpload() {
-  S.wfUpload = null; $('wfModal').classList.add('open');
-  $('wfTitle').textContent = '워크플로우 업로드';
+  S.wfUpload = null; $('wfModal').classList.add('open'); $('wfModal').querySelector('.modal').classList.add('wide');
+  $('wfTitle').textContent = '워크플로우 만들기';
   $('wfBody').innerHTML = `
-    <div class="muted" style="font-size:13px;margin-bottom:12px">Workflow 1.0 문서(.json)나 업로드 파일(<code>{document, user_queries, tags}</code>)을 올리거나 아래에 붙여 넣으세요. 올린 워크플로우는 <b>내 후보</b>로 등록되고, 상세 화면에서 공개(승격)하면 다른 사용자에게도 추천됩니다. 형식은 <code>docs/specs/workflow-1.0/workflow_upload_spec.md</code>를 따릅니다.</div>
-    <div class="field"><label>파일 (.json)</label><input id="wuFile" type="file" accept=".json,application/json" onchange="readWorkflowFile(this)"></div>
-    <div class="field"><label>이름</label><input id="weName" placeholder="문서의 workflow.name"></div>
-    <div class="field"><label>목적 (사용자 요청)</label><input id="weRequest" placeholder="문서의 workflow.user_request"></div>
-    <div class="field"><label>추천 질문 (필수, 한 줄에 하나) · 사용자가 이렇게 물으면 이 워크플로우를 추천합니다</label><textarea id="weQueries" rows="4" placeholder="예: NCE 표본 뽑아서 기술통계랑 히스토그램 보여줘"></textarea></div>
-    <div class="field"><label>태그 (쉼표로 구분)</label><input id="weTags"></div>
-    <div class="field"><label>실행 흐름 (Workflow 1.0 문서 JSON)</label>
-      <textarea id="weDoc" rows="16" class="mono" style="width:100%;font-size:12px" placeholder='{"workflow_version": "1.0", "workflow": {...}}' onchange="syncUploadFields()"></textarea></div>
-    <div id="weResult"></div>
-    <div class="actions"><button class="btn" onclick="$('wfModal').classList.remove('open')">취소</button><button class="btn" onclick="validateWorkflowDoc()">검증</button><button class="btn primary" id="weSave" onclick="saveWorkflowUpload()">등록</button></div>`;
+  <div class="wb">
+    <div class="wb-pane">
+      <div class="muted" style="font-size:13px;margin-bottom:12px">오른쪽 skill/tool 목록에서 <b>+ 추가</b>로 실행 흐름을 쌓거나, Workflow 1.0 문서(.json)·업로드 파일(<code>{document, user_queries, tags}</code>)을 올리거나 붙여 넣으세요. 등록하면 <b>내 후보</b>가 되고, 상세 화면에서 공개(승격)하면 추천 대상이 됩니다. 규격: <code>docs/specs/workflow-1.0/workflow_upload_spec.md</code></div>
+      <div class="field"><label>파일 (.json, 선택)</label><input id="wuFile" type="file" accept=".json,application/json" onchange="readWorkflowFile(this)"></div>
+      <div class="field"><label>이름</label><input id="weName" placeholder="문서의 workflow.name"></div>
+      <div class="field"><label>목적 (사용자 요청) · 이 워크플로우가 하는 일</label><input id="weRequest" placeholder="문서의 workflow.user_request"></div>
+      <div class="field"><label>추천 질문 (필수, 한 줄에 하나) · 사용자가 이렇게 물으면 이 워크플로우를 추천합니다</label><textarea id="weQueries" rows="3" placeholder="예: NCE 표본 뽑아서 기술통계랑 히스토그램 보여줘"></textarea></div>
+      <div class="field"><label>태그 (쉼표로 구분)</label><input id="weTags"></div>
+      <div class="wf-sec" style="margin-top:6px">실행 흐름 <span class="muted" style="font-weight:400">· 호출 번호 s.t는 tool_output 참조의 step_index.tool_index</span></div>
+      <div id="wbCalls"></div>
+      <details id="wbJson" open><summary class="muted" style="cursor:pointer;font-size:13px">Workflow 1.0 문서 JSON (직접 수정 가능)</summary>
+        <textarea id="weDoc" rows="14" class="mono" style="width:100%;font-size:12px;margin-top:6px" placeholder='{"workflow_version": "1.0", "workflow": {...}}' onchange="syncUploadFields()"></textarea></details>
+      <div id="weResult"></div>
+      <div class="actions"><button class="btn" onclick="$('wfModal').classList.remove('open')">취소</button><button class="btn" onclick="validateWorkflowDoc()">검증</button><button class="btn primary" id="weSave" onclick="saveWorkflowUpload()">등록</button></div>
+    </div>
+    <div class="wb-pane wb-cat">
+      <div class="wb-cat-head"><b>skill · tool</b><input id="wbQ" placeholder="이름·설명 검색" oninput="renderCatalog()"></div>
+      <div class="muted" style="font-size:12px;margin:6px 0 10px">skill을 펼치면 tool이, tool을 펼치면 파라미터·출력이 이 자리에서 열립니다. 여러 개를 함께 펼쳐 둘 수 있습니다.</div>
+      <div id="wbCat"><div class="muted">불러오는 중…</div></div>
+    </div>
+  </div>`;
+  $('weDoc').value = JSON.stringify(blankWorkflow(), null, 2); renderCalls();
+  loadCatalog();
+}
+function blankWorkflow() {
+  return { workflow_version: '1.0', workflow: { actor: { type: 'USER', id: S.me?.user?.employee_id || 'unknown' }, name: '', user_request: '', execution_mode: 'static', allow_immediate_execution: false, steps: [] } };
+}
+/* skill/tool catalog (GET /catalog): one side panel, everything expands in place */
+async function loadCatalog() {
+  try { S.catalog = (await api('/catalog')).skills; } catch (e) { $('wbCat').innerHTML = wfMsg([`목록을 불러오지 못했습니다: ${e.message}`]); return; }
+  S.catalogOpen = S.catalogOpen || new Set(); renderCatalog();
+}
+function renderCatalog() {
+  if (!$('wbCat') || !S.catalog) return;
+  const q = ($('wbQ').value || '').trim().toLowerCase();
+  const hit = (...xs) => !q || xs.join(' ').toLowerCase().includes(q);
+  const list = S.catalog.map(sk => ({ sk, tools: sk.tools.filter(t => hit(sk.name, sk.description) || hit(t.name, t.summary, t.role)) }))
+    .filter(({ sk, tools }) => tools.length || hit(sk.name, sk.description));
+  const param = p => `<tr><td><code>${esc(p.name)}</code>${p.required ? ' <span class="badge" title="기본값 없음: arguments에 꼭 넣어야 함">필수</span>' : ''}</td><td class="muted">${esc(p.type || '')}${p.default != null ? ` = ${esc(p.default)}` : ''}</td></tr>${p.doc ? `<tr><td colspan="2" class="muted" style="padding-top:0">${esc(p.doc)}</td></tr>` : ''}`;
+  const tool = (sk, t) => `<details class="wb-tool" data-k="${esc(sk.name)}/${esc(t.name)}" ${S.catalogOpen.has(`${sk.name}/${t.name}`) ? 'open' : ''} ontoggle="keepOpen(this)">
+      <summary><span class="chip-sm ${t.execution === 'conditional' ? 'cond' : ''}">${t.execution === 'conditional' ? '조건부' : '항상'}</span><b>${esc(t.name)}</b>
+        ${t.broken ? '<span class="badge" style="color:var(--bad)">사용 불가</span>' : `<button class="ghost wb-add" onclick="event.preventDefault();addCall('${esc(sk.name)}','${esc(t.name)}')">+ 추가</button>`}
+        <div class="muted wb-sum">${esc(t.summary || t.role)}</div></summary>
+      <div class="wb-tool-body">
+        ${t.broken ? `<div style="color:var(--bad)">${esc(t.broken)}</div>` : ''}
+        ${t.condition ? `<div><span class="muted">실행 조건</span> ${esc(t.condition)}${t.condition_tool ? ` · 판단 근거 <code>${esc(t.condition_tool)}</code>` : ''}</div>` : ''}
+        ${t.role ? `<div><span class="muted">역할</span> ${esc(t.role)}</div>` : ''}
+        ${t.params.length ? `<table class="wb-params">${t.params.map(param).join('')}</table>` : ''}
+        <div><span class="muted">출력 (tool_output.output)</span> ${t.outputs.map(o => `<code>${esc(o)}</code>`).join(' ')}</div>
+      </div></details>`;
+  $('wbCat').innerHTML = list.map(({ sk, tools }) => `<details class="wb-skill" data-k="${esc(sk.name)}" ${q || S.catalogOpen.has(sk.name) ? 'open' : ''} ontoggle="keepOpen(this)">
+      <summary><b>${esc(sk.name)}</b> <span class="muted">tool ${sk.tools.length}</span><div class="muted wb-sum">${esc(sk.description)}</div></summary>
+      ${tools.map(t => tool(sk, t)).join('')}
+      <details class="wb-tool" ontoggle="if (this.open) skillBody(this, '${esc(sk.name)}')"><summary class="muted">skill 문서 전체 보기</summary><div class="wb-tool-body"><div class="muted">불러오는 중…</div></div></details>
+    </details>`).join('') || '<div class="muted">맞는 skill·tool이 없습니다.</div>';
+}
+function keepOpen(el) { const k = el.dataset.k; if (k) el.open ? S.catalogOpen.add(k) : S.catalogOpen.delete(k); }
+async function skillBody(el, name) {
+  const box = el.querySelector('.wb-tool-body'); if (box.dataset.loaded) return;
+  try { const d = await api(`/catalog/skills/${encodeURIComponent(name)}`); box.innerHTML = `<pre class="mono" style="white-space:pre-wrap;font-size:12px;margin:0">${esc(d.body)}</pre>`; box.dataset.loaded = '1'; }
+  catch (e) { box.innerHTML = wfMsg([e.message]); }
+}
+/* the flow: the JSON is the source; the call list and + 추가 edit it */
+function currentDoc() {
+  const raw = $('weDoc').value.trim(); if (!raw) return blankWorkflow();
+  let doc = JSON.parse(raw); if (doc && !doc.workflow && doc.document) doc = doc.document;
+  if (!doc.workflow || typeof doc.workflow !== 'object') throw new Error('실행 흐름 JSON에 workflow 항목이 없습니다.');
+  doc.workflow.steps = Array.isArray(doc.workflow.steps) ? doc.workflow.steps : [];
+  return doc;
+}
+function writeDoc(doc) { $('weDoc').value = JSON.stringify(doc, null, 2); renderCalls(); }
+function addCall(skill, toolName) {
+  let doc; try { doc = currentDoc(); } catch (e) { $('weResult').innerHTML = wfMsg([`JSON을 읽을 수 없어 추가하지 못했습니다: ${e.message}`]); return; }
+  const t = S.catalog.find(s => s.name === skill).tools.find(x => x.name === toolName);
+  const steps = doc.workflow.steps, prev = steps.length ? { si: steps.length - 1, ti: steps.at(-1).tools.length - 1 } : null;
+  const prevTool = prev && S.catalog.flatMap(s => s.tools).find(x => x.name === steps[prev.si].tools[prev.ti].tool);
+  const args = {};
+  for (const p of t.params) {
+    // a parameter named like an output of the previous call takes it (data -> data); other required ones are inputs
+    if (prev && prevTool?.outputs.includes(p.name)) args[p.name] = { source: 'tool_output', step_index: prev.si, tool_index: prev.ti, output: p.name };
+    else if (p.required) args[p.name] = { source: 'input' };
+  }
+  const call = { tool: toolName, execution: t.execution, arguments: args };
+  if (steps.length && steps.at(-1).skill === skill) steps.at(-1).tools.push(call); else steps.push({ skill, tools: [call] });
+  writeDoc(doc); $('weResult').innerHTML = '';
+}
+function removeCall(si, ti) {
+  let doc; try { doc = currentDoc(); } catch { return; }
+  const steps = doc.workflow.steps; steps[si].tools.splice(ti, 1); if (!steps[si].tools.length) steps.splice(si, 1);
+  writeDoc(doc); $('weResult').innerHTML = wfMsg(['호출을 뺐습니다. 뒤 호출의 tool_output 참조 번호가 바뀌었을 수 있으니 검증하세요.']);
+}
+function renderCalls() {
+  if (!$('wbCalls')) return;
+  let doc; try { doc = currentDoc(); } catch { $('wbCalls').innerHTML = '<div class="muted" style="font-size:13px">JSON을 고치는 중입니다.</div>'; return; }
+  const rows = doc.workflow.steps.flatMap((st, si) => (st.tools || []).map((t, ti) => `<div class="wb-call"><code>${si}.${ti}</code><span class="muted">${esc(st.skill)}</span><b>${esc(t.tool)}</b>${t.execution === 'conditional' ? '<span class="badge">조건부</span>' : ''}
+      <span class="muted wb-args">${Object.entries(t.arguments || {}).map(([k, a]) => `${esc(k)}=${a.source === 'tool_output' ? `@${a.step_index}.${a.tool_index}.${esc(a.output)}` : a.source === 'input' ? '입력' : esc(JSON.stringify(a.value))}`).join(', ')}</span>
+      <button class="ghost" title="빼기" onclick="removeCall(${si}, ${ti})">✕</button></div>`));
+  $('wbCalls').innerHTML = rows.join('') || '<div class="muted" style="font-size:13px;margin-bottom:8px">아직 호출이 없습니다. skill·tool 목록에서 tool을 추가하세요.</div>';
 }
 // a bare Workflow 1.0 document, or the upload file {document, user_queries, tags}
 function splitUpload(data) {
@@ -2085,7 +2196,8 @@ function splitUpload(data) {
 function fillUpload({ doc, queries, tags }) {
   const w = doc && doc.workflow && typeof doc.workflow === 'object' ? doc.workflow : {};
   $('weDoc').value = JSON.stringify(doc, null, 2);
-  $('weName').value = w.name || ''; $('weRequest').value = w.user_request || '';
+  if (w.name) $('weName').value = w.name; if (w.user_request) $('weRequest').value = w.user_request;
+  renderCalls();
   if (queries.length) $('weQueries').value = queries.join('\n');  // never guessed: recommendation questions are the author's
   if (tags.length) $('weTags').value = tags.join(', ');
 }
