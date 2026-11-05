@@ -37,6 +37,20 @@ def test_extension_adds_on_top_and_overrides_by_name():
     assert not tools.errors
 
 
+def test_extension_skills_only_use_its_own_tools():
+    # the extension stands on its own: no skill borrows a base tool file
+    skills = SkillCatalog.load(EXT / "skills")
+    tools = ToolCatalog.load(EXT / "tools")
+    missing = {
+        (skill.name, rule.tool)
+        for skill in skills.skills.values()
+        for rule in skill.tools
+        if rule.tool not in tools.tools
+    }
+    assert missing == set()
+    assert not tools.broken
+
+
 def test_without_the_extension_the_base_catalog_is_unchanged():
     settings = Settings(catalog_extensions=[])
     skills = SkillCatalog.load_many(settings.catalog_roots("skills"))
