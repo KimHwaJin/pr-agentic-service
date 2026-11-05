@@ -78,3 +78,4 @@ workflow
 |---|---|
 | [workflow_static.example.json](workflow_static.example.json) | 데이터 1개를 로드해 표본 추출·통계·히스토그램을 수행하는 static 예시 |
 | [workflow_adaptive.example.json](workflow_adaptive.example.json) | 데이터 2개를 로드·결합해 표본 통계와 조건부 분석을 수행하는 adaptive 예시 |
+| [workflow_upload.example.json](workflow_upload.example.json) | static 예시를 업로드 파일(`{document, user_queries, tags}`)로 감싼 예시. 업로드 규칙은 [workflow_upload_spec.md](workflow_upload_spec.md) |

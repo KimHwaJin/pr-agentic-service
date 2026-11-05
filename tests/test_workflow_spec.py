@@ -51,3 +51,19 @@ def test_always_call_cannot_depend_on_conditional(adaptive, skills, tools):
 def test_input_slots(adaptive, tools):
     keys = [s["key"] for s in spec.input_slots(adaptive, tools)]
     assert "1.0.join_columns" in keys and "0.2.data_type" in keys
+
+
+def test_upload_example_is_valid(skills, tools):
+    """docs/specs/workflow-1.0/workflow_upload.example.json is what the
+    upload spec tells people to start from."""
+    import json
+    from pathlib import Path
+
+    from src.dtest.api_service.schemas.workflows import WorkflowCreate
+
+    path = (
+        Path(__file__).resolve().parents[1]
+        / "docs/specs/workflow-1.0/workflow_upload.example.json"
+    )
+    body = WorkflowCreate.model_validate(json.loads(path.read_text("utf-8")))
+    assert spec.validate(body.document, skills, tools) == []
