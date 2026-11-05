@@ -261,7 +261,7 @@ executor가 응답하지 않으면 502 `EXECUTOR_UNAVAILABLE`, 시간 초과는 
 
 | Method | Path | 설명 |
 | --- | --- | --- |
-| POST | `/workflows` | `{document, user_queries[], tags[]}` → candidate (작성자만 보임) |
+| POST | `/workflows` | `{document, user_queries[], tags[]}` → candidate (작성자만 보임). 사람이 작성한 워크플로우 업로드 규격: [workflow_upload_spec.md](specs/workflow-1.0/workflow_upload_spec.md). 개발 화면은 워크플로우 탭의 "워크플로우 업로드" |
 | GET | `/workflows?lifecycle=&q=&tag=` | template 전체 + 내 candidate. 가벼운 요약: `steps`(skill 순서와 tool), `call_count`, `mine`, `can_promote`, `can_delete`(작성자 또는 관리자: 삭제 버튼), `recommendable`(검색·추천에 걸릴 수 있는지), `not_recommendable_reason`(아니면 그 이유, 화면에 그대로 표시) (문서 본문 없음). 상세(`GET /workflows/{id}`)에도 같은 필드가 있습니다 |
 | POST | `/workflows/validate` | 문서 검증만 |
 | POST | `/workflows/search` | `{query}` → `{items: [{workflow, similarity, matched_query}]}`, 승격된 template만 유사도 순. 임베딩이 없으면 기본 모델이 최근 template을 읽고 요청에 맞는 것만 맞는 순서로 고르며, 이때 `similarity`·`matched_query`가 null입니다(0%로 보여 주지 말고 "모델 추천"처럼 표시) |

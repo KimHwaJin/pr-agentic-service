@@ -540,7 +540,8 @@
     <div class="page">
       <div class="page-head"><h1>워크플로우</h1>
         <select class="sort" id="wfFilter"><option value="">전체</option><option value="template">공개</option><option value="candidate">후보</option></select>
-        <select class="sort" id="wfSort"><option value="updated">최근 수정순</option><option value="name">이름순</option></select></div>
+        <select class="sort" id="wfSort"><option value="updated">최근 수정순</option><option value="name">이름순</option></select>
+        <button class="btn primary" onclick="openWorkflowUpload()">워크플로우 업로드</button></div>
       <div class="muted" style="font-size:13px;margin:-8px 0 14px">분석 담당이 저장한 실행 흐름입니다. 공개된 것은 비슷한 질문이 오면 계획 후보로 추천됩니다.</div>
       <label class="page-search"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><input id="wfSearch" placeholder="워크플로우 검색 (이름, 목적, skill, tool)"></label>
       <div class="grid" id="wfGrid"></div>
@@ -2027,7 +2028,8 @@ async function editWorkflow(id) {
 function editedDocument() {
   let doc;
   try { doc = JSON.parse($('weDoc').value); } catch (e) { throw new Error(`실행 흐름 JSON을 읽을 수 없습니다: ${e.message}`); }
-  if (!doc.workflow || typeof doc.workflow !== 'object') throw new Error('실행 흐름 JSON에 workflow 항목이 없습니다.');
+  if (doc && !doc.workflow && doc.document && typeof doc.document === 'object') doc = doc.document;  // an upload file pasted whole
+  if (!doc || !doc.workflow || typeof doc.workflow !== 'object') throw new Error('실행 흐름 JSON에 workflow 항목이 없습니다.');
   doc.workflow.name = $('weName').value.trim();
   doc.workflow.user_request = $('weRequest').value.trim();
   return doc;
@@ -2058,6 +2060,55 @@ async function cloneWorkflow(id) {
   const res = await wfCall(`/workflows/${id}/clone`, 'POST', { name: name.trim() || null });
   if (!res.ok) return alert(['복제하지 못했습니다.', ...wfErrors(res)].join('\n'));
   await loadWorkflows(); editWorkflow(res.data.id);
+}
+/* manual upload: a Workflow 1.0 JSON file (docs/specs/workflow-1.0/workflow_upload_spec.md) -> POST /workflows */
+function openWorkflowUpload() {
+  S.wfUpload = null; $('wfModal').classList.add('open');
+  $('wfTitle').textContent = '워크플로우 업로드';
+  $('wfBody').innerHTML = `
+    <div class="muted" style="font-size:13px;margin-bottom:12px">Workflow 1.0 문서(.json)나 업로드 파일(<code>{document, user_queries, tags}</code>)을 올리거나 아래에 붙여 넣으세요. 올린 워크플로우는 <b>내 후보</b>로 등록되고, 상세 화면에서 공개(승격)하면 다른 사용자에게도 추천됩니다. 형식은 <code>docs/specs/workflow-1.0/workflow_upload_spec.md</code>를 따릅니다.</div>
+    <div class="field"><label>파일 (.json)</label><input id="wuFile" type="file" accept=".json,application/json" onchange="readWorkflowFile(this)"></div>
+    <div class="field"><label>이름</label><input id="weName" placeholder="문서의 workflow.name"></div>
+    <div class="field"><label>목적 (사용자 요청)</label><input id="weRequest" placeholder="문서의 workflow.user_request"></div>
+    <div class="field"><label>추천 질문 (한 줄에 하나, 최소 1개)</label><textarea id="weQueries" rows="4"></textarea></div>
+    <div class="field"><label>태그 (쉼표로 구분)</label><input id="weTags"></div>
+    <div class="field"><label>실행 흐름 (Workflow 1.0 문서 JSON)</label>
+      <textarea id="weDoc" rows="16" class="mono" style="width:100%;font-size:12px" placeholder='{"workflow_version": "1.0", "workflow": {...}}' onchange="syncUploadFields()"></textarea></div>
+    <div id="weResult"></div>
+    <div class="actions"><button class="btn" onclick="$('wfModal').classList.remove('open')">취소</button><button class="btn" onclick="validateWorkflowDoc()">검증</button><button class="btn primary" id="weSave" onclick="saveWorkflowUpload()">등록</button></div>`;
+}
+// a bare Workflow 1.0 document, or the upload file {document, user_queries, tags}
+function splitUpload(data) {
+  if (data && typeof data === 'object' && data.document && typeof data.document === 'object') return { doc: data.document, queries: data.user_queries || [], tags: data.tags || [] };
+  return { doc: data, queries: [], tags: [] };
+}
+function fillUpload({ doc, queries, tags }) {
+  const w = doc && doc.workflow && typeof doc.workflow === 'object' ? doc.workflow : {};
+  $('weDoc').value = JSON.stringify(doc, null, 2);
+  $('weName').value = w.name || ''; $('weRequest').value = w.user_request || '';
+  if (queries.length || !$('weQueries').value.trim()) $('weQueries').value = (queries.length ? queries : (w.user_request ? [w.user_request] : [])).join('\n');
+  if (tags.length) $('weTags').value = tags.join(', ');
+}
+async function readWorkflowFile(input) {
+  const f = input.files[0]; if (!f) return;
+  try { fillUpload(splitUpload(JSON.parse(await f.text()))); $('weResult').innerHTML = wfMsg([`${f.name}을 읽었습니다. 검증 후 등록하세요.`], true); }
+  catch (e) { $('weResult').innerHTML = wfMsg([`${f.name}을 JSON으로 읽을 수 없습니다: ${e.message}`]); }
+}
+function syncUploadFields() {
+  try { const parts = splitUpload(JSON.parse($('weDoc').value)); fillUpload(parts); } catch { /* shown on validate */ }
+}
+async function saveWorkflowUpload() {
+  let doc; try { doc = editedDocument(); } catch (e) { $('weResult').innerHTML = wfMsg([e.message]); return; }
+  if (!doc.workflow.name) { $('weResult').innerHTML = wfMsg(['이름을 적어 주세요.']); return $('weName').focus(); }
+  if (!doc.workflow.user_request) { $('weResult').innerHTML = wfMsg(['목적(사용자 요청)을 적어 주세요.']); return $('weRequest').focus(); }
+  const queries = $('weQueries').value.split('\n').map(q => q.trim()).filter(Boolean);
+  if (!queries.length) { $('weResult').innerHTML = wfMsg(['추천 질문을 하나 이상 적어 주세요.']); return; }
+  const tags = $('weTags').value.split(',').map(t => t.trim()).filter(Boolean);
+  $('weSave').disabled = true;
+  const res = await wfCall('/workflows', 'POST', { document: doc, user_queries: queries, tags });
+  $('weSave').disabled = false;
+  if (!res.ok) { $('weResult').innerHTML = wfMsg(['등록하지 못했습니다.', ...wfErrors(res)]); return; }
+  await loadWorkflows(); openWorkflow(res.data.id);
 }
 // would a question find this workflow? (/search looks at public templates only)
 async function searchPreview(id) {
