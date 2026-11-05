@@ -19,6 +19,7 @@ import asyncio
 import contextlib
 import json
 import logging
+import math
 from collections import defaultdict
 from collections.abc import Awaitable, Callable
 from typing import Any
@@ -82,6 +83,9 @@ class EventBus:
         row: RunEvent | BatchReportEvent,
         durable: bool,
     ) -> None:
+        # NaN/inf (a DataFrame summary, a division by zero) are not JSON:
+        # Postgres jsonb refuses them and the browser cannot parse them
+        row.data = json_safe(row.data)
         contracts.check(row.type, row.data)  # the shape readers rely on
         event: dict[str, Any] = {
             "type": row.type,
@@ -213,6 +217,17 @@ class TokenBuffer:
         if self._parts:
             text, self._parts = "".join(self._parts), []
             await self.emit("token", {"text": text}, durable=False)
+
+
+def json_safe(value: Any) -> Any:
+    """``value`` with every NaN/inf float, at any depth, made None."""
+    if isinstance(value, float):
+        return value if math.isfinite(value) else None
+    if isinstance(value, dict):
+        return {k: json_safe(v) for k, v in value.items()}
+    if isinstance(value, list | tuple):
+        return [json_safe(v) for v in value]
+    return value
 
 
 def runs_wake_channel(namespace: str) -> str:

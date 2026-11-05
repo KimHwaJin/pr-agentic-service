@@ -50,7 +50,7 @@ create_agent(
     middleware=[
         PersonaMiddleware,       # 담당자 전환, 프롬프트·도구 고르기, 메모리 주입, 이미지 주입, 멈춤 방지
         JsonArgumentsMiddleware, # 문자열로 온 JSON 인자 복구
-        ToolErrorMiddleware,     # 도구 오류를 모델에게 메시지로 돌려줌
+        ToolErrorMiddleware,     # 도구 오류를 모델에게 메시지로 돌려줌. 모델이 고칠 수 있는 오류만 원문, 나머지는 단계·재시도 여부·참조 ID만 (agent/tool_errors.py)
         ModelCallLimitMiddleware(run_limit=40),   # 한 턴 모델 호출 상한
         ToolResultCompactionMiddleware,  # 분석이 끝나면 그 분석의 긴 도구 결과를 줄임 (agent/middleware/compaction*.py)
         SummarizationMiddleware(trigger=3만 어림 토큰≈12만 자, keep=절반, prompts/summary.md(최대 6천 자), 입력 자르지 않음),
