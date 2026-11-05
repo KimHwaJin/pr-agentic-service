@@ -5,6 +5,8 @@ Structure tests run everywhere. Tool tests need the analysis libraries:
 ``uv run --group catalog-test pytest tests/test_catalog_extension.py``.
 """
 
+import ast
+import sys
 from pathlib import Path
 
 import pytest
@@ -13,6 +15,25 @@ from src.dtest.core.assets import SkillCatalog, ToolCatalog
 from src.dtest.core.config import ROOT, Settings
 
 EXT = ROOT / "src/dtest/catalogs/analysis_test"
+
+# What the executor's kernel has installed (import names), plus the stdlib.
+# A tool importing anything else fails at run time in the kernel.
+RUNTIME_LIBRARIES = {
+    "numpy",
+    "pandas",
+    "scipy",
+    "sklearn",  # scikit-learn
+    "matplotlib",
+    "seaborn",
+    "xgboost",
+    "pyarrow",
+    "dotenv",  # python-dotenv
+    "requests",
+    "minio",
+    "lakes",
+    "pyspark",
+    "openpyxl",
+}
 
 
 def _catalogs():
@@ -77,6 +98,42 @@ def test_every_skill_tool_exists_and_conditions_point_inside_the_skill():
                 assert rule.condition_tool in names, (skill.name, rule)
 
 
+def _imports(path: Path) -> set[str]:
+    """Top-level module names a tool file imports, at any depth."""
+    names = set()
+    for node in ast.walk(ast.parse(path.read_text("utf-8"))):
+        if isinstance(node, ast.Import):
+            names |= {a.name.split(".")[0] for a in node.names}
+        elif isinstance(node, ast.ImportFrom) and node.level == 0:
+            names.add((node.module or "").split(".")[0])
+    return names
+
+
+@pytest.mark.parametrize(
+    "root",
+    ["src/dtest/assets/tools", "src/dtest/catalogs/analysis_test/tools"],
+)
+def test_tools_import_only_runtime_libraries(root):
+    allowed = RUNTIME_LIBRARIES | set(sys.stdlib_module_names) | {"_lib"}
+    bad = {
+        str(path.relative_to(ROOT)): sorted(_imports(path) - allowed)
+        for path in sorted((ROOT / root).rglob("*.py"))
+        if _imports(path) - allowed
+    }
+    assert bad == {}, f"executor 커널에 없는 라이브러리: {bad}"
+
+
+def test_import_check_catches_a_library_the_kernel_lacks(tmp_path):
+    tool = tmp_path / "t.py"
+    tool.write_text(
+        "def t(data):\n    import statsmodels.api as sm\n"
+        "    from pandas import DataFrame\n    import json\n"
+    )
+    assert _imports(tool) - RUNTIME_LIBRARIES - set(
+        sys.stdlib_module_names
+    ) == {"statsmodels"}
+
+
 def _tool(name: str):
     """The tool function, built the way the executor runs it."""
     _, tools, _ = _catalogs()
@@ -89,7 +146,7 @@ def _tool(name: str):
 def libs():
     pytest.importorskip("pandas")
     pytest.importorskip("sklearn")
-    pytest.importorskip("statsmodels")
+    pytest.importorskip("seaborn")
     import matplotlib
 
     matplotlib.use("Agg")
@@ -265,3 +322,165 @@ def test_every_tool_runs_and_finds_the_planted_facts(data, tmp_path):
         _tool("fragile_transform")(nce, mode="multiply")
     with pytest.raises(ValueError, match="0보다 커야"):
         _tool("fragile_transform")(nce, factor=0)
+
+
+def test_added_tools_run_and_find_the_planted_facts(data, tmp_path):
+    plots, files = str(tmp_path / "plots"), str(tmp_path / "files")
+    nce, wt, fdc, yld = data["nce"], data["wt"], data["fdc"], data["yield"]
+    clean = nce.drop_duplicates()
+    sn = "SN OPEN MASK MACRO.max_val"
+
+    # statistical_test
+    assert _tool("kruskal_test")(clean, sn, "alias_lot_id")[
+        "highest_group"
+    ] == ("L3")
+    posthoc = _tool("tukey_posthoc")(clean, sn, "alias_lot_id")
+    assert all("L3" in pair for pair in posthoc["significant_pairs"])
+    assert len(posthoc["significant_pairs"]) == 5  # L3 against each other LOT
+    corr = _tool("correlation_test")(
+        clean, "DNW MASK MACRO.max_val", "MBO MASK MACRO.max_val"
+    )
+    assert corr["strongest"]["r"] > 0.8
+    with pytest.raises(ValueError, match="pearson, spearman, kendall"):
+        _tool("correlation_test")(clean, sn, sn, method="cosine")
+
+    # anomaly_detection
+    outliers = _tool("detect_outliers")(
+        fdc, ["GAS_FLOW"], group_column="eqp_id"
+    )
+    flagged = outliers["data"][outliers["data"].is_outlier]
+    assert (flagged.GAS_FLOW < 0).sum() == 6  # the six bad readings
+    forest = _tool("isolation_forest_outliers")(
+        fdc, ["CH_PRESSURE", "RF_POWER", "GAS_FLOW"], contamination=0.01
+    )
+    marked = forest["data"]
+    assert marked[marked.GAS_FLOW < 0].is_anomaly.all()
+
+    # time_series
+    trends = {
+        t["group"]: t
+        for t in _tool("trend_test")(
+            fdc, "CH_PRESSURE", group_column="eqp_id"
+        )["trends"]
+    }
+    assert trends["ETCH_B"]["direction"] == "증가"
+    assert trends["ETCH_A"]["direction"] == "없음"
+
+    # spc
+    b1 = fdc[(fdc.eqp_id == "ETCH_B") & (fdc.chamber_id == "CH1")]
+    a1 = fdc[(fdc.eqp_id == "ETCH_A") & (fdc.chamber_id == "CH1")]
+    cusum = _tool("cusum_chart")(
+        b1, "CH_PRESSURE", "timestamp", output_dir=plots
+    )
+    assert cusum["direction"] == "증가"
+    assert cusum["first_alarm_time"] >= "2026-09-18"
+    assert (
+        _tool("cusum_chart")(a1, "CH_PRESSURE", "timestamp", output_dir=plots)[
+            "alarms"
+        ]
+        == 0
+    )
+    daily = b1.assign(day=b1.timestamp.dt.strftime("%Y-%m-%d"))
+    xbar = _tool("xbar_s_chart")(daily, "CH_PRESSURE", "day", output_dir=plots)
+    late = [f["subgroup"] for f in xbar["out_of_control"]]
+    assert late and min(late) >= "2026-09-18"
+
+    # yield_analysis
+    per_eqp = _tool("yield_summary")(yld, "eqp_id", yield_column="yield_pct")
+    assert per_eqp["lowest"]["eqp_id"] == "ETCH_B"
+    per_lot = _tool("yield_summary")(wt, ["alias_lot_id"])
+    assert 0 < per_lot["overall_yield"] < 100
+    pareto = _tool("bin_pareto")(wt, output_dir=plots)
+    assert pareto["total"] == int(wt["PT1H.p_f"].sum())
+    assert pareto["bins"][-1]["cum_pct"] == 100
+    common = _tool("commonality_analysis")(yld, "yield_pct")
+    assert common["top_factor"] == "eqp_id"
+    assert "chamber_id" not in common["significant"]
+    zoned = _tool("split_by_zone")(wt)["data"]
+    by_zone = _tool("commonality_analysis")(zoned, "PT1H.p_f", ["zone"])
+    assert by_zone["factors"][0]["worst_level"] == "edge"
+
+    # modeling
+    features = ["eqp_id", "chamber_id", "avg_pressure", "avg_temp"]
+    rules = _tool("decision_tree_rules")(yld, "yield_pct", features)
+    assert rules["top_split"].startswith("eqp_id")
+    merged = clean.merge(wt, on=["alias_lot_id", "wf_id", "x", "y"])
+    logit = _tool("logistic_regression")(
+        merged, "PT1H.p_f", [sn, "DNW MASK MACRO.max_val"]
+    )
+    assert logit["odds_ratios"][0]["feature"] == sn
+    assert logit["odds_ratios"][0]["odds_ratio"] > 1
+    pca = _tool("pca_analysis")(clean, output_dir=plots)
+    assert {"DNW MASK MACRO.max_val", "MBO MASK MACRO.max_val"} <= set(
+        list(pca["loadings"]["PC2"])[:2]
+    )
+    reg = _tool("linear_regression")(
+        yld, "yield_pct", ["eqp_id", "avg_pressure"]
+    )
+    assert reg["p_values"]["eqp_id_ETCH_B"] < 1e-6
+    assert reg["coefficients"]["avg_pressure"] < 0
+
+    # visualization
+    scatter = _tool("scatter_plot")(
+        yld, "avg_pressure", "yield_pct", hue_column="eqp_id", output_dir=plots
+    )
+    assert scatter["pearson_r"] < -0.5
+    heat = _tool("pivot_heatmap")(
+        yld, "eqp_id", "chamber_id", "yield_pct", output_dir=plots
+    )
+    assert heat["min_cell"]["eqp_id"] == "ETCH_B"
+
+    # report_export
+    import pandas as pd
+
+    excel = _tool("export_excel")(
+        yld,
+        file_name="yield",
+        extra_tables={"by_eqp": per_eqp["data"], "meta": {"rows": len(yld)}},
+        output_dir=files,
+    )
+    sheets = pd.read_excel(excel["file_path"], sheet_name=None)
+    assert set(sheets) == {"data", "by_eqp", "meta"}
+    assert len(sheets["data"]) == len(yld)
+    parquet = _tool("export_parquet")(fdc, output_dir=files)
+    back = pd.read_parquet(parquet["file_path"])
+    assert (
+        back.shape == fdc.shape and back.timestamp.dtype == fdc.timestamp.dtype
+    )
+
+
+def test_decompose_series_matches_the_classical_decomposition(libs, tmp_path):
+    import numpy as np
+    import pandas as pd
+
+    hours = np.arange(24 * 10)
+    frame = pd.DataFrame(
+        {
+            "timestamp": pd.date_range(
+                "2026-09-01", periods=len(hours), freq="h"
+            ),
+            "v": 10 + 0.01 * hours + 2 * np.sin(2 * np.pi * hours / 24),
+        }
+    )
+    out = _tool("decompose_series")(frame, "v", output_dir=str(tmp_path))
+    assert out["seasonal_amplitude"] == pytest.approx(4, abs=0.05)
+    assert out["trend_change"] == pytest.approx(
+        0.01 * (len(hours) - 25), abs=0.01
+    )
+    assert out["residual_sd"] < 0.05
+    with pytest.raises(ValueError, match="2배 이상"):
+        _tool("decompose_series")(
+            frame.head(30), "v", output_dir=str(tmp_path)
+        )
+
+
+def test_xgboost_model_finds_the_route_effect(data):
+    pytest.importorskip("xgboost")
+    yld = data["yield"]
+    features = ["eqp_id", "chamber_id", "avg_pressure", "avg_temp", "rf_power"]
+    model = _tool("xgboost_model")(yld, "yield_pct", features)
+    assert model["metric"] == "r2" and model["score"] > 0.5
+    assert model["importances"][0]["feature"].startswith("eqp_id")
+    edge = _tool("split_by_zone")(data["wt"])["data"]
+    clf = _tool("xgboost_model")(edge, "PT1H.p_f", ["zone"])
+    assert clf["task"] == "classification" and clf["score"] > 0.55

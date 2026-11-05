@@ -64,14 +64,19 @@ phoenix = [
     "arize-phoenix-otel>=0.17.2",
     "openinference-instrumentation-langchain>=0.1.79",
 ]
-# runs the test catalog's tools in tests (src/dtest/catalogs/)
+# runs the test catalog's tools in tests (src/dtest/catalogs/).
+# Keep to the executor's runtime libraries (tests/test_catalog_extension.py
+# checks every tool's imports against that list). xgboost is left out
+# (its Linux wheel pulls a 300 MB GPU library); its tool test skips without it.
 catalog-test = [
     "matplotlib>=3.10",
     "numpy>=2.2",
+    "openpyxl>=3.1",
     "pandas>=2.3",
+    "pyarrow>=18",
     "scikit-learn>=1.7",
     "scipy>=1.15",
-    "statsmodels>=0.14",
+    "seaborn>=0.13",
 ]
 
 [tool.ty.environment]
