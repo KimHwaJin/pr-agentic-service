@@ -27,15 +27,19 @@ except Exception:
 
 def _agentic_observe(name, value):
     import json
+    import math
 
     def num(x):
         x = x.item() if hasattr(x, "item") else x
         if isinstance(x, bool | int | str) or x is None:
             return x
         try:
-            return round(float(x), 6)
+            x = float(x)
         except (TypeError, ValueError):
             return str(x)
+        # NaN/inf are not JSON: the observation must stay standard JSON
+        # (the run's events go to a jsonb column and to the browser)
+        return round(x, 6) if math.isfinite(x) else None
 
     def frame(v):
         # compact: rows and stats are lists aligned with "columns"

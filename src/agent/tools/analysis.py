@@ -19,6 +19,7 @@ or a pod crash the executor returns the same receipt.
 import asyncio
 import hashlib
 import json
+import logging
 import re
 from typing import Any, TypeGuard
 
@@ -48,6 +49,8 @@ from core.services import TOOL_EFFECTS
 from core.workflows import spec
 from core.workflows.service import WorkflowError
 from core.workflows.view import call_views
+
+log = logging.getLogger(__name__)
 
 Runtime = ToolRuntime[RunContext, AnalysisState]
 # agent tools that send an executor operation (one folder each)
@@ -898,6 +901,23 @@ def _bounded(value: Any, limit: int = 3000) -> Any:
     return value if len(text) <= limit else text[:limit] + " ...(생략)"
 
 
+async def _emit_result(ctx: RunContext, data: dict[str, Any]) -> None:
+    """The ``execution_completed`` event, after the executor finished.
+
+    The code already ran: a failed event write must not fail the tool, or
+    the model reads the run as failed and runs the code again. The results
+    still reach the model in the tool's reply.
+    """
+    try:
+        await ctx.emit("execution_completed", data)
+    except Exception:  # noqa: BLE001 - logged; the tool's reply carries the results
+        log.exception(
+            "execution_event_failed run_id=%s execution_id=%s",
+            ctx.run_id,
+            data.get("execution_id"),
+        )
+
+
 async def _step_view(
     runtime: Runtime, result: dict[str, Any] | None
 ) -> dict[str, Any]:
@@ -1043,8 +1063,8 @@ async def run_plan(
         plan["calls"][call.key] = {"status": status, "step_id": step_id}
         report[f"#{number[call.key]} {call.tool}"] = view
         ordered.append({"call": number[call.key], "tool": call.tool, **view})
-    await ctx.emit(
-        "execution_completed",
+    await _emit_result(
+        ctx,
         {"execution_id": execution["id"], "results": ordered, "error": error},
     )
     _, undecided = _segment(json.loads(json.dumps(plan)), {})
@@ -1147,8 +1167,8 @@ async def run_custom_code(
             "step_id": step_id,
         }
     )
-    await ctx.emit(
-        "execution_completed",
+    await _emit_result(
+        ctx,
         {
             "execution_id": execution["id"],
             "results": [{"call": None, "tool": None, "id": custom_id, **view}],

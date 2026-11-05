@@ -30,6 +30,7 @@ from agent.middleware import (
 )
 from agent.middleware.turn_limit import LIMIT_PREFIX
 from agent.prompts import load_prompt
+from agent.tool_errors import tool_error
 from agent.tool_labels import tool_label
 from agent.tools.analysis import (
     finish_analysis,
@@ -53,7 +54,6 @@ from agent.tools.main import (
 )
 from core.config import Settings
 from core.events import TokenBuffer
-from core.executor.client import ExecutorError
 
 log = logging.getLogger(__name__)
 
@@ -238,29 +238,6 @@ STOPPED_ANSWER = (
     "내용은 남아 있으니 '계속'이라고 보내 이어서 진행하거나, 질문을 나눠서 "
     "다시 요청해 주세요."
 )
-
-
-def tool_error(exc: Exception, request: Any) -> str:
-    """Executor/validation problems go back to the model.
-
-    The model can then adapt instead of failing the run.
-    """
-    if isinstance(exc, ExecutorError):
-        # the model may quote it to the user: the error code and message
-        # only, not the whole response body
-        error = exc.body.get("error") if isinstance(exc.body, dict) else None
-        if isinstance(error, dict):
-            detail = f"{error.get('code')}: {error.get('message', '')}"
-        else:
-            detail = str(exc.body)
-        return f"executor 오류 {exc.status}: {detail[:500]}"
-    message = f"도구 실행 오류 ({type(exc).__name__}): {exc}"
-    if isinstance(exc, TypeError) and "argument" in str(exc):
-        # the call did not match the function: say what it takes
-        schema = getattr(getattr(request, "tool", None), "args", None) or {}
-        if schema:
-            message += f"\n이 도구의 인자: {', '.join(schema)}"
-    return message
 
 
 def _dangling_tool_results(messages: list) -> list[ToolMessage]:
