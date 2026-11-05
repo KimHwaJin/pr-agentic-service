@@ -121,7 +121,7 @@ class ReportAgent:
     async def write(
         self,
         ctx: Any,
-        request: str,
+        request: str | list[dict[str, Any]],
         default_title: str,
         quiet: tuple[str, ...] = (),
         can_read: bool = True,
@@ -131,7 +131,9 @@ class ReportAgent:
         ``ctx`` needs services, execution_id, model, cache and emit; tool
         calls not in ``quiet`` go out as tool_call events. ``can_read``
         False (the request already holds every step in full) binds no
-        read_step, so an analysis report is one model call.
+        read_step, so an analysis report is one model call. ``request``
+        is text, or content blocks (text and the steps' figures) for a
+        vision model.
         """
         state = await self._run(ctx, [HumanMessage(request)], quiet, can_read)
         report = handed_in(state, default_title)

@@ -13,7 +13,10 @@
 from agent.middleware.compaction import ToolResultCompactionMiddleware
 from agent.middleware.json_arguments import JsonArgumentsMiddleware
 from agent.middleware.persona import PersonaMiddleware
-from agent.middleware.summarization import ReportingSummarizationMiddleware
+from agent.middleware.summarization import (
+    ReportingSummarizationMiddleware,
+    summary_token_counter,
+)
 from agent.middleware.tool_failures import ToolFailureLimitMiddleware
 from agent.middleware.turn_limit import TurnModelCallLimitMiddleware
 
@@ -24,4 +27,5 @@ __all__ = [
     "ToolFailureLimitMiddleware",
     "ToolResultCompactionMiddleware",
     "TurnModelCallLimitMiddleware",
+    "summary_token_counter",
 ]

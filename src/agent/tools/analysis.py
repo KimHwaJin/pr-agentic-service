@@ -63,10 +63,17 @@ EXECUTION_TOOLS = ("run_plan", "run_custom_code")
 
 
 def _reply(
-    runtime: Runtime, content: str, failed: bool = False, **update: Any
+    runtime: Runtime,
+    content: str,
+    failed: bool = False,
+    figures: list[list[str]] | None = None,
+    **update: Any,
 ) -> Command:
     """failed: the result is an error (a failed execution), so the
-    failure limit counts it."""
+    failure limit counts it. figures: [label, path] of the steps' images,
+    kept on the message (artifact) for a vision analyst
+    (agent.middleware.persona); the model never sees the artifact itself.
+    """
     return Command(
         update={
             **update,
@@ -75,6 +82,7 @@ def _reply(
                     content,
                     tool_call_id=runtime.tool_call_id,
                     status="error" if failed else "success",
+                    artifact={"figures": figures} if figures else None,
                 )
             ],
         }
@@ -1148,6 +1156,11 @@ async def run_plan(
         runtime,
         json.dumps(summary, ensure_ascii=False, default=str),
         failed=failed,
+        figures=[
+            [f"#{r['call']} {r['tool']}", path]
+            for r in ordered
+            for path in r.get("images") or []
+        ],
         plan=plan,
         execution=execution,
     )
@@ -1254,7 +1267,14 @@ async def run_custom_code(
         default=str,
     )
     failed = bool(error) or view["status"] != "SUCCEEDED"
-    return _reply(runtime, body, failed=failed, plan=plan, execution=execution)
+    return _reply(
+        runtime,
+        body,
+        failed=failed,
+        figures=[[custom_id, path] for path in view.get("images") or []],
+        plan=plan,
+        execution=execution,
+    )
 
 
 # --- wrap-up -----------------------------------------------------------------
