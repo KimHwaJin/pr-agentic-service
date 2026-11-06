@@ -163,8 +163,8 @@ class Settings(BaseSettings):
     # how long a checkpoint write waits for a free connection
     checkpoint_pool_timeout_seconds: float = Field(30.0, gt=0)
     auto_migrate: bool = True
-    # Swagger UI, ReDoc and /openapi.json. Off unless turned on: the internal
-    # network rules forbid them even on the dev environment.
+    # Swagger UI, ReDoc and the OpenAPI schema. Off unless turned on: the
+    # internal network rules forbid them even on the dev environment.
     docs_enabled: bool = False
     # The web console (/dev/). Empty: on for local and dev only. True on prd
     # while the integration test runs before opening (testers use the
