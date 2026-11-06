@@ -16,7 +16,7 @@ from starlette.requests import Request
 
 from src.dtest.api_service.app import audit_line
 from src.dtest.api_service.auth.service import SsoService
-from src.dtest.api_service.auth.store import LoginSession
+from src.dtest.api_service.auth.store import AuthSession
 from src.dtest.core import logging_setup
 from src.dtest.core.config import Settings
 from src.dtest.core.request_context import RequestIdInMessage, request_id
@@ -86,14 +86,14 @@ def _sso(session) -> SsoService:
 
 
 async def test_sso_authentication_names_the_user_for_the_audit_line():
-    session = LoginSession("e12345", "csrf", 0, 0)
+    session = AuthSession("e12345", "csrf", 0, 0)
     request = _request("GET")
     await _sso(session).authenticate(request)
     assert request.state.sso_user_id == "e12345"
 
 
 async def test_a_write_refused_for_csrf_still_names_the_user():
-    session = LoginSession("e12345", "csrf", 0, 0)
+    session = AuthSession("e12345", "csrf", 0, 0)
     request = _request("POST")
     with pytest.raises(HTTPException) as refused:
         await _sso(session).authenticate(request)

@@ -3,24 +3,24 @@ from typing import Literal
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 
 from src.dtest.api_service import deps
-from src.dtest.api_service.auth.service import LoginSessionRead
+from src.dtest.api_service.auth.service import AuthSessionRead
 from src.dtest.api_service.deps import ServicesDep, SsoUserDep
-from src.dtest.api_service.rate_limit import login_rate_limit
+from src.dtest.api_service.rate_limit import sso_rate_limit
 from src.dtest.api_service.schemas.base import Model
 from src.dtest.api_service.schemas.users import UserRead
 from src.dtest.core.db import get_row
 from src.dtest.core.models import User
 
 router = APIRouter(prefix="/auth", tags=["auth"])
-LIMITED = [Depends(login_rate_limit)]
+LIMITED = [Depends(sso_rate_limit)]
 
 
 @router.get("/login/sso", status_code=302, dependencies=LIMITED)
-async def login(
+async def start_sso(
     request: Request, return_to: str = "/", target: str = "app"
 ) -> Response:
     """Start login with a browser navigation (not XHR)."""
-    return await request.app.state.sso.login(request, return_to, target)
+    return await request.app.state.sso.start(request, return_to, target)
 
 
 @router.get(
@@ -30,8 +30,8 @@ async def callback(request: Request, flow_id: str) -> Response:
     return await request.app.state.sso.callback(request, flow_id)
 
 
-@router.get("/session", response_model=LoginSessionRead)
-async def session(request: Request, response: Response) -> LoginSessionRead:
+@router.get("/session", response_model=AuthSessionRead)
+async def session(request: Request, response: Response) -> AuthSessionRead:
     """Current login and the CSRF token to send as X-CSRF-Token on writes."""
     return await request.app.state.sso.session(request, response)
 

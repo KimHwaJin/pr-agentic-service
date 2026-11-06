@@ -8,7 +8,7 @@ from starlette.concurrency import run_in_threadpool
 from src.dtest.api_service.auth.sdk import (
     Employee,
     SdkFactory,
-    login_url,
+    entry_url,
     verify_employee,
 )
 from src.dtest.core.config import Settings
@@ -17,7 +17,7 @@ from src.dtest.core.config import Settings
 class SsoAdapter(Protocol):
     async def verify(self, request: Request) -> Employee | None: ...
 
-    async def login_url(self, request: Request, callback_url: str) -> str: ...
+    async def entry_url(self, request: Request, callback_url: str) -> str: ...
 
 
 class IdpAdapter:
@@ -25,13 +25,13 @@ class IdpAdapter:
 
     def __init__(self, sdk_factory: SdkFactory):
         self._verify = partial(verify_employee, sdk_factory)
-        self._login_url = partial(login_url, sdk_factory)
+        self._entry_url = partial(entry_url, sdk_factory)
 
     async def verify(self, request: Request) -> Employee | None:
         return await run_in_threadpool(self._verify, request)
 
-    async def login_url(self, request: Request, callback_url: str) -> str:
-        return await run_in_threadpool(self._login_url, request, callback_url)
+    async def entry_url(self, request: Request, callback_url: str) -> str:
+        return await run_in_threadpool(self._entry_url, request, callback_url)
 
 
 class DevAdapter:
@@ -48,7 +48,7 @@ class DevAdapter:
     async def verify(self, request: Request) -> Employee | None:
         return self.employee
 
-    async def login_url(self, request: Request, callback_url: str) -> str:
+    async def entry_url(self, request: Request, callback_url: str) -> str:
         return callback_url
 
 
