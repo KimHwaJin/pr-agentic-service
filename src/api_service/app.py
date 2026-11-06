@@ -84,12 +84,9 @@ async def _no_body() -> Message:
 def docs_urls(settings: Settings) -> dict[str, str | None]:
     """FastAPI's docs arguments: Swagger, ReDoc and the schema only with
     ``DOCS_ENABLED`` (internal network rules: off even on dev)."""
-    on = settings.docs_enabled
-    return {
-        "docs_url": "/docs" if on else None,
-        "redoc_url": "/redoc" if on else None,
-        "openapi_url": "/openapi.json" if on else None,
-    }
+    if settings.docs_enabled:
+        return {}  # FastAPI's own default paths
+    return {"docs_url": None, "redoc_url": None, "openapi_url": None}
 
 
 def hide_docs(app: FastAPI) -> None:
