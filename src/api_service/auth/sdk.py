@@ -178,7 +178,7 @@ def verify_employee(
     return Employee(employee_id.strip(), name, english_name, department, email)
 
 
-def login_url(
+def entry_url(
     sdk_factory: SdkFactory, request: Request, callback_url: str
 ) -> str:
     return sdk_factory(
