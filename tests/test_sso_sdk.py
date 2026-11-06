@@ -1,6 +1,6 @@
 from fastapi import Request
 
-from api_service.auth.sdk import login_url, verify_employee
+from api_service.auth.sdk import entry_url, verify_employee
 
 
 def _request(cookie: str | None = None, query: bytes = b"") -> Request:
@@ -49,7 +49,7 @@ def test_verify_employee_without_cookie():
 
 
 def test_login_url_replaces_client_origin_with_callback():
-    url = login_url(
+    url = entry_url(
         FakeSdk,
         _request(query=b"ORIGIN=https://evil.example"),
         "https://api/cb/1",
@@ -139,7 +139,7 @@ def test_idp_login_userinfo_check(monkeypatch):
     logged_out = "SMOFC=logout; SMSESSION=s; AMTOKEN=a"
     assert verify_employee(idp_login.create_sdk, _request(logged_out)) is None
 
-    url = login_url(idp_login.create_sdk, _request(), "https://api/cb/1")
+    url = entry_url(idp_login.create_sdk, _request(), "https://api/cb/1")
     assert url == idp_login.SSO_LOGIN_PAGE + "?TARGET=https://api/cb/1"
 
 

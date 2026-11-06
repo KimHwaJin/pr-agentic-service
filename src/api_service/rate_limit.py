@@ -1,6 +1,6 @@
 """Call limit of the login routes (per client IP, per process).
 
-A sliding window of ``Settings.login_rate_limit_per_minute`` calls; over it
+A sliding window of ``Settings.sso_rate_limit_per_minute`` calls; over it
 the route answers 429 with ``Retry-After``. 0 turns it off.
 """
 
@@ -14,7 +14,7 @@ _calls: dict[str, deque[float]] = {}
 
 
 def client_ip(request: Request) -> str:
-    """The first ``X-Forwarded-For`` hop (behind the ingress), else the peer."""
+    """The first ``X-Forwarded-For`` hop (the ingress), else the peer."""
     forwarded = request.headers.get("x-forwarded-for", "")
     first = forwarded.split(",", 1)[0].strip()
     if first:
@@ -22,8 +22,8 @@ def client_ip(request: Request) -> str:
     return request.client.host if request.client else "-"
 
 
-async def login_rate_limit(request: Request) -> None:
-    limit = request.app.state.services.settings.login_rate_limit_per_minute
+async def sso_rate_limit(request: Request) -> None:
+    limit = request.app.state.services.settings.sso_rate_limit_per_minute
     if limit <= 0:
         return
     now = time.monotonic()

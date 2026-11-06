@@ -9,7 +9,7 @@ from pydantic import BaseModel
 from api_service import API_PREFIX
 from api_service.auth.adapters import SsoAdapter
 from api_service.auth.sdk import Employee
-from api_service.auth.store import AuthStore, LoginFlow, LoginSession
+from api_service.auth.store import AuthFlow, AuthSession, AuthStore
 from api_service.users import bind_employee
 from core.config import Settings
 from core.db import Database
@@ -18,7 +18,7 @@ log = logging.getLogger(__name__)
 NO_STORE = {"Cache-Control": "no-store"}
 
 
-class LoginSessionRead(BaseModel):
+class AuthSessionRead(BaseModel):
     user_id: str
     csrf_token: str
     expires_at: int
@@ -73,7 +73,7 @@ class SsoService:
             roots.append("/dev")
         return roots
 
-    def _checked_login_url(self, url: str, callback: str) -> str:
+    def _checked_entry_url(self, url: str, callback: str) -> str:
         if url == callback:
             return url
         parsed = urlsplit(url)
@@ -99,10 +99,10 @@ class SsoService:
             log.warning("sso_verify_failed error_type=%s", type(exc).__name__)
             raise HTTPException(503, "SSO is unavailable.") from None
 
-    async def login(
+    async def start(
         self, request: Request, return_to: str = "/", target: str = "app"
     ) -> Response:
-        return await self._login(
+        return await self._enter(
             request, return_to, target, from_callback=False
         )
 
@@ -113,11 +113,11 @@ class SsoService:
             raise HTTPException(
                 400, "Login flow expired or already used. Start login again."
             )
-        return await self._login(
+        return await self._enter(
             request, flow.return_to, flow.target, from_callback=True
         )
 
-    async def _login(
+    async def _enter(
         self,
         request: Request,
         return_to: str,
@@ -141,12 +141,12 @@ class SsoService:
             callback = (
                 f"{origin}{API_PREFIX}/auth/login/sso/callback/{flow_id}"
             )
-            url = self._checked_login_url(
-                await self.adapter.login_url(request, callback), callback
+            url = self._checked_entry_url(
+                await self.adapter.entry_url(request, callback), callback
             )
             await self.store.create_flow(
                 flow_id,
-                LoginFlow(return_to, target),
+                AuthFlow(return_to, target),
                 self.settings.login_flow_ttl_seconds,
             )
             log.info(
@@ -183,7 +183,7 @@ class SsoService:
         )
         return response
 
-    async def authenticate(self, request: Request) -> LoginSession:
+    async def authenticate(self, request: Request) -> AuthSession:
         sid = request.cookies.get(self.settings.session_cookie_name, "")
         session = await self.store.read_session(sid)
         if session is None:
@@ -207,10 +207,10 @@ class SsoService:
 
     async def session(
         self, request: Request, response: Response
-    ) -> LoginSessionRead:
+    ) -> AuthSessionRead:
         session = await self.authenticate(request)
         response.headers.update(NO_STORE)
-        return LoginSessionRead(
+        return AuthSessionRead(
             user_id=session.user_id,
             csrf_token=session.csrf_token,
             expires_at=session.expires_at,
