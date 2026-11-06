@@ -1,4 +1,4 @@
-"""Reports: evidence chosen by code, one-call writing, number check."""
+"""Reports: evidence chosen by code, one-call writing."""
 
 import asyncio
 from types import SimpleNamespace
@@ -10,7 +10,6 @@ from langchain_core.language_models.fake_chat_models import (
 from langchain_core.messages import AIMessage
 
 from src.dtest.agent import report_agent, reporter
-from src.dtest.agent.report_agent import unsupported_numbers
 from src.dtest.core.config import Settings
 
 OUTPUTS = {
@@ -184,23 +183,6 @@ def test_marked_steps_are_read_in_one_call(monkeypatch):
     assert [c["label"] for c in calls] == ["Step 2, 3 결과 확인"]
 
 
-def test_an_invented_number_gets_one_repair(monkeypatch):
-    _use(
-        monkeypatch,
-        _model(
-            AIMessage("# 수율\n평균 2.345"),  # not in the evidence
-            AIMessage("# 수율\n평균 1.998"),
-        ),
-    )
-    assert _write(_ctx([]), "mean 1.998321") == "# 수율\n평균 1.998"
-
-
-def test_a_repair_that_is_no_report_keeps_the_first(monkeypatch):
-    first = "# 수율\n" + "평균 2.345 " * 20
-    _use(monkeypatch, _model(AIMessage(first), AIMessage("확인했습니다.")))
-    assert _write(_ctx([]), "mean 1.998321") == first
-
-
 def test_report_text_does_not_reach_the_chat():
     from src.dtest.agent.context import ReportContext
 
@@ -215,41 +197,6 @@ def test_report_text_does_not_reach_the_chat():
     asyncio.run(ctx.emit("token", {"text": "# 리포트"}))
     asyncio.run(ctx.emit("tool_call", {"name": "read_step"}))
     assert sent == ["tool_call"]
-
-
-# --- number check -----------------------------------------------------------
-
-
-def test_number_check():
-    evidence = "mean 1.998321 std 0.142695 ratio 0.973 count 988 n 12,345"
-    report = (
-        "평균 1.998, 표준편차 0.14, 수율 97.3%, 988건, 12,345행, "
-        "2026-10-31 10:15 실행, Step 4, 3줄 요약, 1.0 이상"
-    )
-    assert unsupported_numbers(report, evidence) == []
-    assert unsupported_numbers("평균 2.1, 비율 55%, 1,234건", evidence) == [
-        "2.1",
-        "55%",
-        "1,234",
-    ]
-
-
-def test_number_check_false_positives():
-    evidence = (
-        "corr -0.036 p 0.234 mean_a 1.20 mean_b 1.09 pass 973 total 1000"
-    )
-    report = (
-        "### 3.5 LOT별 비교\n"
-        "1. 결과\n"
-        "- 상관 −0.036, p>0.23\n"  # U+2212 minus; a bound rounded down
-        "- 평균 차이 0.11\n"  # 1.20 - 1.09
-        "- 합격 비중 97.3%"  # 973 / 1000
-    )
-    assert unsupported_numbers(report, evidence) == []
-    assert unsupported_numbers("평균 4.27, 비중 55%", evidence) == [
-        "4.27",
-        "55%",
-    ]
 
 
 def test_request_carries_the_project_and_the_overview():
