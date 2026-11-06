@@ -1,4 +1,4 @@
-"""DOCS_ENABLED: /docs, /redoc and /openapi.json are off unless turned on."""
+"""DOCS_ENABLED: Swagger, ReDoc and the OpenAPI schema are off unless on."""
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -6,7 +6,13 @@ from fastapi.testclient import TestClient
 from api_service.app import docs_urls, hide_docs
 from core.config import Settings
 
-DOC_PATHS = ("/docs", "/redoc", "/openapi.json", "/docs/oauth2-redirect")
+_DEFAULT = FastAPI()  # FastAPI's default docs paths
+DOC_PATHS = (
+    _DEFAULT.docs_url,
+    _DEFAULT.redoc_url,
+    _DEFAULT.openapi_url,
+    _DEFAULT.swagger_ui_oauth2_redirect_url,
+)
 
 
 def _codes(app: FastAPI) -> list[int]:
