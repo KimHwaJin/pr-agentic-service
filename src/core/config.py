@@ -183,6 +183,8 @@ class Settings(BaseSettings):
     session_ttl_seconds: int = Field(1800, ge=60, le=86400)
     session_max_seconds: int = Field(43200, ge=300, le=7 * 86400)
     login_flow_ttl_seconds: int = Field(300, ge=60, le=1800)
+    # calls of the login routes per client IP and minute (0: no limit)
+    login_rate_limit_per_minute: int = Field(30, ge=0, le=10000)
     dev_employee_id: str = "dev0001"
     dev_employee_name: str = "개발자"
     admin_employee_ids: list[str] = []
