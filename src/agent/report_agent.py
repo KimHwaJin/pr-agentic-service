@@ -270,7 +270,7 @@ def unsupported_numbers(markdown: str, evidence: str) -> list[str]:
     missing: list[str] = []
     for raw, value, decimals, percent, bound in _extract_figures(markdown):
         value = abs(value)
-        if not decimals and value < 100 and not percent:
+        if decimals == 0 and value < 100 and not percent:
             continue
         unit = 10**-decimals
         tolerance = (unit if bound else 0.5 * unit) + 1e-12
