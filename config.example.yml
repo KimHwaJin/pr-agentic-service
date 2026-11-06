@@ -127,6 +127,9 @@ SESSION_MAX_SECONDS: 43200
 # [공통] 로그인 시작부터 SSO 콜백까지 기다리는 시간(초, 60~1800).
 LOGIN_FLOW_TTL_SECONDS: 300
 
+# [공통] 로그인 경로(/auth/login/sso, 콜백)의 클라이언트 IP당 분당 호출 한도. 넘으면 429. 0이면 제한 없음.
+LOGIN_RATE_LIMIT_PER_MINUTE: 30
+
 # [공통] SSO_ADAPTER=dev 일 때 로그인되는 고정 사번과 이름 (로컬 전용).
 DEV_EMPLOYEE_ID: dev0001
 DEV_EMPLOYEE_NAME: 개발자
