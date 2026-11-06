@@ -232,7 +232,7 @@ def _clean(text: str) -> str:
     return _SKIP.sub(" ", _NUMBERING.sub(r"\1", text))
 
 
-def _numbers(text: str) -> list[tuple[str, float, int, bool, bool]]:
+def _extract_figures(text: str) -> list[tuple[str, float, int, bool, bool]]:
     """(as written, value, decimals, percent, bound) of each number."""
     found = []
     for match in _NUMBER.finditer(_clean(text)):
@@ -266,9 +266,9 @@ def unsupported_numbers(markdown: str, evidence: str) -> list[str]:
     may be the evidence value rounded either way. Whole numbers under 100,
     dates, step references and heading or list numbering are not checked.
     """
-    known = sorted({abs(v) for _, v, _, _, _ in _numbers(evidence)})
+    known = sorted({abs(v) for _, v, _, _, _ in _extract_figures(evidence)})
     missing: list[str] = []
-    for raw, value, decimals, percent, bound in _numbers(markdown):
+    for raw, value, decimals, percent, bound in _extract_figures(markdown):
         value = abs(value)
         if decimals == 0 and value < 100 and not percent:
             continue
