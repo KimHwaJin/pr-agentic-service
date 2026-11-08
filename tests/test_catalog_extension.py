@@ -514,9 +514,12 @@ def test_modeling_leaves_wt_result_columns_out(data):
 
 
 def test_planning_map_lists_the_conditional_tools():
-    skills, tools, knowledge = _catalogs()
-    assert "analysis_planning_map" in knowledge.skills
-    text = (EXT / "knowledge/analysis_planning_map.md").read_text("utf-8")
+    skills, tools, _ = _catalogs()
+    # a guide for planning: its tables must not read as a tool list
+    assert skills.skills["analysis_planning_map"].tools == ()
+    text = (EXT / "skills/planning/analysis_planning_map.md").read_text(
+        "utf-8"
+    )
     section = text.split("## 조건부 tool 판단")[1].split("##")[0]
     listed = set(re.findall(r"^\| `(\w+)` \|", section, re.M))
     conditional = {
