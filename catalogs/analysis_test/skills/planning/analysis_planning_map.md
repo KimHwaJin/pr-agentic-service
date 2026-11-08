@@ -1,11 +1,19 @@
 ---
 name: analysis_planning_map
-description: 분석 요청을 어떤 데이터와 skill 순서로 풀지, tool을 어떻게 잇고 조건부 tool을 언제 실행할지 정리한 분석 계획 지도. 데이터 분석 요청이면 start_analysis로 넘기기 전에 읽고, 해당하는 계획을 context에 요약해 넣는다.
+description: 분석 요청을 어떤 데이터와 skill 순서로 풀지, tool을 어떻게 잇고 조건부 tool을 언제 실행할지 정리한 계획 지도. 새 분석 계획을 세울 때 가장 먼저 읽는다. 실행 tool은 없다.
 ---
 
 # 분석 계획 지도
 
-분석 담당은 이 문서를 직접 읽지 못한다. 요청에 맞는 질문 유형의 skill 순서와 주의점만 골라 `start_analysis`의 context에 적는다. 아래 계획은 시작점이며, 사용자가 범위를 정했으면 그에 맞춰 줄인다. 검정 방법의 선택 근거와 결과 해석 기준은 `analysis_method_guide`를 본다.
+이 skill은 계획을 세우는 순서만 알려 주며 실행 tool은 없다. 요청에 맞는 질문 유형을 찾아 그 계획의 skill을 `read_skill`로 읽고, tool은 `read_tool`로 확인해 계획에 넣는다. 아래 계획은 시작점이며, 사용자가 범위를 정했으면 그에 맞춰 줄인다.
+
+## when_to_use
+
+- 데이터 분석의 새 계획을 세울 때
+
+## not_for
+
+- 이미 승인된 계획을 실행하거나 고칠 때
 
 ## 기본 순서
 
@@ -57,7 +65,7 @@ description: 분석 요청을 어떤 데이터와 skill 순서로 풀지, tool�
 
 다음 호출의 `data`에는 앞 호출의 DataFrame 출력을 넘긴다. 출력 이름이 tool마다 다르다.
 
-| 출력 | tool |
+| 출력 | 내는 단계 |
 |---|---|
 | `data` | `load_synthetic`, `clean_data`, `filter_rows`, `aggregate_by`, `split_by_zone`, `resample_series`, `rolling_stats`, `detect_outliers`, `isolation_forest_outliers`, `kmeans_clustering`, `pca_analysis`, `yield_summary`, `pivot_heatmap` |
 | `merged_data` | `merge_data` |
@@ -67,7 +75,7 @@ description: 분석 요청을 어떤 데이터와 skill 순서로 풀지, tool�
 
 ## 조건부 tool 판단
 
-| tool | 볼 결과 | 실행 기준 |
+| 대상 | 볼 결과 | 실행 기준 |
 |---|---|---|
 | `boxplot_eda` | `compute_statistics.outlier_ratio` | 이상치 비율이 1% 이상인 컬럼이 있을 때 |
 | `correlation_analysis` | `compute_statistics.numeric_columns` | 수치형 컬럼이 2개 이상일 때 |

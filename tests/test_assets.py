@@ -64,7 +64,8 @@ def test_every_analysis_skill_table_reads_cleanly():
     )
     assert skills.errors == {}
     for skill in skills.skills.values():
-        assert skill.tools, skill.name
+        # the planning map is read to plan; it has no tools of its own
+        assert skill.tools or skill.name == "analysis_planning_map", skill.name
         missing = [t.tool for t in skill.tools if t.tool not in tools.tools]
         assert not missing, (skill.name, missing)
 

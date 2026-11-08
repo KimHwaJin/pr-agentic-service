@@ -25,9 +25,10 @@
 | `modeling` | `feature_importance`, `xgboost_model`, `decision_tree_rules`, `linear_regression`, `logistic_regression`, `pca_analysis`, `kmeans_clustering` |
 | `visualization` | `scatter_plot`, `pivot_heatmap` |
 | `report_export` | `export_excel`, `export_parquet` |
+| `analysis_planning_map` (계획 지도, 실행 tool 없음) | 없음 |
 | `test_tools` (시험 전용) | `slow_operation`, `fragile_transform` |
 
-지식 문서: `analysis_planning_map`(분석 계획 지도), `analysis_method_guide`, `analysis_datasets`, `fdc_sensor_data`, `yield_definitions`, `spc_basics` (기본 `semiconductor_test_data`도 그대로).
+지식 문서: `analysis_method_guide`, `analysis_datasets`, `fdc_sensor_data`, `yield_definitions`, `spc_basics` (기본 `semiconductor_test_data`도 그대로).
 
 ## 쓸 수 있는 라이브러리
 
