@@ -17,6 +17,7 @@ description: 결측값, 중복 행, 허용 범위를 벗어난 값을 점검하�
 - 결측값을 모델로 추정해 채우지 않음 (제거 또는 중앙값만)
 - 업무 규칙(정상 범위)은 사용자가 알려 주지 않으면 음수만 위반으로 봄
 - `clean_data`는 `clip_ranges`로 준 범위만 제거함. `validate_ranges`에서 나온 위반을 지우려면 그 범위를 `clip_ranges`로 넘겨야 함
+- `clean_data`는 조건부라 그 출력을 항상 실행 tool의 입력으로 이을 수 없음. 정리된 데이터로 분석까지 요청받아도 계획은 `clean_data`까지만 세우고, 정리 후 분석은 실행 결과를 본 뒤 `run_custom_code`로 함 (결과 변수는 딕셔너리이므로 observations의 var에서 `["data"]`로 DataFrame을 꺼냄)
 
 ## when_to_use
 

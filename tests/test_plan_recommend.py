@@ -415,3 +415,33 @@ def test_two_templates_with_the_same_calls_stay_apart(
         ],
     )
     assert len(asked.seen[0]["candidates"]) == 2
+
+
+def _message(result):
+    return result.update["messages"][0]
+
+
+def test_rejected_plan_counts_as_a_failed_call(skills, tools, monkeypatch):
+    """The tool failure limit stops a plan rejected the same way again."""
+    monkeypatch.setattr(
+        analysis.spec, "validate", lambda *a: ["calls.0.x.data: wrong"]
+    )
+    message = _message(
+        _propose(_runtime(skills, tools, Workflows({}, [])), [NEW_PLAN])
+    )
+    assert message.status == "error"
+    assert "조건부 호출에 의존한" not in message.content
+
+
+def test_rejected_plan_on_a_conditional_call_says_how_to_fix(
+    skills, tools, monkeypatch
+):
+    monkeypatch.setattr(
+        analysis.spec,
+        "validate",
+        lambda *a: [f"calls.0.x.data: {spec.ALWAYS_ON_CONDITIONAL} 1.3"],
+    )
+    message = _message(
+        _propose(_runtime(skills, tools, Workflows({}, [])), [NEW_PLAN])
+    )
+    assert analysis.CONDITIONAL_HELP in message.content

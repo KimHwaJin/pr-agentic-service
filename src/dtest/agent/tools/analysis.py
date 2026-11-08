@@ -62,6 +62,16 @@ Runtime = ToolRuntime[RunContext, AnalysisState]
 EXECUTION_TOOLS = ("run_plan", "run_custom_code")
 
 
+CONDITIONAL_HELP = (
+    "\n\n## 조건부 호출에 의존한 호출을 고치는 법\n"
+    "조건부 호출은 생략될 수 있어 그 출력을 항상 실행 호출의 입력으로 쓸 수 "
+    "없습니다. 입력을 조건부 호출 앞의 출력으로 바꾸면 조건부 호출의 결과가 "
+    "반영되지 않으니, 그 항상 실행 호출을 계획에서 빼고 조건부 호출까지만 "
+    "제안하세요. 뒤의 분석은 조건부 호출을 실행한 결과를 본 뒤 "
+    "`run_custom_code`로 이어서 합니다."
+)
+
+
 def _reply(
     runtime: Runtime,
     content: str,
@@ -320,12 +330,14 @@ async def propose_plans(
                 f"workflow_id 후보를 쓸 수 없습니다: {', '.join(refused)}. "
                 f"calls로 새 계획을 최대 {settings.plan_candidates}개 설계해 "
                 "다시 제안하세요.",
+                failed=True,
             )
     skills, tools = services.skills("analysis"), services.tool_catalog()
     prepared, problems = [], []
     references: dict[str, set[str]] = {}
     seen: set[str] = set()  # _plan_key of the candidates kept
     duplicates: list[str] = []
+    on_conditional = False  # an always-run call reads a conditional one
     for index, candidate in enumerate(
         candidates[: services.settings.plan_candidates]
     ):
@@ -365,6 +377,9 @@ async def propose_plans(
             )
             for kind, names in _referenced(errors).items():
                 references.setdefault(kind, set()).update(names)
+            on_conditional = on_conditional or any(
+                spec.ALWAYS_ON_CONDITIONAL in e for e in errors
+            )
             continue
         document = spec.normalize(document)
         slots = spec.input_slots(document, tools)
@@ -413,7 +428,9 @@ async def propose_plans(
             runtime,
             "계획 검증 실패. 해당 후보만 고쳐 다시 제안하세요.\n"
             + "\n".join(problems)
+            + (CONDITIONAL_HELP if on_conditional else "")
             + _plan_help(references, skills, tools),
+            failed=True,
         )
     if not prepared:
         return _reply(runtime, "제안할 계획이 없습니다.")
