@@ -40,21 +40,22 @@ description: 분석 요청을 어떤 데이터와 skill 순서로 풀지, tool�
 
 | 질문 | 데이터 | skill 순서와 tool | 인자와 판단 |
 |---|---|---|---|
-| 데이터 품질이 괜찮나 | 물어본 데이터 | `data_load` → `data_quality`: `check_missing`, `check_duplicates`, `validate_ranges`, 문제가 있으면 `clean_data` | 정상 범위를 사용자가 말했으면 `validate_ranges.rules`와 `clean_data.clip_ranges`에 같은 값을 준다 |
-| 튀는 값, 이상한 웨이퍼·시점 | 물어본 데이터 | `data_load` → `anomaly_detection`: `detect_outliers`, 변수 조합까지 보면 `isolation_forest_outliers` | 설비마다 수준이 다르면 `group_column: "eqp_id"` |
+| 데이터 품질이 괜찮나 | 물어본 데이터 | `data_load` → `data_quality`: `check_missing`, `check_duplicates`, `validate_ranges`, 문제가 있으면 `clean_data` | 정리한 데이터로 분석까지 요청받으면 아래 주의점의 `clean_data` 항목을 따른다. 정상 범위를 사용자가 말했으면 `validate_ranges.rules`와 `clean_data.clip_ranges`에 같은 값을 준다 |
+| 튀는 값, 이상한 웨이퍼·시점 | 물어본 데이터 | `data_load` → `anomaly_detection`: `detect_outliers`, 변수 조합까지 보면 `isolation_forest_outliers` | 설비마다 수준이 다르면 `group_column: "eqp_id"`. 챔버까지 보려면 아래 주의점의 `chamber_id` 항목을 따른다 |
 | 분포, 이상치, 변수 상관 | 물어본 데이터 | `data_load` → `eda_analysis` | 품질 언급이 있으면 `data_quality`를 앞에 넣는다 |
-| LOT끼리, 설비끼리 차이가 있나 | `nce`, `yield`, `fdc` | `data_load` → `statistical_test`: `normality_test` 후 그룹 수와 정규성으로 분기 | `value_column`, `group_column` 지정. LOT은 `alias_lot_id`, 설비는 `eqp_id`(2개) |
+| 설비끼리 차이가 있나 (2그룹) | `yield`, `fdc` | `data_load` → `statistical_test`: `normality_test` 후 정규면 `compare_groups_ttest`, 아니면 `compare_groups_nonparametric` | `value_column`, `group_column: "eqp_id"`. 설비는 2개이므로 `anova_test`, `kruskal_test`, `tukey_posthoc`를 넣지 않는다 |
+| LOT끼리 차이가 있나 (3그룹 이상) | `nce`, `yield` | `data_load` → `statistical_test`: `normality_test` 후 정규면 `anova_test`, 아니면 `kruskal_test` | `value_column`, `group_column: "alias_lot_id"` |
 | 어느 LOT가 다른가 | `nce`, `yield` | 위와 같고, ANOVA가 유의하면 `tukey_posthoc` | 정규가 아니면 `kruskal_test`로 그친다 |
 | 두 측정값 상관이 유의한가 | `nce`, `fdc`, `yield` | `data_load` → `statistical_test`: `correlation_test` | `x_column`, `y_column` |
 | 가장자리 불량이 많나, 위치별로 다른가 | `wt` 또는 `nce` | `data_load` → `wafer_map`: `wafer_map_plot`, `zone_statistics`, 비율이 벌어지면 `edge_effect_test` | 불량이면 `value_column: "PT1H.p_f"` |
 | 구역과 불량이 연관되나 | `wt` | `data_load` → `dataset_preparation`: `split_by_zone` → `statistical_test`: `chi_square_test` | `column_a: "zone"`, `column_b: "PT1H.p_f"`. `split_by_zone`의 data를 입력으로 쓴다 |
 | LOT별 수율, 낮은 웨이퍼, 많은 bin | `yield` 또는 `wt` | `data_load` → `yield_analysis`: `yield_summary`, `bin_pareto` | `yield`는 `yield_column: "yield_pct"`, `wt`는 `fail_column: "PT1H.p_f"`. bin은 `bin_column: "PT1H.symbol"` (`wt`만) |
-| 수율 저하가 어느 설비·챔버와 관련 있나 | `yield` | `data_load` → `yield_analysis`: `yield_summary`, 차이가 보이면 `commonality_analysis` | `target_column: "yield_pct"`, `factor_columns: ["eqp_id", "chamber_id"]` |
+| 수율 저하가 어느 설비·챔버와 관련 있나 | `yield` | `data_load` → `yield_analysis`: `yield_summary`, 차이가 보이면 `commonality_analysis` | `target_column: "yield_pct"`, `factor_columns: ["eqp_id", "chamber_id"]`. `yield_summary`는 `group_columns: ["eqp_id", "chamber_id"]`로 주고, 챔버 차이는 이 설비×챔버 결과로 판단한다 |
 | 수율 저하에 영향 주는 공정 변수 | `yield` | `data_load` → `modeling`: `feature_importance`, 상위 변수를 `linear_regression`으로 정량화 | `target_column: "yield_pct"` |
 | 측정값과 불량의 관계 | `nce` + `wt` | `data_load` 두 번 → `dataset_preparation`: `merge_data` → `modeling`: `feature_importance`, `logistic_regression` | `target_column: "PT1H.p_f"` |
 | 어떤 조건에서 불량이 나나 | `yield` 또는 `nce` + `wt` | `modeling`: `decision_tree_rules` | 사람이 읽을 규칙이 필요할 때 |
 | 측정값 여러 개를 요약, 비슷한 대상 묶기 | `nce`, `yield` | `modeling`: `pca_analysis`, `kmeans_clustering` | LOT 단위로 묶으려면 먼저 `aggregate_by`로 집계한다 |
-| 센서가 언제부터 변했나, drift가 있나 | `fdc` | `data_load` → `time_series`: `rolling_stats`, `detect_change_points`, `trend_test` | `group_column: "eqp_id"`, `time_column: "timestamp"` |
+| 센서가 언제부터 변했나, drift가 있나 | `fdc` | `data_load` → `time_series`: `rolling_stats`, `detect_change_points`, `trend_test` | `group_column: "eqp_id"`, `time_column: "timestamp"`. 챔버까지 보려면 아래 주의점의 `chamber_id` 항목을 따른다 |
 | 주기 성분이 있나 | `fdc` | `data_load` → `dataset_preparation`: `filter_rows` → `time_series`: `resample_series` → `decompose_series` | 설비·챔버 하나로 거른 뒤 분해한다 |
 | 공정이 관리 상태인가, Cpk는 | `fdc` | `data_load` → `dataset_preparation`: `filter_rows` → `spc`: `control_chart`, `process_capability`, 작은 drift가 의심되면 `cusum_chart` | 설비 하나로 거른다. Cpk는 `lsl`, `usl`이 필요하며 없으면 `$input` |
 | 웨이퍼·LOT·날짜 단위 관리 | `nce`, `yield`, `fdc` | `spc`: `xbar_s_chart` | `subgroup_column` 지정 |
@@ -95,6 +96,9 @@ description: 분석 요청을 어떤 데이터와 skill 순서로 풀지, tool�
 
 ## 계획할 때 주의점
 
+- 비교 tool은 그룹 수로 고른다. 그룹이 2개면 `compare_groups_ttest` 또는 `compare_groups_nonparametric`, 3개 이상이면 `anova_test` 또는 `kruskal_test`를 쓴다. `eqp_id`(ETCH_A, ETCH_B)는 2개이므로 ANOVA 계열을 계획에 넣으면 실행이 실패한다.
+- `chamber_id`는 설비마다 CH1, CH2로 이름이 같다. `group_column: "chamber_id"`만 주면 서로 다른 설비의 챔버가 하나로 합쳐진다. 챔버를 비교하려면 먼저 `filter_rows`로 설비 하나를 거른 뒤 그 결과에 `group_column: "chamber_id"`를 주고, 두 설비를 다 보려면 설비별로 따로 거른다.
+- `clean_data`는 조건부라 실행되지 않을 수 있으므로 그 출력을 뒤 호출의 입력으로 잇지 않는다. 정리 후 분석을 요청받았다고 해서 `load_synthetic`의 `data`에 분석 tool을 이어 계획에 넣으면 정리 전 원본을 분석하게 된다. 계획은 `clean_data`까지만 세우고, 정리 후 분석은 실행 결과를 본 뒤 `run_custom_code`로 한다. 결과 변수는 딕셔너리이므로 observations의 var에서 `["data"]`로 DataFrame을 꺼낸다. 정리 전 원본을 일부러 보려는 계획이면 근거에 원본이라고 적는다.
 - `normality_test`에는 `group_column`을 반드시 준다. 없으면 groups가 1이 되어 비교 tool이 실행되지 않는다. 표본이 8개 미만인 그룹이 있으면 is_normal은 false로 나온다.
 - `control_chart`, `cusum_chart`, `process_capability`, `decompose_series`는 한 계열만 받는다. FDC는 설비가 섞여 있으므로 먼저 `filter_rows`로 거른다.
 - `clean_data`는 `clip_ranges`로 준 범위만 제거한다. 범위 위반을 지우려면 해당 범위를 넘긴다.
