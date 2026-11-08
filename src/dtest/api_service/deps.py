@@ -6,7 +6,7 @@ from fastapi import Depends, Header, HTTPException, Request, Security
 from fastapi.security import APIKeyHeader
 from sqlalchemy import func, select
 
-from src.dtest.api_service.errors import ApiError
+from src.dtest.api_service.errors import ApiError, detail
 from src.dtest.api_service.services import api_clients
 from src.dtest.api_service.services.api_clients import Caller
 from src.dtest.core.models import ChatSession, Project, ProjectMember, User
@@ -157,8 +157,9 @@ async def key_identity(
     batch gateways): a client of another tenant works in that tenant's own
     space; its user ids are SSO employee ids, checked for form, and one of
     our users we deactivated is refused (unknown ones pass).
-    ``user_required`` False (gateway reads): without ``X-User-Id`` the
-    request is a system read over the client's tenant.
+    ``user_required`` False (``/models``): without ``X-User-Id`` the
+    request is the service calling for itself. The gateways always need it
+    (``gateway_scope`` decides what their reads cover).
     """
     caller = await _caller(request, services)
     request.state.api_client = caller
@@ -185,6 +186,52 @@ async def key_identity(
         raise HTTPException(403, "Unknown or inactive user.")
     request.state.caller_user_id = user.id
     return caller, user.id, user
+
+
+# query filters a gateway never passes on as given: the headers and the
+# key's kind decide whose rows a read covers
+SCOPE_QUERY = {"user_id", "tenant_id"}
+
+
+def gateway_scope(
+    request: Request, caller: Caller, user_id: str
+) -> tuple[str | None, dict[str, str]]:
+    """(``X-User-Id`` to send on, query to send on) of a key caller's
+    executor or pr-batch gateway call.
+
+    Every key sends ``X-User-Id`` (who called); what a read covers comes
+    from the key's kind. A standard key (일반키) reads only that user's
+    rows: ``X-User-Id`` goes on, and a ``user_id`` query naming anyone
+    else is 403. A master key (마스터키) reads the whole tenant: no
+    ``X-User-Id`` goes on, and ``user_id`` goes on as the filter. Writes
+    are made for ``X-User-Id`` whatever the kind.
+    """
+    params = {
+        k: v for k, v in request.query_params.items() if k not in SCOPE_QUERY
+    }
+    wanted = request.query_params.get("user_id", "").strip().lower() or None
+    if wanted is not None and not USER_ID.fullmatch(wanted):
+        raise ApiError(
+            400,
+            "INVALID_IDENTITY",
+            "user_id is malformed.",
+            [detail(["query", "user_id"], "string_pattern_mismatch")],
+        )
+    if request.method != "GET":
+        return user_id, params
+    if caller.master:
+        if wanted:
+            params["user_id"] = wanted
+        return None, params
+    if wanted and wanted != user_id:
+        raise ApiError(
+            403,
+            "FORBIDDEN",
+            "A standard key reads only the X-User-Id user's own; "
+            "leave user_id out or name that user.",
+            [detail(["query", "user_id"], "user_filter_not_allowed")],
+        )
+    return user_id, params
 
 
 def _check_employee_id(settings, user_id: str) -> None:

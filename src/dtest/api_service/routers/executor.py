@@ -7,9 +7,11 @@ for two kinds of caller:
 - the browser (SSO): reads, checked here by project membership (admins see
   all), and the runtime/maintenance pages for admins (sent with the
   executor's operator key, ``EXECUTOR_ADMIN_API_KEY``);
-- services and agents with one of our keys (``X-Api-Key``): the executor
-  API of their tenant, writes included, as the user of ``X-User-Id``. They
-  never reach the executor directly, so this is their only way in.
+- services and agents with one of our keys (``X-Api-Key`` + ``X-User-Id``,
+  always): the executor API of their tenant, writes included, made for the
+  user of ``X-User-Id``. A standard key reads only that user's executions,
+  a master key the whole tenant (``deps.gateway_scope``). They never reach
+  the executor directly, so this is their only way in.
 
 The executor gets our key and identity headers made here from what we
 verified, never the caller's own ``X-*`` headers.
@@ -30,6 +32,7 @@ from src.dtest.api_service.deps import (
     IdentityHeaders,
     ServicesDep,
     current_user,
+    gateway_scope,
     identity_header,
     key_identity,
     project_for,
@@ -96,7 +99,7 @@ _ALLOWED: list[tuple[str, str, Sso, bool]] = [
     ("POST", rf"runtime-targets/{UUID}/drain", "ops", False),
     ("POST", rf"runtime-targets/{UUID}/activate", "ops", False),
     ("POST", rf"runtime-targets/{UUID}/disable", "ops", False),
-    ("POST", rf"runtime-targets/{UUID}/purge", "ops", False),
+    ("DELETE", rf"runtime-targets/{UUID}", "ops", False),
     # executor-wide admission, and stopping running executions
     ("POST", r"maintenance/drain", "ops", False),
     ("POST", r"maintenance/activate", "ops", False),
@@ -125,8 +128,11 @@ def relay_description() -> str:
     return (
         "executor `/api/v1/<path>` through this service; any other path "
         "is 404.\n\n"
-        "**API key callers** (`X-Api-Key` + `X-User-Id`; a GET without "
-        "`X-User-Id` reads the whole tenant) may use:\n\n"
+        "**API key callers** (`X-Api-Key` + `X-User-Id`, always) may use "
+        "the routes below. A standard key reads only the `X-User-Id` "
+        "user's executions (a `user_id` query naming anyone else is 403); "
+        "a master key reads the whole tenant, `user_id` narrowing it. "
+        "Writes are made for `X-User-Id`:\n\n"
         "| Method | Path |\n| --- | --- |\n"
         f"{rows}\n\n"
         "Runtime, maintenance, attempts and diagnostics are for our "
@@ -135,7 +141,7 @@ def relay_description() -> str:
 
 
 PASS_HEADERS = {"content-type", "etag", "location", "content-disposition"}
-# list filters the executor no longer takes: the headers decide the scope
+# scope filters we set ourselves (the caller's value is checked, not passed)
 SCOPE_PARAMS = {"user_id", "tenant_id"}
 
 
@@ -145,6 +151,9 @@ SCOPE_PARAMS = {"user_id", "tenant_id"}
 )
 @router.api_route(
     "/{path:path}", methods=["POST"], description=relay_description()
+)
+@router.api_route(
+    "/{path:path}", methods=["DELETE"], description=relay_description()
 )
 async def relay(
     path: str,
@@ -161,11 +170,9 @@ async def relay(
             raise HTTPException(404, "Not available through this service.")
         return await _for_user(services, request, path, route, user)
     caller, user_id, user = await key_identity(
-        request,
-        services,
-        user_required=request.method != "GET",
-        any_user_outside=True,
+        request, services, any_user_outside=True
     )
+    assert user_id is not None
     if route is None or not route[2]:
         raise HTTPException(404, "Not available through this service.")
     return await _for_caller(services, request, path, caller, user_id, user)
@@ -216,9 +223,12 @@ async def _for_caller(
     request: Request,
     path: str,
     caller: Caller,
-    user_id: str | None,
+    user_id: str,
     user: User | None,
 ):
+    """A key caller's call, as its tenant (``gateway_scope``: whose rows a
+    read covers)."""
+    send_user, params = gateway_scope(request, caller, user_id)
     project = identity_header(request, "x-project-id", PROJECT_ID)
     session = request.headers.get("x-session-id", "").strip() or None
     if (
@@ -233,7 +243,7 @@ async def _for_caller(
             if found.project_id != project:
                 raise HTTPException(404, "Session not found.")
     who = Identity(
-        user_id=user_id,
+        user_id=send_user,
         project_id=project,
         session_id=session if project else None,
         tenant=caller.tenant,
@@ -246,7 +256,7 @@ async def _for_caller(
         services,
         request.method,
         path,
-        dict(request.query_params),
+        params,
         body,
         headers,
     )

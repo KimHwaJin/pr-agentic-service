@@ -31,7 +31,7 @@
 
 Swagger(`/docs`)에서는 Authorize 버튼에 `X-Api-Key`·`X-User-Id`가 있고, 각 API에 `X-Project-Id`·`X-Session-Id` 입력칸이 있습니다. 같은 브라우저에 SSO 로그인 쿠키가 있으면 쿠키가 우선이라 헤더는 무시됩니다. 관리자 API(`/admin/...`)는 key로 부를 수 없습니다(403). key 요청은 감사 로그(`api_service.audit`)에 남습니다.
 
-관리자용: `GET /api/v1/admin/api-clients`, `POST /api/v1/admin/api-clients` `{name, tenant, own_tenant?, description?}` → `{client, api_key}`(key 원문은 이때 한 번만, 바로 active), `POST /api/v1/admin/api-clients/{id}/revoke`, `POST /api/v1/admin/api-clients/tenants/{tenant}/revoke` → `{tenant, revoked}`. `tenant`는 필수이고, 우리 tenant로 발급하려면 `own_tenant: true`가 필요합니다(없으면 422).
+관리자용: `GET /api/v1/admin/api-clients`, `POST /api/v1/admin/api-clients` `{name, tenant, kind?, own_tenant?, description?}` (`kind`: `standard` 일반키(기본) | `master` 마스터키) → `{client, api_key}`(key 원문은 이때 한 번만, 바로 active), `POST /api/v1/admin/api-clients/{id}/revoke`, `POST /api/v1/admin/api-clients/tenants/{tenant}/revoke` → `{tenant, revoked}`. `tenant`는 필수이고, 우리 tenant로 발급하려면 `own_tenant: true`가 필요합니다(없으면 422).
 
 **오류 응답:** 모든 오류는 executor와 같은 모양입니다. executor·배치 게이트웨이로 받은 오류도 이 모양으로 옵니다.
 
@@ -213,7 +213,8 @@ Swagger(`/docs`)에서는 Authorize 버튼에 `X-Api-Key`·`X-User-Id`가 있고
 | GET | `/executions/{id}/diagnostics`, `/attempts`, `/attempts/{id}`, `/attempts/{id}/steps` | 관리자 |
 | GET | `/runtime-targets`, `/runtime-targets/{id}`, `/runtime-pools`, `/maintenance`, `/maintenance/runs/{id}`, `/maintenance/runs/{id}/targets` | 관리자 |
 | POST | `/runtime-targets` | 관리자. 런타임 등록·수정(바로 probe) |
-| POST | `/runtime-targets/{id}/probe`, `/drain`, `/activate`, `/disable`, `/purge` | 관리자. 다시 점검 / 새 작업 배정 중지(진행 중은 마저) / 배정 복귀 / 사용 중지 / 사용 중지된 대상 제거 |
+| POST | `/runtime-targets/{id}/probe`, `/drain`, `/activate`, `/disable` | 관리자. 다시 점검 / 새 작업 배정 중지(진행 중은 마저) / 배정 복귀 / 사용 중지 |
+| DELETE | `/runtime-targets/{id}` | 관리자. 사용 중지된 대상 제거(purge). 본문·멱등성 키 없음 |
 | POST | `/maintenance/drain`, `/maintenance/activate`, `/maintenance/runs` | 관리자. executor 전체의 새 실행 접수 중지 / 재개 / 진행 중 실행을 멈추는 점검 작업 생성 |
 
 runtime·maintenance 경로는 executor 운영 key(`EXECUTOR_ADMIN_API_KEY`)가 없으면 503 `EXECUTOR_ADMIN_KEY_MISSING`입니다. POST 본문은 그대로 넘기고, 누가 했는지는 서버가 붙이는 `X-User-Id`(요청한 관리자)로 executor에 기록됩니다. executor는 본문의 `actor`를 받지 않습니다(보내면 422 `REQUEST_VALIDATION_ERROR`). executor·pr-batch에 넘기는 사용자 ID(`X-User-Id`, `context.user_id`)는 모두 `users.id`이고, 이 값은 소문자 사번입니다(2026-11-01부터). 화면에 이름이 필요하면 `/users`로 찾습니다. 나머지 본문(`idempotency_key` 등)은 executor 형식 그대로입니다.
@@ -228,7 +229,7 @@ runtime·maintenance 경로는 executor 운영 key(`EXECUTOR_ADMIN_API_KEY`)가 
 | GET·POST | `/executions/{id}/artifacts` |
 | GET | `/artifacts/{id}`, `/artifacts/{id}/content` |
 
-우리가 `X-Api-Key`(우리 executor key), `X-User-Id`, `X-Tenant-Id`(그 호출자의 tenant)를 다시 만들어 붙입니다. `X-User-Id` 없는 GET은 그 tenant 전체 조회, 없는 쓰기는 400입니다. 운영 경로, attempts, diagnostics는 404. 이벤트는 중계하지 않습니다(`executor.events.<tenant>`를 읽거나 `/events`를 폴링).
+우리가 `X-Api-Key`(우리 executor key), `X-User-Id`, `X-Tenant-Id`(그 호출자의 tenant)를 다시 만들어 붙입니다. `X-User-Id`는 조회·쓰기 모두 필수입니다(없으면 400). 조회 범위는 key 종류로 정해집니다. 일반키는 `X-User-Id` 사용자 것만 보이고(`?user_id=`에 다른 값이면 403), 마스터키는 tenant 전체가 보이고 `?user_id=`로 거릅니다. 전체 규칙과 경로별 스펙은 [게이트웨이 문서](gateway/README.md)를 봅니다. 운영 경로, attempts, diagnostics는 404. 이벤트는 중계하지 않습니다(`executor.events.<tenant>`를 읽거나 `/events`를 폴링).
 
 executor가 응답하지 않으면 502 `EXECUTOR_UNAVAILABLE`, 시간 초과는 504 `EXECUTOR_TIMEOUT`입니다.
 

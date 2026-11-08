@@ -31,6 +31,7 @@ def test_browser_routes():
     assert _access("POST", "runtime-targets") == ("ops", False)
     assert _access("POST", f"runtime-targets/{E}/drain") == ("ops", False)
     assert _access("POST", "maintenance/drain") == ("ops", False)
+    assert _access("DELETE", f"runtime-targets/{E}") == ("ops", False)
     for method, path in [
         ("GET", f"executions/{E}/../../maintenance"),
         ("GET", "executions/not-a-uuid"),
@@ -231,7 +232,7 @@ def test_admin_user_filter_becomes_the_user_header():
 
 def test_relay_docs_list_the_key_routes():
     text = relay.relay_description()
-    keyed = text.split("may use:")[1].split("Runtime,")[0]
+    keyed = text.split("made for `X-User-Id`:")[1].split("Runtime,")[0]
     assert "| POST | `/executions` |" in keyed
     assert "| GET | `/executions/{execution_id}/steps/{id}` |" in keyed
     assert "`/executions/{execution_id}/notebook/cells/{n}`" in keyed
@@ -269,3 +270,59 @@ def test_operator_post_without_a_body_sends_none():
     sent = _operator_post(f"runtime-targets/{E}/probe", b"")
     assert sent.content == b""
     assert "content-type" not in sent.headers
+
+
+# --- standard (일반) and master (마스터) keys -----------------------------
+
+
+def _keyed_read(kind: str, query: bytes, method: str = "GET"):
+    sent: list[httpx.Request] = []
+    services = _services(sent)
+    request = _request(method, "executions", {"X-Api-Key": "pas_live_x"})
+    request.scope["query_string"] = query
+    caller = Caller("c-1", "partner-agent", "partner", kind)
+    asyncio.run(
+        relay._for_caller(
+            cast(Any, services), request, "executions", caller, "e100", None
+        )
+    )
+    return sent[0]
+
+
+def test_standard_key_reads_only_its_users_own():
+    sent = _keyed_read("standard", b"status=RUNNING&tenant_id=x")
+    assert sent.headers["x-user-id"] == "e100"
+    assert dict(sent.url.params) == {"status": "RUNNING"}
+    # naming the same user is allowed (and needs no filter)
+    sent = _keyed_read("standard", b"user_id=E100")
+    assert sent.headers["x-user-id"] == "e100"
+    assert "user_id" not in sent.url.params
+
+
+def test_standard_key_may_not_filter_by_another_user():
+    with pytest.raises(ApiError) as err:
+        _keyed_read("standard", b"user_id=e200")
+    assert (err.value.status, err.value.code) == (403, "FORBIDDEN")
+
+
+def test_master_key_reads_the_tenant_and_filters_by_query():
+    sent = _keyed_read("master", b"status=RUNNING")
+    assert "x-user-id" not in sent.headers
+    assert sent.headers["x-tenant-id"] == "partner"
+    assert dict(sent.url.params) == {"status": "RUNNING"}
+    sent = _keyed_read("master", b"user_id=E200")
+    assert "x-user-id" not in sent.headers
+    assert sent.url.params["user_id"] == "e200"
+
+
+def test_writes_go_for_the_caller_whatever_the_key():
+    for kind in ("standard", "master"):
+        sent = _keyed_read(kind, b"user_id=e200", method="POST")
+        assert sent.headers["x-user-id"] == "e100"
+        assert "user_id" not in sent.url.params
+
+
+def test_malformed_user_filter_is_refused():
+    with pytest.raises(ApiError) as err:
+        _keyed_read("master", b"user_id=Bad%20Id")
+    assert (err.value.status, err.value.code) == (400, "INVALID_IDENTITY")

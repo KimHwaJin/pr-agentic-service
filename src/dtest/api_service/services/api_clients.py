@@ -26,6 +26,13 @@ class Caller:
     id: str
     name: str
     tenant: str
+    # standard | master (ApiClient.kind)
+    kind: str = "standard"
+
+    @property
+    def master(self) -> bool:
+        """Gateway reads over the whole tenant (see ``gateway_scope``)."""
+        return self.kind == "master"
 
 
 _cache: dict[str, tuple[float, Caller | None]] = {}
@@ -59,7 +66,12 @@ async def verify(services: Services, key: str) -> Caller | None:
             and client.status == "active"
             and hmac.compare_digest(client.key_sha256, hashed)
         ):
-            caller = Caller(client.id, client.name, client.tenant)
+            caller = Caller(
+                client.id,
+                client.name,
+                client.tenant,
+                client.kind or "standard",
+            )
             # once per cache window, not per request
             await db.execute(
                 update(ApiClient)

@@ -50,7 +50,8 @@
 
 - SSO admin 전용 API·화면. 테이블 `api_clients`: `id`, `name`, `tenant`, `key_prefix`, `key_sha256`, `status`(`active`·`revoked`. 옛 `pending`은 마이그레이션 0006에서 `active`로 바뀜), `created_by`, `created_at`, `revoked_at`, `last_used_at`.
 - key는 32바이트 이상 무작위 + 접두어 `pas_live_…`(dev `pas_dev_…`). 원문은 발급 응답에서 한 번만 보여 주고 SHA-256 해시만 저장. 비교는 `hmac.compare_digest`.
-- `tenant`는 관리자가 반드시 정한다. executor `TENANT_ID_PATTERN`, 예약어 `dlq`·`work`. 우리 tenant(`pr-agentic-service`)는 `own_tenant: true`를 함께 줄 때만 발급한다(그 key는 우리 사용자 실행 전체를 시스템 조회로 읽는다).
+- `tenant`는 관리자가 반드시 정한다. executor `TENANT_ID_PATTERN`, 예약어 `dlq`·`work`. 우리 tenant(`pr-agentic-service`)는 `own_tenant: true`를 함께 줄 때만 발급한다.
+- `kind`: `standard`(일반키, 기본값) 또는 `master`(마스터키) (2026-11-08, 마이그레이션 0008). 게이트웨이 조회 범위만 다르다(3.5). 그 전에 발급한 key는 `standard`다.
 - **tenant 승인은 우리만 한다** (2026-11-01). executor와 pr-batch는 우리 key에 `allowed_tenants: ["*"]`를 주므로, 발급한 key는 바로 `active`이고 두 서비스의 설정 변경·재배포가 없다. 그만큼 게이트웨이(3.4·3.5)가 tenant의 유일한 경계이고, `EXECUTOR_API_KEY`·`BATCH_API_KEY`는 모든 tenant 권한을 가진 비밀이다(stg·prd는 배포 Secret으로만 주입).
 - tenant를 끊을 때는 그 tenant의 key를 한 번에 폐기한다: `POST /admin/api-clients/tenants/{tenant}/revoke`.
 - 폐기는 `revoked`로 즉시 반영(검증 캐시 최대 60초). key 경로 요청은 감사 로그에 client, user_id, 메서드, 경로, 결과 코드를 남긴다.
@@ -79,7 +80,12 @@
   - 호출자 tenant가 `pr-agentic-service`이면 우리 프로젝트·세션이므로 멤버십·소유를 우리 DB로 확인한다(아니면 404).
   - 외부 tenant이면 **그 호출자가 정한 값**으로 보고 확인 없이 형식(2장)만 검사해 넘긴다. executor 작업 공간이 `tenants/{tenant}/…` 아래라 우리 프로젝트와 섞이지 않는다.
 - 본문은 그대로 넘긴다. `context`·`tenant_id`가 들어 있으면 executor가 422로 거부한다. 멱등키(`idempotency_key`)도 호출자 값 그대로다.
-- `X-User-Id` 없는 GET(시스템 조회)은 허용한다. executor가 호출자 tenant의 실행만 보여 준다. `X-User-Id` 없는 쓰기는 executor가 400으로 거부한다.
+- `X-User-Id`는 key 종류와 관계없이 **모든 호출에 필수**다(없으면 우리가 400 `INVALID_IDENTITY`). "누가 호출했나"를 남기는 값이다 (2026-11-08).
+- 조회(GET)의 범위는 key 종류가 정한다 (`deps.gateway_scope`).
+  - 일반키: `X-User-Id`를 그대로 executor에 넘긴다(그 사용자 것만). 쿼리 `user_id`는 빼고 넘기며, `X-User-Id`와 다르면 우리가 403 `FORBIDDEN`.
+  - 마스터키: `X-User-Id`를 빼고 넘긴다(tenant 전체 시스템 조회). 쿼리 `user_id`가 있으면 소문자로 바꿔 필터로 넘긴다(executor가 tenant 전체 조회를 그 사용자로 거른다).
+- 쓰기는 두 종류 모두 `X-User-Id`를 넘긴다. 쿼리 `user_id`·`tenant_id`는 넘기지 않는다.
+- 배치 게이트웨이(3.4)도 같은 규칙이다. pr-batch는 `X-User-Id` 없는 조회와 쿼리 `user_id` 필터를 받아야 한다(pr-batch 변경 요청).
 - 타임아웃은 `EXECUTOR_TIMEOUT`을 따르고, executor 연결 실패는 502, 타임아웃은 504로 돌려준다.
 
 **허용 경로** (그 외는 우리가 404)

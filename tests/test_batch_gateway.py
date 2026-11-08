@@ -7,6 +7,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from src.dtest.api_service.routers import batch
+from src.dtest.api_service.services.api_clients import Caller
 from src.dtest.core.config import Settings
 
 ID = "3f2a9c1e-5b7d-4e8a-9c21-7d4e5f6a8b90"
@@ -75,7 +76,7 @@ def test_relay_streams_and_maps_connection_errors(client, monkeypatch):
     import httpx
 
     async def identity(*args, **kwargs):
-        return None, None, None
+        return Caller("c-1", "agent", "partner"), "u1", None
 
     def handler(request):
         if request.url.path.endswith("/runtimes"):
@@ -102,7 +103,7 @@ def test_batch_flags_come_from_pr_batch_as_sent(client, monkeypatch):
     import httpx
 
     async def identity(*args, **kwargs):
-        return None, "u1", None
+        return Caller("c-1", "agent", "partner"), "u1", None
 
     async def who(*args, **kwargs):
         return None
@@ -161,13 +162,12 @@ def test_key_caller_goes_as_its_tenant_with_our_key(monkeypatch):
     allowed every tenant), so the caller's own headers never get through."""
     import httpx
 
-    from src.dtest.api_service.services.api_clients import Caller
-
     sent: list[httpx.Request] = []
 
     async def identity(request, *args, **kwargs):
-        request.state.api_client = Caller("c-1", "partner-agent", "partner")
-        return None, "u1", None
+        caller = Caller("c-1", "partner-agent", "partner")
+        request.state.api_client = caller
+        return caller, "u1", None
 
     def handler(request):
         sent.append(request)
@@ -252,3 +252,64 @@ def test_admin_reads_a_users_batches_as_that_user(monkeypatch):
         "method": "GET",
     }
     assert client.get("/api/v1/admin/users/nobody/batches").status_code == 404
+
+
+def _gateway_call(monkeypatch, kind: str, method: str, url: str):
+    import httpx
+
+    sent: list[httpx.Request] = []
+
+    async def identity(request, *args, **kwargs):
+        caller = Caller("c-1", "partner-agent", "partner", kind)
+        request.state.api_client = caller
+        return caller, "e100", None
+
+    def handler(request):
+        sent.append(request)
+        return httpx.Response(200, json={"items": []})
+
+    from src.dtest.api_service import errors
+
+    app = FastAPI()
+    app.include_router(batch.router)
+    errors.install(app)
+    app.state.services = SimpleNamespace(
+        settings=Settings(batch_api_key="bat_ours", executor_tenant_id="ours")
+    )
+    upstream = httpx.AsyncClient(
+        base_url="http://batch", transport=httpx.MockTransport(handler)
+    )
+    monkeypatch.setattr(batch, "key_identity", identity)
+    monkeypatch.setattr(batch, "_client", lambda services: upstream)
+    response = TestClient(app).request(
+        method, url, headers={"X-Api-Key": "pas_live_x", "X-User-Id": "e100"}
+    )
+    return response, sent
+
+
+def test_standard_key_reads_its_own_batches(monkeypatch):
+    got, sent = _gateway_call(
+        monkeypatch, "standard", "GET", "/api/v1/batch/batches?limit=5"
+    )
+    assert got.status_code == 200
+    assert sent[0].headers["x-user-id"] == "e100"
+    assert dict(sent[0].url.params) == {"limit": "5"}
+    denied, sent = _gateway_call(
+        monkeypatch, "standard", "GET", "/api/v1/batch/batches?user_id=e200"
+    )
+    assert denied.status_code == 403 and not sent
+    assert denied.json()["error"]["code"] == "FORBIDDEN"
+
+
+def test_master_key_reads_the_tenants_batches(monkeypatch):
+    got, sent = _gateway_call(
+        monkeypatch, "master", "GET", "/api/v1/batch/batches?user_id=E200"
+    )
+    assert got.status_code == 200
+    assert "x-user-id" not in sent[0].headers
+    assert sent[0].headers["x-tenant-id"] == "partner"
+    assert sent[0].url.params["user_id"] == "e200"
+    written, sent = _gateway_call(
+        monkeypatch, "master", "POST", f"/api/v1/batch/batches/{ID}/runs"
+    )
+    assert sent[0].headers["x-user-id"] == "e100"

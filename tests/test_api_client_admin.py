@@ -219,3 +219,23 @@ def test_our_own_tenant_keeps_its_batches(setup, told):
     got = client.post("/admin/api-clients/tenants/ours/revoke").json()
     assert got["revoked"] == 1 and got["batches_disabled"] is False
     assert told == []
+
+
+def test_a_key_is_standard_unless_issued_as_master(setup):
+    client, db = setup
+    standard = client.post(
+        "/admin/api-clients", json={"name": "a", "tenant": "partner"}
+    )
+    assert standard.json()["client"]["kind"] == "standard"
+    master = client.post(
+        "/admin/api-clients",
+        json={"name": "b", "tenant": "partner", "kind": "master"},
+    )
+    assert master.status_code == 201
+    assert master.json()["client"]["kind"] == "master"
+    assert [r.kind for r in db.rows] == ["standard", "master"]
+    other = client.post(
+        "/admin/api-clients",
+        json={"name": "c", "tenant": "partner", "kind": "admin"},
+    )
+    assert other.status_code == 422

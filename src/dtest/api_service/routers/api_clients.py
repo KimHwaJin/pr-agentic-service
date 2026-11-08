@@ -9,8 +9,9 @@ another tenant has no active key left, pr-batch turns its batches off
 (``disable-by-tenant``; retried by the worker until it has heard).
 
 The tenant is always named. Our own tenant is given only on purpose
-(``own_tenant``): its key reads every execution of our users as a system
-read.
+(``own_tenant``). The kind decides the reach of gateway reads: a
+``standard`` key reads only what its ``X-User-Id`` owns, a ``master`` key
+the whole tenant (a ``user_id`` query narrows it). Writes are the same.
 """
 
 from fastapi import APIRouter, HTTPException
@@ -65,6 +66,7 @@ async def issue_client(
         client = ApiClient(
             name=body.name,
             tenant=tenant,
+            kind=body.kind,
             key_prefix=key[: len(api_clients.key_prefix(settings.env)) + 4],
             key_sha256=api_clients.digest(key),
             status="active",
