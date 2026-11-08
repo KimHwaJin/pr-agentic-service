@@ -1,4 +1,5 @@
 import asyncio
+import logging
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 from typing import Any, cast
@@ -21,6 +22,7 @@ from worker.memory import (
     mark_dirty,
     parse_ops,
     plan_topic,
+    read_ops,
     render_memory,
     take_chunk,
     worker_prompt,
@@ -254,14 +256,19 @@ def test_not_trivial(text):
     assert not is_trivial(text)
 
 
-def test_trivial_chunk_skips_the_model(monkeypatch):
+def test_trivial_chunk_skips_the_model(monkeypatch, caplog):
     def no_model(*args):
         raise AssertionError("the model was called")
 
     monkeypatch.setattr(mw, "chat_model", no_model)
     worker = _worker()
     chunk = [_msg(0, "user", "안녕"), _msg(1, "assistant", "안녕하세요!")]
-    assert run(worker.extract("p", chunk)) == []
+    with caplog.at_level(logging.INFO, logger=mw.log.name):
+        assert run(worker.extract("p", chunk)) == []
+    assert (
+        "memory_extract_skipped project=p messages=2 reason=trivial"
+        in caplog.text
+    )
 
 
 def test_process_advances_past_the_chunk_only():
@@ -319,6 +326,37 @@ def test_parse_ops_reads_json_inside_text():
     assert parse_ops('결과:\n{"ops": [{"op": "add"}]}') == [{"op": "add"}]
     assert parse_ops('[{"op": "delete"}]') == [{"op": "delete"}]
     assert parse_ops("저장할 것이 없습니다") == []
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ('{"ops": []}', ([], "ok")),
+        ("[]", ([], "ok")),
+        ('{"ops": [{"op": "add"}]}', ([{"op": "add"}], "ok")),
+        ("저장할 것이 없습니다", ([], "no_json")),
+        ("", ([], "no_json")),
+        ('{"result": "없음"}', ([], "unparseable")),
+        ('{"ops": "없음"}', ([], "unparseable")),
+    ],
+)
+def test_read_ops_tells_an_empty_answer_from_an_unreadable_one(text, expected):
+    assert read_ops(text) == expected
+
+
+def test_parse_failure_is_logged_and_keeps_the_empty_result(
+    monkeypatch, caplog
+):
+    model = _Model("저장할 것이 없습니다")
+    monkeypatch.setattr(mw, "chat_model", lambda settings, name: model)
+    worker = _worker(_Db([None]))
+    with caplog.at_level(logging.INFO, logger=mw.log.name):
+        changed = run(worker.extract("p", [_msg(0, "user", USER_TEXT)]))
+    assert changed == []
+    assert (
+        "memory_extract_done project=p messages=1 ops=0 "
+        "parse_failed=true parse_status=no_json saved_topics=0"
+    ) in caplog.text
 
 
 LINES = [
@@ -466,7 +504,7 @@ class _Model:
         return AIMessage(self.reply)
 
 
-def test_extract_applies_valid_ops_and_tells_the_sessions(monkeypatch):
+def test_extract_applies_valid_ops_and_tells_the_sessions(monkeypatch, caplog):
     model = _Model(
         '{"ops": ['
         '{"op": "add", "topic": "preferences", "text": "- 보고서는 표 위주",'
@@ -483,7 +521,8 @@ def test_extract_applies_valid_ops_and_tells_the_sessions(monkeypatch):
         _msg(1, "assistant", "편차가 큽니다", "s1", "r1"),
         _msg(2, "user", "좋아", "s2", "r2"),
     ]
-    changed = run(worker.extract("p", chunk))
+    with caplog.at_level(logging.INFO, logger=mw.log.name):
+        changed = run(worker.extract("p", chunk))
     assert changed == ["preferences"]
     section = run(worker.memory.content("p", "preferences"))
     assert section["content"] == "- 보고서는 표 위주"
@@ -501,6 +540,10 @@ def test_extract_applies_valid_ops_and_tells_the_sessions(monkeypatch):
         ("s2", "r2", "memory_updated"),
     }
     assert model.calls == 1
+    assert (
+        "memory_extract_done project=p messages=3 ops=3 "
+        "parse_failed=false parse_status=ok saved_topics=1"
+    ) in caplog.text
 
 
 def test_a_version_conflict_is_retried_once(monkeypatch):
@@ -615,6 +658,40 @@ def test_worker_prompt_lists_the_topics():
     assert (
         "{topics}" not in prompt and "맞지 않으면 저장하지 않습니다" in prompt
     )
+
+
+def test_prompt_saves_named_targets_without_biasing_to_empty():
+    prompt = worker_prompt([], "2026-10-29")
+    assert "대부분의 대화에는 저장할 것이 없습니다" not in prompt
+    assert "확실하지 않으면 저장하지 않습니다" not in prompt
+    assert "처음 나올 때부터 저장합니다" in prompt
+    assert "lasting은 true" in prompt and "한 줄에 합칩니다" in prompt
+    assert "Agent(ASSISTANT)의 분석 결과" in prompt
+
+
+def test_a_named_target_is_merged_into_the_interest_line(monkeypatch):
+    worker = _worker(_Db([None]))
+    run(
+        worker.memory.save_line(
+            "p", "core_interests", "- 관심: NCE SN OPEN", actor=ACTOR
+        )
+    )
+    line = run(worker.memory.content("p", "core_interests"))["lines"][0]
+    model = _Model(
+        '{"ops": [{"op": "replace", "topic": "core_interests", '
+        f'"line_id": "{line["id"]}", '
+        '"text": "- 관심: NCE SN OPEN, FDC CH_PRESSURE", '
+        '"quote": "FDC CH_PRESSURE가", "lasting": true}]}'
+    )
+    monkeypatch.setattr(mw, "chat_model", lambda settings, name: model)
+    request = "FDC CH_PRESSURE가 설비별로 오르는지 봐줘"
+    assert run(worker.extract("p", [_msg(0, "user", request)])) == [
+        "core_interests"
+    ]
+    lines = run(worker.memory.content("p", "core_interests"))["lines"]
+    assert [x["text"] for x in lines] == [
+        "- 관심: NCE SN OPEN, FDC CH_PRESSURE"
+    ]
 
 
 def test_default_prompt_carries_the_key_events_rule_in_its_description():
