@@ -239,3 +239,41 @@ def test_a_key_is_standard_unless_issued_as_master(setup):
         json={"name": "c", "tenant": "partner", "kind": "admin"},
     )
     assert other.status_code == 422
+
+
+def test_reissue_gives_a_new_key_and_ends_the_old_one(setup):
+    client, db = setup
+    issued = client.post(
+        "/admin/api-clients",
+        json={"name": "a", "tenant": "partner", "kind": "master"},
+    ).json()
+    old_key = issued["api_key"]
+    old_hash = db.rows[0].key_sha256
+    api_clients._cache[old_hash] = (float("inf"), object())
+    again = client.post(f"/admin/api-clients/{issued['client']['id']}/reissue")
+    assert again.status_code == 200
+    body = again.json()
+    assert body["api_key"].startswith("pas_") and body["api_key"] != old_key
+    row = db.rows[0]
+    assert row.key_sha256 == api_clients.digest(body["api_key"])
+    assert (row.name, row.tenant, row.kind, row.status) == (
+        "a",
+        "partner",
+        "master",
+        "active",
+    )
+    assert (
+        body["client"]["key_prefix"] == body["api_key"][: len(row.key_prefix)]
+    )
+    assert old_hash not in api_clients._cache  # refused at once here
+
+
+def test_a_revoked_or_unknown_key_is_not_reissued(setup):
+    client, db = setup
+    issued = client.post(
+        "/admin/api-clients", json={"name": "a", "tenant": "partner"}
+    ).json()
+    cid = issued["client"]["id"]
+    client.post(f"/admin/api-clients/{cid}/revoke")
+    assert client.post(f"/admin/api-clients/{cid}/reissue").status_code == 409
+    assert client.post("/admin/api-clients/nope/reissue").status_code == 404

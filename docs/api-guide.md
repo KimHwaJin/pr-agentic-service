@@ -31,7 +31,7 @@
 
 Swagger(`/docs`)에서는 Authorize 버튼에 `X-Api-Key`·`X-User-Id`가 있고, 각 API에 `X-Project-Id`·`X-Session-Id` 입력칸이 있습니다. 같은 브라우저에 SSO 로그인 쿠키가 있으면 쿠키가 우선이라 헤더는 무시됩니다. 관리자 API(`/admin/...`)는 key로 부를 수 없습니다(403). key 요청은 감사 로그(`api_service.audit`)에 남습니다.
 
-관리자용: `GET /api/v1/admin/api-clients`, `POST /api/v1/admin/api-clients` `{name, tenant, kind?, own_tenant?, description?}` (`kind`: `standard` 일반키(기본) | `master` 마스터키) → `{client, api_key}`(key 원문은 이때 한 번만, 바로 active), `POST /api/v1/admin/api-clients/{id}/revoke`, `POST /api/v1/admin/api-clients/tenants/{tenant}/revoke` → `{tenant, revoked}`. `tenant`는 필수이고, 우리 tenant로 발급하려면 `own_tenant: true`가 필요합니다(없으면 422).
+관리자용: `GET /api/v1/admin/api-clients`, `POST /api/v1/admin/api-clients` `{name, tenant, kind?, own_tenant?, description?}` (`kind`: `standard` 일반키(기본) | `master` 마스터키) → `{client, api_key}`(key 원문은 이때 한 번만, 바로 active), `POST /api/v1/admin/api-clients/{id}/reissue` → `{client, api_key}`(같은 이름·tenant·종류로 새 key, 이전 key는 바로 끊김, 폐기된 key는 409), `POST /api/v1/admin/api-clients/{id}/revoke`, `POST /api/v1/admin/api-clients/tenants/{tenant}/revoke` → `{tenant, revoked}`. `tenant`는 필수이고, 우리 tenant로 발급하려면 `own_tenant: true`가 필요합니다(없으면 422).
 
 **오류 응답:** 모든 오류는 executor와 같은 모양입니다. executor·배치 게이트웨이로 받은 오류도 이 모양으로 옵니다.
 

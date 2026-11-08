@@ -2783,16 +2783,36 @@ async function renderApiClients() {
   const clients = await api('/admin/api-clients');
   $('sysBody').innerHTML = `<div class="toolbar"><button class="btn primary" onclick="openClientModal()">새 키 발급</button></div>
     <div class="muted" style="font-size:12.5px;margin:-4px 0 12px;line-height:1.6">다른 서비스·에이전트가 이 서비스(채팅·배치·executor 입구)를 부를 때 쓰는 키입니다. 호출자는 <span class="mono">X-Api-Key</span>와 <span class="mono">X-User-Id</span>(우리 사용자 ID)를 보냅니다.
+      키 원문은 저장하지 않아 발급할 때 한 번만 보입니다. 잃어버렸으면 <b>재발급</b>으로 새 키를 받습니다(지금 키는 바로 끊기므로 호출 서비스의 키를 곧바로 바꿔 주세요).
       어떤 tenant가 executor·pr-batch를 쓸 수 있는지는 여기서만 정합니다. 발급한 키는 바로 사용 중이 되고, executor·pr-batch 설정을 바꾸거나 다시 배포할 필요가 없습니다. 폐기(키 하나 또는 tenant 전체)는 최대 1분 안에 모든 서버에 반영됩니다.</div>
     ${clients.length ? `<table class="tbl"><thead><tr><th>이름</th><th>tenant</th><th>종류</th><th>키</th><th>상태</th><th>마지막 사용</th><th>발급</th><th></th></tr></thead><tbody>${clients.map(c => `
       <tr><td><b>${esc(c.name)}</b>${c.description ? `<br><span class="muted">${esc(c.description)}</span>` : ''}</td><td class="mono">${esc(c.tenant)}</td><td>${c.kind === 'master' ? '<span class="badge" title="executor·배치 조회가 tenant 전체를 봅니다. user_id 쿼리로 거를 수 있습니다.">마스터</span>' : '<span title="executor·배치 조회는 X-User-Id 사용자 것만 봅니다.">일반</span>'}</td><td class="mono">${esc(c.key_prefix)}…</td>
         <td>${c.status === 'active' ? statusBadge('ACTIVE').replace('ACTIVE', CLIENT_STATE.active) : `<span class="badge ${c.status === 'revoked' ? 'bad' : ''}">${CLIENT_STATE[c.status] || esc(c.status)}</span>`}${c.batches_disable_pending ? ' <span class="badge" title="tenant의 키가 모두 폐기되어 pr-batch에 배치 끄기를 알리는 중입니다. 답이 없어 5분 간격으로 다시 시도합니다.">배치 끄기 재시도 대기</span>' : ''}</td>
         <td>${c.last_used_at ? fmtTime(c.last_used_at) : '<span class="muted">-</span>'}</td><td>${fmtTime(c.created_at)}</td>
-        <td style="white-space:nowrap">${c.status !== 'revoked' ? `<button class="ghost" style="color:var(--bad)" onclick="clientAction('${c.id}', 'revoke', '${esc(c.name)}')">폐기</button>
+        <td style="white-space:nowrap">${c.status !== 'revoked' ? `<button class="ghost" title="같은 이름·tenant·종류로 새 키를 발급합니다. 지금 키는 바로 끊깁니다." onclick="reissueClient('${c.id}', '${esc(c.name)}')">재발급</button>
+          <button class="ghost" style="color:var(--bad)" onclick="clientAction('${c.id}', 'revoke', '${esc(c.name)}')">폐기</button>
           <button class="ghost" style="color:var(--bad)" onclick="revokeTenant('${esc(c.tenant)}')">tenant 전체 폐기</button>` : ''}</td></tr>`).join('')}</tbody></table>`
       : '<div class="muted">발급한 키가 없습니다.</div>'}`;
 }
+function showIssuedKey(key, title, state) {
+  $('acTitle').textContent = title;
+  $('acKey').value = key; $('acCopy').textContent = '복사';
+  $('acState').textContent = state;
+  $('acForm').hidden = true; $('acIssued').hidden = false; $('acSave').hidden = true;
+  $('clientModal').classList.add('open'); $('acKey').select();
+}
+function copyIssuedKey() {
+  navigator.clipboard?.writeText($('acKey').value);
+  $('acCopy').textContent = '복사됨'; setTimeout(() => $('acCopy').textContent = '복사', 1200);
+}
+async function reissueClient(id, name) {
+  if (!confirm(`${name} 키를 재발급할까요? 지금 키는 바로 끊기고, 새 키는 한 번만 보입니다.`)) return;
+  const issued = await api(`/admin/api-clients/${id}/reissue`, { method: 'POST' });
+  showIssuedKey(issued.api_key, `API 키 재발급 · ${name}`, '이전 키는 더 이상 쓸 수 없습니다. 호출 서비스의 키를 지금 바꿔 주세요.');
+  renderApiClients();
+}
 function openClientModal() {
+  $('acTitle').textContent = 'API 키 발급';
   $('acName').value = ''; $('acTenant').value = ''; $('acDesc').value = ''; $('acOwn').checked = false; $('acKind').value = 'standard';
   $('acForm').hidden = false; $('acIssued').hidden = true; $('acSave').hidden = false;
   $('clientModal').classList.add('open'); $('acName').focus();
@@ -2805,9 +2825,7 @@ async function issueClient() {
   $('acSave').disabled = true;
   try {
     const issued = await api('/admin/api-clients', { method: 'POST', body: { name, tenant, kind, ...(own_tenant ? { own_tenant } : {}), ...(description ? { description } : {}) } });
-    $('acKey').value = issued.api_key;
-    $('acState').textContent = '바로 쓸 수 있습니다.';
-    $('acForm').hidden = true; $('acIssued').hidden = false; $('acSave').hidden = true;
+    showIssuedKey(issued.api_key, 'API 키 발급', '바로 쓸 수 있습니다.');
     renderApiClients();
   } finally { $('acSave').disabled = false; }
 }
@@ -2826,7 +2844,7 @@ async function revokeTenant(tenant) {
 </script>
 <div class="modal-back" id="clientModal" onclick="if (event.target === this) this.classList.remove('open')">
   <div class="modal" style="width:min(560px,100%)">
-    <div class="modal-head"><h2>API 키 발급</h2><button class="ghost" onclick="$('clientModal').classList.remove('open')">닫기</button></div>
+    <div class="modal-head"><h2 id="acTitle">API 키 발급</h2><button class="ghost" onclick="$('clientModal').classList.remove('open')">닫기</button></div>
     <div class="modal-body">
       <div id="acForm">
         <div class="field"><label>이름</label><input id="acName" maxlength="64" placeholder="호출하는 서비스·에이전트 (예: report-agent)"></div>
@@ -2837,8 +2855,9 @@ async function revokeTenant(tenant) {
         <div class="muted" style="font-size:12px;line-height:1.6">tenant는 그 호출자의 executor 실행·배치가 속하는 공간입니다. 다른 tenant의 실행·이벤트는 서로 보이지 않습니다.</div>
       </div>
       <div id="acIssued" hidden>
-        <div class="field"><label>발급된 키 (지금 한 번만 보입니다)</label><input id="acKey" class="mono" readonly onclick="this.select()"></div>
-        <div class="toolbar"><button class="btn" onclick="navigator.clipboard.writeText($('acKey').value)">복사</button></div>
+        <div class="field"><label>발급된 키</label><input id="acKey" class="mono" readonly onclick="this.select()"></div>
+        <div class="toolbar"><button class="btn primary" id="acCopy" onclick="copyIssuedKey()">복사</button></div>
+        <div style="font-size:12.5px;margin:6px 0;color:var(--bad)"><b>이 창을 닫으면 다시 볼 수 없습니다.</b> 지금 복사해 호출 서비스의 설정에 넣어 주세요. 잃어버리면 목록의 재발급으로 새 키를 받습니다.</div>
         <div class="muted" style="font-size:12.5px" id="acState"></div>
       </div>
     </div>

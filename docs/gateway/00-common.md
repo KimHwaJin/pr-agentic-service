@@ -24,7 +24,7 @@ executor 게이트웨이(`/api/v1/executor/…`)와 배치 게이트웨이(`/api
 
 ## 3. API key
 
-key는 우리 관리자가 **시스템 > API 키** 화면(또는 `POST /api/v1/admin/api-clients`)에서 발급합니다. 원문은 발급할 때 한 번만 보이고, 우리는 SHA-256만 보관합니다.
+key는 우리 관리자가 **시스템 > API 키** 화면(또는 `POST /api/v1/admin/api-clients`)에서 발급합니다. 원문은 발급할 때 한 번만 보이고, 우리는 SHA-256만 보관합니다. 잃어버리면 관리자가 재발급합니다(같은 이름·tenant·종류로 새 key). 이전 key는 그때 바로 끊기므로 새 key로 곧바로 바꿉니다.
 
 | 항목 | 값 |
 | --- | --- |

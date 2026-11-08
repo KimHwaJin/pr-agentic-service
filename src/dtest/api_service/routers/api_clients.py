@@ -14,6 +14,8 @@ The tenant is always named. Our own tenant is given only on purpose
 the whole tenant (a ``user_id`` query narrows it). Writes are the same.
 """
 
+import logging
+
 from fastapi import APIRouter, HTTPException
 from sqlalchemy import select, update
 
@@ -29,6 +31,8 @@ from src.dtest.core.batch_admin import tell_batch_tenant
 from src.dtest.core.config import RESERVED_TENANT_IDS
 from src.dtest.core.db import utcnow
 from src.dtest.core.models import ApiClient
+
+log = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/admin/api-clients", tags=["api-clients"])
 
@@ -77,6 +81,41 @@ async def issue_client(
         db.add(client)
         await db.commit()
         await db.refresh(client)
+    return ApiClientIssued(
+        client=ApiClientRead.model_validate(client), api_key=key
+    )
+
+
+@router.post("/{client_id}/reissue", response_model=ApiClientIssued)
+async def reissue_client(
+    client_id: str, services: ServicesDep, admin: AdminDep
+):
+    """A new key for the same client (name, tenant, kind stay); the old
+    key stops working at once. Keys are kept only as a hash, so this is
+    how a lost key is replaced. Revoked clients are not brought back."""
+    settings = services.settings
+    key = api_clients.new_key(settings.env)
+    async with services.db.sessions() as db:
+        client = await db.get(ApiClient, client_id)
+        if client is None:
+            raise HTTPException(404, "Client not found.")
+        if client.status == "revoked":
+            raise HTTPException(409, "The key is revoked; issue a new one.")
+        old = client.key_sha256
+        client.key_prefix = key[
+            : len(api_clients.key_prefix(settings.env)) + 4
+        ]
+        client.key_sha256 = api_clients.digest(key)
+        client.last_used_at = None
+        await db.commit()
+        await db.refresh(client)
+    api_clients.forget(old)
+    log.info(
+        "api_client_reissued client=%s tenant=%s by=%s",
+        client.name,
+        client.tenant,
+        admin.id,
+    )
     return ApiClientIssued(
         client=ApiClientRead.model_validate(client), api_key=key
     )

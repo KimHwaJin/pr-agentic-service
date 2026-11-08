@@ -54,6 +54,7 @@
 - `kind`: `standard`(일반키, 기본값) 또는 `master`(마스터키) (2026-11-08, 마이그레이션 0008). 게이트웨이 조회 범위만 다르다(3.5). 그 전에 발급한 key는 `standard`다.
 - **tenant 승인은 우리만 한다** (2026-11-01). executor와 pr-batch는 우리 key에 `allowed_tenants: ["*"]`를 주므로, 발급한 key는 바로 `active`이고 두 서비스의 설정 변경·재배포가 없다. 그만큼 게이트웨이(3.4·3.5)가 tenant의 유일한 경계이고, `EXECUTOR_API_KEY`·`BATCH_API_KEY`는 모든 tenant 권한을 가진 비밀이다(stg·prd는 배포 Secret으로만 주입).
 - tenant를 끊을 때는 그 tenant의 key를 한 번에 폐기한다: `POST /admin/api-clients/tenants/{tenant}/revoke`.
+- key를 잃어버리면 재발급한다: `POST /admin/api-clients/{id}/reissue`(2026-11-08). 같은 행의 `key_prefix`·`key_sha256`만 새 key로 바꾸고 이름·tenant·종류는 그대로 둔다. 이전 key는 즉시 거부되고(다른 pod는 캐시 만료까지 최대 `api_client_cache_seconds`), 유예 기간은 없다. 폐기된 key는 재발급하지 않는다(409).
 - 폐기는 `revoked`로 즉시 반영(검증 캐시 최대 60초). key 경로 요청은 감사 로그에 client, user_id, 메서드, 경로, 결과 코드를 남긴다.
 
 ### 3.4 게이트웨이
