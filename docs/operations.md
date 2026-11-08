@@ -22,6 +22,7 @@
 
 - 마스터키(특히 우리 tenant 마스터키)는 사실상 관리자 읽기 권한이므로, 발급 시 `description`에 용도와 담당자를 적고 분기마다 `GET /api/v1/admin/api-clients`로 쓰지 않는 키를 `/revoke`합니다.
 - 다른 tenant 키를 발급할 때 그 호출자에게 `X-User-Id`로 **SSO 사번**을 보내기로 약속받습니다(시스템 호출은 `svc-…`). 사번 규칙이 정해지면 `EMPLOYEE_ID_PATTERN`에 넣어 형식을 강제합니다.
+- key를 잃어버렸으면 화면의 "재발급"(`POST /api/v1/admin/api-clients/{id}/reissue`)으로 새 key를 받습니다. 원문은 저장하지 않아 다시 보여 줄 수 없습니다. 이전 key는 그 순간 끊기므로(다른 서버도 최대 1분 안에) 호출 서비스의 key를 곧바로 바꿉니다.
 - tenant 하나를 끊을 때는 `POST /api/v1/admin/api-clients/tenants/{tenant}/revoke`로 그 tenant의 키를 모두 폐기합니다(화면의 "tenant 전체 폐기").
 - 우리 쪽 `EXECUTOR_API_KEY`·`BATCH_API_KEY`는 executor·pr-batch에서 **모든 tenant**로 행세할 수 있는 키입니다. stg·prd에서는 레포 설정 파일이 아니라 배포 Secret으로만 주입하고, 교체는 상대 서비스 `key_sha256`에 새 해시를 먼저 추가해 배포한 뒤 우리 key를 바꾸고 옛 해시를 지우는 순서로 합니다.
 - 키 원문은 발급 응답에서 한 번만 보입니다. DB에는 SHA-256만 남습니다.
