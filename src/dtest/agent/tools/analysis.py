@@ -318,12 +318,14 @@ async def propose_plans(
                 runtime,
                 "계획 검증 실패. 사용자가 추천 워크플로우를 거절했으므로 "
                 f"workflow_id 후보를 쓸 수 없습니다: {', '.join(refused)}. "
-                f"calls로 새 계획을 {settings.plan_candidates}개 설계해 "
+                f"calls로 새 계획을 최대 {settings.plan_candidates}개 설계해 "
                 "다시 제안하세요.",
             )
     skills, tools = services.skills("analysis"), services.tool_catalog()
     prepared, problems = [], []
     references: dict[str, set[str]] = {}
+    seen: set[str] = set()  # _plan_key of the candidates kept
+    duplicates: list[str] = []
     for index, candidate in enumerate(
         candidates[: services.settings.plan_candidates]
     ):
@@ -373,6 +375,19 @@ async def propose_plans(
             ).items()
             if k in {s["key"] for s in slots}
         }
+        # the same calls and inputs as an earlier candidate (only the title
+        # or rationale differs): one card entry is enough. Two registered
+        # templates stay apart; a new plan copying one does not.
+        calls_key = _plan_key(document, values)
+        key = (
+            f"workflow:{source['workflow_id']}:{calls_key}"
+            if source
+            else calls_key
+        )
+        if key in seen:
+            duplicates.append(title)
+            continue
+        seen.update({key, calls_key})
         prepared.append(
             {
                 "title": title,
@@ -385,6 +400,13 @@ async def propose_plans(
                 ],
                 "input_values": values,
             }
+        )
+    if duplicates:
+        log.info(
+            "plan_duplicates_removed run_id=%s count=%d titles=%s",
+            ctx.run_id,
+            len(duplicates),
+            duplicates,
         )
     if problems:
         return _reply(
@@ -426,7 +448,7 @@ async def propose_plans(
         return _reply(
             runtime,
             "사용자가 추천 워크플로우를 거절했습니다. workflow_id 후보는 "
-            "쓰지 말고, calls로 새 계획을 "
+            "쓰지 말고, calls로 새 계획을 최대 "
             f"{settings.plan_candidates}개 설계해 propose_plans로 다시 "
             "제안하세요.",
             recommend={**recommend, "rejected": True},
@@ -499,6 +521,18 @@ async def propose_plans(
         f"계획 승인됨: {plan['title']} ({calls}).{note} "
         "run_plan으로 실행하세요.",
         plan=plan,
+    )
+
+
+def _plan_key(document: dict[str, Any], values: dict[str, Any]) -> str:
+    """What makes two candidates the same plan: their calls (tools,
+    arguments) and prefilled inputs. Name, user request and rationale are
+    left out, since the model words them differently for the same plan."""
+    return json.dumps(
+        {"steps": document["workflow"]["steps"], "inputs": values},
+        sort_keys=True,
+        ensure_ascii=False,
+        default=str,
     )
 
 

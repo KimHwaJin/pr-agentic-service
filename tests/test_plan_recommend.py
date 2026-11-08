@@ -329,12 +329,13 @@ def test_the_card_shape_documents_allow_reject_templates():
 
 def test_prompt_step_three_follows_the_mode():
     mixed = plan_recommend(_settings(plan_candidates=4))
-    assert "나머지 4-k개는 새로" in mixed
+    assert "새 계획은 최대 4-k개" in mixed
+    assert "개수를 채우지 말고" in mixed
     first = plan_recommend(
         _settings(plan_candidates=4, plan_recommend_mode="recommend_first")
     )
     assert "추천 워크플로우(`workflow_id` 후보)만" in first
-    assert "추천을 거절하면" in first and "새 계획을 4개" in first
+    assert "추천을 거절하면" in first and "새 계획을 최대 4개" in first
     assert "{n}" not in mixed + first
 
 
@@ -354,3 +355,63 @@ def test_auto_run_similarity_is_not_below_workflow_similarity():
     with pytest.raises(ValidationError):
         Settings(plan_recommend_mode="templates_only")
     Settings(workflow_similarity=0.9, workflow_auto_run_similarity=0.9)
+
+
+# --- repeated candidates -------------------------------------------------
+
+
+def test_the_same_plan_twice_is_one_card_entry(skills, tools, template, asked):
+    wf = Workflows({"w1": template}, [_hit("w1", 0.75, template)])
+    runtime = _runtime(skills, tools, wf)
+    _search(runtime)
+    reworded = NEW_PLAN | {"title": "같은 계획 다른 이름", "rationale": "x"}
+    other = NEW_PLAN | {"inputs": {"0.data_type": "nce"}}
+    _propose(
+        runtime,
+        [
+            _template_candidate("w1", template, tools),
+            NEW_PLAN,
+            reworded,
+            _template_candidate("w1", template, tools),
+            other,
+        ],
+    )
+    titles = [c["title"] for c in asked.seen[0]["candidates"]]
+    # other inputs make another plan
+    assert titles == ["템플릿 w1", "새 계획", "새 계획"]
+    assert asked.seen[0]["candidates"][2]["input_values"]
+
+
+def test_a_new_plan_copying_a_template_is_dropped(
+    skills, tools, template, asked
+):
+    wf = Workflows({"w1": template}, [_hit("w1", 0.75, template)])
+    runtime = _runtime(skills, tools, wf)
+    _search(runtime)
+    copied = {
+        "title": "복사한 계획",
+        "calls": analysis.plan_format.describe(template),
+        "inputs": _all_inputs(template, tools),
+    }
+    _propose(runtime, [_template_candidate("w1", template, tools), copied])
+    titles = [c["title"] for c in asked.seen[0]["candidates"]]
+    assert titles == ["템플릿 w1"]
+
+
+def test_two_templates_with_the_same_calls_stay_apart(
+    skills, tools, template, asked
+):
+    wf = Workflows(
+        {"w1": template, "w2": template},
+        [_hit("w1", 0.75, template), _hit("w2", 0.75, template)],
+    )
+    runtime = _runtime(skills, tools, wf)
+    _search(runtime)
+    _propose(
+        runtime,
+        [
+            _template_candidate("w1", template, tools),
+            _template_candidate("w2", template, tools),
+        ],
+    )
+    assert len(asked.seen[0]["candidates"]) == 2
