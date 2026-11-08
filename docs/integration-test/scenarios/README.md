@@ -50,7 +50,7 @@
 | [EXEC-03](EXEC-03.md) | 외부 tenant(`it-ext`) 키로 실행 제출 | P0 | 일부 | 운영 |  |
 | [EXEC-04](EXEC-04.md) | 키로 runtime·maintenance·attempts 경로 | P0 | O | 관리자 |  |
 | [EXEC-05](EXEC-05.md) | 결과물 `/artifacts/{id}`·`/view/artifacts/{id}` | P0 | O | 일반 |  |
-| [EXEC-06](EXEC-06.md) | 우리 tenant 키, `X-User-Id` 없이 GET / POST | P1 | O | 관리자 |  |
+| [EXEC-06](EXEC-06.md) | 일반키·마스터키의 조회 범위와 `X-User-Id` 필수 | P1 | O | 관리자 |  |
 | [EXEC-07](EXEC-07.md) | 우리 tenant 키로 남의 프로젝트·세션 헤더 | P1 | O | 관리자 |  |
 | [EXEC-08](EXEC-08.md) | 관리자 시스템 > 런타임·점검 탭 | P1 | 일부 | 관리자 |  |
 | [BAT-01](BAT-01.md) | 분석 노트북으로 스크립트 등록(`from-notebook`) | P0 | O | 일반 |  |
