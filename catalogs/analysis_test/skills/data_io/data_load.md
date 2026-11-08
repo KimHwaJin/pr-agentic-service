@@ -29,7 +29,7 @@ description: 분석할 데이터(NCE 공정 측정, WT 웨이퍼 테스트, FDC 
 
 ## typical_next_skills
 
-- `data_quality`, `dataset_preparation`, `eda_analysis`, `time_series`, `spc`, `wafer_map`, `statistical_test`, `modeling`
+- `data_quality`, `dataset_preparation`, `eda_analysis`, `anomaly_detection`, `time_series`, `spc`, `wafer_map`, `yield_analysis`, `statistical_test`, `modeling`, `visualization`
 
 ## Tool list
 

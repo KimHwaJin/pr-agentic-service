@@ -33,7 +33,7 @@ description: 결측값, 중복 행, 허용 범위를 벗어난 값을 점검하�
 
 ## typical_next_skills
 
-- `eda_analysis`, `statistical_test`, `dataset_preparation`, `modeling`
+- `eda_analysis`, `anomaly_detection`, `statistical_test`, `dataset_preparation`, `modeling`, `report_export`
 
 ## Tool list
 

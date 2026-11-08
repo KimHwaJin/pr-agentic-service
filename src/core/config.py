@@ -160,8 +160,8 @@ class Settings(BaseSettings):
     # how long a checkpoint write waits for a free connection
     checkpoint_pool_timeout_seconds: float = Field(30.0, gt=0)
     auto_migrate: bool = True
-    # Swagger UI, ReDoc and /openapi.json. Off unless turned on: the internal
-    # network rules forbid them even on the dev environment.
+    # Swagger UI, ReDoc and the OpenAPI schema. Off unless turned on: the
+    # internal network rules forbid them even on the dev environment.
     docs_enabled: bool = False
     # The web console (/dev/). Empty: on for local and dev only. True on prd
     # while the integration test runs before opening (testers use the
@@ -183,6 +183,8 @@ class Settings(BaseSettings):
     session_ttl_seconds: int = Field(1800, ge=60, le=86400)
     session_max_seconds: int = Field(43200, ge=300, le=7 * 86400)
     login_flow_ttl_seconds: int = Field(300, ge=60, le=1800)
+    # calls of the login routes per client IP and minute (0: no limit)
+    sso_rate_limit_per_minute: int = Field(30, ge=0, le=10000)
     dev_employee_id: str = "dev0001"
     dev_employee_name: str = "개발자"
     admin_employee_ids: list[str] = []
@@ -395,6 +397,16 @@ class Settings(BaseSettings):
     image_context_turns: int = (
         3  # images of the last N user turns reach the model
     )
+    # What one image counts as when the conversation's size is estimated for
+    # summarization (LangChain counts 85; a 1568 px image is ~1-1.5k).
+    image_tokens: int = Field(1500, ge=0)
+    # Figures of executed steps a vision model sees (0: none). The analyst
+    # sees those of the latest tool result before it decides the next step;
+    # report writers see those of the execution they report on. Never more
+    # than the model's max_images.
+    agent_tool_images: int = Field(4, ge=0, le=32)
+    report_max_images: int = Field(6, ge=0, le=32)
+    batch_report_max_images: int = Field(6, ge=0, le=32)
 
     # pr-batch.
     batch_base_url: str = "http://localhost:8100"

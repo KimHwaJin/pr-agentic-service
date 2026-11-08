@@ -98,7 +98,7 @@ async def current_user(
     services = get_services(request)
     request.state.api_client = None
     if request.cookies.get(services.settings.session_cookie_name):
-        return await _sso_login(request, services)
+        return await _session_user(request, services)
     _, _, user = await key_identity(request, services)
     assert user is not None
     return user
@@ -115,7 +115,7 @@ async def user_or_service(
     services = get_services(request)
     request.state.api_client = None
     if request.cookies.get(services.settings.session_cookie_name):
-        return await _sso_login(request, services)
+        return await _session_user(request, services)
     _, _, user = await key_identity(request, services, user_required=False)
     return user
 
@@ -133,12 +133,12 @@ async def sso_user(request: Request) -> User:
         if request.headers.get("x-api-key"):
             raise HTTPException(403, "This API needs an SSO login.")
         raise HTTPException(401, "Login required.")
-    return await _sso_login(request, services)
+    return await _session_user(request, services)
 
 
-async def _sso_login(request: Request, services: Services) -> User:
-    login = await request.app.state.sso.authenticate(request)
-    user = await _user(services, login.user_id)
+async def _session_user(request: Request, services: Services) -> User:
+    session = await request.app.state.sso.authenticate(request)
+    user = await _user(services, session.user_id)
     if user is None or not user.is_active:
         raise HTTPException(401, "Login required.")
     return user

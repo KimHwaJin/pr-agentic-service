@@ -6,7 +6,7 @@
 
 | 경로 | 방법 |
 |---|---|
-| 화면 | 워크플로우 탭 → **워크플로우 업로드** → `.json` 파일 선택 또는 문서 붙여넣기 → **검증** → **등록** |
+| 화면 | 워크플로우 탭 → **워크플로우 만들기** → 오른쪽 skill·tool 목록에서 **+ 추가**로 흐름을 쌓거나, `.json` 파일 선택 또는 문서 붙여넣기 → **검증** → **등록** |
 | API | `POST /api/v1/workflows/validate`(검증만) → `POST /api/v1/workflows`(등록) |
 
 등록된 워크플로우는 **후보(candidate)** 다. 작성자에게만 보이고 추천 대상이 아니다. 상세 화면의 **공개(승격)**, 또는 `POST /api/v1/workflows/{id}/promote`로 **공개(template)** 하면 모든 사용자의 계획 추천 후보가 된다. 승격 권한은 `WORKFLOW_PROMOTION` 설정을 따른다. `author`(기본)면 작성자가, `admin`이면 SSO로 로그인한 관리자만 승격한다.
@@ -31,7 +31,7 @@
 | `user_queries` | string[] | 예 | 추천 질문. **최소 1개**. 이런 질문이 오면 이 워크플로우를 추천한다. 앞뒤 공백을 지우고 빈 값과 중복을 버린 뒤, 질문당 4000자, 최대 1000개까지 저장한다 |
 | `tags` | string[] | 아니요 | 분류 태그. 소문자로 바꾸고 중복을 없애 정렬해 저장한다. 기본값 `[]` |
 
-**(B) Workflow 1.0 문서만**: `workflow_version`과 `workflow`로 시작하는 문서다. 화면에서만 받으며, 추천 질문은 `workflow.user_request`로 미리 채워지므로 화면에서 고쳐 쓴다. API로 보낼 때는 (A) 형식으로 감싸야 한다.
+**(B) Workflow 1.0 문서만**: `workflow_version`과 `workflow`로 시작하는 문서다. 화면에서만 받는다. 추천 질문은 자동으로 채우지 않으므로 화면의 **추천 질문** 칸에 직접 적어야 등록된다. API로 보낼 때는 (A) 형식으로 감싸야 한다.
 
 예시 파일: [workflow_upload.example.json](workflow_upload.example.json). [workflow_static.example.json](workflow_static.example.json)을 (A) 형식으로 감싼 것이다.
 
@@ -47,6 +47,19 @@
 | `workflow.execution_mode` | 서버가 다시 계산한다. `conditional` Tool이 하나라도 있으면 `adaptive`, 없으면 `static` |
 | `workflow.allow_immediate_execution` | 필수 boolean. `true`여도 실제 즉시 실행은 서버 정책(유사도 `WORKFLOW_AUTO_RUN_SIMILARITY`, 필수 입력 충족)에 따른다 |
 | 정의되지 않은 필드 | 스키마가 `additionalProperties: false`라 거부된다 |
+
+## 3-1. 실행 방식 (등록된 워크플로우)
+
+| 실행 방식 | 조건 | 실행 |
+|---|---|---|
+| static | 모든 Tool이 `always` | 에이전트는 파라미터만 채운다(모르는 값은 사용자에게 묻는다). executor **SINGLE** 실행 한 번으로 정의된 그대로 돈다. 인자 수정, 재실행, 코드 추가가 없고, 실패하면 리포트 없이 실패로 끝나며 에이전트가 원인을 설명한다 |
+| adaptive | `conditional` Tool이 하나 이상 | 파라미터 처리는 static과 같다. executor **MULTI** 실행에서 앞 결과를 보고 conditional Tool의 실행 여부를 에이전트가 그때그때 정한다 |
+
+에이전트가 새로 짠 계획(등록된 워크플로우가 아닌 것)은 이 구분 없이 MULTI로 실행한다.
+
+## 3-2. 쓸 수 있는 skill과 tool 찾기
+
+`GET /api/v1/catalog/skills`(skill 목록)와 `GET /api/v1/catalog/tools?skill=`(그 skill의 tool: 실행 방식 `always`/`conditional`, 출력 이름), `GET /api/v1/catalog/tools/{name}?skill=`(파라미터의 필수 여부·기본값·설명)로 찾는다. `GET /api/v1/catalog/tools?q=`는 skill을 가로질러 tool을 검색한다. 목록은 페이지(`next_cursor`)로 나뉜다. `steps[].skill`, `tools[].tool`, `tools[].execution`, `tool_output.output`에 이 값을 그대로 쓰면 4절 의미 검증을 통과한다. skill 본문은 `GET /api/v1/catalog/skills/{name}`. 화면의 **워크플로우 만들기**는 같은 정보를 오른쪽 패널에 보여 준다(skill·tool을 그 자리에서 펼치고, 아래로 내리면 더 불러오며, 검색은 tool 검색). **+ 추가**를 누르면 그 tool 호출을 문서 끝에 붙인다(같은 skill이면 마지막 step에, 아니면 새 step). 필수 파라미터는 `source: input`으로, 직전 호출의 출력과 이름이 같은 파라미터는 그 출력의 `tool_output`으로 채운다.
 
 ## 4. 서버 검증 규칙
 

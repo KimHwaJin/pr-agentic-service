@@ -268,6 +268,10 @@ executor가 응답하지 않으면 502 `EXECUTOR_UNAVAILABLE`, 시간 초과는 
 | GET/PATCH/DELETE | `/workflows/{id}` | GET은 문서 전체 + `calls`(tool별 설명·파라미터 출처·앞 단계 참조, 계획 승인 화면과 같은 형식) + `mine`. PATCH는 `expected_revision` 필수. DELETE는 작성자, 또는 관리자(template·candidate 모두) |
 | POST | `/workflows/{id}/promote` | candidate → template (검색·추천 대상). `WORKFLOW_PROMOTION=author`(기본)이면 작성자가 자기 워크플로를, `admin`이면 관리자만(SSO 로그인) 아무 워크플로나 승격합니다. 목록·상세의 `can_promote`가 true면 승격 버튼을 보여 주면 됩니다. `admin` 모드의 관리자(SSO)에게는 목록·상세에 다른 사람의 candidate도 보입니다. |
 | POST | `/workflows/{id}/clone`, `/workflows/{id}/reindex` | |
+| GET | `/catalog/skills?q=&cursor=&limit=` | 워크플로우에 쓸 수 있는 분석 skill 목록(이름순, 페이지): `{items[]{name, description, category, tool_count}, next_cursor}`. `name`이 `steps[].skill`. `q`는 이름·설명 검색. DB가 아니라 서버가 읽은 skill/tool 파일(워크플로우 검증 기준과 같음)이고, tool 코드는 주지 않습니다. API 키 호출은 `X-User-Id` 없이도 됩니다 (아래 셋도 같음) |
+| GET | `/catalog/tools?skill=&q=&cursor=&limit=` | tool 목록(페이지): `{items[]{skill, name, execution(always\|conditional), summary, role, outputs[], broken}, next_cursor}`. `skill`을 주면 그 skill의 tool을 skill 표 순서로, 없으면 모든 skill의 tool을 skill 이름순으로 줍니다(같은 tool이 여러 skill에 있으면 skill마다 한 줄). `q`는 tool 이름·설명·역할 검색이라 skill을 몰라도 tool을 찾을 수 있습니다. `name`은 `tools[].tool`, `execution`은 `tools[].execution`, `outputs`는 `tool_output.output` |
+| GET | `/catalog/skills/{name}` | skill 하나와 본문(마크다운 `body`) |
+| GET | `/catalog/tools/{name}?skill=` | 그 skill에서의 tool 하나: 목록 필드 + `condition`, `condition_tool`, `signature`, `params[]{name, type, required, default, doc}`, `docstring` |
 
 ## 8. 배치 (pr-batch 진입점)
 

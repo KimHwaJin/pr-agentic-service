@@ -42,6 +42,7 @@ COOKIE_SAMESITE: lax
 SESSION_TTL_SECONDS: 1800
 SESSION_MAX_SECONDS: 43200
 LOGIN_FLOW_TTL_SECONDS: 300
+SSO_RATE_LIMIT_PER_MINUTE: 30
 # SSO_ADAPTER=dev only
 DEV_EMPLOYEE_ID: dev0001
 DEV_EMPLOYEE_NAME: 개발자
@@ -161,6 +162,13 @@ IMAGE_MAX_BYTES: 10485760
 IMAGE_MAX_TOTAL_BYTES: 20971520
 REQUEST_MAX_BYTES: 33554432
 IMAGE_CONTEXT_TURNS: 3
+# one image in the summarization size estimate (tokens)
+IMAGE_TOKENS: 1500
+# step figures a vision model sees (0: off): the analyst (latest tool
+# result), chat reports, batch reports; capped by the model's MAX_IMAGES
+AGENT_TOOL_IMAGES: 4
+REPORT_MAX_IMAGES: 6
+BATCH_REPORT_MAX_IMAGES: 6
 
 # pr-batch. Our key there (BATCH_API_KEY) is a secret: env only.
 # Reports of successful BATCH executions; empty model = the default model.

@@ -5,7 +5,12 @@ Plan = Workflow 1.0 document + run bindings, kept in graph state:
      "source": {...} | None,
      "calls": {"s.t": {"status": pending|succeeded|failed|skipped,
                        "reason"?, "step_id"?}},
-     "custom": [{"id", "purpose", "status", "step_id"}]}
+     "custom": [{"id", "purpose", "status", "step_id"}],
+     "mode": "static" | "adaptive" | "agent", "reported"?: bool}
+A static plan (a registered workflow with no conditional call) runs as
+written in one executor SINGLE execution: no revised args, no custom code,
+no second run, and no report when it fails. An adaptive one runs in the
+session's MULTI kernel, the agent deciding its conditional calls.
 Execution = the session's executor MULTI execution (one kernel, one
 notebook):
     {"id", "version", "next_sequence", "alive": bool,
@@ -58,10 +63,17 @@ EXECUTION_TOOLS = ("run_plan", "run_custom_code")
 
 
 def _reply(
-    runtime: Runtime, content: str, failed: bool = False, **update: Any
+    runtime: Runtime,
+    content: str,
+    failed: bool = False,
+    figures: list[list[str]] | None = None,
+    **update: Any,
 ) -> Command:
     """failed: the result is an error (a failed execution), so the
-    failure limit counts it."""
+    failure limit counts it. figures: [label, path] of the steps' images,
+    kept on the message (artifact) for a vision analyst
+    (agent.middleware.persona); the model never sees the artifact itself.
+    """
     return Command(
         update={
             **update,
@@ -70,6 +82,7 @@ def _reply(
                     content,
                     tool_call_id=runtime.tool_call_id,
                     status="error" if failed else "success",
+                    artifact={"figures": figures} if figures else None,
                 )
             ],
         }
@@ -79,6 +92,23 @@ def _reply(
 def _approved(plan: dict[str, Any] | None) -> TypeGuard[dict[str, Any]]:
     """A plan the user approved (custom code alone leaves one without it)."""
     return bool(plan and plan.get("document"))
+
+
+def plan_mode(source: dict[str, Any] | None, document: dict) -> str:
+    """static/adaptive for a registered workflow, agent for a new plan."""
+    return spec.execution_mode(document) if source else "agent"
+
+
+def _static(plan: dict[str, Any] | None) -> TypeGuard[dict[str, Any]]:
+    return plan is not None and plan.get("mode") == "static"
+
+
+STATIC_FAILED = (
+    "등록된 static 워크플로우는 정의된 그대로 한 번만 실행되고, 실패하면 "
+    "그대로 실패로 끝납니다. 인자 수정, 재실행, 코드 추가, 리포트 작성은 "
+    "하지 마세요. 실패한 호출과 오류를 근거로 원인을 사용자에게 설명한 뒤 "
+    "finish_analysis로 마치세요."
+)
 
 
 def _owner(runtime: Runtime) -> SourceOwner:
@@ -450,6 +480,7 @@ async def propose_plans(
             for c in spec.calls(chosen["document"])
         },
         "custom": [],
+        "mode": plan_mode(chosen["source"], chosen["document"]),
     }
     await ctx.emit(
         "plan_approved",
@@ -589,6 +620,8 @@ async def revise_call(
     plan = runtime.state.get("plan")
     if not _approved(plan):
         return _reply(runtime, "승인된 계획이 없습니다.")
+    if _static(plan):
+        return _reply(runtime, STATIC_FAILED)
     key = _call_key(plan, call)
     if key is None:
         return _reply(runtime, f"{call}번 호출이 없습니다.")
@@ -721,12 +754,13 @@ async def _submit(
     steps: list[dict[str, Any]],
     labels: list[str],
     folder: str,
+    single: bool = False,
 ) -> tuple[dict, dict]:
     return tuple(
         await _once(
             runtime,
             "submit",
-            lambda: _submit_now(runtime, steps, labels, folder),
+            lambda: _submit_now(runtime, steps, labels, folder, single),
         )
     )
 
@@ -774,15 +808,34 @@ async def _submit_now(
     steps: list[dict[str, Any]],
     labels: list[str],
     folder: str,
+    single: bool = False,
 ) -> list[dict]:
     """Append to the live execution or open a new MULTI execution.
 
-    Returns [receipt, execution].
+    single (a static workflow): always a new SINGLE execution, which takes
+    no further operation; a live MULTI kernel of the session is finalized
+    first so it does not wait out its timeout. Returns [receipt, execution].
     """
     ctx = runtime.context
     settings = ctx.services.settings
     executor = ctx.services.executor
     execution: dict[str, Any] | None = runtime.state.get("execution")
+    if single:
+        if execution and execution.get("alive"):
+            try:
+                await executor.finalize(
+                    execution["id"],
+                    who=_who(runtime, execution),
+                    idempotency_key=_key(runtime, "close"),
+                    expected_version=execution["version"],
+                )
+            except ExecutorError as exc:  # already over, or moved on
+                log.warning(
+                    "close_before_single_failed execution=%s code=%s",
+                    execution["id"],
+                    exc.code,
+                )
+        execution = None
     if execution and execution.get("alive"):
         for i, step in enumerate(steps):
             step["sequence"] = execution["next_sequence"] + i
@@ -814,7 +867,9 @@ async def _submit_now(
             who=_who(runtime),
             steps=steps,
             profile=settings.executor_runtime_profile,
-            wait_seconds=settings.executor_operation_wait_seconds,
+            wait_seconds=None
+            if single
+            else settings.executor_operation_wait_seconds,
             metadata={"service": "pr-agentic-service", "run_id": ctx.run_id},
         )
         execution = {
@@ -968,6 +1023,17 @@ async def run_plan(
         if (key := _call_key(plan, ref))
     }
     number = {c.key: i for i, c in enumerate(spec.calls(plan["document"]))}
+    single = _static(plan)
+    states = [s["status"] for s in plan["calls"].values()]
+    if single and any(s != "pending" for s in states):
+        if all(s == "succeeded" for s in states):
+            return _reply(
+                runtime,
+                "계획의 모든 호출이 끝났습니다. "
+                "결과를 해석하고 write_report를 호출하세요.",
+                plan=plan,
+            )
+        return _reply(runtime, STATIC_FAILED, plan=plan)
     execution = runtime.state.get("execution")
     if execution and execution.get("alive"):
         status = (await ctx.services.executor.get(execution["id"]))["state"]
@@ -1047,7 +1113,9 @@ async def run_plan(
             }
         )
         labels.append(call.key)
-    receipt, execution = await _submit(runtime, steps, labels, folder)
+    receipt, execution = await _submit(
+        runtime, steps, labels, folder, single=single
+    )
     event = _wait_operation(execution, receipt)
     execution, results, error = _apply_event(execution, event)
 
@@ -1079,11 +1147,20 @@ async def run_plan(
             if v["status"] == "pending"
         ],
     }
+    failed = bool(error) or any(
+        r["status"] not in ("SUCCEEDED", "NOT_RUN") for r in ordered
+    )
+    if single and (failed or summary["pending_calls"]):
+        summary["static_workflow"] = STATIC_FAILED
     return _reply(
         runtime,
         json.dumps(summary, ensure_ascii=False, default=str),
-        failed=bool(error)
-        or any(r["status"] not in ("SUCCEEDED", "NOT_RUN") for r in ordered),
+        failed=failed,
+        figures=[
+            [f"#{r['call']} {r['tool']}", path]
+            for r in ordered
+            for path in r.get("images") or []
+        ],
         plan=plan,
         execution=execution,
     )
@@ -1110,6 +1187,15 @@ async def run_custom_code(
             runtime,
             "현재 코드 레벨(1)에서는 직접 작성한 코드를 실행할 수 없습니다. "
             "등록된 tool만 사용하세요.",
+        )
+    current = runtime.state.get("plan")
+    if _static(current) and not current.get("reported"):
+        return _reply(
+            runtime,
+            "등록된 static 워크플로우에는 코드를 덧붙일 수 없습니다. "
+            "결과로 답하거나(성공했으면 write_report), 실패했으면 원인을 "
+            "설명하고 마치세요. 다른 분석이 필요하면 새 계획을 "
+            "propose_plans로 제안하세요.",
         )
     answer = interrupt(
         {
@@ -1181,7 +1267,14 @@ async def run_custom_code(
         default=str,
     )
     failed = bool(error) or view["status"] != "SUCCEEDED"
-    return _reply(runtime, body, failed=failed, plan=plan, execution=execution)
+    return _reply(
+        runtime,
+        body,
+        failed=failed,
+        figures=[[custom_id, path] for path in view.get("images") or []],
+        plan=plan,
+        execution=execution,
+    )
 
 
 # --- wrap-up -----------------------------------------------------------------
@@ -1202,6 +1295,10 @@ async def write_report(title: str, focus: str, runtime: Runtime) -> Command:
     plan = runtime.state.get("plan")
     if not execution:
         return _reply(runtime, "실행된 분석이 없습니다.")
+    if _static(plan) and any(
+        s["status"] != "succeeded" for s in plan["calls"].values()
+    ):
+        return _reply(runtime, STATIC_FAILED)
     if execution.get("alive"):
         try:
             await _once(
@@ -1310,6 +1407,7 @@ async def write_report(title: str, focus: str, runtime: Runtime) -> Command:
         f"리포트 게시 완료 (report={links['report']}, "
         f"notebook={links['notebook']}).\n\n{markdown[:6000]}",
         execution=None,
+        plan={**plan, "reported": True} if plan else plan,
     )
 
 

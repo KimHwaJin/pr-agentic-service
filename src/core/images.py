@@ -62,7 +62,35 @@ def prepare(encoded: str, mime_type: str, max_bytes: int) -> Prepared:
         raise ImageError("not a readable image") from None
     if image.format != FORMATS[mime_type]:
         raise ImageError(f"content is {image.format}, not {mime_type}")
-    if max(image.size) <= MAX_SIDE:
+    return _fit(image, raw, mime_type)
+
+
+def fit_file(raw: bytes) -> Prepared:
+    """An image file someone else wrote (a step's figure) for the model.
+
+    PNG, JPEG and WEBP keep their type; any other raster format becomes a
+    PNG. Shrunk like ``prepare``.
+    """
+    try:
+        image = PILImage.open(io.BytesIO(raw))
+        width, height = image.size
+        if width * height > MAX_PIXELS:
+            raise ImageError(f"image is larger than {MAX_PIXELS} pixels")
+        image.load()
+    except (UnidentifiedImageError, OSError, PILImage.DecompressionBombError):
+        raise ImageError("not a readable image") from None
+    mime_type = next(
+        (m for m, f in FORMATS.items() if f == image.format), None
+    )
+    if mime_type is None:
+        mime_type, raw = "image/png", b""  # re-encoded below
+        if image.mode not in ("RGB", "RGBA", "L", "LA"):
+            image = image.convert("RGBA")
+    return _fit(image, raw, mime_type)
+
+
+def _fit(image: PILImage.Image, raw: bytes, mime_type: str) -> Prepared:
+    if raw and max(image.size) <= MAX_SIDE:
         return Prepared(raw, mime_type, *image.size)
     image.thumbnail((MAX_SIDE, MAX_SIDE))
     if FORMATS[mime_type] == "JPEG" and image.mode not in ("RGB", "L"):

@@ -1,6 +1,6 @@
 ---
 name: time_series
-description: 설비 센서처럼 시간에 따라 쌓인 값의 추세, 이동 평균, 평균이 바뀐 시점(변화점), 주기 성분을 분석하는 skill.
+description: 설비 센서처럼 시간에 따라 쌓인 값의 추세(유의성과 기울기), 이동 평균, 평균이 바뀐 시점(변화점), 주기 성분을 분석하는 skill.
 ---
 
 # Time Series
@@ -10,6 +10,7 @@ description: 설비 센서처럼 시간에 따라 쌓인 값의 추세, 이동 �
 - 일정 간격으로 묶어 집계 (`resample_series`)
 - 이동 평균·이동 표준편차와 그래프 (`rolling_stats`)
 - 평균이 크게 바뀐 시점 찾기 (`detect_change_points`)
+- 꾸준히 오르거나 내리는 추세의 유의성과 하루당 기울기, Mann-Kendall·Theil-Sen (`trend_test`)
 - 추세·주기·잔차 분해 (`decompose_series`)
 
 ## limitations
@@ -41,4 +42,5 @@ description: 설비 센서처럼 시간에 따라 쌓인 값의 추세, 이동 �
 | `resample_series` | 항상 실행 | 시계열을 일·시간 단위로 정리할 때 | 없음 | 간격별 집계 |
 | `rolling_stats` | 항상 실행 | 추세를 볼 때 | 없음 | 이동 평균 |
 | `detect_change_points` | 항상 실행 | 값이 바뀐 시점을 찾을 때 | 없음 | 변화점 탐지 |
+| `trend_test` | 항상 실행 | drift·추세가 유의한지, 얼마나 빠른지 볼 때 | 없음 | 추세 검정 |
 | `decompose_series` | 조건부 실행 | 주기 성분(하루 주기 등)을 따로 봐야 하고, `resample_series` 결과 행 수가 주기의 2배 이상일 때 | `resample_series` | 추세·주기 분해 |
