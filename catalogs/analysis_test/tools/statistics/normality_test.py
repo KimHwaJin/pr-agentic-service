@@ -14,6 +14,8 @@ def normality_test(
 
     Returns:
         {"is_normal": bool, "p_values": dict, "groups": int, "method": str}
+        표본이 8개 미만인 그룹은 검정할 수 없어 p_values가 null이고,
+        그런 그룹이 있으면 is_normal은 false입니다.
     """
     from scipy import stats
 
@@ -29,9 +31,12 @@ def normality_test(
     )
     p_values = {}
     for name, values in groups.items():
+        if len(values) < 8:  # the test is undefined below 8 values
+            p_values[name] = None
+            continue
         sample = values.sample(min(len(values), 5000), random_state=0)
         p_values[name] = float(stats.normaltest(sample).pvalue)
-    normal = all(p >= alpha for p in p_values.values())
+    normal = all(p is not None and p >= alpha for p in p_values.values())
     print(f"normality_test: {value_column} normal={normal} p={p_values}")
     return {
         "is_normal": normal,
