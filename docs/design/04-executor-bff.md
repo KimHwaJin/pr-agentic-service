@@ -80,4 +80,4 @@
 - 범위: 2.1(필수 8개) + 2.3(관리자용: diagnostics, attempts, runtime-targets, runtime-pools, maintenance 조회) + **런타임 등록 `POST /runtime-targets`(관리자)**. 2.2(operation 단위)는 넣지 않음.
 - 경로: `/api/v1/executor/...`에 executor와 같은 모양.
 - 요청·응답: executor 본문 그대로. 관리자 쓰기는 `X-User-Id`(요청한 관리자)로 기록됨. executor는 body `actor`를 받지 않음(2026-11-03, 보내면 422).
-- 런타임 조작(probe, drain, activate, disable, purge)과 executor 점검 조작(maintenance drain, activate, runs 생성·조회)도 관리자 전용으로 열었음.
+- 런타임 조작(probe, drain, activate, disable, 등록 삭제는 `DELETE /runtime-targets/{id}`)과 executor 점검 조작(maintenance drain, activate, runs 생성·조회)도 관리자 전용으로 열었음.

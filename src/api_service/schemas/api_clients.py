@@ -1,10 +1,13 @@
 """Keys of the services and agents that call this API."""
 
 from datetime import datetime
+from typing import Literal
 
 from pydantic import Field
 
 from api_service.schemas.base import Model
+
+ApiClientKind = Literal["standard", "master"]
 
 
 class ApiClientCreate(Model):
@@ -13,6 +16,9 @@ class ApiClientCreate(Model):
     tenant: str = Field(pattern=r"^[a-z][a-z0-9-]{1,62}[a-z0-9]$")
     # required to issue a key of this service's own tenant
     own_tenant: bool = False
+    # standard (일반키): gateway reads see only X-User-Id's own; master
+    # (마스터키): gateway reads see the whole tenant, user_id narrows them
+    kind: ApiClientKind = "standard"
     description: str | None = Field(None, max_length=2000)
 
 
@@ -20,6 +26,7 @@ class ApiClientRead(Model):
     id: str
     name: str
     tenant: str
+    kind: ApiClientKind = "standard"
     key_prefix: str
     status: str
     description: str | None

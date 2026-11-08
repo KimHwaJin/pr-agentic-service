@@ -4,14 +4,23 @@
 
 ## 1. API 키 발급 기준
 
-`POST /api/v1/admin/api-clients`로 만드는 키는 두 종류입니다. 어떤 tenant가 executor·pr-batch를 쓸 수 있는지는 이 발급으로만 정합니다(2026-11-01). 두 서비스는 우리 key에 모든 tenant를 허용하므로(`allowed_tenants: ["*"]`), 새 tenant를 위해 두 서비스 설정을 바꾸거나 다시 배포할 일이 없습니다. 발급한 키는 바로 사용 중이 됩니다.
+`POST /api/v1/admin/api-clients`로 만드는 키는 tenant 기준으로 두 가지이고, 종류(`kind`)로 다시 일반키와 마스터키로 나뉩니다. 어떤 tenant가 executor·pr-batch를 쓸 수 있는지는 이 발급으로만 정합니다(2026-11-01). 두 서비스는 우리 key에 모든 tenant를 허용하므로(`allowed_tenants: ["*"]`), 새 tenant를 위해 두 서비스 설정을 바꾸거나 다시 배포할 일이 없습니다. 발급한 키는 바로 사용 중이 됩니다.
 
 | 종류 | 권한 | 발급 대상 |
 |---|---|---|
-| 우리 tenant 키 (`tenant`에 우리 tenant + `own_tenant: true`) | `X-User-Id` 없이 executor·배치 중계를 GET하면 **우리 tenant 전체 사용자**의 실행·아티팩트·배치를 읽습니다(시스템 조회). `X-User-Id`를 붙이면 그 사용자로 동작합니다. | 우리 팀이 운영하는 서버 간 연동(배치 서버, 모니터링 등)만. 개인·다른 팀에는 발급하지 않습니다. |
+| 우리 tenant 키 (`tenant`에 우리 tenant + `own_tenant: true`) | 우리 사용자로 executor·배치 중계를 부릅니다. 마스터키로 발급하면 조회가 **우리 tenant 전체 사용자**의 실행·아티팩트·배치를 봅니다. | 우리 팀이 운영하는 서버 간 연동(배치 서버, 모니터링 등)만. 개인·다른 팀에는 발급하지 않습니다. |
 | 다른 tenant 키 (`tenant` 지정) | 그 tenant 범위만 읽고 씁니다. | 다른 팀 서비스 |
 
-- 우리 tenant 키는 사실상 관리자 읽기 권한이므로, 발급 시 `description`에 용도와 담당자를 적고 분기마다 `GET /api/v1/admin/api-clients`로 쓰지 않는 키를 `/revoke`합니다.
+종류(`kind`, 2026-11-08). 두 종류 모두 executor·배치 게이트웨이의 모든 호출에 `X-User-Id`가 필수입니다("누가 호출했나"를 남기는 값). 쓰기(제출·취소 등)는 두 종류가 같고 `X-User-Id` 사용자로 만들어집니다.
+
+| kind | 게이트웨이 조회 범위 | 쿼리 `user_id` |
+|---|---|---|
+| `standard` (일반키, 기본값) | `X-User-Id` 사용자 것만 | 안 넣어도 됩니다. `X-User-Id`와 다른 값은 403 `FORBIDDEN` |
+| `master` (마스터키) | tenant 전체 | 넣으면 그 사용자 것으로 거릅니다 |
+
+- 2026-11-08 이전에 발급한 키는 모두 일반키입니다. 예전처럼 `X-User-Id` 없이 tenant 전체를 읽던 연동은 마스터키를 새로 발급받아 바꿔야 합니다(그 전에는 `X-User-Id` 없는 요청이 400입니다).
+
+- 마스터키(특히 우리 tenant 마스터키)는 사실상 관리자 읽기 권한이므로, 발급 시 `description`에 용도와 담당자를 적고 분기마다 `GET /api/v1/admin/api-clients`로 쓰지 않는 키를 `/revoke`합니다.
 - 다른 tenant 키를 발급할 때 그 호출자에게 `X-User-Id`로 **SSO 사번**을 보내기로 약속받습니다(시스템 호출은 `svc-…`). 사번 규칙이 정해지면 `EMPLOYEE_ID_PATTERN`에 넣어 형식을 강제합니다.
 - tenant 하나를 끊을 때는 `POST /api/v1/admin/api-clients/tenants/{tenant}/revoke`로 그 tenant의 키를 모두 폐기합니다(화면의 "tenant 전체 폐기").
 - 우리 쪽 `EXECUTOR_API_KEY`·`BATCH_API_KEY`는 executor·pr-batch에서 **모든 tenant**로 행세할 수 있는 키입니다. stg·prd에서는 레포 설정 파일이 아니라 배포 Secret으로만 주입하고, 교체는 상대 서비스 `key_sha256`에 새 해시를 먼저 추가해 배포한 뒤 우리 key를 바꾸고 옛 해시를 지우는 순서로 합니다.

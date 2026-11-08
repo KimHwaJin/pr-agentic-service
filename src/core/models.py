@@ -441,6 +441,12 @@ class ApiClient(Timestamped, Base):
     key_sha256: Mapped[str] = mapped_column(String(64), unique=True)
     # active | revoked
     status: Mapped[str] = mapped_column(String(16), default="active")
+    # standard: the gateways read only what X-User-Id owns; master: their
+    # reads cover the whole tenant (a user_id query narrows them). Writes
+    # are the same for both: X-User-Id is who they are made for.
+    kind: Mapped[str] = mapped_column(
+        String(16), default="standard", server_default="standard"
+    )
     description: Mapped[str | None] = mapped_column(Text)
     created_by: Mapped[str] = mapped_column(ID)
     revoked_at: Mapped[datetime | None] = mapped_column(
