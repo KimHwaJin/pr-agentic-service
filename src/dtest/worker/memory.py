@@ -184,22 +184,27 @@ def take_chunk(
     return chunk
 
 
-def parse_ops(text: str) -> list[dict[str, Any]]:
-    """The model's ``{"ops": [...]}`` (or a bare list); [] if unreadable."""
+def read_ops(text: str) -> tuple[list[dict[str, Any]], str]:
+    """The model's ``{"ops": [...]}`` (or a bare list) and how it read:
+    ``ok``, ``no_json`` or ``unparseable`` (the last two give no ops)."""
     start = min(
         (i for i in (text.find("{"), text.find("[")) if i >= 0), default=-1
     )
     if start < 0:
-        return []
+        return [], "no_json"
     try:
         value = json_repair.loads(text[start:])
     except Exception:  # noqa: BLE001
-        return []
+        return [], "unparseable"
     if isinstance(value, dict):
-        value = value.get("ops", [])
+        value = value.get("ops")
     if not isinstance(value, list):
-        return []
-    return [op for op in value if isinstance(op, dict)]
+        return [], "unparseable"
+    return [op for op in value if isinstance(op, dict)], "ok"
+
+
+def parse_ops(text: str) -> list[dict[str, Any]]:
+    return read_ops(text)[0]
 
 
 @dataclass
@@ -441,6 +446,12 @@ class MemoryWorker:
             )
             if chunk:
                 await self.extract(state.project_id, chunk)
+            else:
+                log.info(
+                    "memory_extract_skipped project=%s messages=0 "
+                    "reason=no_messages",
+                    state.project_id,
+                )
         except asyncio.CancelledError:
             raise
         except Exception as exc:  # noqa: BLE001
@@ -480,6 +491,11 @@ class MemoryWorker:
         """One model call for the chunk; returns the changed topic ids."""
         user_texts = [m.content for m in chunk if m.role == "user"]
         if all(is_trivial(t) for t in user_texts):
+            log.info(
+                "memory_extract_skipped project=%s messages=%d reason=trivial",
+                project_id,
+                len(chunk),
+            )
             return []  # covers a chunk with no user message too
         contents = await self.memory.contents(project_id)
         topics = {t["topic"] for t in contents}
@@ -494,7 +510,7 @@ class MemoryWorker:
         response = await chat_model(self.settings, model).ainvoke(
             [SystemMessage(prompt), HumanMessage(request)]
         )
-        ops = parse_ops(response.text)
+        ops, parsed = read_ops(response.text)
         by_topic: dict[str, list[dict[str, Any]]] = {}
         for op in ops:
             # "section": the name before topics were editable
@@ -519,6 +535,16 @@ class MemoryWorker:
             if view:
                 changed.append(topic_id)
                 await self.announce(chunk, view)
+        log.info(
+            "memory_extract_done project=%s messages=%d ops=%d "
+            "parse_failed=%s parse_status=%s saved_topics=%d",
+            project_id,
+            len(chunk),
+            len(ops),
+            str(parsed != "ok").lower(),
+            parsed,
+            len(changed),
+        )
         return changed
 
     async def apply(
