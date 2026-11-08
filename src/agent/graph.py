@@ -24,6 +24,7 @@ from agent.middleware import (
     JsonArgumentsMiddleware,
     PersonaMiddleware,
     ReportingSummarizationMiddleware,
+    ToolCallDedupMiddleware,
     ToolFailureLimitMiddleware,
     TurnModelCallLimitMiddleware,
     compaction_rules,
@@ -110,6 +111,8 @@ class AgentGraphs:
             middleware: list[AgentMiddleware[Any, Any, Any]] = [
                 PersonaMiddleware(),
                 JsonArgumentsMiddleware(),
+                # before the tools run: one plan card per response
+                ToolCallDedupMiddleware(),
                 ToolFailureLimitMiddleware(
                     self.settings.agent_tool_failure_limit,
                     self.settings.agent_tool_failure_any_limit,

@@ -3,6 +3,7 @@
 - persona: two personas in one graph (prompt, tools, memory, images,
   stall recovery)
 - json_arguments: nested arguments that arrive as JSON strings
+- tool_call_dedup: repeated calls in one model response (one plan card)
 - tool_failures: stops a tool failing the same way again and again
 - turn_limit: model calls of one user turn, across resumes
 - compaction: generic; trims the tool traffic of finished segments
@@ -17,6 +18,7 @@ from agent.middleware.summarization import (
     ReportingSummarizationMiddleware,
     summary_token_counter,
 )
+from agent.middleware.tool_call_dedup import ToolCallDedupMiddleware
 from agent.middleware.tool_failures import ToolFailureLimitMiddleware
 from agent.middleware.turn_limit import TurnModelCallLimitMiddleware
 
@@ -24,6 +26,7 @@ __all__ = [
     "JsonArgumentsMiddleware",
     "PersonaMiddleware",
     "ReportingSummarizationMiddleware",
+    "ToolCallDedupMiddleware",
     "ToolFailureLimitMiddleware",
     "ToolResultCompactionMiddleware",
     "TurnModelCallLimitMiddleware",
