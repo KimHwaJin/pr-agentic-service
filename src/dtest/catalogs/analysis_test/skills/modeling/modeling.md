@@ -32,7 +32,7 @@ description: 목표 값(수율, 불량 여부 등)에 영향이 큰 변수를 �
 
 ## typical_previous_skill
 
-- `data_load`, `dataset_preparation`, `data_quality`
+- `data_load`, `dataset_preparation`, `data_quality`, `visualization`, `yield_analysis`
 
 ## typical_next_skills
 

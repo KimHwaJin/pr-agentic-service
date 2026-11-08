@@ -35,13 +35,24 @@ def xgboost_model(
 
     if target_column not in data:
         raise ValueError(f"목표 컬럼 '{target_column}'이 데이터에 없습니다.")
-    skip = {target_column, "alias_lot_id", "wf_id", "x", "y", "timestamp"}
+    skip = {
+        target_column,
+        "alias_lot_id",
+        "wf_id",
+        "x",
+        "y",
+        "timestamp",
+        "PT1H.symbol",  # restates pass/fail, it would explain PT1H.p_f alone
+        "PT1H.end_tm",
+    }
     features = feature_columns or [c for c in data.columns if c not in skip]
     frame = data[list(features) + [target_column]].dropna()
     X = pd.get_dummies(frame[features], drop_first=False).astype(float)
     X.columns = [str(c).replace("[", "(").replace("]", ")") for c in X.columns]
     target = frame[target_column]
-    classify = target.dtype == object or target.nunique() <= 2
+    classify = (
+        not pd.api.types.is_numeric_dtype(target) or target.nunique() <= 2
+    )
     params = dict(
         n_estimators=n_estimators,
         max_depth=max_depth,

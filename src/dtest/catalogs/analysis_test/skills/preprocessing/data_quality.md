@@ -16,6 +16,7 @@ description: 결측값, 중복 행, 허용 범위를 벗어난 값을 점검하�
 
 - 결측값을 모델로 추정해 채우지 않음 (제거 또는 중앙값만)
 - 업무 규칙(정상 범위)은 사용자가 알려 주지 않으면 음수만 위반으로 봄
+- `clean_data`는 `clip_ranges`로 준 범위만 제거함. `validate_ranges`에서 나온 위반을 지우려면 그 범위를 `clip_ranges`로 넘겨야 함
 
 ## when_to_use
 
@@ -28,11 +29,11 @@ description: 결측값, 중복 행, 허용 범위를 벗어난 값을 점검하�
 
 ## typical_previous_skill
 
-- `data_load`
+- `data_load`, `anomaly_detection`
 
 ## typical_next_skills
 
-- `eda_analysis`, `anomaly_detection`, `statistical_test`, `dataset_preparation`, `report_export`
+- `eda_analysis`, `anomaly_detection`, `statistical_test`, `dataset_preparation`, `modeling`, `report_export`
 
 ## Tool list
 
@@ -41,4 +42,4 @@ description: 결측값, 중복 행, 허용 범위를 벗어난 값을 점검하�
 | `check_missing` | 항상 실행 | 데이터가 준비된 경우 | 없음 | 결측 점검 |
 | `check_duplicates` | 항상 실행 | 데이터가 준비된 경우 | 없음 | 중복 점검 |
 | `validate_ranges` | 항상 실행 | 데이터가 준비된 경우 | 없음 | 범위 위반 점검 |
-| `clean_data` | 조건부 실행 | 결측·중복·범위 위반 점검 결과 중 하나라도 문제가 있을 때 | `validate_ranges` | 정리된 데이터 생성 |
+| `clean_data` | 조건부 실행 | `check_missing`의 has_missing, `check_duplicates`의 has_duplicates, `validate_ranges`의 has_violations 중 하나라도 true일 때 (세 점검을 모두 본 뒤 판단) | `validate_ranges` | 정리된 데이터 생성 |

@@ -43,4 +43,4 @@ description: 공정 이상 여부를 관리도(개별값, X-bar·S, CUSUM)로 �
 | `control_chart` | 항상 실행 | 관리 상태를 볼 때 | 없음 | 관리도 |
 | `xbar_s_chart` | 항상 실행 | 부분군(웨이퍼, LOT, 날짜) 단위로 관리할 때 | 없음 | 평균·산포 관리도 |
 | `cusum_chart` | 조건부 실행 | `control_chart`의 out_of_control이 0이지만 작은 drift가 의심될 때 | `control_chart` | 작은 이동 탐지 |
-| `process_capability` | 조건부 실행 | 규격 하한(lsl)과 상한(usl)을 알 때 | `control_chart` | 공정능력 계산 |
+| `process_capability` | 항상 실행 | Cpk를 묻거나 규격 하한(lsl)과 상한(usl)이 있을 때. 값을 모르면 `$input`으로 둔다 | 없음 | 공정능력 계산 |

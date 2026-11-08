@@ -34,7 +34,7 @@ description: 그룹 간 평균·분포 차이(LOT끼리, 설비끼리 등), 어�
 
 ## typical_previous_skill
 
-- `data_load`, `dataset_preparation`
+- `data_load`, `data_quality`, `dataset_preparation`, `wafer_map`, `visualization`, `yield_analysis`
 
 ## typical_next_skills
 
@@ -44,7 +44,7 @@ description: 그룹 간 평균·분포 차이(LOT끼리, 설비끼리 등), 어�
 
 | Tool | 실행 방식 | 실행 조건 | condition_tool | 역할 |
 |---|---|---|---|---|
-| `normality_test` | 항상 실행 | 그룹 비교 전 | 없음 | 정규성 확인 |
+| `normality_test` | 항상 실행 | 그룹 비교 전. 그룹 수가 판단 근거이므로 `group_column`을 지정한다 | 없음 | 정규성 확인 |
 | `compare_groups_ttest` | 조건부 실행 | `normality_test`의 is_normal이 true이고 비교할 그룹이 2개일 때 | `normality_test` | 두 그룹 평균 비교 |
 | `compare_groups_nonparametric` | 조건부 실행 | `normality_test`의 is_normal이 false이고 비교할 그룹이 2개일 때 | `normality_test` | 두 그룹 분포 비교 |
 | `anova_test` | 조건부 실행 | `normality_test`의 is_normal이 true이고 groups가 3 이상일 때 | `normality_test` | 여러 그룹 평균 비교 |

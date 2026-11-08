@@ -13,7 +13,7 @@ def feature_importance(
     Args:
         data: 입력 DataFrame
         target_column: 목표 컬럼 (예: "yield_pct", "PT1H.p_f")
-        feature_columns: 사용할 변수 (None이면 목표·키 컬럼을 뺀 나머지)
+        feature_columns: 사용할 변수 (None이면 목표·키·WT 결과 컬럼 제외)
         n_estimators: 트리 수
         top_n: 돌려줄 상위 변수 수
 
@@ -26,12 +26,21 @@ def feature_importance(
 
     if target_column not in data:
         raise ValueError(f"목표 컬럼 '{target_column}'이 데이터에 없습니다.")
-    skip = {target_column, "alias_lot_id", "wf_id", "x", "y", "timestamp"}
+    skip = {
+        target_column,
+        "alias_lot_id",
+        "wf_id",
+        "x",
+        "y",
+        "timestamp",
+        "PT1H.symbol",  # restates pass/fail, it would explain PT1H.p_f alone
+        "PT1H.end_tm",
+    }
     features = feature_columns or [c for c in data.columns if c not in skip]
     frame = data[features + [target_column]].dropna()
     X = pd.get_dummies(frame[features], drop_first=False)
     y = frame[target_column]
-    classify = y.dtype == object or y.nunique() <= 2
+    classify = not pd.api.types.is_numeric_dtype(y) or y.nunique() <= 2
     model = (
         RandomForestClassifier(n_estimators=n_estimators, random_state=0)
         if classify

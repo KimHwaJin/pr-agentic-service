@@ -27,7 +27,7 @@ description: 두 변수의 관계를 산점도(회귀선, 그룹 색)로, 두 �
 
 ## typical_previous_skill
 
-- `data_load`, `dataset_preparation`
+- `data_load`, `dataset_preparation`, `anomaly_detection`, `yield_analysis`
 
 ## typical_next_skills
 

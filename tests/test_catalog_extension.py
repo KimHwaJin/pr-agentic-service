@@ -6,6 +6,7 @@ Structure tests run everywhere. Tool tests need the analysis libraries:
 """
 
 import ast
+import re
 import sys
 from pathlib import Path
 
@@ -484,3 +485,47 @@ def test_xgboost_model_finds_the_route_effect(data):
     edge = _tool("split_by_zone")(data["wt"])["data"]
     clf = _tool("xgboost_model")(edge, "PT1H.p_f", ["zone"])
     assert clf["task"] == "classification" and clf["score"] > 0.55
+
+
+def test_normality_with_small_groups_is_not_an_error(data):
+    # yield has 4 wafers per LOT; the test needs at least 8 values
+    out = _tool("normality_test")(data["yield"], "yield_pct", "alias_lot_id")
+    assert out["groups"] == 40
+    assert out["is_normal"] is False
+    assert set(out["p_values"].values()) == {None}
+
+
+def test_change_points_survive_missing_values(data):
+    fdc = data["fdc"].copy()
+    fdc.loc[fdc.index[::50], "CH_PRESSURE"] = float("nan")
+    out = _tool("detect_change_points")(
+        fdc, "CH_PRESSURE", group_column="eqp_id"
+    )
+    assert any(p["group"] == "ETCH_B" for p in out["change_points"])
+
+
+def test_modeling_leaves_wt_result_columns_out(data):
+    out = _tool("feature_importance")(
+        data["wt"].assign(extra=range(len(data["wt"]))),
+        "PT1H.p_f",
+        n_estimators=5,
+    )
+    assert {i["feature"] for i in out["importances"]} == {"extra"}
+
+
+def test_planning_map_lists_the_conditional_tools():
+    skills, tools, knowledge = _catalogs()
+    assert "analysis_planning_map" in knowledge.skills
+    text = (EXT / "knowledge/analysis_planning_map.md").read_text("utf-8")
+    section = text.split("## 조건부 tool 판단")[1].split("##")[0]
+    listed = set(re.findall(r"^\| `(\w+)` \|", section, re.M))
+    conditional = {
+        rule.tool
+        for skill in skills.skills.values()
+        for rule in skill.tools
+        if rule.execution == "conditional"
+    }
+    assert listed == conditional
+    outputs = text.split("## tool을 잇는 출력 이름")[1].split("##")[0]
+    named = set(re.findall(r"`(\w+)`", outputs)) & set(tools.tools)
+    assert {"load_synthetic", "merge_data", "sample_data"} <= named
