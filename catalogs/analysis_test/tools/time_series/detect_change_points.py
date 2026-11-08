@@ -22,7 +22,7 @@ def detect_change_points(
     found = []
     parts = data.groupby(group_column) if group_column else [("all", data)]
     for name, part in parts:
-        part = part.sort_values(time_column)
+        part = part.dropna(subset=[value_column]).sort_values(time_column)
         values = part[value_column].to_numpy(dtype=float)
         n = len(values)
         if n < 20:

@@ -4,7 +4,7 @@
 
 ## 켜고 끄기
 
-- 켜기: `config.{APP_ENV}.yml`에 `catalog_extensions: [catalogs/analysis_test]`, 로컬은 compose의 `CATALOG_EXTENSIONS` (지금은 로컬만 켜져 있음)
+- 켜기: `config.yml`의 `CATALOG_EXTENSIONS: ["catalogs/analysis_test"]`, 로컬은 compose의 `CATALOG_EXTENSIONS` (지금은 로컬만 켜져 있음)
 - 끄기(원복): 그 줄을 지우면 `assets/`만 읽습니다. `assets/`의 파일은 하나도 바꾸지 않았습니다.
 - 이름이 같으면 확장이 이깁니다. 이 카탈로그는 `data_load`, `dataset_preparation` skill을 덮어씁니다(합성 데이터 `load_synthetic`, 행 선택·집계·구역 tool 추가). 기본 tool(`extract_data` 등)은 그대로 읽힙니다.
 
@@ -23,7 +23,7 @@
 | `modeling` | `feature_importance`, `linear_regression`, `kmeans_clustering` |
 | `test_tools` (시험 전용) | `slow_operation`, `fragile_transform` |
 
-지식 문서: `analysis_datasets`, `fdc_sensor_data`, `yield_definitions`, `spc_basics` (기본 `semiconductor_test_data`도 그대로).
+지식 문서: `analysis_planning_map`(분석 계획 지도), `analysis_datasets`, `fdc_sensor_data`, `yield_definitions`, `spc_basics` (기본 `semiconductor_test_data`도 그대로).
 
 tool은 executor 커널에서 pandas, numpy, scipy, scikit-learn, statsmodels, matplotlib을 씁니다(로컬 executor 테스트 환경에 있음).
 

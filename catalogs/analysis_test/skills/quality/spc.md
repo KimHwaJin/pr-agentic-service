@@ -37,4 +37,4 @@ description: 공정 이상 여부를 관리도(관리 한계를 벗어난 점)�
 | Tool | 실행 방식 | 실행 조건 | condition_tool | 역할 |
 |---|---|---|---|---|
 | `control_chart` | 항상 실행 | 관리 상태를 볼 때 | 없음 | 관리도 |
-| `process_capability` | 조건부 실행 | 규격 하한(lsl)과 상한(usl)을 알 때 | `control_chart` | 공정능력 계산 |
+| `process_capability` | 항상 실행 | Cpk를 묻거나 규격 하한(lsl)과 상한(usl)이 있을 때. 값을 모르면 `$input`으로 둔다 | 없음 | 공정능력 계산 |
