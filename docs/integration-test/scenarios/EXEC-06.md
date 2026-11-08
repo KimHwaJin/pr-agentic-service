@@ -1,4 +1,4 @@
-# EXEC-06 우리 tenant 키, `X-User-Id` 없이 GET / POST
+# EXEC-06 일반키·마스터키의 조회 범위와 `X-User-Id` 필수
 
 | 항목 | 값 |
 | --- | --- |
@@ -11,19 +11,24 @@
 | 11/01판 ID | C6 |
 
 ## 1. 목적
-우리 tenant 키는 X-User-Id 없이 조회는 tenant 전체로 되고, 쓰기는 거부되는지 확인합니다.
+게이트웨이는 key 종류와 관계없이 `X-User-Id`를 요구하고(조회·쓰기 모두), 조회 범위는 key 종류가 정하는지 확인합니다. 일반키는 `X-User-Id` 사용자 것만, 마스터키는 tenant 전체(쿼리 `user_id`로 거르기)입니다.
 
 ## 2. 사전 조건
-- 우리 tenant 키
+- 우리 tenant 일반키, 우리 tenant 마스터키 (시스템 > API 키에서 종류를 골라 발급)
+- 실행이 있는 사용자 두 명 (A: 내 사번, B: 다른 사번)
 
 ## 3. 수행 절차
 1. 관리자로 **시스템 > API 호출 시험** 탭을 엽니다.
-2. 시나리오 **EXEC-06**을 고르고(X-User-Id 꺼짐) 보냅니다.
-3. 방식을 POST, 경로를 `/api/v1/executor/executions`로 바꾸고 EXEC-02 본문을 붙여 보냅니다.
+2. 시나리오 **EXEC-06**을 고르고(X-User-Id 꺼짐) 일반키로 보냅니다. 마스터키로도 보냅니다.
+3. 방식을 POST, 경로를 `/api/v1/executor/executions`로 바꾸고 EXEC-02 본문을 붙여 보냅니다(X-User-Id 꺼짐).
+4. 일반키, X-User-Id=A로 `GET /api/v1/executor/executions?limit=20`을 보내고, 이어서 `?user_id=B`를 붙여 보냅니다.
+5. 마스터키, X-User-Id=A로 `GET /api/v1/executor/executions?limit=20`을 보내고, 이어서 `?user_id=B`를 붙여 보냅니다.
 
 ## 4. 예상 결과
-- 2: 200, 여러 사용자의 실행
-- 3: 400
+- 2: 두 key 모두 400 `INVALID_IDENTITY`
+- 3: 400 `INVALID_IDENTITY`
+- 4: 처음은 200, A의 실행만. `user_id=B`는 403 `FORBIDDEN`
+- 5: 처음은 200, 여러 사용자의 실행. `user_id=B`는 200, B의 실행만 (executor의 user_id 필터 반영 후)
 
 ## 5. 확인 방법
 API 호출 시험 결과

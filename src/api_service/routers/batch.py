@@ -2,8 +2,10 @@
 
 ``/api/v1/batch/{path}`` relays to pr-batch ``/api/v1/{path}`` with our key
 (``X-Api-Key: BATCH_API_KEY``) and the caller as ``X-User-Id``: the SSO user,
-or the user a key caller names. pr-batch shows each user only their own
-batches and scripts (404 otherwise).
+or the user a key caller names (always sent to us). pr-batch shows each
+user only their own batches and scripts (404 otherwise). A master key's
+reads go without ``X-User-Id``, over the tenant, its ``user_id`` query as
+the filter (``deps.gateway_scope``).
 
 Reports of finished batch runs are not asked for by pr-batch: the worker
 starts one when the executor reports a successful BATCH execution (see
@@ -23,6 +25,7 @@ from uuid import UUID
 import httpx
 from fastapi import APIRouter, HTTPException, Request, Response
 from fastapi.responses import HTMLResponse, StreamingResponse
+from starlette.datastructures import QueryParams
 
 from api_service.deps import (
     PROJECT_ID,
@@ -33,6 +36,7 @@ from api_service.deps import (
     UserDep,
     caller_of,
     current_user,
+    gateway_scope,
     identity_header,
     key_identity,
     project_for,
@@ -278,16 +282,16 @@ async def batch_gateway(
     path = path.strip("/")
     if not relayed(request.method, path):
         raise HTTPException(404, "Not available through this service.")
+    params: dict[str, str] | QueryParams = request.query_params
     if request.cookies.get(services.settings.session_cookie_name):
         user: User | None = await current_user(request)
         user_id = user.id if user else None
     else:
-        _, user_id, user = await key_identity(
-            request,
-            services,
-            user_required=path != "runtimes",
-            any_user_outside=True,
+        caller, caller_user, user = await key_identity(
+            request, services, any_user_outside=True
         )
+        assert caller_user is not None
+        user_id, params = gateway_scope(request, caller, caller_user)
     headers = {
         k: v
         for k, v in request.headers.items()
@@ -300,7 +304,7 @@ async def batch_gateway(
     outgoing = client.build_request(
         request.method,
         f"/api/v1/{path}",
-        params=request.query_params,
+        params=params,
         headers=headers,
         content=body,
     )
