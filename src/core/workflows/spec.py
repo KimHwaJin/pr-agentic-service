@@ -12,6 +12,8 @@ from jsonschema import Draft202012Validator
 
 from core.assets import SkillCatalog, ToolCatalog
 
+ALWAYS_ON_CONDITIONAL = "an always-run call cannot depend on conditional call"
+
 _SCHEMA = Draft202012Validator(
     json.loads(
         (Path(__file__).parent / "workflow_schema_1.0.json").read_text("utf-8")
@@ -142,8 +144,7 @@ def validate(
                 and call.execution != "conditional"
             ):
                 errors.append(
-                    f"{where}.{name}: an always-run call cannot depend on "
-                    f"conditional call {ref.key}"
+                    f"{where}.{name}: {ALWAYS_ON_CONDITIONAL} {ref.key}"
                 )
         seen[call.key] = call
     return errors
