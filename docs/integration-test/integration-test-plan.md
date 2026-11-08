@@ -138,7 +138,7 @@
 | EXEC-03 | 외부 tenant(`it-ext`) 키로 실행 제출 | `tenants/it-ext/…`에 생성, 이벤트는 `executor.events.it-ext`, 우리 run 변화 없음 | I2 I3 | 일부 (운영) |  | P0 |
 | EXEC-04 | 키로 runtime·maintenance·attempts 경로 | 404, executor로 가지 않음 | I2 | O |  | P0 |
 | EXEC-05 | 결과물 `/artifacts/{id}`·`/view/artifacts/{id}` | 프로젝트 멤버만, 비멤버 거부, 외부 tenant 결과물은 안 보임 | I1 I3 | O |  | P0 |
-| EXEC-06 | 우리 tenant 키, `X-User-Id` 없이 GET / POST | GET은 우리 tenant 전체, POST는 400 | I2 I3 | O |  | P1 |
+| EXEC-06 | 일반키·마스터키의 조회 범위와 `X-User-Id` 필수 | `X-User-Id`가 없으면 key 종류와 관계없이 GET·POST 400 `INVALID_IDENTITY`. 일반키는 `X-User-Id` 사용자 실행만(다른 `user_id`는 403 `FORBIDDEN`), 마스터키는 tenant 전체와 `user_id` 필터 | I2 I3 | O |  | P1 |
 | EXEC-07 | 우리 tenant 키로 남의 프로젝트·세션 헤더 | 403 | I2 | O |  | P1 |
 | EXEC-08 | 관리자 시스템 > 런타임·점검 탭 | 200. `EXECUTOR_ADMIN_API_KEY`를 비우면 그 탭만 503 | I1 I4 | 일부 (관리자) |  | P1 |
 
