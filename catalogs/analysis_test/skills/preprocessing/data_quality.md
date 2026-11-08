@@ -29,7 +29,7 @@ description: 결측값, 중복 행, 허용 범위를 벗어난 값을 점검하�
 
 ## typical_previous_skill
 
-- `data_load`
+- `data_load`, `anomaly_detection`
 
 ## typical_next_skills
 

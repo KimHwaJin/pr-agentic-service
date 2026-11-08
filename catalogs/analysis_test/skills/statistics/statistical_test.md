@@ -34,7 +34,7 @@ description: 그룹 간 평균·분포 차이(LOT끼리, 설비끼리 등), 어�
 
 ## typical_previous_skill
 
-- `data_load`, `data_quality`, `dataset_preparation`, `wafer_map`
+- `data_load`, `data_quality`, `dataset_preparation`, `wafer_map`, `visualization`, `yield_analysis`
 
 ## typical_next_skills
 
