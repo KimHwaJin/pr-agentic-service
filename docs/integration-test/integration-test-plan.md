@@ -263,7 +263,7 @@
 | R2 | 우리 `docker-compose.yml`의 `BATCH_API_KEY` 기본값이 빈 값 | 로컬 게이트웨이 호출 401 | pr-batch 로컬 키가 정해지면 기본값으로 | 우리 | 로컬 개발용, 미반영 |
 | R3 | `smoke_e2e.py`·`run_scenarios.py`·`loadtest.py`가 dev SSO 로그인만 지원 | dev·prd(idp)에서 RUN-14·OPS-09 자동화 불가 | `X-Api-Key` + `X-User-Id` 모드 옵션 추가 | 우리 | 미반영 |
 | R4 | 이전 리셋 요청에 Redis 스트림이 빠져 있음 | 옛 uuid 사용자의 이벤트가 남음 | PREP-06에 포함 | 인프라 | 반영(문서) |
-| R5 | Go/No-Go F1·F2·F3·F8 | 미반영이면 OPS-06·GAIA-04 실패 | 반영 여부 확인 | 우리 | 완료(main `f0fed74`, internal/gaia `60aa017`) |
+| R5 | Go/No-Go F1·F2·F3·F8 | 미반영이면 OPS-06 실패 | 반영 여부 확인 | 우리 | 완료(main `f0fed74`, internal/gaia `60aa017`) |
 | R6 | pr-batch가 `can_enable`·`can_disable`·`enable_blocked_reason`을 직접 줌 | 우리 계산이 덮으면 BAT-09 사유가 빠짐 | pr-batch 값을 그대로 넘김 | 우리 | 완료(게이트웨이가 그대로 전달, `tests/test_batch_gateway.py`) |
 | R7 | local은 dev SSO 어댑터라 실제 idp를 거치지 않음 | | dev 예습으로 대체 | 우리 | 해소(local 단계 없음) |
 | R8 | executor 10/21 점검 항목(handover 후 projection·완료 이벤트, 배치 대상 반환 뒤 리포트 저장) 현재 상태 모름 | BAT-04 실패 시 1순위 원인 후보 | executor에 확인 요청 | executor | 확인 대기 |
