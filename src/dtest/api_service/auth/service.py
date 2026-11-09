@@ -20,6 +20,10 @@ NO_STORE = {"Cache-Control": "no-store"}
 # The login flow of a browser sent to an SSO page that returns to our root
 # (the SDK's token page knows only the registered host), not the callback.
 LOGIN_FLOW_COOKIE = "agentic_login_flow"
+# A callback still unverified may send the browser on once more (the SSO
+# login gives the SMSESSION, the workplace token page then the AMTOKEN);
+# past that it stops instead of looping through the SSO.
+MAX_LOGIN_HOPS = 1
 
 
 class AuthSessionRead(BaseModel):
@@ -124,7 +128,11 @@ class SsoService:
                 },
             )
         return await self._enter(
-            request, flow.return_to, flow.target, from_callback=True
+            request,
+            flow.return_to,
+            flow.target,
+            from_callback=True,
+            hops=flow.hops,
         )
 
     async def _enter(
@@ -133,14 +141,15 @@ class SsoService:
         return_to: str,
         target: str,
         from_callback: bool,
+        hops: int = 0,
     ) -> Response:
         destination = self._destination(return_to, target)
         employee = await self._verify(request)
         if employee is None:
-            if from_callback:
+            if from_callback and hops >= MAX_LOGIN_HOPS:
                 # the SSO sent the browser back without a cookie we accept;
                 # stop here instead of looping through the SSO again
-                log.warning("sso_callback_unverified")
+                log.warning("sso_callback_unverified hops=%s", hops)
                 raise HTTPException(
                     401,
                     "SSO could not verify the user.",
@@ -154,15 +163,18 @@ class SsoService:
             url = self._checked_entry_url(
                 await self.adapter.entry_url(request, callback), callback
             )
+            next_hops = hops + 1 if from_callback else 0
             await self.store.create_flow(
                 flow_id,
-                AuthFlow(return_to, target),
+                AuthFlow(return_to, target, next_hops),
                 self.settings.login_flow_ttl_seconds,
             )
             log.info(
-                "sso_login_redirect target=%s to=%s",
+                "sso_login_redirect target=%s to=%s path=%s hops=%s",
                 target,
                 "callback" if url == callback else urlsplit(url).netloc,
+                "-" if url == callback else urlsplit(url).path,
+                next_hops,
             )
             response = RedirectResponse(url, 302, headers=NO_STORE)
             if url != callback:

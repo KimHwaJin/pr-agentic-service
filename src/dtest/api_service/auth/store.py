@@ -32,6 +32,8 @@ class AuthSession:
 class AuthFlow:
     return_to: str
     target: str  # app | docs
+    # SSO pages already passed (login, then the token page): see _enter
+    hops: int = 0
 
 
 class AuthStore:
