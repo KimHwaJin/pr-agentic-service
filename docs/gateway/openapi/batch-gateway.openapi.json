@@ -7,8 +7,13 @@
   },
   "servers": [
     {
-      "url": "/",
-      "description": "pr-agentic-service"
+      "url": "https://{api_host}",
+      "description": "pr-agentic-service deployed on Kubernetes (the environment's public origin; ask the service owner)",
+      "variables": {
+        "api_host": {
+          "default": "api-host"
+        }
+      }
     }
   ],
   "paths": {
@@ -9075,7 +9080,7 @@
         "type": "apiKey",
         "in": "header",
         "name": "X-Api-Key",
-        "description": "A pr-agentic-service key (pas_live_..., pas_dev_... on local/dev), issued by our administrators. Its kind is standard or master."
+        "description": "A pr-agentic-service key (pas_live_... on stg/prd, pas_dev_... on dev), issued by our administrators. Its kind is standard or master."
       }
     }
   }

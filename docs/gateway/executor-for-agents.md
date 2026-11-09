@@ -2,7 +2,7 @@
 
 You are writing a client that runs Python code through the **executor gateway** of pr-agentic-service. This one file is enough to write that client. Read the rules first. Use the TypeScript types at the end (and `openapi/executor-gateway.openapi.json`) as the exact field contract.
 
-- Base path: `{BASE_URL}/api/v1/executor`. `BASE_URL` is `http://localhost:8080` locally. Other environments get it from config (the service's public API origin).
+- Base path: `{BASE_URL}/api/v1/executor`. `BASE_URL` is the deployed service (Kubernetes): the environment's public origin `https://<api-host>` from outside the cluster, or `http://pr-agentic-service.<namespace>.svc.cluster.local` from inside it. Read it from config (`AGENTIC_BASE_URL`); never hard-code it.
 - Every route below is relative to that base path. Any route not listed here returns `404 NOT_FOUND`.
 - The gateway relays to the executor. Request and success response bodies are the executor's own, unchanged. The gateway checks the key and user, sets the identity headers itself, and decides the read scope.
 
@@ -10,7 +10,7 @@ You are writing a client that runs Python code through the **executor gateway** 
 
 ### MUST
 
-1. Send `X-Api-Key: <key>` on every request. Read the key from config or an env var (e.g. `AGENTIC_API_KEY`). Never hard-code it or log it. Keys look like `pas_live_…` (local/dev: `pas_dev_…`).
+1. Send `X-Api-Key: <key>` on every request. Read the key from config or an env var (e.g. `AGENTIC_API_KEY`). Never hard-code it or log it. Keys look like `pas_live_…` on stg/prd and `pas_dev_…` on dev.
 2. Send `X-User-Id: <employee id>` on **every** request, reads included. Use the user your service authenticated, lower case, matching `^[a-z0-9][a-z0-9._-]{0,63}$`. If it is missing or malformed, you get `400 INVALID_IDENTITY`.
 3. Send `Content-Type: application/json` on every POST.
 4. Generate one `idempotency_key` (a UUID string, 1–255 chars) per logical write **before** the first attempt. Put it in the JSON body (not a header). Reuse the same key **and the same body** on every retry of that write.
