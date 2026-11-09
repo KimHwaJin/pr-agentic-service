@@ -20,10 +20,11 @@ pr-agentic-service  /api/v1/executor/{path}  ──▶ executor  /api/v1/{path}
 | [batch-gateway.md](batch-gateway.md) | 사람 | 배치 게이트웨이 22개 경로와 이 서비스의 배치 API 6개: 개념, 흐름, 경로별 상세 설명, 레퍼런스 |
 | [executor-for-agents.md](executor-for-agents.md) | 코딩 에이전트 | executor 게이트웨이 클라이언트를 만들 때 넣는 단일 파일. 규칙(MUST/MUST NOT), 흐름, 예제 코드, 타입 정의 |
 | [batch-for-agents.md](batch-for-agents.md) | 코딩 에이전트 | 배치 게이트웨이용 단일 파일 |
+| [executor-for-agents.ko.md](executor-for-agents.ko.md), [batch-for-agents.ko.md](batch-for-agents.ko.md) | 코딩 에이전트 | 위 두 파일의 한글판. 내용은 같고, 코드·경로·필드 이름·오류 코드는 영문 그대로입니다 |
 | [openapi/executor-gateway.openapi.json](openapi/executor-gateway.openapi.json) | 도구·코딩 에이전트 | executor 게이트웨이의 OpenAPI 3.1 (우리 경로·헤더·오류로 바꾼 것) |
 | [openapi/batch-gateway.openapi.json](openapi/batch-gateway.openapi.json) | 도구·코딩 에이전트 | 배치 게이트웨이의 OpenAPI 3.1 |
 
-바이브코딩으로 클라이언트를 만들 때는 `*-for-agents.md`와 같은 이름의 `openapi/*.openapi.json`을 함께 코딩 에이전트에게 줍니다.
+바이브코딩으로 클라이언트를 만들 때는 `*-for-agents.md`(한글판은 `*-for-agents.ko.md`)와 같은 이름의 `openapi/*.openapi.json`을 함께 코딩 에이전트에게 줍니다.
 
 ## 엔드포인트 현황
 
@@ -34,8 +35,7 @@ pr-agentic-service  /api/v1/executor/{path}  ──▶ executor  /api/v1/{path}
 | 이 서비스의 배치 API | 6 | `POST /api/v1/batch/scripts/from-notebook`, `/api/v1/batch-reports` 5개. 우리 tenant 사용자만 |
 | 관리자 화면 전용 (SSO 로그인만) | executor 운영 19 + 배치 2 | API key로는 부를 수 없습니다. [executor-gateway.md 8장](executor-gateway.md#8-api-key로-부를-수-없는-경로) |
 
-## 기준과 다시 만들기
+## 문서 갱신
 
-- 기준 코드: pr-agentic-service `main`, executor `main`(`c73ee52`), pr-batch `main`(`8dc99aa`) (2026-11-09 재생성). 경로 허용 목록은 `src/api_service/routers/executor.py`, `src/api_service/routers/batch.py`의 `_ALLOWED`입니다. 내부망 `internal/gaia` 브랜치에서는 같은 파일이 `src/dtest/api_service/routers/`에 있습니다.
-- 각 문서의 "레퍼런스"와 "스키마" 절, 그리고 `openapi/*.json`은 `scripts/gateway_docs.py`가 executor·pr-batch의 OpenAPI에서 만듭니다. 손으로 고치지 말고, 두 시스템의 API나 허용 목록이 바뀌면 스크립트를 다시 돌립니다(사용법은 스크립트 첫머리).
-- 요청·응답 본문은 executor·pr-batch 것을 그대로 중계합니다. 필드의 뜻은 이 문서에 옮겨 적었고, 두 시스템의 원문 문서는 executor `dev_docs/`, pr-batch `docs/api/`에 있습니다.
+- 각 문서의 "레퍼런스"와 "스키마" 절, 그리고 `openapi/*.json`은 executor·pr-batch의 API 명세와 게이트웨이 허용 목록에서 자동으로 만듭니다. 손으로 고치지 않습니다.
+- 요청·응답 본문은 executor·pr-batch 것을 그대로 중계합니다. 필드의 뜻은 이 문서에 옮겨 적었습니다.

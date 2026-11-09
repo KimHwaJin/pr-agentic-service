@@ -476,7 +476,7 @@ gw.update(batch["id"], {"script_version_number": None})    # re-pin to latest; s
 
 ## 9. Types
 
-Generated from the pr-batch OpenAPI and the agentic service's own routes (`scripts/gateway_docs.py`). Do not edit by hand.
+Generated from the pr-batch OpenAPI and the agentic service's own routes. Do not edit by hand.
 
 - Interfaces marked `unknown fields → 422` are request bodies. Response types may gain fields, so ignore unknown ones.
 - `string` timestamps are ISO 8601 with time zone, and ids are UUID strings.
