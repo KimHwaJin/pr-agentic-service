@@ -43,6 +43,13 @@ LOGIN_TARGET = "page"
 # goes on to the callback. Its origin must be in SSO_ALLOWED_ORIGINS.
 # Empty: SSO_LOGIN_PAGE as before.
 TOKEN_PAGE = ""
+# Its query, filled with our service ({service}); the page refuses a wrong
+# name as an expired session. SSO_CHECK_URL, when set, makes this moot.
+TOKEN_PAGE_QUERY = "client_id={service}&redirect_uri={service}"
+# The workplace check the SDK makes (``.../api/common/v1/auth/sso``): asked
+# with the browser's cookies, it answers 401 {"url": <token page URL>}, the
+# exact URL to send the browser to. Set: used before TOKEN_PAGE.
+SSO_CHECK_URL = ""
 
 # Our service as the SSO registered it: the SDK's ORIGIN (the URL it asks
 # the workplace about) and the token page's client_id/redirect_url.
@@ -99,17 +106,15 @@ def create_sdk(request, callback_url):
         sso = UserinfoCheck(request)
     if callback_url is not None and VERIFY_WITH != "sdk":
         cookies = request.cookies
-        if (
-            TOKEN_PAGE
-            and cookies.get("SMSESSION")
-            and not cookies.get("AMTOKEN")
-        ):
+        token_url = (
+            _token_url(request)
+            if cookies.get("SMSESSION") and not cookies.get("AMTOKEN")
+            else None
+        )
+        if token_url:
             # logged in to the SSO (no SMSESSION: SSO_LOGIN_PAGE first;
             # the token page refuses it as an expired session)
-            service = _service(request)
-            sso.redirect_url = (
-                f"{TOKEN_PAGE}?client_id={service}&redirect_url={service}"
-            )
+            sso.redirect_url = token_url
         else:
             # the callback has no query, so it goes in as is, like the sample
             sso.redirect_url = (
@@ -119,6 +124,40 @@ def create_sdk(request, callback_url):
     # AMTOKEN and returns to our registered host, that is GET /); its origin
     # must be in SSO_ALLOWED_ORIGINS
     return sso
+
+
+def _token_url(request):
+    """Where a browser with an SMSESSION gets its AMTOKEN, or None."""
+    service = _service(request)
+    if SSO_CHECK_URL:
+        response = None
+        try:
+            response = httpx.get(
+                SSO_CHECK_URL,
+                params={"URL": service},
+                headers={"Client-Url": service},
+                cookies=request.cookies.to_dict(),
+                timeout=USERINFO_TIMEOUT_SECONDS,
+            )
+            url = (
+                response.json().get("url")
+                if response.status_code == 401
+                else None
+            )
+        except (httpx.HTTPError, ValueError, AttributeError) as exc:
+            log.warning("sso_check failed error_type=%s", type(exc).__name__)
+            url = None
+        # the path only: the query may carry tokens
+        log.info(
+            "sso_check status=%s url=%s",
+            getattr(response, "status_code", "-"),
+            httpx.URL(url).path if isinstance(url, str) else "-",
+        )
+        if isinstance(url, str) and url:
+            return url
+    if TOKEN_PAGE:
+        return f"{TOKEN_PAGE}?" + TOKEN_PAGE_QUERY.format(service=service)
+    return None
 
 
 def _target(request, callback_url):
