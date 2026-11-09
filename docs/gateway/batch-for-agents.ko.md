@@ -286,7 +286,7 @@ SKIPPED                                       (정책이 실행하지 않기로 
 | 27 | POST | `/api/v1/batch-reports/{report_id}/retry` | – | | 202 `BatchReportDetail` |
 | 28 | POST | `/api/v1/batch/scripts/from-notebook` | `BatchScriptFromNotebook` | | 201 `ScriptView` |
 
-경로별 정확한 쿼리 파라미터, 한도, 응답 코드는 `openapi/batch-gateway.openapi.json`에 있습니다. pr-batch의 `batches:disable-by-owner`, `batches:disable-by-tenant`는 게이트웨이로 부를 수 없습니다(404).
+경로별 정확한 쿼리 파라미터, 한도, 응답 코드는 `openapi/batch-gateway.openapi.json`에 있습니다.
 
 ## 7. 참고 클라이언트 (Python, httpx)
 
@@ -485,7 +485,7 @@ pr-batch OpenAPI와 이 서비스의 경로에서 자동으로 만든 부분입�
 - `unknown fields → 422`가 붙은 interface는 요청 본문입니다. 응답 타입에는 필드가 늘 수 있으니 모르는 필드는 무시합니다.
 - `string` 시각은 시간대가 있는 ISO 8601이고, id는 UUID 문자열입니다.
 - `BatchReportEvents.items`는 이 서비스의 실행 이벤트 타입(`*Event` / `*Data`)을 씁니다.
-- 이 서비스 경로의 스키마 이름이 pr-batch 것과 겹치면 우리 스키마 앞에 `Agentic`을 붙입니다.
+- 이 서비스 경로의 스키마 이름이 pr-batch 것과 겹치면 이 서비스 스키마 앞에 `Agentic`을 붙입니다.
 
 <!-- gen:begin types -->
 ```ts

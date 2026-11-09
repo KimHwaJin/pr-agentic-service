@@ -284,7 +284,7 @@ Rows 1–22 relay to pr-batch under `/api/v1/batch`. Rows 23–28 are the agenti
 | 27 | POST | `/api/v1/batch-reports/{report_id}/retry` | – | | 202 `BatchReportDetail` |
 | 28 | POST | `/api/v1/batch/scripts/from-notebook` | `BatchScriptFromNotebook` | | 201 `ScriptView` |
 
-The exact query parameters, limits and response codes per route are in `openapi/batch-gateway.openapi.json`. Not available through the gateway (404): pr-batch's `batches:disable-by-owner` and `batches:disable-by-tenant`.
+The exact query parameters, limits and response codes per route are in `openapi/batch-gateway.openapi.json`.
 
 ## 7. Reference client (Python, httpx)
 
