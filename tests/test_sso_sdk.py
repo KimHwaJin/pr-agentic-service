@@ -222,3 +222,23 @@ def test_idp_adapter_takes_the_scheme_of_the_public_origin(monkeypatch):
     )
     adapter._verify(request)
     assert seen == ["https://agentic.corp/x"]
+
+
+def test_a_rejection_logs_the_service_url_and_the_sso_answer(caplog):
+    class Refused(FakeSdk):
+        def __init__(self, request, callback):
+            super().__init__(request, callback)
+            self.redirect_url = (
+                "https://login.corp/sso/SSOServiceInformation.jsp"
+                "?errorcode=404&token=secret"
+            )
+
+        def check_day_cookie(self, cookie):
+            return False
+
+    caplog.set_level("INFO")
+    assert verify_employee(Refused, _request("SMSESSION=x"), "https") is None
+    line = caplog.messages[-1]
+    assert "scheme=https" in line and "cookies=SMSESSION" in line
+    assert "login.corp/sso/SSOServiceInformation.jsp?errorcode=404" in line
+    assert "secret" not in line and "SMSESSION=x" not in line

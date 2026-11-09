@@ -215,9 +215,15 @@ class SsoService:
         root continues its login flow at the callback."""
         flow_id = request.cookies.get(LOGIN_FLOW_COOKIE, "")
         if _FLOW_ID.fullmatch(flow_id):
-            log.info("sso_returned_to_root")
+            # the token page may hand the SDK its answer in the query
+            query = request.url.query
+            log.info(
+                "sso_returned_to_root query_keys=%s",
+                ",".join(sorted(request.query_params)) or "-",
+            )
             return RedirectResponse(
-                f"{API_PREFIX}/auth/login/sso/callback/{flow_id}",
+                f"{API_PREFIX}/auth/login/sso/callback/{flow_id}"
+                + (f"?{query}" if query else ""),
                 302,
                 headers=NO_STORE,
             )

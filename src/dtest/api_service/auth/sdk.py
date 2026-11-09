@@ -21,6 +21,7 @@ import logging
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
 from typing import Any, Protocol
+from urllib.parse import parse_qs, urlsplit
 
 from fastapi import Request
 from starlette.datastructures import QueryParams
@@ -163,10 +164,17 @@ def verify_employee(
     sdk = sdk_factory(SdkRequest(request, scheme=scheme), None)
     valid = sdk.check_day_cookie(cookie)
     if valid is False:
-        # names only: which cookies arrived tells a domain/path problem
+        # names only: which cookies arrived tells a domain/path problem;
+        # the service URL the SDK builds (scheme + Host) and where the SSO
+        # sent it instead (no query but errorcode) tell a registration one
+        view = SdkRequest(request, scheme=scheme)
         log.info(
-            "sso_verify result=rejected cookies=%s",
+            "sso_verify result=rejected cookies=%s scheme=%s host=%s "
+            "sso_said=%s",
             ",".join(sorted(request.cookies)),
+            view.scheme,
+            view.environ.get("HTTP_HOST", ""),
+            _where(getattr(sdk, "redirect_url", "")),
         )
         return None
     if valid is not True:
@@ -189,6 +197,17 @@ def verify_employee(
         raise ValueError("Invalid SSO employee response")
     log.info("sso_verify result=ok")
     return Employee(employee_id.strip(), name, english_name, department, email)
+
+
+def _where(url: Any) -> str:
+    """``host/path`` of a URL, plus its ``errorcode`` if any; no other
+    query (it may carry tokens)."""
+    if not isinstance(url, str) or not url:
+        return "-"
+    parts = urlsplit(url)
+    code = parse_qs(parts.query).get("errorcode", [""])[0]
+    where = f"{parts.netloc}{parts.path}" or "-"
+    return f"{where}?errorcode={code}" if code else where
 
 
 def entry_url(
