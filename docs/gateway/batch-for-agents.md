@@ -5,7 +5,7 @@ You are writing a client that uploads Jupyter notebooks and runs them on a sched
 - Base paths:
   - `{BASE_URL}/api/v1/batch` relays to pr-batch (scripts, batches, runs, runtimes).
   - `{BASE_URL}/api/v1/batch-reports` and `{BASE_URL}/api/v1/batch/scripts/from-notebook` are pr-agentic-service's own batch routes.
-- `BASE_URL` is `http://localhost:8080` locally. Other environments get it from config (the service's public API origin).
+- `BASE_URL` is the deployed service (Kubernetes): the environment's public origin `https://<api-host>` from outside the cluster, or `http://pr-agentic-service.<namespace>.svc.cluster.local` from inside it. Read it from config (`AGENTIC_BASE_URL`); never hard-code it.
 - Any route not listed in section 6 returns `404 NOT_FOUND`.
 - Request and success response bodies are pr-batch's own. The gateway checks the key and user, sets the identity headers itself, and decides the read scope.
 - pr-batch stores notebooks, schedules and tracks runs. The code itself runs on the executor. Run results (the executed notebook) are downloaded from the **executor gateway** with the same key (section 4.4).
