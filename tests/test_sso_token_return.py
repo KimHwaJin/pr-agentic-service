@@ -138,6 +138,7 @@ def test_idp_login_sdk_mode_keeps_the_sdk_login_url(monkeypatch):
         idp_login.create_sdk(View(), "https://cb").redirect_url == TOKEN_PAGE
     )
     monkeypatch.setattr(idp_login, "VERIFY_WITH", "userinfo")
+    monkeypatch.setattr(idp_login, "LOGIN_TARGET", "callback")
 
     class Cookies(dict):
         def to_dict(self):
@@ -175,6 +176,7 @@ def test_userinfo_without_amtoken_goes_to_the_token_page(monkeypatch):
             self.environ = {"HTTP_HOST": "agentic.corp"}
 
     monkeypatch.setattr(idp_login, "VERIFY_WITH", "userinfo")
+    monkeypatch.setattr(idp_login, "LOGIN_TARGET", "callback")
     monkeypatch.setattr(idp_login, "TOKEN_PAGE", "http://login.corp/issue.jsp")
     fresh = idp_login.create_sdk(View({"SMSESSION": "s"}), "https://cb")
     assert fresh.redirect_url == (
