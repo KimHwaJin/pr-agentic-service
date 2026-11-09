@@ -12,7 +12,7 @@ Two ways to verify, picked by ``VERIFY_WITH``:
 - ``"sdk"`` (the Flask sample): the private SDK's ``check_day_cookie`` and
   ``get_sso_info``.
 
-Login goes to ``SSO_LOGIN_PAGE?TARGET=<our callback>`` (userinfo) or to
+Login goes to ``SSO_LOGIN_PAGE?TARGET=<our page>`` (userinfo) or to
 the SDK's own ``redirect_url`` (sdk: the workplace token page, which comes
 back to our root ``/``); its origin must be in SSO_ALLOWED_ORIGINS.
 
@@ -28,6 +28,12 @@ log = logging.getLogger(__name__)
 VERIFY_WITH = "userinfo"  # or "sdk"
 
 SSO_LOGIN_PAGE = "https://idp.example.com/sso/am/login.jsp"
+
+# What SSO_LOGIN_PAGE gets as TARGET. "page" (the Streamlit sample's
+# TARGET={your_page_url}): our service page, ``https://<service>/``; the
+# SSO comes back there and our root goes on to the callback. "callback":
+# our callback URL itself.
+LOGIN_TARGET = "page"
 
 # userinfo: a browser with an SMSESSION but no AMTOKEN (a fresh or incognito
 # window after the SSO login: only the workplace issues it) is sent to the
@@ -106,11 +112,24 @@ def create_sdk(request, callback_url):
             )
         else:
             # the callback has no query, so it goes in as is, like the sample
-            sso.redirect_url = f"{SSO_LOGIN_PAGE}?TARGET={callback_url}"
+            sso.redirect_url = (
+                f"{SSO_LOGIN_PAGE}?TARGET={_target(request, callback_url)}"
+            )
     # sdk: the SDK's own URL (the workplace's token page, which issues the
     # AMTOKEN and returns to our registered host, that is GET /); its origin
     # must be in SSO_ALLOWED_ORIGINS
     return sso
+
+
+def _target(request, callback_url):
+    """SSO_LOGIN_PAGE's TARGET (see LOGIN_TARGET)."""
+    if LOGIN_TARGET != "page":
+        return callback_url
+    service = _service(request)
+    if "://" in service:
+        return service.rstrip("/") + "/"
+    scheme = getattr(request, "scheme", "") or "https"
+    return f"{scheme}://{service}/"
 
 
 def _service(request):

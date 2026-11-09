@@ -145,6 +145,10 @@ def test_idp_login_userinfo_check(monkeypatch):
     assert verify_employee(idp_login.create_sdk, _request(logged_out)) is None
 
     url = entry_url(idp_login.create_sdk, _request(), "https://api/cb/1")
+    # the sample's TARGET={your_page_url}: our page; our root goes on
+    assert url == idp_login.SSO_LOGIN_PAGE + "?TARGET=https://api/"
+    monkeypatch.setattr(idp_login, "LOGIN_TARGET", "callback")
+    url = entry_url(idp_login.create_sdk, _request(), "https://api/cb/1")
     assert url == idp_login.SSO_LOGIN_PAGE + "?TARGET=https://api/cb/1"
 
 
