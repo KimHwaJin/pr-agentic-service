@@ -45,6 +45,7 @@
 | `DB_POOL_SIZE` | 3 (+overflow 3) | SQLAlchemy 풀(앱 테이블). Pod당 최대 `DB_POOL_SIZE × 2` 연결. 턴이 도는 동안에는 거의 쓰지 않고, 많은 턴이 한꺼번에 시작될 때만 몰린다(아래 측정). 로그에 `QueuePool limit`이 보이면 올린다 |
 | `BATCH_REPORT_CONCURRENCY` | 4 | 배치 리포트를 Pod 하나가 동시에 몇 건 쓰는지. 리포트 1건은 LLM을 최대 `BATCH_REPORT_MODEL_CALL_LIMIT`(20)번 차례로 부르므로 LLM 동시 요청은 Pod당 최대 `RUN_CONCURRENCY + BATCH_REPORT_CONCURRENCY`. 배치가 한꺼번에 끝나 리포트가 밀리면 올리고, LLM 게이트웨이 한도에 가까우면 내린다. 작업마다 lease(SKIP LOCKED)를 잡으므로 같은 리포트를 두 번 쓰지 않는다 |
 | `CHECKPOINT_POOL_SIZE` | 8 | LangGraph checkpointer/store 풀. 실행 중인 turn의 graph step마다 체크포인트를 쓰므로 `RUN_CONCURRENCY`의 절반 이상으로 둔다. 연결을 30초(`CHECKPOINT_POOL_TIMEOUT_SECONDS`) 안에 못 얻으면 turn이 실패한다 |
+| `DB_KEEPALIVE_IDLE_SECONDS` | 60 | checkpointer/store 풀 연결이 이 시간(초) 조용하면 OS가 TCP keepalive를 보낸다(10초 간격, 3번 무응답이면 끊김). Pod와 DB 사이 장비(LB, 방화벽, NAT)가 idle 연결을 끊는 시간보다 짧게 둔다. 풀은 연결을 빌려줄 때마다 상태를 확인해, 끊긴 연결이면 새로 연결한다 |
 | PG `max_connections` | — | 우리 Pod당 최대 연결 = `DB_POOL_SIZE × 2 + CHECKPOINT_POOL_SIZE` (기본 14). 같은 DB를 executor·pr-batch도 쓰므로 아래 "공용 DB 연결 예산"의 합계보다 커야 한다 |
 | HPA | CPU 60%, min 2 / max 4 | CPU가 LLM 대기를 반영하지 않으므로 min 2를 유지한다. 큐 적체는 `RUN_CONCURRENCY`로 흡수 |
 | `terminationGracePeriodSeconds` | 60 | preStop 5초 → uvicorn 연결 종료 대기(`--timeout-graceful-shutdown 20`, SSE가 있으면 끝까지 기다림) → 새 run 수락 중단, 진행 중 turn과 메모리 작업을 함께 마무리(최대 20초) → 남은 run은 lease 반납 후 다른 Pod가 이어감. 합계 약 45~50초 |

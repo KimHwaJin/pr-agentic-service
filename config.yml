@@ -20,6 +20,9 @@ DB_POOL_SIZE: 3
 # CHECKPOINT_POOL_SIZE = 14, x maxReplicas 4 = 56 (docs/load-design.md)
 CHECKPOINT_POOL_SIZE: 8
 CHECKPOINT_POOL_TIMEOUT_SECONDS: 30
+# TCP keepalive of checkpoint pool connections, shorter than the idle cut of
+# any network device between the pod and PostgreSQL
+DB_KEEPALIVE_IDLE_SECONDS: 60
 AUTO_MIGRATE: true
 # /docs, /redoc, /openapi.json: off on dev/stg/prd (internal network rules);
 # docker-compose turns them on for local runs
