@@ -157,3 +157,34 @@ def test_root_hands_the_token_page_query_to_the_callback():
     assert back.headers["location"] == (
         f"/api/v1/auth/login/sso/callback/{flow_id}?ssoToken=abc%2B1&x=2"
     )
+
+
+def test_userinfo_without_amtoken_goes_to_the_token_page(monkeypatch):
+    from src.dtest import idp_login
+
+    class Cookies(dict):
+        def to_dict(self):
+            return dict(self)
+
+    class View:
+        def __init__(self, cookies):
+            self.cookies = Cookies(cookies)
+            self.environ = {"HTTP_HOST": "agentic.corp"}
+
+    monkeypatch.setattr(idp_login, "VERIFY_WITH", "userinfo")
+    monkeypatch.setattr(idp_login, "TOKEN_PAGE", "http://login.corp/issue.jsp")
+    fresh = idp_login.create_sdk(View({"SMSESSION": "s"}), "https://cb")
+    assert fresh.redirect_url == (
+        "http://login.corp/issue.jsp"
+        "?client_id=agentic.corp&redirect_url=agentic.corp"
+    )
+    # with an AMTOKEN (expired or refused): the SSO login, as before
+    known = idp_login.create_sdk(
+        View({"SMSESSION": "s", "AMTOKEN": "a"}), "https://cb"
+    )
+    assert known.redirect_url.endswith("?TARGET=https://cb")
+    # no token page configured: as before
+    monkeypatch.setattr(idp_login, "TOKEN_PAGE", "")
+    assert idp_login.create_sdk(View({}), "https://cb").redirect_url.endswith(
+        "?TARGET=https://cb"
+    )

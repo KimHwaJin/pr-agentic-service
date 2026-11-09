@@ -29,9 +29,18 @@ VERIFY_WITH = "userinfo"  # or "sdk"
 
 SSO_LOGIN_PAGE = "https://idp.example.com/sso/am/login.jsp"
 
-# sdk: the service URL the SDK asks the workplace about (its ORIGIN), as
-# the SSO registered it. Empty: the Host header alone (``host``, no
-# scheme), the form our registration answers; the SDK's own fallback
+# userinfo: a browser without an AMTOKEN (a fresh or incognito window: only
+# the workplace issues it) is sent to the workplace token page instead,
+# ``TOKEN_PAGE?client_id=<service>&redirect_url=<service>``; it issues the
+# AMTOKEN (logging in first if needed) and returns to our root ``/``, which
+# goes on to the callback. Its origin must be in SSO_ALLOWED_ORIGINS.
+# Empty: SSO_LOGIN_PAGE as before.
+TOKEN_PAGE = ""
+
+# Our service as the SSO registered it: the SDK's ORIGIN (the URL it asks
+# the workplace about) and the token page's client_id/redirect_url.
+# Empty: the Host header alone (``host``, no scheme), the form our
+# registration answers; the SDK's own fallback
 # (``https://host``) and our callback URL get errorcode=404.
 SERVICE_URL = ""
 USERINFO_URL = "http://workplace.example.com/api/common/v1/auth/userInfo"
@@ -64,7 +73,7 @@ def create_sdk(request, callback_url):
         # the SDK takes ORIGIN, when there is one, as the service URL it
         # sends the workplace (URL=..., Client-Url) and gets back from the
         # token page; it must be the registered one, never our callback
-        origin = SERVICE_URL or request.environ.get("HTTP_HOST", "")
+        origin = _service(request)
         request.args = type(request.args)(
             [*request.args.to_dict().items(), ("ORIGIN", origin)]
         )
@@ -82,12 +91,23 @@ def create_sdk(request, callback_url):
     else:
         sso = UserinfoCheck(request)
     if callback_url is not None and VERIFY_WITH != "sdk":
-        # the callback has no query, so it goes in as is, like the sample
-        sso.redirect_url = f"{SSO_LOGIN_PAGE}?TARGET={callback_url}"
+        if TOKEN_PAGE and not request.cookies.get("AMTOKEN"):
+            service = _service(request)
+            sso.redirect_url = (
+                f"{TOKEN_PAGE}?client_id={service}&redirect_url={service}"
+            )
+        else:
+            # the callback has no query, so it goes in as is, like the sample
+            sso.redirect_url = f"{SSO_LOGIN_PAGE}?TARGET={callback_url}"
     # sdk: the SDK's own URL (the workplace's token page, which issues the
     # AMTOKEN and returns to our registered host, that is GET /); its origin
     # must be in SSO_ALLOWED_ORIGINS
     return sso
+
+
+def _service(request):
+    """Our service as the SSO registered it (SERVICE_URL, else the Host)."""
+    return SERVICE_URL or request.environ.get("HTTP_HOST", "")
 
 
 class UserinfoCheck:
