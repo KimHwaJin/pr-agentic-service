@@ -31,6 +31,9 @@ class Store:
     async def create_flow(self, flow_id, flow, ttl):
         self.flows[flow_id] = flow
 
+    async def consume_flow(self, flow_id):
+        return self.flows.pop(flow_id, None)
+
 
 def _service(url, **kw):
     s = Settings(
@@ -183,8 +186,29 @@ def test_userinfo_without_amtoken_goes_to_the_token_page(monkeypatch):
         View({"SMSESSION": "s", "AMTOKEN": "a"}), "https://cb"
     )
     assert known.redirect_url.endswith("?TARGET=https://cb")
+    # not logged in to the SSO yet: its login first (the token page
+    # calls a missing SMSESSION an expired session)
+    assert idp_login.create_sdk(View({}), "https://cb").redirect_url.endswith(
+        "?TARGET=https://cb"
+    )
     # no token page configured: as before
     monkeypatch.setattr(idp_login, "TOKEN_PAGE", "")
     assert idp_login.create_sdk(View({}), "https://cb").redirect_url.endswith(
         "?TARGET=https://cb"
     )
+
+
+def test_a_callback_without_amtoken_goes_on_to_the_token_page_once():
+    from api_service.auth.store import AuthFlow
+
+    sso = _service(TOKEN_PAGE)
+    sso.store.flows["f" * 43] = AuthFlow("/dev/", "app")  # back from login
+    on = asyncio.run(sso.callback(_request(), "f" * 43))
+    assert on.headers["location"] == TOKEN_PAGE
+    (flow,) = sso.store.flows.values()
+    assert flow.hops == 1 and flow.return_to == "/dev/"
+    # back from the token page still unverified: stop, no loop
+    (flow_id,) = sso.store.flows
+    with pytest.raises(HTTPException) as e:
+        asyncio.run(sso.callback(_request(), flow_id))
+    assert e.value.status_code == 401
