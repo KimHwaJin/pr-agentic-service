@@ -14,8 +14,6 @@ from src.dtest.core.assets import SkillCatalog, ToolCatalog
 
 ALWAYS_ON_CONDITIONAL = "an always-run call cannot depend on conditional call"
 
-ALWAYS_ON_CONDITIONAL = "an always-run call cannot depend on conditional call"
-
 _SCHEMA = Draft202012Validator(
     json.loads(
         (Path(__file__).parent / "workflow_schema_1.0.json").read_text("utf-8")
