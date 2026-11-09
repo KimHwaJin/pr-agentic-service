@@ -20,9 +20,11 @@
 1. 각 저장소 담당에게 이번 환경에 배포할 커밋을 받습니다.
 2. 통합테스트 계획 문서 요약의 기준 커밋과 상황판 비고에 적습니다.
 3. 테스트 중 재배포는 결함 수정으로 병합된 커밋만 하고, 할 때마다 같은 곳에 새 커밋을 적습니다.
+4. 아래 최소 커밋 이후여야 합니다(서비스 사이 계약이 맞물림): 우리 main `7058bde`·internal/gaia `fbf3721`, executor `c73ee52`(`runtime.kernel_id`, executions `user_id` 필터, `DELETE /runtime-targets/{id}`), pr-batch `8dc99aa`(`X-User-Id` 없는 tenant 전체 조회, `user_id` 필터, 응답 `user_id`).
 
 ## 4. 예상 결과
 - 네 저장소의 커밋이 모두 적혀 있음
+- 네 저장소 커밋이 위 최소 커밋 이후
 
 ## 5. 확인 방법
 계획 문서와 상황판 기록

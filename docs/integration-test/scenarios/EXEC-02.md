@@ -21,13 +21,16 @@
 2. 시나리오 **EXEC-02**를 고르고 키, A의 사번, 추가 헤더의 `<project_id>`를 넣습니다. 본문의 `idempotency_key`를 `it-exec02-<날짜시각>`처럼 바꿉니다.
 3. 보내고 응답의 실행 ID를 복사합니다.
 4. **실행 이력**에서 실행 ID로 바로 열기를 합니다. **결과**와 **개요 > 원본 JSON**을 봅니다.
+5. 같은 실행 상세의 **이벤트** 탭에서 `execution.started` 줄을 봅니다.
 
 ## 4. 예상 결과
 - 3: 201(또는 202), 실행 ID
 - 4: 결과에 `2`. 원본 JSON의 작업 공간 경로가 `tenants/dtest-agent-service/users/<A 사번>/…`, 결과 경로가 `executor/executions/<id>/…`
+- 4: 원본 JSON의 `runtime`에 `kernel_id`가 있음(정리 뒤에는 null일 수 있음)
+- 5: `execution.started` 내용의 `runtime`에 `kernel_id`가 있음
 
 ## 5. 확인 방법
-API 호출 시험 결과, 실행 이력
+API 호출 시험 결과, 실행 이력, 실행 상세 이벤트 탭
 
 ## 6. 정리 (원상복구)
 없음
