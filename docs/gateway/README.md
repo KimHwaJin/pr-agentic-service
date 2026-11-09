@@ -32,10 +32,10 @@ pr-agentic-service  /api/v1/executor/{path}  ──▶ executor  /api/v1/{path}
 | executor 게이트웨이 (`/api/v1/executor/…`) | 21 | API key로 부를 수 있는 경로. 이 밖의 경로는 404 |
 | 배치 게이트웨이 (`/api/v1/batch/…`, pr-batch 중계) | 22 | 같음 |
 | 이 서비스의 배치 API | 6 | `POST /api/v1/batch/scripts/from-notebook`, `/api/v1/batch-reports` 5개. 우리 tenant 사용자만 |
-| 관리자 화면 전용 (SSO 로그인만) | executor 운영 20 + 배치 2 | API key로는 부를 수 없습니다. [executor-gateway.md 8장](executor-gateway.md#8-api-key로-부를-수-없는-경로) |
+| 관리자 화면 전용 (SSO 로그인만) | executor 운영 19 + 배치 2 | API key로는 부를 수 없습니다. [executor-gateway.md 8장](executor-gateway.md#8-api-key로-부를-수-없는-경로) |
 
 ## 기준과 다시 만들기
 
-- 기준 코드: pr-agentic-service `main`, executor `main`, pr-batch `main` (2026-11-08). 경로 허용 목록은 `src/api_service/routers/executor.py`, `src/api_service/routers/batch.py`의 `_ALLOWED`입니다.
+- 기준 코드: pr-agentic-service `main`, executor `main`(`c73ee52`), pr-batch `main`(`8dc99aa`) (2026-11-09 재생성). 경로 허용 목록은 `src/api_service/routers/executor.py`, `src/api_service/routers/batch.py`의 `_ALLOWED`입니다. 내부망 `internal/gaia` 브랜치에서는 같은 파일이 `src/dtest/api_service/routers/`에 있습니다.
 - 각 문서의 "레퍼런스"와 "스키마" 절, 그리고 `openapi/*.json`은 `scripts/gateway_docs.py`가 executor·pr-batch의 OpenAPI에서 만듭니다. 손으로 고치지 말고, 두 시스템의 API나 허용 목록이 바뀌면 스크립트를 다시 돌립니다(사용법은 스크립트 첫머리).
 - 요청·응답 본문은 executor·pr-batch 것을 그대로 중계합니다. 필드의 뜻은 이 문서에 옮겨 적었고, 두 시스템의 원문 문서는 executor `dev_docs/`, pr-batch `docs/api/`에 있습니다.
