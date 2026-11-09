@@ -1,5 +1,5 @@
 # =============================================================================
-# config.example.yml : pr-agentic-service의 모든 설정값 안내서
+# config.example.yml : agent-service의 모든 설정값 안내서
 # =============================================================================
 # 이 파일은 읽히지 않습니다(참고용). 서비스가 실제로 읽는 곳은 아래뿐입니다.
 #
@@ -16,7 +16,8 @@
 #   예) CORS_ORIGINS='["https://front.example.com"]'
 # - 상대 경로는 레포 루트 기준입니다 (실행 위치 무관).
 # - 아래 "값"은 config.yml 에 실제로 들어 있는 공통값이거나(공통 항목),
-#   형식을 보여 주는 예시입니다(환경별 항목, <...> 자리). 코드 기본값이 다르면
+#   형식을 보여 주는 예시입니다(환경별 항목, <...> 자리). 공통 항목이라도 주소는
+#   <...> 자리로 적었습니다(실제 값은 config.yml). 코드 기본값이 다르면
 #   "기본값:" 으로 따로 적었습니다.
 # - <...> 자리표시자가 남아 있으면 APP_ENV 가 있는 환경에서는 기동하지 않습니다.
 # - 비밀값(키, 비밀번호)은 절대 여기에 실제 값을 쓰지 마세요.
@@ -162,7 +163,7 @@ SERVICE_USER_PREFIX: svc-
 # -----------------------------------------------------------------------------
 
 # [공통] OpenAI 호환 게이트웨이 주소 (/v1 까지). 기본값: http://localhost:8001/v1
-LLM_BASE_URL: http://model.frodo.com/v1
+LLM_BASE_URL: http://<llm-gateway-host>/v1
 
 # [환경별][비밀] 게이트웨이 API 키. 키가 필요 없는 vLLM 은 EMPTY. 기본값: EMPTY
 LLM_API_KEY: <llm-api-key>
@@ -210,7 +211,7 @@ LLM_ENABLE_THINKING: false
 # openai 면 EMBEDDING_BASE_URL, EMBEDDING_MODEL 필수.
 EMBEDDING_PROVIDER: none
 
-# [공통] 임베딩 API 주소 (openai 일 때). 예) http://model.frodo.com/v1
+# [공통] 임베딩 API 주소 (openai 일 때). 예) http://<llm-gateway-host>/v1
 EMBEDDING_BASE_URL: ""
 
 # [공통][비밀] 임베딩 API 키. 필요 없으면 EMPTY.
@@ -289,7 +290,7 @@ EXECUTOR_IO_MODE: pv
 # -----------------------------------------------------------------------------
 
 # [공통] executor JupyterLab 주소. 비우면 "JupyterLab에서 열기" 링크 없음. 기본값: ""
-NOTEBOOK_LAB_BASE_URL: https://executor-jupyter-lab.frodo.com
+NOTEBOOK_LAB_BASE_URL: https://<jupyter-lab-host>
 
 # [공통] Jupyter 루트와 executor 공유 루트가 다를 때 그 사이 경로. 예) shared
 NOTEBOOK_LAB_PATH_PREFIX: ""
@@ -515,8 +516,8 @@ PHOENIX_ENDPOINT: http://<phoenix-host>
 PHOENIX_API_KEY: <phoenix-key>
 
 # [환경별] Phoenix 프로젝트 이름(트레이스가 모이는 곳). 기본값: pr-agentic-service
-# 예) 로컬은 pr-agentic-service-local
-SERVICE_ID: pr-agentic-service
+# 예) 로컬은 agent-service-local
+SERVICE_ID: agent-service
 
 
 # =============================================================================

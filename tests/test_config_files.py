@@ -286,6 +286,9 @@ def test_config_example_documents_every_setting():
         (config.ROOT / "config.yml").read_text(encoding="utf-8")
     )
     for key, value in shared.items():
-        assert example[key.lower()] == value, key
+        documented = example[key.lower()]
+        if isinstance(documented, str) and "<" in documented:
+            continue  # an address left as a <...> placeholder
+        assert documented == value, key
     for model in example["models"]:
         config.ModelSpec.model_validate(model)
