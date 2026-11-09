@@ -114,9 +114,10 @@ def _environ(request: Request, scheme: str) -> dict[str, str]:
 class SdkRequest:
     """Flask-like read-only request.
 
-    On login, args ORIGIN is the server callback. The Flask attributes the
-    SDK may read are strings like Flask's; anything else falls through to
-    the ASGI request.
+    A client's ``ORIGIN`` query is dropped: the SDK takes it as the service
+    URL it asks the SSO about (idp_login.py sets it). The Flask attributes
+    the SDK may read are strings like Flask's; anything else falls through
+    to the ASGI request.
     """
 
     def __init__(
@@ -125,12 +126,14 @@ class SdkRequest:
         callback_url: str | None = None,
         scheme: str | None = None,
     ):
-        params = request.query_params
-        if callback_url is not None:
-            params = QueryParams(
-                [(k, v) for k, v in params.multi_items() if k != "ORIGIN"]
-                + [("ORIGIN", callback_url)]
-            )
+        params = QueryParams(
+            [
+                (k, v)
+                for k, v in request.query_params.multi_items()
+                if k != "ORIGIN"
+            ]
+        )
+        self.callback_url = callback_url
         self._request = request
         self.args = _Values(params.multi_items())
         self.cookies = _Values(request.cookies.items())

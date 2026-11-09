@@ -4,7 +4,8 @@ from src.dtest.api_service.auth.sdk import entry_url, verify_employee
 
 
 def _request(cookie: str | None = None, query: bytes = b"") -> Request:
-    headers = [(b"cookie", cookie.encode())] if cookie else []
+    headers = [(b"host", b"api")]
+    headers += [(b"cookie", cookie.encode())] if cookie else []
     return Request(
         {
             "type": "http",
@@ -21,11 +22,9 @@ def _request(cookie: str | None = None, query: bytes = b"") -> Request:
 class FakeSdk:
     def __init__(self, request, callback):
         self.request, self.callback = request, callback
+        self.args = request.args.to_dict()
         self.redirect_url = (
-            "https://sso.example/login?ORIGIN="
-            + request.args.to_dict()["ORIGIN"]
-            if callback
-            else ""
+            "https://sso.example/login?TARGET=" + callback if callback else ""
         )
 
     def check_day_cookie(self, cookie):
@@ -48,13 +47,20 @@ def test_verify_employee_without_cookie():
     assert verify_employee(FakeSdk, _request("sso=expired")) is None
 
 
-def test_login_url_replaces_client_origin_with_callback():
+def test_login_drops_a_client_origin():
+    seen = []
+
+    def make(request, callback):
+        seen.append(request.args.to_dict())
+        return FakeSdk(request, callback)
+
     url = entry_url(
-        FakeSdk,
-        _request(query=b"ORIGIN=https://evil.example"),
+        make,
+        _request(query=b"ORIGIN=https://evil.example&x=1"),
         "https://api/cb/1",
     )
-    assert url.endswith("ORIGIN=https://api/cb/1")
+    assert url.endswith("TARGET=https://api/cb/1")
+    assert seen == [{"x": "1"}]
 
 
 def test_lab_url_uses_a_workspace_per_employee():
@@ -99,7 +105,7 @@ def test_sdk_request_has_flask_attributes():
     assert view.environ["HTTP_HOST"] == "api.corp"
     assert view.environ["REMOTE_ADDR"] == "10.0.0.1"
     assert view.cookies.to_dict() == {"a": "1", "b": "2"}
-    assert view.args.to_dict()["ORIGIN"] == "https://api.corp/cb/1"
+    assert "ORIGIN" not in view.args.to_dict()
     # anything else falls through to the ASGI request
     assert view.query_params["return_to"] == "/"
 
@@ -142,7 +148,7 @@ def test_idp_login_userinfo_check(monkeypatch):
     assert url == idp_login.SSO_LOGIN_PAGE + "?TARGET=https://api/cb/1"
 
 
-def test_idp_login_sdk_mode_gives_origin_when_verifying(monkeypatch):
+def test_idp_login_sdk_mode_gives_the_registered_origin(monkeypatch):
     import sys
     import types
 
@@ -163,7 +169,11 @@ def test_idp_login_sdk_mode_gives_origin_when_verifying(monkeypatch):
     )
     monkeypatch.setattr(idp_login, "VERIFY_WITH", "sdk")
     assert verify_employee(idp_login.create_sdk, _request("a=1")) is None
-    assert seen["origin"] == "https://api/login"
+    # the bare host, as the SSO registered it; not a URL of ours
+    assert seen["origin"] == "api"
+    monkeypatch.setattr(idp_login, "SERVICE_URL", "https://api")
+    entry_url(idp_login.create_sdk, _request(), "https://api/cb/1")
+    assert seen["origin"] == "https://api"
 
 
 def test_sdk_request_shows_the_public_scheme_behind_the_ingress():

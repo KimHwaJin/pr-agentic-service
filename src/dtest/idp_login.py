@@ -28,6 +28,12 @@ log = logging.getLogger(__name__)
 VERIFY_WITH = "userinfo"  # or "sdk"
 
 SSO_LOGIN_PAGE = "https://idp.example.com/sso/am/login.jsp"
+
+# sdk: the service URL the SDK asks the workplace about (its ORIGIN), as
+# the SSO registered it. Empty: the Host header alone (``host``, no
+# scheme), the form our registration answers; the SDK's own fallback
+# (``https://host``) and our callback URL get errorcode=404.
+SERVICE_URL = ""
 USERINFO_URL = "http://workplace.example.com/api/common/v1/auth/userInfo"
 USERINFO_TIMEOUT_SECONDS = 5.0
 
@@ -55,13 +61,13 @@ def create_sdk(request, callback_url):
         # the private SDK, as in the Flask sample
         from your_private_module import SSO  # ty: ignore[unresolved-import]
 
-        if callback_url is None and "ORIGIN" not in request.args:
-            # The Flask sample checks the cookie inside /login?ORIGIN=...,
-            # and the SDK may need ORIGIN when it is built; give it the page
-            # being verified (the callback, no query).
-            request.args = type(request.args)(
-                [*request.args.to_dict().items(), ("ORIGIN", request.url)]
-            )
+        # the SDK takes ORIGIN, when there is one, as the service URL it
+        # sends the workplace (URL=..., Client-Url) and gets back from the
+        # token page; it must be the registered one, never our callback
+        origin = SERVICE_URL or request.environ.get("HTTP_HOST", "")
+        request.args = type(request.args)(
+            [*request.args.to_dict().items(), ("ORIGIN", origin)]
+        )
         sso = SSO(request)
     else:
         sso = UserinfoCheck(request)
