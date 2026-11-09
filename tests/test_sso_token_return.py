@@ -123,8 +123,13 @@ def test_idp_login_sdk_mode_keeps_the_sdk_login_url(monkeypatch):
     monkeypatch.setitem(sys.modules, "your_private_module", module)
     monkeypatch.setattr(idp_login, "VERIFY_WITH", "sdk")
 
+    class Args(dict):
+        def to_dict(self):
+            return dict(self)
+
     class View:
-        args = {"ORIGIN": "x"}
+        args = Args()
+        environ = {"HTTP_HOST": "agentic.corp"}
 
     assert (
         idp_login.create_sdk(View(), "https://cb").redirect_url == TOKEN_PAGE
