@@ -62,10 +62,11 @@ USER_HEADER = {
     "required": True,
     "schema": {"type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$"},
     "description": (
-        "Who calls (always required, every key kind). Our tenant: one of our "
-        "active users (users.id or employee id). Another tenant: an SSO "
-        "employee id (system accounts svc-...). Standard key: reads cover "
-        "only this user's rows. Master key: reads cover the whole tenant. "
+        "Who calls (always required, every key kind). The agentic "
+        "service's tenant: one of its active users (employee id). "
+        "Another tenant: an employee id (system accounts svc-...). "
+        "Standard key: reads cover only this user's rows. Master key: reads "
+        "cover the whole tenant. "
         "Writes are made for this user."
     ),
 }

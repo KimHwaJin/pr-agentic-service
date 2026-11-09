@@ -5,12 +5,9 @@ executor 게이트웨이(`/api/v1/executor/…`)와 배치 게이트웨이(`/api
 ## 1. 구조
 
 - 호출자는 pr-agentic-service에만 접속합니다. executor와 pr-batch의 주소와 key는 호출자에게 주지 않습니다.
-- `/api/v1/executor/{path}`는 executor `/api/v1/{path}`로, `/api/v1/batch/{path}`는 pr-batch `/api/v1/{path}`로 중계됩니다. 메서드, 쿼리, 본문은 그대로 넘어가고, 응답의 상태 코드와 본문도 그대로 돌아옵니다(배치는 오류 본문만 우리 형식으로 맞춥니다, 6장).
-- **허용 목록에 있는 경로만 통과합니다.** 목록 밖의 경로와 메서드는 우리가 404 `NOT_FOUND`(`Not available through this service.`)로 답하고 뒤로 보내지 않습니다. 목록은 각 게이트웨이 문서의 "엔드포인트 한눈에 보기"에 있습니다.
-- 우리가 하는 일은 세 가지입니다.
-  1. 호출자의 key와 사용자를 확인합니다(2장, 3장).
-  2. executor·pr-batch에 보낼 신원 헤더를 **우리가 확인한 값으로 새로 만듭니다.** 호출자가 보낸 `X-Tenant-Id`, `Authorization`, `Cookie` 같은 헤더는 넘어가지 않습니다(5장).
-  3. key 종류에 따라 조회 범위를 정합니다(4장).
+- `/api/v1/executor/{path}`는 executor `/api/v1/{path}`로, `/api/v1/batch/{path}`는 pr-batch `/api/v1/{path}`로 중계됩니다. 메서드, 쿼리, 본문은 그대로 넘어가고, 응답의 상태 코드와 본문도 그대로 돌아옵니다(배치는 오류 본문만 공통 형식으로 맞춥니다, 6장).
+- **문서에 있는 경로만 쓸 수 있습니다.** 그 밖의 경로와 메서드는 404 `NOT_FOUND`(`Not available through this service.`)입니다. 목록은 각 게이트웨이 문서의 "엔드포인트 한눈에 보기"에 있습니다.
+- 게이트웨이는 호출자의 key와 사용자를 확인하고(3장, 4장), key 종류에 따라 조회 범위를 정합니다(4장). 호출자가 보낸 `X-Tenant-Id`, `Authorization`, `Cookie` 같은 헤더는 쓰지 않습니다(5장).
 
 ## 2. 주소
 
@@ -27,7 +24,7 @@ pr-agentic-service는 쿠버네티스 클러스터에 배포되어 있고, 호�
 
 ## 3. API key
 
-key는 우리 관리자가 **시스템 > API 키** 화면(또는 `POST /api/v1/admin/api-clients`)에서 발급합니다. 원문은 발급할 때 한 번만 보이고, 우리는 SHA-256만 보관합니다. 잃어버리면 관리자가 재발급합니다(같은 이름·tenant·종류로 새 key). 이전 key는 그때 바로 끊기므로 새 key로 곧바로 바꿉니다.
+key는 이 서비스 관리자에게 요청해 발급받습니다. 원문은 발급할 때 한 번만 보이므로 바로 안전한 곳에 저장합니다. 잃어버리면 관리자가 재발급합니다(같은 tenant·종류로 새 key). 이전 key는 그때 바로 끊기므로 새 key로 곧바로 바꿉니다.
 
 | 항목 | 값 |
 | --- | --- |
@@ -35,11 +32,11 @@ key는 우리 관리자가 **시스템 > API 키** 화면(또는 `POST /api/v1/a
 | 보내는 법 | 모든 요청에 `X-Api-Key: <key>` |
 | tenant | key마다 하나. 발급할 때 정하고 바꿀 수 없습니다. 호출자가 만드는 실행·배치는 모두 이 tenant에 속합니다 |
 | 종류 (`kind`) | `standard`(일반키, 기본값) 또는 `master`(마스터키). **조회 범위만** 다릅니다(4장) |
-| 폐기 | 관리자가 key 하나 또는 tenant 전체를 폐기합니다. 모든 서버에 60초 안에 반영되고, 그 뒤로는 401입니다 |
+| 폐기 | 관리자가 key 하나 또는 tenant 전체를 폐기합니다. 60초 안에 반영되고, 그 뒤로는 401입니다 |
 
-- tenant가 다르면 서로의 실행·배치·아티팩트가 보이지 않습니다(404). 우리 tenant(`dtest-agent-service`) key는 우리 팀 서버 간 연동에만 발급합니다.
-- key는 설정이나 환경 변수에서 읽고, 코드나 저장소에 넣지 않습니다. 로그에는 `pas_…` 값이 `***`로 가려집니다.
-- SSO 로그인 쿠키가 함께 오면 쿠키로만 판정하고 key는 무시합니다. 서버 간 호출에서는 쿠키를 보내지 않습니다.
+- tenant가 다르면 서로의 실행·배치·아티팩트가 보이지 않습니다(404).
+- key는 설정이나 환경 변수에서 읽고, 코드에 넣거나 로그에 남기지 않습니다.
+- 쿠키를 함께 보내지 않습니다. 쿠키가 있으면 key 대신 쿠키로 판정합니다.
 
 ## 4. 사용자(`X-User-Id`)와 조회 범위
 
@@ -49,8 +46,8 @@ key는 우리 관리자가 **시스템 > API 키** 화면(또는 `POST /api/v1/a
 
 | key의 tenant | `X-User-Id`에 넣는 값 | 확인 |
 | --- | --- | --- |
-| 우리 tenant | 우리 사용자의 `users.id` 또는 사번 | 활성 사용자여야 합니다. 모르거나 비활성이면 403 `FORBIDDEN`. 뒤로는 `users.id`(소문자 사번)로 넘깁니다 |
-| 다른 tenant | SSO 사번 (시스템 계정은 `svc-…`) | 형식 `^[a-z0-9][a-z0-9._-]{0,63}$`(소문자로 바꾼 뒤)만 봅니다. 우리가 비활성화한 사번이면 403 |
+| 이 서비스 tenant | 이 서비스 사용자의 사번 | 활성 사용자여야 합니다. 모르거나 비활성이면 403 `FORBIDDEN` |
+| 다른 tenant | 사번 (시스템 계정은 `svc-…`) | 형식 `^[a-z0-9][a-z0-9._-]{0,63}$`(소문자로 바꾼 뒤)만 봅니다. 이 서비스에서 비활성화된 사번이면 403 |
 
 - 대문자로 보내도 됩니다. 소문자로 바꿔서 씁니다(`E12345`와 `e12345`는 같은 사용자).
 - 상위 호출자나 브라우저가 보낸 값을 확인 없이 넘기지 않습니다. 호출 서비스가 직접 인증한 사용자로 만듭니다.
@@ -65,24 +62,15 @@ key는 우리 관리자가 **시스템 > API 키** 화면(또는 `POST /api/v1/a
 
 - 일반키는 "필터를 안 넣으면 검색 불가"가 아니라 **"항상 자기 것만 검색"** 입니다.
 - 남의 자원을 상세 조회하면 일반키는 404입니다. 존재 여부를 알려 주지 않습니다.
-- 쓰기 요청의 쿼리 `user_id`는 무시합니다(넘기지 않음). 쿼리 `tenant_id`는 언제나 무시합니다. tenant는 key가 정합니다.
+- 쓰기 요청의 쿼리 `user_id`는 무시합니다. 쿼리 `tenant_id`는 언제나 무시합니다. tenant는 key가 정합니다.
 - `user_id`의 형식이 틀리면 400 `INVALID_IDENTITY`입니다.
-
-뒤로 보내는 값은 이렇게 됩니다.
-
-| 호출 | executor·pr-batch로 가는 `X-User-Id` | 쿼리 `user_id` |
-| --- | --- | --- |
-| 일반키 조회 | 호출자의 `X-User-Id` | 보내지 않음 |
-| 마스터키 조회 | 보내지 않음 (tenant 전체 조회) | 호출자가 넣었으면 소문자로 바꿔 보냄 |
-| 쓰기 (두 종류 모두) | 호출자의 `X-User-Id` | 보내지 않음 |
-
 
 ### 4.3 프로젝트와 세션 (`X-Project-Id`, `X-Session-Id`)
 
 선택 헤더입니다. 형식은 `^[A-Za-z0-9][A-Za-z0-9._-]{0,254}$`이고 `unscoped`는 쓸 수 없습니다.
 
-- 우리 tenant key: 우리 프로젝트·세션이어야 합니다. `X-User-Id` 사용자가 그 프로젝트의 멤버가 아니거나 세션이 그 프로젝트 것이 아니면 404입니다.
-- 다른 tenant key: 그 호출자가 정한 값으로 보고 형식만 확인해 넘깁니다.
+- 이 서비스 tenant key: 이 서비스의 프로젝트·세션이어야 합니다. `X-User-Id` 사용자가 그 프로젝트의 멤버가 아니거나 세션이 그 프로젝트 것이 아니면 404입니다.
+- 다른 tenant key: 호출자가 정한 값으로 보고 형식만 확인합니다.
 - `X-Session-Id`는 `X-Project-Id`가 있어야 합니다(없으면 400).
 - executor는 두 값을 실행 제출(`POST /executions`) 때만 실행의 `context`로 저장합니다. 다른 경로에서는 형식만 검사하고 쓰지 않으므로, 조회·취소 때는 보내지 않아도 됩니다. pr-batch는 배치 등록(`POST /batches`) 때의 `X-Project-Id`만 저장합니다.
 
@@ -92,14 +80,13 @@ key는 우리 관리자가 **시스템 > API 키** 화면(또는 `POST /api/v1/a
 
 | 헤더 | executor 게이트웨이 | 배치 게이트웨이 |
 | --- | --- | --- |
-| `X-Api-Key` | 우리 executor key로 바꿔 보냄 | 우리 pr-batch key로 바꿔 보냄 |
-| `X-User-Id` | 4.2 표대로 | 4.2 표대로 |
-| `X-Tenant-Id` | key의 tenant로 우리가 붙임. 호출자 값은 버림 | 같음 |
-| `X-Project-Id`, `X-Session-Id` | 4.3 확인 뒤 넘김 | `X-Project-Id`만, 배치 등록 때만 |
-| `Content-Type` | 넘김 | 넘김 |
-| `Idempotency-Key`, `If-Match`, `Accept` | **넘기지 않음** (executor는 멱등키를 본문 `idempotency_key`로 받음) | 넘김 |
-| `Range` | **넘기지 않음** (파일은 항상 전체 200) | 해당 없음 |
-| `Authorization`, `Cookie`, 그 밖 | 넘기지 않음 | 넘기지 않음 |
+| `X-Api-Key` | 필수 | 필수 |
+| `X-User-Id` | 필수 (4장) | 필수 (4장) |
+| `X-Project-Id`, `X-Session-Id` | 선택 (4.3) | `X-Project-Id`만, 배치 등록 때만 |
+| `Content-Type` | 씀 | 씀 |
+| `Idempotency-Key`, `If-Match`, `Accept` | **쓰지 않음** (멱등키는 본문 `idempotency_key`) | 씀 |
+| `Range` | **쓰지 않음** (파일은 항상 전체 200) | 해당 없음 |
+| `X-Tenant-Id`, `Authorization`, `Cookie`, 그 밖 | 무시 | 무시 |
 
 ### 5.2 응답 헤더
 
@@ -108,15 +95,15 @@ key는 우리 관리자가 **시스템 > API 키** 화면(또는 `POST /api/v1/a
 | `Content-Type` | 그대로 | 그대로 |
 | `ETag` | 그대로 | 그대로 (`If-Match`에 씀) |
 | `Location` | 그대로. **executor 기준 경로**(`/api/v1/executions/{id}`)입니다 | 그대로. **pr-batch 기준 경로**(`/api/v1/batches/{id}`)입니다 |
-| `Content-Disposition` | 그대로 (아티팩트 파일 이름) | 넘기지 않음 |
-| `Content-Length` | 넘기지 않음 (스트리밍으로 보냄) | 넘기지 않음 |
-| `X-Request-ID` | 우리 요청 ID | 우리 요청 ID |
+| `Content-Disposition` | 그대로 (아티팩트 파일 이름) | 없음 |
+| `Content-Length` | 없음 | 없음 |
+| `X-Request-ID` | 요청 ID (문의할 때 전달) | 요청 ID (문의할 때 전달) |
 
 `Location`을 따라갈 때는 앞의 `/api/v1/`을 `/api/v1/executor/` 또는 `/api/v1/batch/`로 바꿉니다. 예: `/api/v1/executions/abc` → `/api/v1/executor/executions/abc`.
 
 ## 6. 응답과 오류 형식
 
-성공 응답은 executor·pr-batch의 본문을 그대로 돌려줍니다. 모든 오류는 한 가지 모양입니다. executor와 pr-batch의 오류도 같은 모양이라 그대로 오고, 우리가 만든 오류도 같은 모양입니다.
+성공 응답은 executor·pr-batch의 본문을 그대로 돌려줍니다. 모든 오류는 한 가지 모양입니다. 게이트웨이가 낸 오류와 executor·pr-batch가 낸 오류가 같은 모양입니다.
 
 ```json
 {"error": {
@@ -132,7 +119,7 @@ key는 우리 관리자가 **시스템 > API 키** 화면(또는 `POST /api/v1/a
 - `details`는 항상 있습니다(없으면 `[]`). 잘못된 값마다 하나씩, `location`(첫 원소는 `body`·`header`·`query`·`path`), `type`(바뀌지 않는 snake_case 사유), `context`(한도와 실제 값)가 들어갑니다.
 - `context`는 특정 값에 묶이지 않는 정보이고, 없으면 빠집니다.
 
-### 6.1 우리(게이트웨이)가 내는 오류
+### 6.1 게이트웨이가 내는 오류
 
 | HTTP | code | 언제 | 재시도 |
 | --- | --- | --- | --- |
@@ -140,7 +127,7 @@ key는 우리 관리자가 **시스템 > API 키** 화면(또는 `POST /api/v1/a
 | 401 | `LOGIN_REQUIRED` | `X-Api-Key` 없음 | 아니오 |
 | 401 | `INVALID_API_KEY` | 모르는 key, 폐기된 key | 아니오 |
 | 403 | `FORBIDDEN` | 모르거나 비활성인 사용자, 일반키가 남의 `user_id`로 조회 | 아니오 |
-| 404 | `NOT_FOUND` | 허용 목록 밖의 경로·메서드, (우리 tenant) 멤버가 아닌 프로젝트·남의 세션 | 아니오 |
+| 404 | `NOT_FOUND` | 문서에 없는 경로·메서드, (이 서비스 tenant) 멤버가 아닌 프로젝트·남의 세션 | 아니오 |
 | 413 | `TOO_LARGE` | 요청 본문이 32MB 초과 | 아니오 |
 | 502 | `EXECUTOR_UNAVAILABLE` / `BAD_GATEWAY` | executor / pr-batch가 응답하지 않음 | 예, 잠시 뒤 (쓰기는 같은 멱등키로) |
 | 504 | `EXECUTOR_TIMEOUT` / `ERROR` | executor(30초) / pr-batch(60초)가 시간 안에 답하지 않음 | 예, 잠시 뒤 (쓰기는 같은 멱등키로) |
@@ -171,16 +158,15 @@ key는 우리 관리자가 **시스템 > API 키** 화면(또는 `POST /api/v1/a
 
 | 항목 | 값 | 넘으면 |
 | --- | --- | --- |
-| 요청 본문 (우리) | 32MB | 413 `TOO_LARGE` |
+| 요청 본문 (게이트웨이) | 32MB | 413 `TOO_LARGE` |
 | 요청 본문 (executor) | 30MB | 413 `REQUEST_BODY_TOO_LARGE` |
 | 업로드 파일 (pr-batch) | 10MiB | 413 `UPLOAD_TOO_LARGE` |
-| executor 응답 대기 | 30초 (`EXECUTOR_TIMEOUT_SECONDS`) | 504 `EXECUTOR_TIMEOUT` |
+| executor 응답 대기 | 30초 | 504 `EXECUTOR_TIMEOUT` |
 | pr-batch 응답 대기 | 60초 | 504 |
 
 실행 자체는 비동기라 응답 대기 시간과 관계없습니다. 제출하면 바로 202가 오고, 상태는 조회로 확인합니다.
 
-## 10. 운영 정보
+## 10. 문의
 
-- key 요청은 모두 감사 로그에 남습니다(client 이름, tenant, `X-User-Id`, 메서드, 경로, 결과 코드). key 값은 남지 않습니다.
 - 문의할 때는 응답의 `X-Request-ID`, 실행 ID, 배치·run ID를 함께 알려 주세요.
-- 사용자 비활성화는 30초, key 폐기는 60초 안에 모든 서버에 반영됩니다.
+- 사용자 비활성화는 30초, key 폐기는 60초 안에 반영됩니다.
