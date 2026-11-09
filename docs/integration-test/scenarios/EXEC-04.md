@@ -15,14 +15,18 @@
 
 ## 2. 사전 조건
 - 우리 tenant 키
+- EXEC-02의 실행 ID
 
 ## 3. 수행 절차
 1. 관리자로 **시스템 > API 호출 시험** 탭을 엽니다.
 2. 시나리오 **EXEC-04**를 고르고 보냅니다.
 3. 경로를 `/api/v1/executor/maintenance`로 바꿔 보냅니다.
+4. 경로를 `/api/v1/executor/executions/<EXEC-02 실행 ID>/attempts`로 바꿔 보냅니다.
+5. 방식을 DELETE, 경로를 `/api/v1/executor/runtime-targets/<시스템 > 런타임의 target ID>`로 바꿔 보냅니다.
 
 ## 4. 예상 결과
-- 2·3: 404 (executor로 전달되지 않음)
+- 2·3·4: 404 (executor로 전달되지 않음)
+- 5: 404 (executor로 전달되지 않음), 런타임 탭에 그 대상이 그대로 있음
 
 ## 5. 확인 방법
 API 호출 시험 결과

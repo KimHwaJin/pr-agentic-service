@@ -16,7 +16,7 @@
 | [PREP-06](PREP-06.md) | 세 서비스 중지 후 동시 리셋 | P0 | X | 운영 | 단독 |
 | [PREP-07](PREP-07.md) | 배포 | P0 | X | 운영 | 단독 |
 | [PREP-08](PREP-08.md) | 연결 스모크(S0, 아래) | P0 | 일부 | 운영 |  |
-| [PREP-09](PREP-09.md) | 관리자 최초 로그인 → /users/me에서 admin 확인 → 테스트 키 2개 발급 | P0 | O | 관리자 |  |
+| [PREP-09](PREP-09.md) | 관리자 최초 로그인 → /users/me에서 admin 확인 → 테스트 키 3개 발급(일반·마스터) | P0 | O | 관리자 |  |
 | [PREP-10](PREP-10.md) | 테스트 데이터 | P0 | 일부 | 운영 |  |
 | [AUTH-01](AUTH-01.md) | SSO 첫 로그인 | P0 | O | 일반 |  |
 | [AUTH-02](AUTH-02.md) | `ADMIN_EMPLOYEE_IDS`에 있는 사번의 최초 로그인 | P0 | O | 관리자 |  |
@@ -44,13 +44,17 @@
 | [RUN-14](RUN-14.md) | 분석 시나리오 묶음 `scripts/run_scenarios.py` | P1 | X | 운영 |  |
 | [RUN-15](RUN-15.md) | 코드 레벨 4로 분석 요청 (세션 또는 프로젝트 설정) | P1 | O | 일반 |  |
 | [RUN-16](RUN-16.md) | 임베딩 없는 환경(`EMBEDDING_PROVIDER: none`)에서 템플릿이 있는 요청 | P1 | O | 일반 |  |
-| [RUN-17](RUN-17.md) | 일회성 지시와 지속 선호를 섞어 대화 | P1 | O | 일반 |  |
-| [EXEC-01](EXEC-01.md) | 우리 tenant 키 + `X-User-Id`로 `GET /executor/executions` | P0 | O | 관리자 |  |
+| [RUN-17](RUN-17.md) | 일회성 지시와 지속 선호, 분석 대상 이름을 섞어 대화 | P1 | 일부 | 일반 |  |
+| [RUN-18](RUN-18.md) | 계획 후보 중복 없음, 한 응답에 계획 카드 하나 | P0 | 일부 | 일반 |  |
+| [RUN-19](RUN-19.md) | 계획 규칙: 2그룹 비교, 챔버 비교, 정리 후 분석 | P1 | O | 일반 |  |
+| [RUN-20](RUN-20.md) | 같은 이유로 계획이 계속 거부될 때 반복 제한 | P1 | 일부 | 운영 |  |
+| [RUN-21](RUN-21.md) | 답변 값이 실제 데이터와 같음(지어낸 데이터 없음) | P0 | 일부 | 운영 |  |
+| [EXEC-01](EXEC-01.md) | 우리 tenant 일반키 + `X-User-Id`로 `GET /executor/executions` | P0 | O | 관리자 |  |
 | [EXEC-02](EXEC-02.md) | INLINE `print(1+1)` 제출(curl) | P0 | O | 관리자 |  |
 | [EXEC-03](EXEC-03.md) | 외부 tenant(`it-ext`) 키로 실행 제출 | P0 | 일부 | 운영 |  |
 | [EXEC-04](EXEC-04.md) | 키로 runtime·maintenance·attempts 경로 | P0 | O | 관리자 |  |
 | [EXEC-05](EXEC-05.md) | 결과물 `/artifacts/{id}`·`/view/artifacts/{id}` | P0 | O | 일반 |  |
-| [EXEC-06](EXEC-06.md) | 우리 tenant 키, `X-User-Id` 없이 GET / POST | P1 | O | 관리자 |  |
+| [EXEC-06](EXEC-06.md) | 일반키·마스터키의 조회 범위와 `X-User-Id` 필수 | P1 | O | 관리자 |  |
 | [EXEC-07](EXEC-07.md) | 우리 tenant 키로 남의 프로젝트·세션 헤더 | P1 | O | 관리자 |  |
 | [EXEC-08](EXEC-08.md) | 관리자 시스템 > 런타임·점검 탭 | P1 | 일부 | 관리자 |  |
 | [BAT-01](BAT-01.md) | 분석 노트북으로 스크립트 등록(`from-notebook`) | P0 | O | 일반 |  |
@@ -63,6 +67,7 @@
 | [BAT-08](BAT-08.md) | 우리 워커를 내린 채 배치 성공 → 재기동 | P1 | 일부 | 운영 | 단독 |
 | [BAT-09](BAT-09.md) | 일정 없는 배치 / 지난 일정만 있는 배치 | P1 | O | 일반 |  |
 | [BAT-10](BAT-10.md) | 외부 tenant 키로 배치 등록·실행 | P1 | 일부 | 운영 |  |
+| [BAT-11](BAT-11.md) | 일반키·마스터키의 배치 조회 범위와 X-User-Id 필수 | P1 | O | 관리자 |  |
 | [TEN-01](TEN-01.md) | 외부 tenant `it-ext` 일괄 폐기 (BAT-10 배치가 켜진 상태) | P0 | 일부 | 운영 | 단독 |
 | [TEN-02](TEN-02.md) | pr-batch를 내린 채 tenant 폐기 | P0 | 일부 | 운영 | 단독 |
 | [TEN-03](TEN-03.md) | 사용자 B 비활성화 | P0 | O | 관리자 | 단독 |
@@ -76,6 +81,7 @@
 | [ADM-04](ADM-04.md) | `/users/me` `permissions` | P1 | O | 일반 |  |
 | [ADM-05](ADM-05.md) | 관리자 전체 실행 보기 + 사용자 필터 | P1 | O | 관리자 |  |
 | [ADM-06](ADM-06.md) | 워크플로 승격·삭제 | P1 | O | 관리자 |  |
+| [ADM-07](ADM-07.md) | API 키 재발급 | P1 | O | 관리자 |  |
 | [OPS-01](OPS-01.md) | executor를 내린 채 분석 요청, 이후 복구 | P0 | 일부 | 운영 | 단독 |
 | [OPS-02](OPS-02.md) | Redis 재시작 | P0 | 일부 | 운영 | 단독 |
 | [OPS-03](OPS-03.md) | 키 해시 불일치(일부러 틀린 키) | P0 | 일부 | 운영 | 단독 |
@@ -86,10 +92,6 @@
 | [OPS-08](OPS-08.md) | 없는 모델, LLM 장애 | P1 | 일부 | 운영 |  |
 | [OPS-09](OPS-09.md) | 동시 사용자 부하(`scripts/loadtest.py`) | P1 | X | 운영 | 단독 |
 | [OPS-10](OPS-10.md) | 항상 실패하는 코드를 요구하는 요청 | P0 | O | 일반 |  |
-| [GAIA-01](GAIA-01.md) | gaia completion 첫 호출 | P0 | X | gaia 화면 |  |
-| [GAIA-02](GAIA-02.md) | 계획 승인 자동 응답 | P0 | X | gaia 화면 |  |
-| [GAIA-03](GAIA-03.md) | question에서 멈춤 → 다음 gaia 메시지 | P0 | X | gaia 화면 |  |
-| [GAIA-04](GAIA-04.md) | SSO와 gaia의 사번 대소문자 표기 | P0 | X | gaia 화면 |  |
-| [GAIA-05](GAIA-05.md) | 같은 대화가 웹 콘솔 세션에 보임 | P1 | O | 일반 |  |
-| [GAIA-06](GAIA-06.md) | 호출이 끊긴 뒤 재호출 | P1 | X | gaia 화면 |  |
-| [GAIA-07](GAIA-07.md) | gaia `GAIA_DEPLOYMENT=development` 이상에서 accesskey 없이 호출 | P0 | O | 관리자 |  |
+| [OPS-11](OPS-11.md) | pr-batch EXECUTOR_API_KEY에 해시를 넣은 설정 | P1 | 일부 | 운영 | 단독 |
+
+gaia 관련 시나리오(GAIA-01~07)는 이번 통합 테스트에서 제외했습니다(11/09). prd는 internal/gaia 빌드이므로 PREP-05는 그대로 수행합니다.

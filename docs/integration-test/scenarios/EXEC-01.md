@@ -1,4 +1,4 @@
-# EXEC-01 우리 tenant 키 + `X-User-Id`로 `GET /executor/executions`
+# EXEC-01 우리 tenant 일반키 + `X-User-Id`로 `GET /executor/executions`
 
 | 항목 | 값 |
 | --- | --- |
@@ -11,10 +11,10 @@
 | 11/01판 ID | C1 |
 
 ## 1. 목적
-우리 tenant 키 + X-User-Id로 executor 실행 목록을 보면 그 사람의 실행만 나오는지 확인합니다.
+우리 tenant 일반키 + X-User-Id로 executor 실행 목록을 보면 그 사람의 실행만 나오는지 확인합니다.
 
 ## 2. 사전 조건
-- 우리 tenant 키
+- 우리 tenant 일반키(PREP-09)
 - 실행 기록이 있는 일반 A와 B
 
 ## 3. 수행 절차
