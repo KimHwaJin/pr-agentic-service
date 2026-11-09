@@ -59,6 +59,10 @@ CHECKPOINT_POOL_SIZE: 8
 # [공통] 체크포인트 쓰기가 빈 커넥션을 기다리는 최대 시간(초, 0 초과).
 CHECKPOINT_POOL_TIMEOUT_SECONDS: 30
 
+# [공통] 체크포인트 풀 연결의 TCP keepalive 첫 신호까지 걸리는 시간(초, 1 이상).
+# k8s와 DB 사이 장비(LB, 방화벽, NAT)가 idle 연결을 끊는 시간보다 짧게 둔다.
+DB_KEEPALIVE_IDLE_SECONDS: 60
+
 # [공통] 기동 시 alembic 마이그레이션 자동 적용 여부.
 AUTO_MIGRATE: true
 
