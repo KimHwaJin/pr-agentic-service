@@ -13,6 +13,15 @@ from src.dtest.core.models import User
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 LIMITED = [Depends(sso_rate_limit)]
+# app root (outside API_PREFIX)
+root_router = APIRouter()
+
+
+@root_router.get("/", include_in_schema=False, dependencies=LIMITED)
+async def sso_return(request: Request) -> Response:
+    """Where the SSO token page sends the browser back (it knows only our
+    registered host): goes on with the login flow, else to the console."""
+    return request.app.state.sso.returned(request)
 
 
 @router.get("/login/sso", status_code=302, dependencies=LIMITED)

@@ -9,6 +9,12 @@ Known SDK contract (Flask sample): ``sso = SSO(request)``,
 The SDK reads ``request.url``, ``request.args.to_dict()``,
 ``request.cookies.to_dict()`` and ``request.environ``; we give it a
 read-only view of the ASGI request instead of Flask.
+
+TLS ends at the ingress, so the pod sees ``http``. The SDK picks the
+service URL it sends to the SSO from ``request.url``'s scheme (https: the
+bare host, which is what the SSO registered; http: ``http://host``,
+refused with ``errorcode=404``), so the view carries the public scheme
+(``PUBLIC_API_ORIGIN``'s) instead of the pod's.
 """
 
 import logging
@@ -63,7 +69,7 @@ class _Values(Mapping[str, str]):
         return {k: v[0] if flat else list(v) for k, v in self._values.items()}
 
 
-def _environ(request: Request) -> dict[str, str]:
+def _environ(request: Request, scheme: str) -> dict[str, str]:
     """WSGI-style metadata snapshot (no body, no input stream)."""
     scope = request.scope
     root_path = scope.get("root_path", "")
@@ -82,7 +88,7 @@ def _environ(request: Request) -> dict[str, str]:
         "SERVER_PORT": (
             str(server[1]) if server and server[1] is not None else ""
         ),
-        "wsgi.url_scheme": scope.get("scheme", "http"),
+        "wsgi.url_scheme": scheme,
     }
     client = scope.get("client")
     if client:
@@ -112,7 +118,12 @@ class SdkRequest:
     the ASGI request.
     """
 
-    def __init__(self, request: Request, callback_url: str | None = None):
+    def __init__(
+        self,
+        request: Request,
+        callback_url: str | None = None,
+        scheme: str | None = None,
+    ):
         params = request.query_params
         if callback_url is not None:
             params = QueryParams(
@@ -122,17 +133,19 @@ class SdkRequest:
         self._request = request
         self.args = _Values(params.multi_items())
         self.cookies = _Values(request.cookies.items())
-        self.environ = _environ(request)
-        self.url = str(request.url)
+        # the browser's scheme (public origin), not the pod's (see above)
+        url = request.url.replace(scheme=scheme) if scheme else request.url
+        self.environ = _environ(request, url.scheme)
+        self.url = str(url)
         self.headers = request.headers
         self.method = request.method
-        url = request.url
         self.scheme = url.scheme
         self.host = url.netloc
         self.path = url.path
         self.full_path = url.path + "?" + url.query
         self.host_url = f"{url.scheme}://{url.netloc}/"
-        self.url_root = str(request.base_url)
+        base = request.base_url
+        self.url_root = str(base.replace(scheme=scheme) if scheme else base)
         self.base_url = self.url.split("?", 1)[0]
         self.remote_addr = request.client.host if request.client else None
 
@@ -141,13 +154,13 @@ class SdkRequest:
 
 
 def verify_employee(
-    sdk_factory: SdkFactory, request: Request
+    sdk_factory: SdkFactory, request: Request, scheme: str | None = None
 ) -> Employee | None:
     cookie = request.headers.get("cookie")
     if not cookie:
         log.info("sso_verify result=no_cookie")
         return None
-    sdk = sdk_factory(SdkRequest(request), None)
+    sdk = sdk_factory(SdkRequest(request, scheme=scheme), None)
     valid = sdk.check_day_cookie(cookie)
     if valid is False:
         # names only: which cookies arrived tells a domain/path problem
@@ -179,8 +192,11 @@ def verify_employee(
 
 
 def entry_url(
-    sdk_factory: SdkFactory, request: Request, callback_url: str
+    sdk_factory: SdkFactory,
+    request: Request,
+    callback_url: str,
+    scheme: str | None = None,
 ) -> str:
     return sdk_factory(
-        SdkRequest(request, callback_url), callback_url
+        SdkRequest(request, callback_url, scheme), callback_url
     ).redirect_url

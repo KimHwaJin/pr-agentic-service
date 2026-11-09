@@ -1,4 +1,5 @@
 import logging
+import re
 import secrets
 from urllib.parse import urlsplit
 
@@ -16,6 +17,9 @@ from src.dtest.core.db import Database
 
 log = logging.getLogger(__name__)
 NO_STORE = {"Cache-Control": "no-store"}
+# The login flow of a browser sent to an SSO page that returns to our root
+# (the SDK's token page knows only the registered host), not the callback.
+LOGIN_FLOW_COOKIE = "agentic_login_flow"
 
 
 class AuthSessionRead(BaseModel):
@@ -111,7 +115,13 @@ class SsoService:
         if flow is None:
             log.info("sso_callback_flow_missing")
             raise HTTPException(
-                400, "Login flow expired or already used. Start login again."
+                400,
+                "Login flow expired or already used. Start login again.",
+                headers={
+                    **NO_STORE,
+                    # forget it, so / does not come back here again
+                    "Set-Cookie": f"{LOGIN_FLOW_COOKIE}=; Max-Age=0; Path=/",
+                },
             )
         return await self._enter(
             request, flow.return_to, flow.target, from_callback=True
@@ -154,7 +164,10 @@ class SsoService:
                 target,
                 "callback" if url == callback else urlsplit(url).netloc,
             )
-            return RedirectResponse(url, 302, headers=NO_STORE)
+            response = RedirectResponse(url, 302, headers=NO_STORE)
+            if url != callback:
+                self._keep_flow(response, flow_id)
+            return response
         async with self.db.sessions() as db:
             user = await bind_employee(
                 db, employee, self.settings.admin_employee_ids
@@ -171,6 +184,7 @@ class SsoService:
             "sso_login_ok user_id=%s from_callback=%s", user.id, from_callback
         )
         response = RedirectResponse(destination, 302, headers=NO_STORE)
+        response.delete_cookie(LOGIN_FLOW_COOKIE, path="/")
         response.set_cookie(
             self.settings.session_cookie_name,
             sid,
@@ -182,6 +196,34 @@ class SsoService:
             samesite=self.settings.cookie_samesite,
         )
         return response
+
+    def _keep_flow(self, response: Response, flow_id: str) -> None:
+        s = self.settings
+        response.set_cookie(
+            LOGIN_FLOW_COOKIE,
+            flow_id,
+            max_age=s.login_flow_ttl_seconds,
+            path="/",
+            secure=s.cookie_secure,
+            httponly=True,
+            # sent on the SSO's cross-site redirect back (strict is not)
+            samesite="none" if s.cookie_samesite == "none" else "lax",
+        )
+
+    def returned(self, request: Request) -> Response:
+        """``GET /``: a browser back from an SSO page that returns to our
+        root continues its login flow at the callback."""
+        flow_id = request.cookies.get(LOGIN_FLOW_COOKIE, "")
+        if _FLOW_ID.fullmatch(flow_id):
+            log.info("sso_returned_to_root")
+            return RedirectResponse(
+                f"{API_PREFIX}/auth/login/sso/callback/{flow_id}",
+                302,
+                headers=NO_STORE,
+            )
+        if self.settings.console_enabled:
+            return RedirectResponse("/dev/", 302)
+        raise HTTPException(404, "Not found.")
 
     async def authenticate(self, request: Request) -> AuthSession:
         sid = request.cookies.get(self.settings.session_cookie_name, "")
@@ -224,6 +266,9 @@ class SsoService:
         response = Response(status_code=204, headers=NO_STORE)
         response.delete_cookie(self.settings.session_cookie_name, path="/")
         return response
+
+
+_FLOW_ID = re.compile(r"[A-Za-z0-9_-]{43}")
 
 
 def _in_console(path: str) -> bool:

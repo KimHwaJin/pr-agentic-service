@@ -21,8 +21,13 @@ OWN_PREFIXES = (API_PREFIX + "/", "/view/", "/dev/")
 
 
 def is_own(path: str) -> bool:
-    """``/api/v1/...``, ``/view/...``, ``/dev`` and below."""
-    return path.startswith(OWN_PREFIXES) or path + "/" in OWN_PREFIXES
+    """``/api/v1/...``, ``/view/...``, ``/dev`` and below, and ``/`` (where
+    the SSO token page sends the browser back, see routers/auth.py)."""
+    return (
+        path == "/"
+        or path.startswith(OWN_PREFIXES)
+        or path + "/" in OWN_PREFIXES
+    )
 
 
 class OwnPaths:

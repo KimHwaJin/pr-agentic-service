@@ -119,6 +119,7 @@ def mount_api(app: FastAPI, settings: Settings) -> None:
     ):
         api.include_router(module.router)
     app.include_router(api)
+    app.include_router(auth.root_router)
     app.include_router(artifacts.router)
     app.include_router(batch.router)
     # the view pages' libraries, served here: no CDN in the closed network
