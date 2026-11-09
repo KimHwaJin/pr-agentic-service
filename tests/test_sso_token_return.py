@@ -181,7 +181,7 @@ def test_userinfo_without_amtoken_goes_to_the_token_page(monkeypatch):
     fresh = idp_login.create_sdk(View({"SMSESSION": "s"}), "https://cb")
     assert fresh.redirect_url == (
         "http://login.corp/issue.jsp"
-        "?client_id=agentic.corp&redirect_url=agentic.corp"
+        "?client_id=agentic.corp&redirect_uri=agentic.corp"
     )
     # with an AMTOKEN (expired or refused): the SSO login, as before
     known = idp_login.create_sdk(
@@ -214,3 +214,49 @@ def test_a_callback_without_amtoken_goes_on_to_the_token_page_once():
     with pytest.raises(HTTPException) as e:
         asyncio.run(sso.callback(_request(), flow_id))
     assert e.value.status_code == 401
+
+
+def test_userinfo_takes_the_token_page_url_the_workplace_gives(monkeypatch):
+    import httpx
+
+    from src.dtest import idp_login
+
+    calls = []
+
+    class Response:
+        status_code = 401
+
+        def json(self):
+            return {"url": "http://login.corp/issuToken.jsp?cliend_id=a"}
+
+    def fake_get(url, params, headers, cookies, timeout):
+        calls.append((url, params, headers, cookies))
+        return Response()
+
+    class Cookies(dict):
+        def to_dict(self):
+            return dict(self)
+
+    class View:
+        cookies = Cookies({"SMSESSION": "s"})
+        environ = {"HTTP_HOST": "agentic.corp"}
+
+    monkeypatch.setattr(httpx, "get", fake_get)
+    monkeypatch.setattr(idp_login, "VERIFY_WITH", "userinfo")
+    monkeypatch.setattr(idp_login, "SSO_CHECK_URL", "http://wp.corp/sso")
+    monkeypatch.setattr(idp_login, "TOKEN_PAGE", "http://never")
+    sso = idp_login.create_sdk(View(), "https://cb")
+    assert sso.redirect_url == "http://login.corp/issuToken.jsp?cliend_id=a"
+    assert calls == [
+        (
+            "http://wp.corp/sso",
+            {"URL": "agentic.corp"},
+            {"Client-Url": "agentic.corp"},
+            {"SMSESSION": "s"},
+        )
+    ]
+
+    # the workplace says something else: TOKEN_PAGE, as configured
+    Response.status_code = 200
+    sso = idp_login.create_sdk(View(), "https://cb")
+    assert sso.redirect_url.startswith("http://never?client_id=")
