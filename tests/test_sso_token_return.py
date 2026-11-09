@@ -42,14 +42,14 @@ def _service(url, **kw):
     return SsoService(s, Adapter(url), Store(), None)
 
 
-def _request(cookie: str = "") -> Request:
+def _request(cookie: str = "", query: bytes = b"") -> Request:
     headers = [(b"cookie", cookie.encode())] if cookie else []
     return Request(
         {
             "type": "http",
             "method": "GET",
             "path": "/",
-            "query_string": b"",
+            "query_string": query,
             "headers": headers,
         }
     )
@@ -140,4 +140,15 @@ def test_idp_login_sdk_mode_keeps_the_sdk_login_url(monkeypatch):
 
     assert idp_login.create_sdk(UView(), "https://cb").redirect_url.endswith(
         "TARGET=https://cb"
+    )
+
+
+def test_root_hands_the_token_page_query_to_the_callback():
+    sso = _service(TOKEN_PAGE)
+    flow_id = "b" * 43
+    back = sso.returned(
+        _request(f"{LOGIN_FLOW_COOKIE}={flow_id}", b"ssoToken=abc%2B1&x=2")
+    )
+    assert back.headers["location"] == (
+        f"/api/v1/auth/login/sso/callback/{flow_id}?ssoToken=abc%2B1&x=2"
     )
