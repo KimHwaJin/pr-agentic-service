@@ -29,10 +29,11 @@ VERIFY_WITH = "userinfo"  # or "sdk"
 
 SSO_LOGIN_PAGE = "https://idp.example.com/sso/am/login.jsp"
 
-# userinfo: a browser without an AMTOKEN (a fresh or incognito window: only
-# the workplace issues it) is sent to the workplace token page instead,
+# userinfo: a browser with an SMSESSION but no AMTOKEN (a fresh or incognito
+# window after the SSO login: only the workplace issues it) is sent to the
+# workplace token page instead of SSO_LOGIN_PAGE,
 # ``TOKEN_PAGE?client_id=<service>&redirect_url=<service>``; it issues the
-# AMTOKEN (logging in first if needed) and returns to our root ``/``, which
+# AMTOKEN and returns to our root ``/``, which
 # goes on to the callback. Its origin must be in SSO_ALLOWED_ORIGINS.
 # Empty: SSO_LOGIN_PAGE as before.
 TOKEN_PAGE = ""
@@ -91,7 +92,14 @@ def create_sdk(request, callback_url):
     else:
         sso = UserinfoCheck(request)
     if callback_url is not None and VERIFY_WITH != "sdk":
-        if TOKEN_PAGE and not request.cookies.get("AMTOKEN"):
+        cookies = request.cookies
+        if (
+            TOKEN_PAGE
+            and cookies.get("SMSESSION")
+            and not cookies.get("AMTOKEN")
+        ):
+            # logged in to the SSO (no SMSESSION: SSO_LOGIN_PAGE first;
+            # the token page refuses it as an expired session)
             service = _service(request)
             sso.redirect_url = (
                 f"{TOKEN_PAGE}?client_id={service}&redirect_url={service}"
