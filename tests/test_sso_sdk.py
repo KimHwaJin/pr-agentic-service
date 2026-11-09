@@ -165,3 +165,61 @@ def test_idp_login_sdk_mode_gives_origin_when_verifying(monkeypatch):
     monkeypatch.setattr(idp_login, "VERIFY_WITH", "sdk")
     assert verify_employee(idp_login.create_sdk, _request("a=1")) is None
     assert seen["origin"] == "https://api/login"
+
+
+def test_sdk_request_shows_the_public_scheme_behind_the_ingress():
+    """TLS ends at the ingress: the pod gets http, the SDK must see https
+    (it sends the bare host to the SSO only for https requests)."""
+    from api_service.auth.sdk import SdkRequest
+
+    request = Request(
+        {
+            "type": "http",
+            "method": "GET",
+            "path": "/api/v1/auth/login/sso/callback/f1",
+            "query_string": b"",
+            "headers": [(b"host", b"agentic.corp")],
+            "server": ("10.1.2.3", 8080),
+            "scheme": "http",
+        }
+    )
+    view = SdkRequest(request, scheme="https")
+    assert view.url.startswith("https://agentic.corp/")
+    assert view.host_url == "https://agentic.corp/"
+    assert view.url_root == "https://agentic.corp/"
+    assert view.environ["wsgi.url_scheme"] == "https"
+    assert view.environ["HTTP_HOST"] == "agentic.corp"
+    # without a public scheme the pod's own is kept
+    assert SdkRequest(request).url.startswith("http://agentic.corp/")
+
+
+def test_idp_adapter_takes_the_scheme_of_the_public_origin(monkeypatch):
+    import sys
+    import types
+
+    from api_service.auth import adapters
+    from core.config import Settings
+
+    seen = []
+    module = types.ModuleType("fake_idp_sdk")
+    module.make = lambda r, cb: seen.append(r.url) or FakeSdk(r, cb)
+    monkeypatch.setitem(sys.modules, "fake_idp_sdk", module)
+    settings = Settings(
+        sso_adapter="idp",
+        sso_adapter_factory="fake_idp_sdk:make",
+        public_api_origin="https://agentic.corp",
+    )
+    adapter = adapters.load_adapter(settings)
+    request = Request(
+        {
+            "type": "http",
+            "method": "GET",
+            "path": "/x",
+            "query_string": b"",
+            "headers": [(b"host", b"agentic.corp"), (b"cookie", b"sso=valid")],
+            "server": ("10.1.2.3", 8080),
+            "scheme": "http",
+        }
+    )
+    adapter._verify(request)
+    assert seen == ["https://agentic.corp/x"]
