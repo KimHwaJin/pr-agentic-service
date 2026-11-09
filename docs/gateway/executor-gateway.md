@@ -8,7 +8,6 @@ pr-agentic-service를 거쳐 executor를 부르는 API입니다. executor는 Pyt
 
 ```
 Execution 1──* Operation 1──* Step           (Step 하나 = 코드 셀 하나)
-Execution 1──* Attempt                         (재시도·복구 시도, 관리자 화면 전용)
 Execution 1──* Artifact                        (노트북, 리포트, 그림, 파일)
 Execution 1──1 Notebook                        (실행한 셀과 출력이 쌓이는 .ipynb)
 ```
@@ -26,7 +25,7 @@ Execution 1──1 Notebook                        (실행한 셀과 출력이 �
 
 ## 2. 엔드포인트 한눈에 보기
 
-API key로 부를 수 있는 21개입니다. 이 밖의 `/api/v1/executor/…` 경로는 404입니다. 아래 표는 레퍼런스(10장)와 같은 순서이고, 요청·응답 이름은 11장 스키마로 이어집니다.
+API key로 부를 수 있는 21개입니다. 이 밖의 `/api/v1/executor/…` 경로는 404입니다. 아래 표는 레퍼런스(9장)와 같은 순서이고, 요청·응답 이름은 10장 스키마로 이어집니다.
 
 <!-- gen:begin summary -->
 | # | Method | Path | 요청 본문 | 성공 응답 |
@@ -145,7 +144,7 @@ GET  /executions/{id}                         → SUCCEEDED / FAILED
 
 ### 3.4 진행 상황 보기
 
-이 게이트웨이는 executor 이벤트 스트림(Redis)을 중계하지 않습니다. 다음 둘 중 하나로 확인합니다.
+이 게이트웨이는 실시간 이벤트 스트림을 제공하지 않습니다. 다음 둘 중 하나로 확인합니다.
 
 - `GET /executions/{id}`를 2~5초 간격으로 읽습니다. 가장 간단합니다.
 - `GET /executions/{id}/events?after_sequence=<마지막으로 본 event_sequence>`로 새 이벤트만 읽습니다. 응답의 `next_cursor`가 있으면 그대로 `cursor`로 넘겨 이어 읽습니다(이때 `after_sequence`는 빼고).
@@ -179,7 +178,7 @@ GET  /executions/{id}                         → SUCCEEDED / FAILED
 
 ## 5. 경로별 상세 설명
 
-경로는 모두 `/api/v1/executor` 뒤에 붙습니다. 헤더는 3장의 공통 헤더이고, 필드 전체 목록은 10장 레퍼런스와 11장 스키마에 있습니다.
+경로는 모두 `/api/v1/executor` 뒤에 붙습니다. 헤더는 3장의 공통 헤더이고, 필드 전체 목록은 9장 레퍼런스와 10장 스키마에 있습니다.
 
 ### 5.1 `POST /executions` 실행 제출
 
@@ -202,7 +201,7 @@ GET  /executions/{id}                         → SUCCEEDED / FAILED
 | `operation.metadata`, `metadata` | | 호출자 값. 키 32개 이하(`^[a-z][a-z0-9_]{0,63}$`), JSON 4096바이트 이하. 조회 결과와 완료 이벤트에 그대로 나옵니다. 비밀값을 넣지 않습니다 |
 
 - 본문에 `context`, `tenant_id`, `actor`를 넣지 않습니다(422). 사용자·프로젝트·세션·tenant는 헤더로 정해지고, 누가 했는지(`created_by`)는 `X-User-Id`로 기록됩니다.
-- **코드는 `INLINE`으로 보냅니다.** `PATH` source(executor 입력 저장소의 `.py` 파일)는 그 저장소에 파일을 쓸 수 있는 우리 내부 서비스만 씁니다.
+- **코드는 `INLINE`으로 보냅니다.** `PATH` source는 쓸 수 없습니다.
 - 한도를 넘으면 422 `INVALID_EXECUTION_SPEC`이고 `details[].context`에 한도와 실제 값이 들어갑니다.
 
 ### 5.2 `GET /executions` 실행 목록
@@ -232,14 +231,14 @@ GET  /executions/{id}                         → SUCCEEDED / FAILED
 | `recovery` | 커널 정리 상태 (`runtime_session_cleanup_status`, `runtime_abort_status`) |
 | `trigger`, `metadata`, `tenant_id` | 제출할 때의 값 |
 | `created_by`, `updated_by` | 그 쓰기를 한 `X-User-Id` |
-| `created_by_client`, `updated_by_client` | executor가 본 API key의 클라이언트 이름. 이 게이트웨이를 거친 요청은 모두 우리 서비스 이름입니다(호출자 key 이름이 아닙니다). 예전 행은 null |
+| `created_by_client`, `updated_by_client` | executor가 본 API key의 클라이언트 이름. 이 게이트웨이를 거친 요청은 모두 `pr-agentic-service`입니다(호출자 key 이름이 아닙니다) |
 
 ### 5.4 `GET /executions/{execution_id}/result` 통합 결과
 
 Execution 상태와 모든 Operation, Step, Attempt 요약, Artifact 요약을 한 번에 돌려줍니다(페이지 없음). [ExecutionResultResponse](#schema-executionresultresponse).
 
 - `operations[].steps[].result`: `status`, `error_message`, `output_summary`(출력 종류·개수, `has_image`, `has_error`), `result_ref`.
-- **`result_ref`는 executor와 우리 서비스가 함께 쓰는 내부 저장소(SHARED_PV) 경로라 호출자는 열 수 없습니다.** 출력 원문은 노트북 API(5.9)로 읽습니다.
+- **`result_ref`는 내부 저장 경로라 호출자는 열 수 없습니다.** 출력 원문은 노트북 API(5.9)로 읽습니다.
 
 ### 5.5 Step과 Operation 조회
 
@@ -333,7 +332,7 @@ MULTI에서 방금 붙인 Operation의 결과만 볼 때는 `/operations/{operat
 
 ## 7. 오류 코드
 
-게이트웨이 오류(400·401·403·404·413·502·504)는 [00-common 6.1](00-common.md#61-우리게이트웨이가-내는-오류)입니다. executor가 내는 주요 코드는 이렇습니다.
+게이트웨이 오류(400·401·403·404·413·502·504)는 [00-common 6.1](00-common.md#61-게이트웨이가-내는-오류)입니다. executor가 내는 주요 코드는 이렇습니다.
 
 | HTTP | code | 뜻 | 대처 |
 | --- | --- | --- | --- |
@@ -349,27 +348,15 @@ MULTI에서 방금 붙인 Operation의 결과만 볼 때는 `/operations/{operat
 
 `INVALID_EXECUTION_SPEC`의 `details[].type`: `too_many_steps`, `execution_step_limit_exceeded`, `inline_source_too_large`, `source_blank`, `steps_empty`, `sequence_not_contiguous`, `first_sequence_not_zero`, `unsupported_schema_version`, `exceeds_max_runtime`, `not_allowed_for_single`, `required_for_multi`, `multi_requires_interactive`, `session_without_project`, `reserved_value` 등.
 
-## 8. API key로 부를 수 없는 경로
+## 8. 알려진 제약
 
-아래는 executor에 있지만 우리 관리자 화면(SSO 로그인, 관리자 역할)에서만 쓰는 경로입니다. key로 부르면 404입니다.
-
-| 구분 | 경로 (`/api/v1/executor` 뒤) |
-| --- | --- |
-| 재시도·진단 이력 | `GET /executions/{id}/attempts`, `/attempts/{attempt_id}`, `/attempts/{attempt_id}/steps`, `/diagnostics` |
-| 런타임 서버 | `GET·POST /runtime-targets`, `GET /runtime-targets/{id}`, `POST /runtime-targets/{id}/probe`·`/drain`·`/activate`·`/disable`, `DELETE /runtime-targets/{id}`(등록 삭제), `GET /runtime-pools` |
-| 점검 | `GET /maintenance`, `POST /maintenance/drain`·`/activate`·`/runs`, `GET /maintenance/runs/{id}`, `/maintenance/runs/{id}/targets` |
-
-브라우저(SSO)로 부를 때는 조회만 열려 있고(실행 목록·상세·결과·노트북 등, 프로젝트 멤버만), 쓰기와 `/artifacts/*`는 key 호출자만 씁니다.
-
-## 9. 알려진 제약
-
-- **이벤트 스트림 없음:** 실시간 이벤트(Redis)는 중계하지 않습니다. 상태 조회나 `/events`로 폴링합니다(3.4).
+- **이벤트 스트림 없음:** 실시간 이벤트는 제공하지 않습니다. 상태 조회나 `/events`로 폴링합니다(3.4).
 - **Step 결과 파일(`result_ref`)은 열 수 없음:** 노트북 API로 출력을 읽습니다(5.9).
 - **`Range` 미지원:** 파일은 항상 전체로 받습니다.
 - **`Location`은 executor 기준 경로:** `/api/v1/` → `/api/v1/executor/`로 바꿔 씁니다.
 - **`PATH` source:** 외부 호출자는 executor 입력 저장소에 쓸 수 없으므로 `INLINE`만 씁니다.
 
-## 10. 레퍼런스: 경로별 파라미터와 응답
+## 9. 레퍼런스: 경로별 파라미터와 응답
 
 `X-Api-Key`, `X-User-Id`(필수), `X-Project-Id`, `X-Session-Id`(선택)는 모든 경로에 공통이라 표에서 뺐습니다. 모든 경로는 00-common 6.1의 게이트웨이 오류와 422(요청 형식 오류)를 낼 수 있습니다. 쿼리 `user_id`는 목록 조회에만 적었습니다(00-common 4.2 규칙).
 
@@ -632,7 +619,7 @@ Stream registered Artifact content
 - 이 경로의 그 밖의 오류: `409`
 <!-- gen:end endpoints -->
 
-## 11. 스키마
+## 10. 스키마
 
 executor OpenAPI에서 만든 표입니다. 필드 설명은 executor 원문(영문)이고, 뜻은 5장에 한국어로 적었습니다.
 

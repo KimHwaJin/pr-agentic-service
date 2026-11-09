@@ -32,7 +32,7 @@ Batch  1──* SkippedWindow (정책 때문에 실행하지 않은 예약 구�
 
 ## 2. 엔드포인트 한눈에 보기
 
-1~22는 pr-batch 중계, 23~28은 이 서비스의 API입니다. 이 밖의 `/api/v1/batch/…` 경로는 404입니다(pr-batch 운영 API `batches:disable-by-owner`, `batches:disable-by-tenant` 포함).
+1~22는 pr-batch 중계, 23~28은 이 서비스의 API입니다. 이 밖의 `/api/v1/batch/…` 경로는 404입니다.
 
 <!-- gen:begin summary -->
 | # | Method | Path | 요청 본문 | 성공 응답 |
@@ -75,12 +75,12 @@ Batch  1──* SkippedWindow (정책 때문에 실행하지 않은 예약 구�
 | --- | --- |
 | `Idempotency-Key` | 쓰기(POST·PATCH·DELETE)마다 **필수 헤더**입니다. 1~255자, 공백 없는 ASCII. 그대로 pr-batch에 넘어갑니다. 같은 tenant·사용자·작업·키·본문이면 처음 응답을 그대로 돌려주고(7일 보관), 같은 키에 다른 본문은 409 `IDEMPOTENCY_CONFLICT` |
 | `If-Match` | 스크립트 이름 변경·삭제, 배치 수정·삭제·켜기·끄기에 필수. 상세 GET이나 직전 쓰기 응답의 `ETag` 값을 **따옴표까지 그대로**(예: `"3"`). 낡았으면 409 `REVISION_CONFLICT`, 따옴표가 없으면 422 `INVALID_REVISION`, 없으면 422 |
-| `X-Project-Id` | 배치 등록(`POST /batches`) 때만 넘어가고 배치에 저장됩니다. 나중에 바꿀 수 없습니다. 우리 tenant key면 멤버인 프로젝트여야 합니다 |
+| `X-Project-Id` | 배치 등록(`POST /batches`) 때만 넘어가고 배치에 저장됩니다. 나중에 바꿀 수 없습니다. 이 서비스 tenant key면 멤버인 프로젝트여야 합니다 |
 | `X-Session-Id` | 넘기지 않습니다 |
 | 조회 범위 | 00-common 4.2와 같습니다. 쿼리 `user_id` 필터는 `GET /scripts`, `GET /batches`에서 받습니다 |
-| `GET /runtimes` | `X-User-Id`는 보내야 하지만(우리 규칙) pr-batch에는 신원 없이 갑니다. 누구에게나 같은 목록입니다 |
+| `GET /runtimes` | 누구에게나 같은 목록입니다. 그래도 `X-User-Id`는 보내야 합니다 |
 | `Location` | pr-batch 기준 경로(`/api/v1/batches/{id}`)입니다. `/api/v1/` → `/api/v1/batch/`로 바꿔 씁니다 |
-| 오류 본문 | pr-batch 오류는 우리 형식 그대로 옵니다. **예외 하나:** 수동 실행이 동시 실행 한도에 걸린 409(아래 5.4)는 RunView 대신 `{"error": {"code": "CONFLICT", …, "context": <RunView>}}`로 옵니다 |
+| 오류 본문 | pr-batch 오류는 공통 형식 그대로 옵니다. **예외 하나:** 수동 실행이 동시 실행 한도에 걸린 409(아래 5.4)는 RunView 대신 `{"error": {"code": "CONFLICT", …, "context": <RunView>}}`로 옵니다 |
 
 ## 4. 상태
 
@@ -111,7 +111,7 @@ SKIPPED  (정책이 실행하지 않기로 함, 만들어질 때 끝)
 
 ## 5. 경로별 상세 설명
 
-경로는 모두 `/api/v1/batch` 뒤에 붙습니다. 헤더는 `X-Api-Key`, `X-User-Id`(필수)와 3장의 헤더입니다. 필드 전체는 10장 레퍼런스와 11장 스키마에 있습니다.
+경로는 모두 `/api/v1/batch` 뒤에 붙습니다. 헤더는 `X-Api-Key`, `X-User-Id`(필수)와 3장의 헤더입니다. 필드 전체는 9장 레퍼런스와 10장 스키마에 있습니다.
 
 ### 5.1 런타임
 
@@ -223,12 +223,12 @@ BatchView에서 화면·로직에 쓰는 필드: `user_id`(소유자), `enabled`
 
 `POST /api/v1/batch/scripts/from-notebook` `{"artifact_id": "<executor NOTEBOOK artifact>", "name"?: "…"}` → 201 ScriptView(pr-batch 응답 그대로).
 
-- 우리 채팅 세션이 만든 노트북을 pr-batch `NOTEBOOK` 스크립트로 올립니다. 그 아티팩트를 볼 수 있는 **우리 tenant 사용자**만 됩니다(`X-User-Id`가 우리 활성 사용자).
-- 노트북이 아닌 아티팩트는 422입니다. 멱등키는 우리가 아티팩트 ID와 내용 해시로 만들므로 `Idempotency-Key`가 필요 없습니다.
+- 이 서비스의 채팅 세션이 만든 노트북을 `NOTEBOOK` 스크립트로 올립니다. 그 아티팩트를 볼 수 있는 **이 서비스 tenant 사용자**만 됩니다(`X-User-Id`가 이 서비스의 활성 사용자).
+- 노트북이 아닌 아티팩트는 422입니다. `Idempotency-Key`는 필요 없습니다(같은 요청을 다시 보내면 같은 스크립트가 돌아옵니다).
 
 ### 5.6 배치 리포트 (이 서비스의 API)
 
-배치 run이 `COMPLETED`(executor `SUCCEEDED`)가 되면 이 서비스가 리포트 작업을 만들어 에이전트로 결과를 분석하고, 리포트를 executor 아티팩트로 저장해 실행 노트북 끝에 붙입니다. 실패한 run은 리포트가 없습니다. **우리 tenant(`dtest-agent-service`)의 배치만** 대상이고, 소유자(실행의 `context.user_id`) 것만 보입니다. key 호출자는 `X-User-Id`가 우리 활성 사용자여야 합니다.
+배치 run이 `COMPLETED`(executor `SUCCEEDED`)가 되면 이 서비스가 리포트 작업을 만들어 에이전트로 결과를 분석하고, 리포트를 executor 아티팩트로 저장해 실행 노트북 끝에 붙입니다. 실패한 run은 리포트가 없습니다. **이 서비스 tenant의 배치만** 대상이고, 소유자(실행의 `context.user_id`) 것만 보입니다. key 호출자는 `X-User-Id`가 이 서비스의 활성 사용자여야 합니다.
 
 | 경로 (`/api/v1` 뒤) | 설명 |
 | --- | --- |
@@ -282,12 +282,12 @@ X-User-Id: e12345
 
 ## 7. 오류 코드
 
-게이트웨이 오류(400·401·403·404·413·502·504)는 [00-common 6.1](00-common.md#61-우리게이트웨이가-내는-오류)입니다. pr-batch가 내는 코드:
+게이트웨이 오류(400·401·403·404·413·502·504)는 [00-common 6.1](00-common.md#61-게이트웨이가-내는-오류)입니다. pr-batch가 내는 코드:
 
 | HTTP | code | 뜻 | 재시도 |
 | --- | --- | --- | --- |
 | 400 | `INVALID_IDENTITY` | `X-User-Id`·`user_id` 형식 오류 | 아니오 |
-| 403 | `FORBIDDEN` | `user_id`가 `X-User-Id`와 다름 (보통은 우리가 먼저 막음) | 아니오 |
+| 403 | `FORBIDDEN` | `user_id`가 `X-User-Id`와 다름 | 아니오 |
 | 404 | `NOT_FOUND` | 없음, 다른 tenant·(일반키) 다른 사용자, 삭제됨 | 아니오 |
 | 409 | `IDEMPOTENCY_CONFLICT` | 같은 키에 다른 본문 | 새 키로 |
 | 409 | `REVISION_CONFLICT` | `If-Match`가 현재 revision과 다름 (`details[0].context`: `expected`, `current`) | GET 뒤 새 `ETag`와 **새 키**로 |
@@ -300,23 +300,15 @@ X-User-Id: e12345
 | 503 | `DATABASE_UNAVAILABLE`, `STORAGE_UNAVAILABLE`, `INCONSISTENT_STATE` | 일시 장애 | 예, 같은 `Idempotency-Key`로 |
 | 503 | `EXECUTOR_NOT_CONFIGURED`, `RUNTIMES_NOT_CONFIGURED` | 서버 설정 누락 | 설정이 고쳐진 뒤 |
 
-## 8. API key로 부를 수 없는 경로
-
-| 경로 | 쓰는 곳 |
-| --- | --- |
-| `GET /api/v1/admin/users/{user_id}/batches` | 관리자 화면: 비활성화한 사용자의 배치가 꺼졌는지 확인 (SSO 관리자) |
-| `GET /view/batch-scripts/{script_id}/versions/{version_id}` | 브라우저 화면: 스크립트 버전 노트북 보기 (HTML, SSO) |
-| pr-batch `POST /batches:disable-by-owner`, `:disable-by-tenant` | 이 서비스가 사용자 비활성화·tenant 폐기 때 직접 부름. 게이트웨이로는 404 |
-
-## 9. 알려진 제약
+## 8. 알려진 제약
 
 - **결과 파일은 executor 게이트웨이에서:** 배치 게이트웨이로는 run 결과 노트북을 받을 수 없습니다(5.4).
 - **`Location`은 pr-batch 기준 경로:** `/api/v1/` → `/api/v1/batch/`로 바꿔 씁니다.
 - **수동 실행 409의 모양:** 5.4의 `CONFLICT` 형태로 옵니다.
 - **`Content-Disposition` 미전달:** 버전 원본(`…/content`)을 저장할 파일 이름은 VersionView의 이름으로 정합니다.
-- **배치 리포트와 from-notebook은 우리 tenant 사용자만:** 다른 tenant key는 `X-User-Id`가 우리 사용자가 아니면 403입니다.
+- **배치 리포트와 from-notebook은 이 서비스 tenant 사용자만:** 다른 tenant key는 `X-User-Id`가 이 서비스 사용자가 아니면 403입니다.
 
-## 10. 레퍼런스: 경로별 파라미터와 응답
+## 9. 레퍼런스: 경로별 파라미터와 응답
 
 `X-Api-Key`, `X-User-Id`(필수), `X-Project-Id`(배치 등록만)는 표에서 뺐습니다. 모든 경로는 00-common 6.1의 게이트웨이 오류와 422를 낼 수 있습니다.
 
@@ -637,7 +629,7 @@ Notebook To Batch Script
 - 응답 `201` (`application/json`): [ScriptView](#schema-scriptview)
 <!-- gen:end endpoints -->
 
-## 11. 스키마
+## 10. 스키마
 
 pr-batch와 이 서비스의 OpenAPI에서 만든 표입니다. pr-batch 필드 설명은 원문이고, 뜻은 5장에 적었습니다. `BatchReportEvents.items`는 채팅 run 이벤트와 같은 모양이라 그 이벤트 스키마가 함께 들어 있습니다.
 

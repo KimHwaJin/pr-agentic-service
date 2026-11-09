@@ -48,7 +48,7 @@
 
 `Location`은 executor 기준 경로(`/api/v1/executions/{id}`)입니다. 따라가기 전에 `/api/v1/`을 `/api/v1/executor/`로 바꾸거나, 그냥 `execution_id`로 URL을 만듭니다.
 
-key가 이 서비스 자신의 tenant(`dtest-agent-service`) 것이면 `X-User-Id`는 이 서비스의 활성 사용자여야 합니다(아니면 `403 FORBIDDEN`). `X-Project-Id`는 그 사용자가 멤버인 프로젝트, `X-Session-Id`는 그 프로젝트의 세션이어야 합니다(아니면 `404`). 다른 tenant의 key는 형식만 확인합니다.
+key가 이 서비스 자신의 tenant 것이면 `X-User-Id`는 이 서비스의 활성 사용자여야 합니다(아니면 `403 FORBIDDEN`). `X-Project-Id`는 그 사용자가 멤버인 프로젝트, `X-Session-Id`는 그 프로젝트의 세션이어야 합니다(아니면 `404`). 다른 tenant의 key는 형식만 확인합니다.
 
 ## 3. 조회 범위: 일반키와 마스터키
 
@@ -143,7 +143,7 @@ GET  /executions/{id}            SUCCEEDED / FAILED 까지
 
 ### 4.4 폴링과 이벤트
 
-- 게이트웨이는 executor의 Redis 이벤트 스트림을 중계하지 않습니다.
+- 게이트웨이에는 실시간 이벤트 스트림이 없습니다.
 - `GET /executions/{id}`를 2~5초마다 폴링합니다. 종료 상태는 `SUCCEEDED`, `FAILED`, `CANCELLED`입니다. MULTI는 `WAITING_FOR_OPERATION`에서도 일이 멈춥니다.
 - 또는 새 이벤트를 읽습니다: `GET /executions/{id}/events?after_sequence=<마지막으로 본 event_sequence>&limit=200`(limit 1~500).
   - 결과는 `event_sequence` 오름차순입니다.
@@ -203,7 +203,7 @@ GET  /executions/{id}            SUCCEEDED / FAILED 까지
 | 400 | `INVALID_IDENTITY` | 게이트웨이 / executor | `X-User-Id` 없음·형식 오류, `X-Project-Id`·`X-Session-Id` 형식 오류, 프로젝트 없는 세션, 쿼리 `user_id` 형식 오류 | 요청을 고침. 재시도 안 함 |
 | 401 | `LOGIN_REQUIRED` | 게이트웨이 | `X-Api-Key` 없음 | 설정을 고침 |
 | 401 | `INVALID_API_KEY` | 게이트웨이 | 모르거나 폐기된 key | 멈추고 알림 |
-| 403 | `FORBIDDEN` | 게이트웨이 | 모르거나 비활성인 사용자(우리 tenant), 일반키가 남의 `user_id`로 조회 | 재시도 안 함 |
+| 403 | `FORBIDDEN` | 게이트웨이 | 모르거나 비활성인 사용자(이 서비스 tenant), 일반키가 남의 `user_id`로 조회 | 재시도 안 함 |
 | 404 | `NOT_FOUND` | 게이트웨이 | 목록에 없는 경로, 멤버가 아닌 프로젝트, 남의 세션 | 경로를 고침 |
 | 404 | `EXECUTION_NOT_FOUND`, `ARTIFACT_NOT_FOUND`, 그 밖의 `*_NOT_FOUND` | executor | 없음, 다른 tenant, (일반키) 다른 사용자 | id 확인 |
 | 409 | `EXECUTION_VERSION_CONFLICT` | executor | 낡은 `expected_version` | 상태를 GET, 판단, 새 버전과 **새** idempotency key로 보냄 |
@@ -267,8 +267,6 @@ GET  /executions/{id}            SUCCEEDED / FAILED 까지
 | 19 | POST | `/executions/{execution_id}/retry` | `ExecutionRetryRequest` | 202 `ExecutionCommandResponse` |
 | 20 | GET | `/artifacts/{artifact_id}` | – | 200 `ExecutionArtifactResponse` |
 | 21 | GET | `/artifacts/{artifact_id}/content` | – | 200 파일 바이트 |
-
-key로 부를 수 없는 경로(404): attempts, diagnostics, 런타임 타깃·풀, 점검(maintenance). 이 서비스 관리자만 씁니다.
 
 상태:
 

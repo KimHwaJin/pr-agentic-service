@@ -46,7 +46,7 @@ Response headers you may use: `Content-Type`, `ETag` (artifact content: SHA-256)
 
 `Location` is the executor's own path (`/api/v1/executions/{id}`). Rewrite `/api/v1/` to `/api/v1/executor/` before following it, or simply build the URL from `execution_id`.
 
-If the key belongs to the agentic service's own tenant (`dtest-agent-service`), `X-User-Id` must be an active user of that service (else `403 FORBIDDEN`). `X-Project-Id` must be a project that user is a member of, and `X-Session-Id` a session of that project (else `404`). Keys of other tenants only get format checks.
+If the key belongs to the agentic service's own tenant, `X-User-Id` must be an active user of that service (else `403 FORBIDDEN`). `X-Project-Id` must be a project that user is a member of, and `X-Session-Id` a session of that project (else `404`). Keys of other tenants only get format checks.
 
 ## 3. Read scope: standard key vs master key
 
@@ -141,7 +141,7 @@ GET  /executions/{id}            until SUCCEEDED / FAILED
 
 ### 4.4 Polling and events
 
-- The gateway does not relay the executor's Redis event stream.
+- The gateway has no live event stream.
 - Poll `GET /executions/{id}` every 2–5 s. Terminal states are `SUCCEEDED`, `FAILED` and `CANCELLED`. MULTI also stops being busy at `WAITING_FOR_OPERATION`.
 - Or read new events: `GET /executions/{id}/events?after_sequence=<last seen event_sequence>&limit=200` (limit 1–500).
   - Results are in ascending `event_sequence`.
@@ -201,7 +201,7 @@ All errors (from the gateway and from the executor) look like this:
 | 400 | `INVALID_IDENTITY` | gateway / executor | `X-User-Id` missing or malformed, bad `X-Project-Id`/`X-Session-Id`, session without project, bad `user_id` query | fix the request; do not retry |
 | 401 | `LOGIN_REQUIRED` | gateway | no `X-Api-Key` | fix config |
 | 401 | `INVALID_API_KEY` | gateway | unknown or revoked key | stop; report |
-| 403 | `FORBIDDEN` | gateway | unknown or inactive user (our tenant), or a standard key with someone else's `user_id` | do not retry |
+| 403 | `FORBIDDEN` | gateway | unknown or inactive user (the agentic service's tenant), or a standard key with someone else's `user_id` | do not retry |
 | 404 | `NOT_FOUND` | gateway | route not in the list, project not a member, foreign session | fix the path |
 | 404 | `EXECUTION_NOT_FOUND`, `ARTIFACT_NOT_FOUND`, other `*_NOT_FOUND` | executor | missing, other tenant, or (standard key) other user | check the id |
 | 409 | `EXECUTION_VERSION_CONFLICT` | executor | stale `expected_version` | GET the state; decide; send with the new version and a **new** idempotency key |
@@ -265,8 +265,6 @@ All paths are under `/api/v1/executor`.
 | 19 | POST | `/executions/{execution_id}/retry` | `ExecutionRetryRequest` | 202 `ExecutionCommandResponse` |
 | 20 | GET | `/artifacts/{artifact_id}` | – | 200 `ExecutionArtifactResponse` |
 | 21 | GET | `/artifacts/{artifact_id}/content` | – | 200 file bytes |
-
-Not available with a key (they return 404): attempts, diagnostics, runtime targets and pools, and maintenance. Those routes are for the service's administrators only.
 
 States:
 
