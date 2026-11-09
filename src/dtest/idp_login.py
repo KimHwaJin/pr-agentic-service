@@ -69,6 +69,16 @@ def create_sdk(request, callback_url):
             [*request.args.to_dict().items(), ("ORIGIN", origin)]
         )
         sso = SSO(request)
+        # what the SDK really sent the workplace (its private fields; host
+        # names only, no cookie): the one line that settles a 404
+        name = type(sso).__name__
+        log.info(
+            "sso_sdk origin=%s target_url=%s protocol=%s uuid=%s",
+            origin,
+            getattr(sso, f"_{name}__target_url", "?"),
+            getattr(sso, f"_{name}__protocol", "?"),
+            bool(getattr(sso, "uuid", False)),
+        )
     else:
         sso = UserinfoCheck(request)
     if callback_url is not None and VERIFY_WITH != "sdk":

@@ -252,3 +252,30 @@ def test_a_rejection_logs_the_service_url_and_the_sso_answer(caplog):
     assert "scheme=https" in line and "cookies=SMSESSION" in line
     assert "login.corp/sso/SSOServiceInformation.jsp?errorcode=404" in line
     assert "secret" not in line and "SMSESSION=x" not in line
+
+
+def test_idp_login_sdk_mode_logs_what_the_sdk_sent(monkeypatch, caplog):
+    import sys
+    import types
+
+    from src.dtest import idp_login
+
+    class SSO:
+        def __init__(self, request):
+            self.__target_url = request.args.to_dict()["ORIGIN"]
+            self.__protocol = "https://"
+            self.uuid = False
+            self.redirect_url = ""
+
+        def check_day_cookie(self, cookie):
+            return False
+
+    monkeypatch.setitem(
+        sys.modules, "your_private_module", types.SimpleNamespace(SSO=SSO)
+    )
+    monkeypatch.setattr(idp_login, "VERIFY_WITH", "sdk")
+    caplog.set_level("INFO")
+    verify_employee(idp_login.create_sdk, _request("SMSESSION=x"))
+    line = next(m for m in caplog.messages if m.startswith("sso_sdk "))
+    assert "origin=api target_url=api protocol=https:// uuid=False" in line
+    assert "SMSESSION" not in line
