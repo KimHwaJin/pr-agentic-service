@@ -19,7 +19,8 @@ Batch  1──* SkippedWindow (정책 때문에 실행하지 않은 예약 구�
 | Version | 노트북 원본 한 벌. 같은 바이트를 다시 올리면 새로 만들지 않습니다. 비어 있지 않은 코드 셀 하나가 Step 하나가 됩니다 |
 | Batch | 어떤 버전을, 어떤 런타임에서, 언제, 어떤 정책으로 돌릴지. **등록하면 꺼져 있고** `enable`로 켭니다 |
 | Run | 실행 한 번. 수동 실행이나 예약 시각에 생기고 executor Execution 하나와 1:1입니다 |
-| 소유 | 모든 자원은 (tenant, 사용자) 것입니다. tenant는 key, 사용자는 `X-User-Id`입니다. 응답의 `owner_id`가 소유자입니다 |
+| 소유 | 모든 자원은 (tenant, 사용자) 것입니다. tenant는 key, 사용자는 `X-User-Id`입니다. 응답의 `user_id`가 소유자입니다 |
+| 기록 | `created_by`·`updated_by`는 요청의 `X-User-Id`, `created_by_client`·`updated_by_client`는 pr-batch를 부른 key 이름(이 게이트웨이로 오면 `pr-agentic-service`)입니다. 예약 실행·상태 반영처럼 사람이 하지 않은 변경은 둘 다 `null`입니다 |
 
 일반적인 흐름:
 
@@ -203,7 +204,7 @@ CreateBatch:
 
 UpdateBatch(PATCH) 규칙: 바꿀 필드만 보냅니다. `{}`는 422입니다. `name`·`script_id`·`runtime`·`policy`는 `null`이 안 됩니다. `script_version_number: null`은 최신 버전으로 다시 고정, `schedule: null`은 일정 삭제(켜져 있으면 409 `SCHEDULE_REQUIRED`)입니다. **일정이 그대로면 `schedule`을 빼고 보냅니다.** 같은 일정을 다시 보내면 새 일정으로 보고 간격 실행의 주기를 지금부터 다시 셉니다. `policy`는 구간별로 합쳐지고, 다른 `mode`로 바꾸면 그 구간이 새 mode의 기본값으로 바뀝니다.
 
-BatchView에서 화면·로직에 쓰는 필드: `owner_id`, `enabled`, `can_enable`, `can_disable`, `enable_blocked_reason`, `disabled_reason`(`OWNER`·`USER_DEACTIVATED`·`TENANT_REVOKED`·null), `next_run_at`, `preview_runs`(최대 5개), `revision`, `config_number`.
+BatchView에서 화면·로직에 쓰는 필드: `user_id`(소유자), `enabled`, `can_enable`, `can_disable`, `enable_blocked_reason`, `disabled_reason`(`OWNER`·`USER_DEACTIVATED`·`TENANT_REVOKED`·null), `next_run_at`, `preview_runs`(최대 5개), `revision`, `config_number`.
 
 ### 5.4 실행 (Run)
 
@@ -215,7 +216,7 @@ BatchView에서 화면·로직에 쓰는 필드: `owner_id`, `enabled`, `can_ena
 | `POST /batches/{batch_id}/runs/{run_id}/cancel` | 없음 | 202 RunView | `Idempotency-Key`. 끝난 run은 409 `NOT_CANCELLABLE` |
 
 - 수동 실행이 동시 실행 한도에 걸리면 pr-batch는 409와 함께 `status: "SKIPPED"`, `skip_reason: "SKIPPED_CAPACITY"`인 RunView를 돌려줍니다. **이 게이트웨이에서는 이것이 `{"error": {"code": "CONFLICT", "message": "pr-batch refused the request.", "details": [], "context": {<RunView 필드>}}}`로 옵니다.** `error.context.skip_reason`으로 구분합니다.
-- RunView 주요 필드: `id`, `owner_id`, `status`, `skip_reason`, `failure_type`, `cancel_requested`, `trigger`(`MANUAL`·`SCHEDULED`), `scheduled_for`, `execution_id`, `notebook_status`, `result.notebook_artifact_id`, `completed_at`.
+- RunView 주요 필드: `id`, `user_id`(소유자), `status`, `skip_reason`, `failure_type`, `cancel_requested`, `trigger`(`MANUAL`·`SCHEDULED`), `scheduled_for`, `execution_id`, `notebook_status`, `result.notebook_artifact_id`, `completed_at`.
 - 실행 결과 파일은 pr-batch가 주지 않습니다. `COMPLETED`면 `result.notebook_artifact_id`를 executor 게이트웨이에서 받습니다: `GET /api/v1/executor/artifacts/{notebook_artifact_id}/content`(같은 key, 같은 `X-User-Id`). 실행 상세는 `GET /api/v1/executor/executions/{execution_id}`입니다.
 
 ### 5.5 세션 노트북을 배치 스크립트로 (이 서비스의 API)
@@ -334,7 +335,7 @@ List Scripts
 | --- | --- | --- | --- | --- | --- | --- |
 | query | `limit` | integer |  | `50` | ≥ 1, ≤ 100 |  |
 | query | `cursor` | string \| null |  |  | 길이 ≤ 1024 |  |
-| query | `user_id` | string \| null |  |  |  | Reads only. Master key: narrows the tenant-wide read to this user. Standard key: may only repeat X-User-Id (anything else is 403). |
+| query | `user_id` | string \| null |  |  | `^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$` | Reads only. Master key: narrows the tenant-wide read to this user. Standard key: may only repeat X-User-Id (anything else is 403). |
 
 - 응답 `200` (`application/json`): [ScriptPage](#schema-scriptpage)
 
@@ -439,7 +440,7 @@ List Batches
 | query | `limit` | integer |  | `50` | ≥ 1, ≤ 100 |  |
 | query | `cursor` | string \| null |  |  | 길이 ≤ 1024 |  |
 | query | `script_id` | string (uuid) \| null |  |  |  |  |
-| query | `user_id` | string \| null |  |  |  | Reads only. Master key: narrows the tenant-wide read to this user. Standard key: may only repeat X-User-Id (anything else is 403). |
+| query | `user_id` | string \| null |  |  | `^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$` | Reads only. Master key: narrows the tenant-wide read to this user. Standard key: may only repeat X-User-Id (anything else is 403). |
 
 - 응답 `200` (`application/json`): [BatchPage](#schema-batchpage)
 
@@ -812,11 +813,11 @@ Also the data of an ``artifact`` event.
 | 필드 | 타입 | 필수 | 기본값 | 제약 | 설명 |
 | --- | --- | --- | --- | --- | --- |
 | `created_at` | string (date-time) | O |  |  |  |
-| `created_by_type` | "USER" \| "SYSTEM" | O |  |  |  |
-| `created_by` | string | O |  |  |  |
+| `created_by` | string \| null | O |  |  |  |
+| `created_by_client` | string \| null | O |  |  |  |
 | `updated_at` | string (date-time) | O |  |  |  |
-| `updated_by_type` | "USER" \| "SYSTEM" | O |  |  |  |
-| `updated_by` | string | O |  |  |  |
+| `updated_by` | string \| null | O |  |  |  |
+| `updated_by_client` | string \| null | O |  |  |  |
 | `id` | string (uuid) | O |  |  |  |
 | `name` | string | O |  |  |  |
 | `script_id` | string (uuid) | O |  |  |  |
@@ -827,7 +828,7 @@ Also the data of an ``artifact`` event.
 | `policy` | [Policy](#schema-policy) | O |  |  |  |
 | `tenant_id` | string | O |  |  |  |
 | `project_id` | string \| null | O |  |  |  |
-| `owner_id` | string | O |  |  |  |
+| `user_id` | string | O |  |  |  |
 | `enabled` | boolean | O |  |  |  |
 | `can_enable` | boolean | O |  |  |  |
 | `can_disable` | boolean | O |  |  |  |
@@ -1424,14 +1425,14 @@ Executor artifact IDs; download via Executor after ownership check.
 | 필드 | 타입 | 필수 | 기본값 | 제약 | 설명 |
 | --- | --- | --- | --- | --- | --- |
 | `created_at` | string (date-time) | O |  |  |  |
-| `created_by_type` | "USER" \| "SYSTEM" | O |  |  |  |
-| `created_by` | string | O |  |  |  |
+| `created_by` | string \| null | O |  |  |  |
+| `created_by_client` | string \| null | O |  |  |  |
 | `updated_at` | string (date-time) | O |  |  |  |
-| `updated_by_type` | "USER" \| "SYSTEM" | O |  |  |  |
-| `updated_by` | string | O |  |  |  |
+| `updated_by` | string \| null | O |  |  |  |
+| `updated_by_client` | string \| null | O |  |  |  |
 | `id` | string (uuid) | O |  |  |  |
 | `batch_id` | string (uuid) | O |  |  |  |
-| `owner_id` | string | O |  |  |  |
+| `user_id` | string | O |  |  |  |
 | `script_id` | string (uuid) | O |  |  |  |
 | `script_version_id` | string (uuid) | O |  |  |  |
 | `config_number` | integer | O |  |  |  |
@@ -1517,14 +1518,14 @@ Executor artifact IDs; download via Executor after ownership check.
 | 필드 | 타입 | 필수 | 기본값 | 제약 | 설명 |
 | --- | --- | --- | --- | --- | --- |
 | `created_at` | string (date-time) | O |  |  |  |
-| `created_by_type` | "USER" \| "SYSTEM" | O |  |  |  |
-| `created_by` | string | O |  |  |  |
+| `created_by` | string \| null | O |  |  |  |
+| `created_by_client` | string \| null | O |  |  |  |
 | `updated_at` | string (date-time) | O |  |  |  |
-| `updated_by_type` | "USER" \| "SYSTEM" | O |  |  |  |
-| `updated_by` | string | O |  |  |  |
+| `updated_by` | string \| null | O |  |  |  |
+| `updated_by_client` | string \| null | O |  |  |  |
 | `id` | string (uuid) | O |  |  |  |
 | `batch_id` | string (uuid) | O |  |  |  |
-| `owner_id` | string | O |  |  |  |
+| `user_id` | string | O |  |  |  |
 | `script_id` | string (uuid) | O |  |  |  |
 | `script_version_id` | string (uuid) | O |  |  |  |
 | `config_number` | integer | O |  |  |  |
@@ -1610,15 +1611,15 @@ When a batch runs. Policies live separately in Policy.
 | 필드 | 타입 | 필수 | 기본값 | 제약 | 설명 |
 | --- | --- | --- | --- | --- | --- |
 | `created_at` | string (date-time) | O |  |  |  |
-| `created_by_type` | "USER" \| "SYSTEM" | O |  |  |  |
-| `created_by` | string | O |  |  |  |
+| `created_by` | string \| null | O |  |  |  |
+| `created_by_client` | string \| null | O |  |  |  |
 | `updated_at` | string (date-time) | O |  |  |  |
-| `updated_by_type` | "USER" \| "SYSTEM" | O |  |  |  |
-| `updated_by` | string | O |  |  |  |
+| `updated_by` | string \| null | O |  |  |  |
+| `updated_by_client` | string \| null | O |  |  |  |
 | `id` | string (uuid) | O |  |  |  |
 | `name` | string | O |  |  |  |
 | `type` | [ScriptType](#schema-scripttype) | O |  |  |  |
-| `owner_id` | string | O |  |  |  |
+| `user_id` | string | O |  |  |  |
 | `revision` | integer | O |  |  |  |
 | `latest_version` | [VersionView](#schema-versionview) | O |  |  |  |
 
@@ -1680,11 +1681,11 @@ Record the new run as SKIPPED (OVERLAP).
 | 필드 | 타입 | 필수 | 기본값 | 제약 | 설명 |
 | --- | --- | --- | --- | --- | --- |
 | `created_at` | string (date-time) | O |  |  |  |
-| `created_by_type` | "USER" \| "SYSTEM" | O |  |  |  |
-| `created_by` | string | O |  |  |  |
+| `created_by` | string \| null | O |  |  |  |
+| `created_by_client` | string \| null | O |  |  |  |
 | `updated_at` | string (date-time) | O |  |  |  |
-| `updated_by_type` | "USER" \| "SYSTEM" | O |  |  |  |
-| `updated_by` | string | O |  |  |  |
+| `updated_by` | string \| null | O |  |  |  |
+| `updated_by_client` | string \| null | O |  |  |  |
 | `id` | string (uuid) | O |  |  |  |
 | `batch_id` | string (uuid) | O |  |  |  |
 | `config_number` | integer | O |  |  |  |
@@ -1781,11 +1782,11 @@ Only fields present in the request change; schedule=null removes.
 | 필드 | 타입 | 필수 | 기본값 | 제약 | 설명 |
 | --- | --- | --- | --- | --- | --- |
 | `created_at` | string (date-time) | O |  |  |  |
-| `created_by_type` | "USER" \| "SYSTEM" | O |  |  |  |
-| `created_by` | string | O |  |  |  |
+| `created_by` | string \| null | O |  |  |  |
+| `created_by_client` | string \| null | O |  |  |  |
 | `updated_at` | string (date-time) | O |  |  |  |
-| `updated_by_type` | "USER" \| "SYSTEM" | O |  |  |  |
-| `updated_by` | string | O |  |  |  |
+| `updated_by` | string \| null | O |  |  |  |
+| `updated_by_client` | string \| null | O |  |  |  |
 | `id` | string (uuid) | O |  |  |  |
 | `script_id` | string (uuid) | O |  |  |  |
 | `version_number` | integer | O |  |  |  |
@@ -1814,11 +1815,11 @@ Only fields present in the request change; schedule=null removes.
 | 필드 | 타입 | 필수 | 기본값 | 제약 | 설명 |
 | --- | --- | --- | --- | --- | --- |
 | `created_at` | string (date-time) | O |  |  |  |
-| `created_by_type` | "USER" \| "SYSTEM" | O |  |  |  |
-| `created_by` | string | O |  |  |  |
+| `created_by` | string \| null | O |  |  |  |
+| `created_by_client` | string \| null | O |  |  |  |
 | `updated_at` | string (date-time) | O |  |  |  |
-| `updated_by_type` | "USER" \| "SYSTEM" | O |  |  |  |
-| `updated_by` | string | O |  |  |  |
+| `updated_by` | string \| null | O |  |  |  |
+| `updated_by_client` | string \| null | O |  |  |  |
 | `id` | string (uuid) | O |  |  |  |
 | `script_id` | string (uuid) | O |  |  |  |
 | `version_number` | integer | O |  |  |  |

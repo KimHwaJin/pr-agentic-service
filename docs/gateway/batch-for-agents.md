@@ -31,7 +31,7 @@ You are writing a client that uploads Jupyter notebooks and runs them on a sched
 
 ### MUST NOT
 
-1. Do not send unknown fields. JSON bodies reject them with `422 VALIDATION_ERROR`. Do not send `tenant_id`, `owner_id` or `actor`.
+1. Do not send unknown fields. JSON bodies reject them with `422 VALIDATION_ERROR`. Do not send `tenant_id`, `user_id`, `owner_id` or `actor` in a body; the owner is always `X-User-Id`.
 2. Do not send `X-Tenant-Id`. It is ignored, because the key fixes the tenant.
 3. Do not call pr-batch or the executor directly. Only these gateways.
 4. Do not reuse an `Idempotency-Key` for a different body (`409 IDEMPOTENCY_CONFLICT`). Do not reuse one after a `409 REVISION_CONFLICT`: fetch the new ETag and use a **new** key.
@@ -64,7 +64,7 @@ Response headers: `ETag` (detail and write responses), `Location` (creates), `Co
 | detail routes | someone else's → `404` | any in the tenant |
 | writes | as `X-User-Id` | as `X-User-Id` |
 
-A malformed `user_id` returns `400 INVALID_IDENTITY`. `GET /runtimes` is the same list for everyone, though `X-User-Id` is still required.
+A malformed `user_id` returns `400 INVALID_IDENTITY`. Every Script, Version, Batch and Run carries `user_id` (owner; not on versions), `created_by`/`updated_by` (the `X-User-Id` that made the change) and `created_by_client`/`updated_by_client` (the calling key's name, `pr-agentic-service` through this gateway). Both are `null` for changes no user made, such as scheduled runs and status updates. `GET /runtimes` is the same list for everyone, though `X-User-Id` is still required.
 
 ## 4. Flows
 
@@ -186,7 +186,7 @@ SKIPPED                                       (policy decided not to run; termin
 - Read `notebook_status` only after the run is terminal.
 - Result notebook: when the run is `COMPLETED`, download `result.notebook_artifact_id` from the executor gateway with `GET /api/v1/executor/artifacts/{notebook_artifact_id}/content`, using the same key and the same `X-User-Id`.
 - Execution details are at `GET /api/v1/executor/executions/{execution_id}`. See `executor-for-agents.md` for the notebook and cell routes.
-- RunView fields you need: `id`, `batch_id`, `owner_id`, `status`, `skip_reason`, `failure_type`, `cancel_requested`, `trigger` (`MANUAL` or `SCHEDULED`), `scheduled_for`, `execution_id`, `notebook_status`, `result.notebook_artifact_id`, `last_error` and `completed_at`.
+- RunView fields you need: `id`, `batch_id`, `user_id` (owner), `status`, `skip_reason`, `failure_type`, `cancel_requested`, `trigger` (`MANUAL` or `SCHEDULED`), `scheduled_for`, `execution_id`, `notebook_status`, `result.notebook_artifact_id`, `last_error` and `completed_at`.
 - RunDetail adds `steps[]` (`sequence`, `original_index` = notebook cell index, `status`).
 
 ### 4.5 Turn a chat notebook into a script (agentic service route)
@@ -576,11 +576,11 @@ interface BatchScriptFromNotebook { // unknown fields → 422
 }
 interface BatchView {
   created_at: string;
-  created_by_type: "USER" | "SYSTEM";
-  created_by: string;
+  created_by: string | null;
+  created_by_client: string | null;
   updated_at: string;
-  updated_by_type: "USER" | "SYSTEM";
-  updated_by: string;
+  updated_by: string | null;
+  updated_by_client: string | null;
   id: string;
   name: string;
   script_id: string;
@@ -591,7 +591,7 @@ interface BatchView {
   policy: Policy;
   tenant_id: string;
   project_id: string | null;
-  owner_id: string;
+  user_id: string;
   enabled: boolean;
   can_enable: boolean;
   can_disable: boolean;
@@ -892,14 +892,14 @@ interface ResultRefs {
 }
 interface RunDetail {
   created_at: string;
-  created_by_type: "USER" | "SYSTEM";
-  created_by: string;
+  created_by: string | null;
+  created_by_client: string | null;
   updated_at: string;
-  updated_by_type: "USER" | "SYSTEM";
-  updated_by: string;
+  updated_by: string | null;
+  updated_by_client: string | null;
   id: string;
   batch_id: string;
-  owner_id: string;
+  user_id: string;
   script_id: string;
   script_version_id: string;
   config_number: number;
@@ -957,14 +957,14 @@ interface RunStatusEvent {
 }
 interface RunView {
   created_at: string;
-  created_by_type: "USER" | "SYSTEM";
-  created_by: string;
+  created_by: string | null;
+  created_by_client: string | null;
   updated_at: string;
-  updated_by_type: "USER" | "SYSTEM";
-  updated_by: string;
+  updated_by: string | null;
+  updated_by_client: string | null;
   id: string;
   batch_id: string;
-  owner_id: string;
+  user_id: string;
   script_id: string;
   script_version_id: string;
   config_number: number;
@@ -1014,15 +1014,15 @@ interface ScriptPage {
 type ScriptType = "NOTEBOOK";
 interface ScriptView {
   created_at: string;
-  created_by_type: "USER" | "SYSTEM";
-  created_by: string;
+  created_by: string | null;
+  created_by_client: string | null;
   updated_at: string;
-  updated_by_type: "USER" | "SYSTEM";
-  updated_by: string;
+  updated_by: string | null;
+  updated_by_client: string | null;
   id: string;
   name: string;
   type: ScriptType;
-  owner_id: string;
+  user_id: string;
   revision: number;
   latest_version: VersionView;
 }
@@ -1048,11 +1048,11 @@ interface SkippedPage {
 }
 interface SkippedView {
   created_at: string;
-  created_by_type: "USER" | "SYSTEM";
-  created_by: string;
+  created_by: string | null;
+  created_by_client: string | null;
   updated_at: string;
-  updated_by_type: "USER" | "SYSTEM";
-  updated_by: string;
+  updated_by: string | null;
+  updated_by_client: string | null;
   id: string;
   batch_id: string;
   config_number: number;
@@ -1109,11 +1109,11 @@ interface UpdateBatch { // unknown fields → 422
 }
 interface VersionDetail {
   created_at: string;
-  created_by_type: "USER" | "SYSTEM";
-  created_by: string;
+  created_by: string | null;
+  created_by_client: string | null;
   updated_at: string;
-  updated_by_type: "USER" | "SYSTEM";
-  updated_by: string;
+  updated_by: string | null;
+  updated_by_client: string | null;
   id: string;
   script_id: string;
   version_number: number;
@@ -1130,11 +1130,11 @@ interface VersionPage {
 }
 interface VersionView {
   created_at: string;
-  created_by_type: "USER" | "SYSTEM";
-  created_by: string;
+  created_by: string | null;
+  created_by_client: string | null;
   updated_at: string;
-  updated_by_type: "USER" | "SYSTEM";
-  updated_by: string;
+  updated_by: string | null;
+  updated_by_client: string | null;
   id: string;
   script_id: string;
   version_number: number;
