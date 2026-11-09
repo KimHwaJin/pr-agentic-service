@@ -12,8 +12,9 @@ Two ways to verify, picked by ``VERIFY_WITH``:
 - ``"sdk"`` (the Flask sample): the private SDK's ``check_day_cookie`` and
   ``get_sso_info``.
 
-Login always goes to ``SSO_LOGIN_PAGE?TARGET=<our callback>``; its origin
-must be in SSO_ALLOWED_ORIGINS.
+Login goes to ``SSO_LOGIN_PAGE?TARGET=<our callback>`` (userinfo) or to
+the SDK's own ``redirect_url`` (sdk: the workplace token page, which comes
+back to our root ``/``); its origin must be in SSO_ALLOWED_ORIGINS.
 
 Do not log or print cookies, URLs with tickets or employee data here.
 """
@@ -64,9 +65,12 @@ def create_sdk(request, callback_url):
         sso = SSO(request)
     else:
         sso = UserinfoCheck(request)
-    if callback_url is not None:
+    if callback_url is not None and VERIFY_WITH != "sdk":
         # the callback has no query, so it goes in as is, like the sample
         sso.redirect_url = f"{SSO_LOGIN_PAGE}?TARGET={callback_url}"
+    # sdk: the SDK's own URL (the workplace's token page, which issues the
+    # AMTOKEN and returns to our registered host, that is GET /); its origin
+    # must be in SSO_ALLOWED_ORIGINS
     return sso
 
 

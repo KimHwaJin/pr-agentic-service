@@ -1,6 +1,7 @@
 import importlib
 from functools import partial
 from typing import Protocol
+from urllib.parse import urlsplit
 
 from fastapi import Request
 from starlette.concurrency import run_in_threadpool
@@ -23,9 +24,10 @@ class SsoAdapter(Protocol):
 class IdpAdapter:
     """Runs the synchronous IdP SDK in a thread pool."""
 
-    def __init__(self, sdk_factory: SdkFactory):
-        self._verify = partial(verify_employee, sdk_factory)
-        self._entry_url = partial(entry_url, sdk_factory)
+    def __init__(self, sdk_factory: SdkFactory, scheme: str | None = None):
+        # scheme: the public one (PUBLIC_API_ORIGIN), shown to the SDK
+        self._verify = partial(verify_employee, sdk_factory, scheme=scheme)
+        self._entry_url = partial(entry_url, sdk_factory, scheme=scheme)
 
     async def verify(self, request: Request) -> Employee | None:
         return await run_in_threadpool(self._verify, request)
@@ -62,4 +64,5 @@ def load_adapter(settings: Settings) -> SsoAdapter:
         )
     module, name = settings.sso_adapter_factory.split(":", 1)
     sdk_factory: SdkFactory = getattr(importlib.import_module(module), name)
-    return IdpAdapter(sdk_factory)
+    scheme = urlsplit(settings.public_api_origin).scheme or None
+    return IdpAdapter(sdk_factory, scheme)
