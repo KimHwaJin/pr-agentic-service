@@ -20,9 +20,11 @@
 1. executor `AUTH_CLIENTS`의 `pr-agentic-service`·`pr-batch`·`ops` 해시를 실제 값으로 바꿉니다.
 2. pr-batch `AUTH_CLIENTS`의 `pr-agentic-service` 해시를 바꿉니다(`admin: true`, `allowed_tenants: ["*"]` 유지).
 3. 키 원문을 우리 `EXECUTOR_API_KEY`·`EXECUTOR_ADMIN_API_KEY`·`BATCH_API_KEY`와 pr-batch `EXECUTOR_API_KEY`에 넣습니다(Deployment env 권장).
+4. `EXECUTOR_API_KEY`·`BATCH_API_KEY` 같은 `*_API_KEY`에는 반드시 키 원문을, `AUTH_CLIENTS`의 `key_sha256`에는 해시를 넣습니다(바꿔 넣으면 401, 배치는 `SUBMIT_REJECTED`).
 
 ## 4. 예상 결과
 - 세 서비스 설정에 0000… 해시가 남아 있지 않음
+- `*_API_KEY` 값이 64자리 hex(해시 모양)가 아님. 원문의 SHA-256이 상대 서비스 `key_sha256`과 같음
 
 ## 5. 확인 방법
 세 서비스 설정 diff

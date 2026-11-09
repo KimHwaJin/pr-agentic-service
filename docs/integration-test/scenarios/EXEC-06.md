@@ -14,7 +14,7 @@
 게이트웨이는 key 종류와 관계없이 `X-User-Id`를 요구하고(조회·쓰기 모두), 조회 범위는 key 종류가 정하는지 확인합니다. 일반키는 `X-User-Id` 사용자 것만, 마스터키는 tenant 전체(쿼리 `user_id`로 거르기)입니다.
 
 ## 2. 사전 조건
-- 우리 tenant 일반키, 우리 tenant 마스터키 (시스템 > API 키에서 종류를 골라 발급)
+- 우리 tenant 일반키, 우리 tenant 마스터키 (PREP-09)
 - 실행이 있는 사용자 두 명 (A: 내 사번, B: 다른 사번)
 
 ## 3. 수행 절차
@@ -23,12 +23,14 @@
 3. 방식을 POST, 경로를 `/api/v1/executor/executions`로 바꾸고 EXEC-02 본문을 붙여 보냅니다(X-User-Id 꺼짐).
 4. 일반키, X-User-Id=A로 `GET /api/v1/executor/executions?limit=20`을 보내고, 이어서 `?user_id=B`를 붙여 보냅니다.
 5. 마스터키, X-User-Id=A로 `GET /api/v1/executor/executions?limit=20`을 보내고, 이어서 `?user_id=B`를 붙여 보냅니다.
+6. 마스터키, X-User-Id=A로 `GET /api/v1/executor/executions?limit=20&user_id=A%20B!`를 보냅니다.
 
 ## 4. 예상 결과
 - 2: 두 key 모두 400 `INVALID_IDENTITY`
 - 3: 400 `INVALID_IDENTITY`
 - 4: 처음은 200, A의 실행만. `user_id=B`는 403 `FORBIDDEN`
-- 5: 처음은 200, 여러 사용자의 실행. `user_id=B`는 200, B의 실행만 (executor의 user_id 필터 반영 후)
+- 5: 처음은 200, 여러 사용자의 실행. `user_id=B`는 200, B의 실행만
+- 6: 400 `INVALID_IDENTITY` (details에 `query.user_id`)
 
 ## 5. 확인 방법
 API 호출 시험 결과
