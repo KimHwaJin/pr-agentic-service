@@ -46,26 +46,51 @@ def _alembic_upgrade(settings: Settings) -> None:
     command.upgrade(config, "head")
 
 
-@asynccontextmanager
-async def build_services(
-    settings: Settings,
-) -> AsyncGenerator[Services]:
-    db = Database(settings.database_url, settings.db_pool_size)
-    redis = Redis.from_url(settings.redis_url, decode_responses=True)
+async def _alive(conn: AsyncConnection[DictRow]) -> None:
+    """Raises on a dead connection (``check_connection`` for autocommit
+    connections, typed for dict rows)."""
+    await conn.execute("")
+
+
+def checkpoint_pool(settings: Settings) -> PgPool:
+    """The LangGraph checkpointer/store pool, not yet open.
+
+    A connection left idle in the pool can be dropped by a network device
+    between the pod and PostgreSQL, which tells neither side (the server's
+    own keepalive waits two hours). The next turn then failed with
+    "server closed the connection unexpectedly". ``check`` tests each
+    connection as it is lent and replaces a dead one; the TCP keepalive
+    keeps idle connections from looking idle to those devices.
+    """
     pool: PgPool = AsyncConnectionPool(
         settings.psycopg_url,
         connection_class=AsyncConnection[DictRow],
         min_size=1,
         max_size=settings.checkpoint_pool_size,
         timeout=settings.checkpoint_pool_timeout_seconds,
+        check=_alive,
         kwargs={
             "autocommit": True,
             "application_name": GRAPH_POOL_NAME,
             "prepare_threshold": 0,
             "row_factory": dict_row,
+            "keepalives": 1,
+            "keepalives_idle": settings.db_keepalive_idle_seconds,
+            "keepalives_interval": 10,
+            "keepalives_count": 3,
         },
         open=False,
     )
+    return pool
+
+
+@asynccontextmanager
+async def build_services(
+    settings: Settings,
+) -> AsyncGenerator[Services]:
+    db = Database(settings.database_url, settings.db_pool_size)
+    redis = Redis.from_url(settings.redis_url, decode_responses=True)
+    pool = checkpoint_pool(settings)
     await pool.open()
     embedder = build_embedder(settings)  # workflow search only
     # no vector index: project memory is put in the prompt whole

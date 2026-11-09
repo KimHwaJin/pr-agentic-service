@@ -159,6 +159,9 @@ class Settings(BaseSettings):
     checkpoint_pool_size: int = Field(8, ge=2)
     # how long a checkpoint write waits for a free connection
     checkpoint_pool_timeout_seconds: float = Field(30.0, gt=0)
+    # TCP keepalive of checkpoint pool connections: seconds of silence
+    # before the first probe. Shorter than any network device's idle cut.
+    db_keepalive_idle_seconds: int = Field(60, ge=1)
     auto_migrate: bool = True
     # Swagger UI, ReDoc and the OpenAPI schema. Off unless turned on: the
     # internal network rules forbid them even on the dev environment.
