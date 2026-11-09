@@ -12,7 +12,8 @@ them as we serve them (our path, our headers, our errors) and writes:
   routes: ``scripts/from-notebook`` and ``/batch-reports``)
 - the generated parts of the Markdown docs, between
   ``<!-- gen:begin NAME -->`` and ``<!-- gen:end NAME -->`` in
-  ``docs/gateway/*.md`` (endpoint tables, schema tables, TypeScript types).
+  ``docs/gateway/*.md`` (endpoint tables, schema tables, TypeScript types;
+  the Korean agent guides ``*-for-agents.ko.md`` get the same types).
 
 Run from the repo root after either service changes its API, or after our
 allow lists change, and commit the result::
@@ -805,8 +806,11 @@ def main() -> None:
             "schemas": schemas_md(batch_spec, skip),
         },
     )
-    fill(DOCS / "executor-for-agents.md", {"types": ts_md(exec_spec, skip)})
-    fill(DOCS / "batch-for-agents.md", {"types": ts_md(batch_spec, skip)})
+    exec_types = {"types": ts_md(exec_spec, skip)}
+    batch_types = {"types": ts_md(batch_spec, skip)}
+    for suffix in (".md", ".ko.md"):  # English and Korean guides
+        fill(DOCS / f"executor-for-agents{suffix}", exec_types)
+        fill(DOCS / f"batch-for-agents{suffix}", batch_types)
     print(
         f"executor: {len(exec_spec['paths'])} paths, "
         f"batch: {len(batch_spec['paths'])} paths"

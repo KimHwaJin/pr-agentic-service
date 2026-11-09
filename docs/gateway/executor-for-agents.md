@@ -495,7 +495,7 @@ for a in gw.artifacts(eid):
 
 ## 9. Types
 
-Generated from the executor OpenAPI (`scripts/gateway_docs.py`). Do not edit by hand. Interfaces marked `unknown fields → 422` are request bodies; response types may gain fields, so ignore unknown ones. `string` timestamps are ISO 8601 with time zone, and ids are UUID strings.
+Generated from the executor OpenAPI. Do not edit by hand. Interfaces marked `unknown fields → 422` are request bodies; response types may gain fields, so ignore unknown ones. `string` timestamps are ISO 8601 with time zone, and ids are UUID strings.
 
 <!-- gen:begin types -->
 ```ts
