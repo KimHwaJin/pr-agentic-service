@@ -309,7 +309,14 @@ def build(
     return {
         "openapi": "3.1.0",
         "info": {"title": title, "version": "1.0", "description": description},
-        "servers": [{"url": "/", "description": "pr-agentic-service"}],
+        "servers": [
+            {
+                "url": "https://{api_host}",
+                "description": "pr-agentic-service deployed on Kubernetes "
+                "(the environment's public origin; ask the service owner)",
+                "variables": {"api_host": {"default": "api-host"}},
+            }
+        ],
         "paths": paths,
         "components": {
             "schemas": components,
@@ -319,9 +326,9 @@ def build(
                     "in": "header",
                     "name": "X-Api-Key",
                     "description": (
-                        "A pr-agentic-service key (pas_live_..., pas_dev_... "
-                        "on local/dev), issued by our administrators. Its "
-                        "kind is standard or master."
+                        "A pr-agentic-service key (pas_live_... on "
+                        "stg/prd, pas_dev_... on dev), issued by our "
+                        "administrators. Its kind is standard or master."
                     ),
                 }
             },

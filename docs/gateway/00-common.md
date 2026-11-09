@@ -14,13 +14,16 @@ executor 게이트웨이(`/api/v1/executor/…`)와 배치 게이트웨이(`/api
 
 ## 2. 주소
 
-| 환경 | Base URL | 비고 |
+pr-agentic-service는 쿠버네티스 클러스터에 배포되어 있고, 호출자는 배포된 서비스의 주소로 부릅니다.
+
+| 호출 위치 | Base URL | 비고 |
 | --- | --- | --- |
-| 로컬 (docker compose) | `http://localhost:8080` | `APP_PORT`로 바꿀 수 있습니다 |
-| dev · stg · prd | 환경별 `PUBLIC_API_ORIGIN` (`https://<api-host>`) | 담당자에게 받습니다 |
+| 클러스터 밖 (다른 서비스·사내망) | 환경(dev·stg·prd)별 공개 주소 `https://<api-host>` | 담당자에게 받습니다 |
+| 같은 클러스터 안 | `http://pr-agentic-service.<namespace>.svc.cluster.local` (Service 포트 80) | 네임스페이스는 담당자에게 받습니다 |
 
 - 이 문서의 경로는 모두 Base URL 뒤에 붙습니다. 예: `https://<api-host>/api/v1/executor/executions`.
-- 서비스의 Swagger(`/docs`)와 `/openapi.json`은 dev·stg·prd에서 꺼져 있습니다(내부망 규정). 켜져 있어도 게이트웨이는 `{path}` 하나로만 보입니다. 경로별 스키마는 이 폴더의 [openapi/](openapi/) 파일을 씁니다.
+- Base URL은 코드에 넣지 않고 설정(예: `AGENTIC_BASE_URL`)에서 읽어, 환경마다 바꿔 끼웁니다.
+- 배포된 서비스의 Swagger(`/docs`)와 `/openapi.json`은 꺼져 있습니다(내부망 규정). 경로별 스키마는 이 폴더의 [openapi/](openapi/) 파일을 씁니다.
 
 ## 3. API key
 
@@ -28,7 +31,7 @@ key는 우리 관리자가 **시스템 > API 키** 화면(또는 `POST /api/v1/a
 
 | 항목 | 값 |
 | --- | --- |
-| 형식 | `pas_live_…` (로컬·dev는 `pas_dev_…`) |
+| 형식 | stg·prd는 `pas_live_…`, dev는 `pas_dev_…` |
 | 보내는 법 | 모든 요청에 `X-Api-Key: <key>` |
 | tenant | key마다 하나. 발급할 때 정하고 바꿀 수 없습니다. 호출자가 만드는 실행·배치는 모두 이 tenant에 속합니다 |
 | 종류 (`kind`) | `standard`(일반키, 기본값) 또는 `master`(마스터키). **조회 범위만** 다릅니다(4장) |
