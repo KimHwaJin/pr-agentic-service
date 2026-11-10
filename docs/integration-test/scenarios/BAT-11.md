@@ -25,7 +25,7 @@
 3. 키를 마스터키로 바꾸고(X-User-Id=A) GET /api/v1/batch/batches?limit=20을 보냅니다.
 4. 경로 끝에 &user_id=<B의 사번>을 붙여 보냅니다.
 5. X-User-Id 보내기를 끄고 마스터키로 3을 다시 보냅니다.
-6. 마스터키, X-User-Id=A로 방식 POST, 경로 /api/v1/batch/scripts/from-notebook, 본문 {"artifact_id":"<A의 노트북 artifact ID>"}를 보냅니다. 이어서 일반키, X-User-Id=A로 GET /api/v1/batch/scripts를 보냅니다.
+6. 마스터키, X-User-Id=A로 방식 POST, 경로 /api/v1/batch/scripts/from-notebook, 본문 {"artifact_id":"<A의 노트북 artifact ID>"}, 추가 헤더 {"Idempotency-Key": "it-bat11-nb-<시각>"}를 보냅니다. 이어서 일반키, X-User-Id=A로 GET /api/v1/batch/scripts를 보냅니다.
 
 ## 4. 예상 결과
 - 1: 200, 모든 항목의 user_id가 A

@@ -1913,7 +1913,7 @@ async function saveScript() {
   if (!file && !artifact) return alert('노트북 파일을 고르거나 artifact ID를 입력하세요.');
   $('smSave').disabled = true;
   try {
-    if (artifact) await api('/batch/scripts/from-notebook', { method: 'POST', body: { artifact_id: artifact, ...(name ? { name } : {}) } });
+    if (artifact) await api('/batch/scripts/from-notebook', { method: 'POST', headers: idemKey(), body: { artifact_id: artifact, ...(name ? { name } : {}) } });
     else {
       const form = new FormData(); form.append('type', 'NOTEBOOK'); form.append('file', file); if (name) form.append('name', name);
       const r = await fetch(`${API}/batch/scripts`, { method: 'POST', credentials: 'include', headers: { ...idemKey(), ...(S.csrf ? { 'X-CSRF-Token': S.csrf } : {}) }, body: form });

@@ -19,7 +19,8 @@ You are writing a client that uploads Jupyter notebooks and runs them on a sched
 3. Send an `Idempotency-Key` **header** on every POST, PATCH and DELETE to `/api/v1/batch/…` (1–255 chars, ASCII, no spaces; use a UUID).
    - Make it once per logical write, before the first try.
    - Reuse it with the same body on retries.
-   - Exception: `scripts/from-notebook` and `/batch-reports/…/retry` do not need one.
+   - Send it on the agentic service's own `scripts/from-notebook` too (without it: `422 INVALID_BODY`).
+   - Exception: `/batch-reports/…/retry` does not need one.
 4. Send `If-Match: <ETag>` on rename or delete of a script, and on update, delete, enable or disable of a batch.
    - Take the ETag from the detail GET or the last write response.
    - Send it **with its quotes**, e.g. `If-Match: "3"`.
@@ -194,7 +195,8 @@ SKIPPED                                       (policy decided not to run; termin
 - Call `POST /api/v1/batch/scripts/from-notebook` with `{"artifact_id": "<executor NOTEBOOK artifact id>", "name"?: "…"}`. It returns `201 ScriptView`.
 - Only for keys of the agentic service's own tenant, with `X-User-Id` an active user who can see that artifact.
 - An artifact that is not a notebook returns 422.
-- No `Idempotency-Key`: the service derives one from the artifact and its content.
+- Send an `Idempotency-Key` header (the same rule as the other writes). It goes to pr-batch as sent and shares its key space with script upload (`POST /scripts`).
+- A key names one registration. To register the same notebook again (after deleting its script, or under another name), use a new key. You get a new script.
 
 ### 4.6 Batch reports (agentic service routes)
 
@@ -282,7 +284,7 @@ Rows 1–22 relay to pr-batch under `/api/v1/batch`. Rows 23–28 are the agenti
 | 25 | GET | `/api/v1/batch-reports/{report_id}/events?types=` | – | | 200 `BatchReportEvents` |
 | 26 | GET | `/api/v1/batch-reports/{report_id}/stream` | – | `Last-Event-ID`? | 200 `text/event-stream` |
 | 27 | POST | `/api/v1/batch-reports/{report_id}/retry` | – | | 202 `BatchReportDetail` |
-| 28 | POST | `/api/v1/batch/scripts/from-notebook` | `BatchScriptFromNotebook` | | 201 `ScriptView` |
+| 28 | POST | `/api/v1/batch/scripts/from-notebook` | `BatchScriptFromNotebook` | IK | 201 `ScriptView` |
 
 The exact query parameters, limits and response codes per route are in `openapi/batch-gateway.openapi.json`.
 

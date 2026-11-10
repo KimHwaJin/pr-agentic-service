@@ -4080,6 +4080,20 @@
         ],
         "parameters": [
           {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255,
+              "pattern": "^[!-~]+$",
+              "description": "A new value per registration (a UUID); the same value only to retry it. Passed to pr-batch as sent.",
+              "title": "Idempotency-Key"
+            },
+            "description": "A new value per registration (a UUID); the same value only to retry it. Passed to pr-batch as sent."
+          },
+          {
             "name": "X-User-Id",
             "in": "header",
             "required": true,

@@ -18,12 +18,12 @@ come to that tenant's stream). ``X-Project-Id`` is sent on registration
 (``POST /batches``) only: pr-batch keeps it and never changes it.
 """
 
-import hashlib
 import re
+from typing import Annotated
 from uuid import UUID
 
 import httpx
-from fastapi import APIRouter, HTTPException, Request, Response
+from fastapi import APIRouter, Header, HTTPException, Request, Response
 from fastapi.responses import HTMLResponse, StreamingResponse
 from starlette.datastructures import QueryParams
 
@@ -79,13 +79,36 @@ def ours(services: Services, user_id: str) -> Identity:
     )
 
 
+# pr-batch's own rule for the header (its api/deps.py ``Key``)
+IdempotencyKey = Annotated[
+    str,
+    Header(
+        alias="Idempotency-Key",
+        min_length=1,
+        max_length=255,
+        pattern=r"^[!-~]+$",
+        description=(
+            "A new value per registration (a UUID); the same value only "
+            "to retry it. Passed to pr-batch as sent."
+        ),
+    ),
+]
+PASSED_BACK = {"etag", "location", "content-type"}
+
+
 @router.post("/api/v1/batch/scripts/from-notebook", status_code=201)
 async def notebook_to_batch_script(
-    body: BatchScriptFromNotebook, services: ServicesDep, user: UserDep
+    body: BatchScriptFromNotebook,
+    services: ServicesDep,
+    user: UserDep,
+    idempotency_key: IdempotencyKey,
 ):
     """Registers a session notebook (executor artifact).
 
-    It becomes a pr-batch NOTEBOOK script.
+    It becomes a pr-batch NOTEBOOK script. The caller's ``Idempotency-Key``
+    goes to pr-batch as sent, as on the relayed writes: a key names one
+    registration, not the notebook, so registering a notebook again (after
+    deleting its script, or under another name) is a new script.
     """
     artifact = await owned_artifact(services, user, body.artifact_id)
     if artifact["type"] != "NOTEBOOK":
@@ -97,25 +120,37 @@ async def notebook_to_batch_script(
     )
     content = b"".join([c async for c in chunks])
     await response.aclose()
-    digest = hashlib.sha256(content).hexdigest()[:16]
-    result = await _client(services).post(
-        "/api/v1/scripts",
-        headers={
-            **batch_headers(services, ours(services, user.id)),
-            "Idempotency-Key": f"nb-{body.artifact_id}-{digest}",
-        },
-        data={
-            "type": "NOTEBOOK",
-            **({"name": body.name} if body.name else {}),
-        },
-        files={
-            "file": (artifact["name"], content, "application/x-ipynb+json")
-        },
-    )
+    try:
+        result = await _client(services).post(
+            "/api/v1/scripts",
+            headers={
+                **batch_headers(services, ours(services, user.id)),
+                "Idempotency-Key": idempotency_key,
+            },
+            data={
+                "type": "NOTEBOOK",
+                **({"name": body.name} if body.name else {}),
+            },
+            files={
+                "file": (
+                    artifact["name"],
+                    content,
+                    "application/x-ipynb+json",
+                )
+            },
+        )
+    except httpx.TimeoutException:
+        raise HTTPException(504, "pr-batch did not answer in time.") from None
+    except httpx.HTTPError:
+        raise HTTPException(502, "pr-batch is not reachable.") from None
+    if result.status_code >= 400:
+        return await _batch_error(result)
     return Response(
         result.content,
         result.status_code,
-        media_type=result.headers.get("content-type"),
+        headers={
+            k: v for k, v in result.headers.items() if k.lower() in PASSED_BACK
+        },
     )
 
 
@@ -318,9 +353,7 @@ async def batch_gateway(
     if result.status_code >= 400:
         return await _batch_error(result)
     passthrough = {
-        k: v
-        for k, v in result.headers.items()
-        if k.lower() in {"etag", "location", "content-type"}
+        k: v for k, v in result.headers.items() if k.lower() in PASSED_BACK
     }
 
     async def chunks():

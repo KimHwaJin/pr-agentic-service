@@ -723,8 +723,13 @@ def main() -> None:
     for path, item in json.loads(text).items():
         for method, op in item.items():
             op = copy.deepcopy(op)
+            # identity headers are ours to describe; Idempotency-Key
+            # (from-notebook) is the caller's, as on the relayed writes
             op["parameters"] = [
-                p for p in op.get("parameters", []) if p["in"] != "header"
+                p
+                for p in op.get("parameters", [])
+                if p["in"] != "header"
+                or p["name"].lower() == "idempotency-key"
             ] + [{**USER_HEADER, "description": OUR_USER_DESCRIPTION}]
             op["security"] = [{"X-Api-Key": []}]
             op["tags"] = ["batch (pr-agentic-service)"]
