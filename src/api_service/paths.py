@@ -50,17 +50,40 @@ class OwnPaths:
 
 class NotOwnPaths:
     """The inverse of ``OwnPaths``: runs ``middleware`` for every request
-    except those to our paths, which go straight to the app."""
+    except those to our paths (and the exact paths in ``skip``), which go
+    straight to the app."""
 
-    def __init__(self, app: ASGIApp, middleware: Any, *args: Any, **kw: Any):
+    def __init__(
+        self,
+        app: ASGIApp,
+        middleware: Any,
+        *args: Any,
+        skip: frozenset[str] = frozenset(),
+        **kw: Any,
+    ):
         self.app = app
+        self.skip = skip
         self.other: ASGIApp = middleware(app, *args, **kw)
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send):
-        if scope["type"] in {"http", "websocket"} and is_own(scope["path"]):
+        if scope["type"] in {"http", "websocket"} and (
+            is_own(scope["path"]) or scope["path"] in self.skip
+        ):
             await self.app(scope, receive, send)
         else:
             await self.other(scope, receive, send)
+
+
+def docs_paths(app: Any) -> frozenset[str]:
+    """The app's Swagger, ReDoc, OAuth2 redirect and schema paths, as served
+    (with ``root_path``). Empty with ``DOCS_ENABLED`` off: ``hide_docs`` and
+    ``docs_urls`` leave them None."""
+    paths = {app.docs_url, app.redoc_url, app.openapi_url}
+    if app.docs_url and app.swagger_ui_oauth2_redirect_url:
+        paths.add(app.swagger_ui_oauth2_redirect_url)
+    root = (getattr(app, "root_path", "") or "").rstrip("/")
+    found = {p for p in paths if p}
+    return frozenset(found | {root + p for p in found})
 
 
 # The gaia template's access key check (gaia/core.py ``AuthMiddleware``,
@@ -78,7 +101,9 @@ def _is_gaia_auth(cls: Any) -> bool:
 
 
 def skip_gaia_auth(app: Any) -> None:
-    """Keeps the gaia template's access key check off our paths.
+    """Keeps the gaia template's access key check off our paths, and off
+    the docs paths while ``DOCS_ENABLED`` is on (Swagger UI fetches the
+    schema without the ``accesskey`` header, so it got 401).
 
     The template may add its middleware any time before serving (in
     ``GaiaService()`` or in ``main()``), so the swap happens when the app
@@ -89,16 +114,22 @@ def skip_gaia_auth(app: Any) -> None:
 
     def build_middleware_stack():
         swapped = 0
+        skip = docs_paths(app)
         for i, entry in enumerate(app.user_middleware):
             if _is_gaia_auth(entry.cls):
                 app.user_middleware[i] = Middleware(
-                    NotOwnPaths, entry.cls, *entry.args, **entry.kwargs
+                    NotOwnPaths,
+                    entry.cls,
+                    *entry.args,
+                    skip=skip,
+                    **entry.kwargs,
                 )
                 swapped += 1
         if swapped:
             log.info(
-                "gaia_auth_skipped_on_own_paths prefixes=%s",
+                "gaia_auth_skipped_on_own_paths prefixes=%s docs=%s",
                 ",".join(OWN_PREFIXES),
+                ",".join(sorted(skip)) or "off",
             )
         return build()
 
