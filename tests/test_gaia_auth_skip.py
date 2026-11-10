@@ -10,6 +10,15 @@ from starlette.middleware.base import BaseHTTPMiddleware
 
 from api_service.paths import skip_gaia_auth
 
+_NO_DOCS = {"docs_url": None, "redoc_url": None, "openapi_url": None}
+_DOCS = FastAPI()  # FastAPI's default docs paths
+DOC_PATHS = (
+    _DOCS.docs_url,
+    _DOCS.redoc_url,
+    _DOCS.openapi_url,
+    _DOCS.swagger_ui_oauth2_redirect_url,
+)
+
 
 class AuthMiddleware(BaseHTTPMiddleware):
     """Stand-in for gaia.core.AuthMiddleware."""
@@ -32,8 +41,8 @@ class AuthMiddleware(BaseHTTPMiddleware):
 AuthMiddleware.__module__ = "gaia.core"
 
 
-def _app(add_after: bool = False) -> FastAPI:
-    app = FastAPI()
+def _app(add_after: bool = False, docs: bool = False) -> FastAPI:
+    app = FastAPI() if docs else FastAPI(**_NO_DOCS)
 
     @app.get("/api/admin/appReady")
     async def ready():
@@ -101,3 +110,18 @@ def test_other_middleware_named_alike_is_left_alone():
     app.add_middleware(AuthMiddleware2, required_key="k")
     skip_gaia_auth(app)
     assert TestClient(app).get("/dev/").status_code == 401
+
+
+def test_docs_skip_the_gaia_key_when_on():
+    """DOCS_ENABLED on: Swagger UI fetches the schema without the key."""
+    for add_after in (False, True):
+        client = TestClient(_app(add_after, docs=True))
+        for path in DOC_PATHS:
+            assert client.get(path).status_code == 200, path
+        assert client.get("/api/admin/appReady").status_code == 401
+
+
+def test_docs_paths_keep_the_gaia_key_when_off():
+    client = TestClient(_app())
+    for path in DOC_PATHS:
+        assert client.get(path).status_code == 401, path
