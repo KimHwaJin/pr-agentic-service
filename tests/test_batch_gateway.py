@@ -313,3 +313,111 @@ def test_master_key_reads_the_tenants_batches(monkeypatch):
         monkeypatch, "master", "POST", f"/api/v1/batch/batches/{ID}/runs"
     )
     assert sent[0].headers["x-user-id"] == "e100"
+
+
+def _notebook_client(monkeypatch, handler):
+    """from-notebook over a fake executor artifact and a fake pr-batch."""
+    import httpx
+
+    from api_service.deps import current_user
+    from core.models import User
+
+    async def artifact(services, user, artifact_id):
+        return {"type": "NOTEBOOK", "name": "daily.ipynb"}
+
+    async def stream_artifact(artifact_id):
+        async def chunks():
+            yield b'{"cells": []}'
+
+        return httpx.Response(200), chunks()
+
+    app = FastAPI()
+    app.include_router(batch.router)
+    app.state.services = SimpleNamespace(
+        settings=Settings(),
+        executor=SimpleNamespace(stream_artifact=stream_artifact),
+    )
+    app.dependency_overrides[current_user] = lambda: User(id="u1")
+    upstream = httpx.AsyncClient(
+        base_url="http://batch", transport=httpx.MockTransport(handler)
+    )
+    monkeypatch.setattr(batch, "owned_artifact", artifact)
+    monkeypatch.setattr(batch, "_client", lambda services: upstream)
+    return TestClient(app)
+
+
+FROM_NOTEBOOK = "/api/v1/batch/scripts/from-notebook"
+
+
+def test_from_notebook_sends_the_callers_idempotency_key(monkeypatch):
+    """A key names one registration, not the notebook: the same notebook
+    registered again (its script deleted, or another name) goes to
+    pr-batch under the new key the caller sent, so it is a new script."""
+    import httpx
+
+    seen = []
+
+    def handler(request):
+        seen.append(request.headers["idempotency-key"])
+        return httpx.Response(
+            201,
+            json={"id": ID},
+            headers={"etag": '"1"', "location": f"/api/v1/scripts/{ID}"},
+        )
+
+    client = _notebook_client(monkeypatch, handler)
+    for key in ("first", "second"):
+        made = client.post(
+            FROM_NOTEBOOK,
+            json={"artifact_id": "a-1"},
+            headers={"Idempotency-Key": key},
+        )
+        assert made.status_code == 201 and made.json() == {"id": ID}
+        assert made.headers["etag"] == '"1"'
+        assert made.headers["location"] == f"/api/v1/scripts/{ID}"
+    assert seen == ["first", "second"]
+
+
+@pytest.mark.parametrize("headers", [{}, {"Idempotency-Key": "has space"}])
+def test_from_notebook_needs_an_idempotency_key(monkeypatch, headers):
+    def handler(request):
+        raise AssertionError("pr-batch was called")
+
+    client = _notebook_client(monkeypatch, handler)
+    refused = client.post(
+        FROM_NOTEBOOK, json={"artifact_id": "a-1"}, headers=headers
+    )
+    assert refused.status_code == 422
+
+
+def test_from_notebook_fails_as_the_relayed_routes_do(monkeypatch):
+    import httpx
+
+    def handler(request):
+        key = request.headers["idempotency-key"]
+        if key == "timeout":
+            raise httpx.ReadTimeout("slow")
+        if key == "down":
+            raise httpx.ConnectError("refused")
+        return httpx.Response(
+            409,
+            json={
+                "code": "IDEMPOTENCY_CONFLICT",
+                "message": "Key used for another request.",
+            },
+        )
+
+    client = _notebook_client(monkeypatch, handler)
+
+    def call(key):
+        return client.post(
+            FROM_NOTEBOOK,
+            json={"artifact_id": "a-1"},
+            headers={"Idempotency-Key": key},
+        )
+
+    assert call("timeout").status_code == 504
+    assert call("down").status_code == 502
+    conflict = call("reused")
+    assert conflict.status_code == 409
+    assert conflict.json()["error"]["code"] == "IDEMPOTENCY_CONFLICT"
