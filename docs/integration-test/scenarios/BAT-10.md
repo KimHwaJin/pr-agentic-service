@@ -19,7 +19,7 @@
 ## 3. 수행 절차
 1. 관리자로 **시스템 > API 호출 시험** 탭을 엽니다.
 2. 시나리오 **BAT-10**으로 목록을 봅니다(키, A 사번).
-3. 방식 POST, 경로 `/api/v1/batch/scripts/from-notebook`, 본문 `{"artifact_id":"<A의 노트북 artifact ID>"}`로 스크립트를 등록합니다.
+3. 방식 POST, 경로 `/api/v1/batch/scripts/from-notebook`, 본문 `{"artifact_id":"<A의 노트북 artifact ID>"}`로 스크립트를 등록합니다(추가 헤더 `{"Idempotency-Key": "it-bat10-nb-<시각>"}`).
 4. 경로 `/api/v1/batch/batches`로 배치를 만듭니다. 본문은 화면에서 새 배치를 만들 때 요청·응답 창에 찍힌 `POST /batch/batches` 본문을 복사해 스크립트 ID만 바꿉니다. 이어서 `/api/v1/batch/batches/<배치 ID>/runs`로 실행합니다(추가 헤더 `{"Idempotency-Key": "it-bat10-<시각>"}`).
 5. 운영 담당이 executor에서 그 실행의 tenant를 확인합니다. 우리 **배치 > 리포트**에 새 리포트가 없는지 봅니다.
 

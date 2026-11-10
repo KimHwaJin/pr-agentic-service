@@ -21,7 +21,8 @@
 3. `/api/v1/batch/…`의 모든 POST, PATCH, DELETE에 `Idempotency-Key` **헤더**를 보냅니다(1~255자, ASCII, 공백 없음. UUID를 씁니다).
    - 논리적인 쓰기마다 첫 시도 전에 한 번 만듭니다.
    - 재시도 때는 같은 본문과 함께 다시 씁니다.
-   - 예외: `scripts/from-notebook`과 `/batch-reports/…/retry`는 필요 없습니다.
+   - 이 서비스의 경로인 `scripts/from-notebook`에도 똑같이 보냅니다(없으면 `422 INVALID_BODY`).
+   - 예외: `/batch-reports/…/retry`는 필요 없습니다.
 4. 스크립트 이름 변경·삭제, 배치 수정·삭제·켜기·끄기에 `If-Match: <ETag>`를 보냅니다.
    - ETag는 상세 GET이나 직전 쓰기 응답에서 받습니다.
    - **따옴표까지 그대로** 보냅니다. 예: `If-Match: "3"`.
@@ -196,7 +197,8 @@ SKIPPED                                       (정책이 실행하지 않기로 
 - `POST /api/v1/batch/scripts/from-notebook`에 `{"artifact_id": "<executor NOTEBOOK 아티팩트 id>", "name"?: "…"}`를 보냅니다. `201 ScriptView`가 옵니다.
 - 이 서비스 자신의 tenant key만 쓸 수 있고, `X-User-Id`는 그 아티팩트를 볼 수 있는 활성 사용자여야 합니다.
 - 노트북이 아닌 아티팩트는 422입니다.
-- `Idempotency-Key`는 필요 없습니다. 서비스가 아티팩트와 그 내용으로 만듭니다.
+- `Idempotency-Key` 헤더를 보냅니다(다른 쓰기와 같은 규칙). 그대로 pr-batch에 전달되고, 스크립트 업로드(`POST /scripts`)와 같은 키 공간을 씁니다.
+- 키는 등록 한 번을 가리킵니다. 같은 노트북을 다시 등록할 때(스크립트를 지운 뒤, 또는 다른 이름으로)는 새 key를 씁니다. 새 스크립트가 만들어집니다.
 
 ### 4.6 배치 리포트 (이 서비스의 경로)
 
@@ -284,7 +286,7 @@ SKIPPED                                       (정책이 실행하지 않기로 
 | 25 | GET | `/api/v1/batch-reports/{report_id}/events?types=` | – | | 200 `BatchReportEvents` |
 | 26 | GET | `/api/v1/batch-reports/{report_id}/stream` | – | `Last-Event-ID`? | 200 `text/event-stream` |
 | 27 | POST | `/api/v1/batch-reports/{report_id}/retry` | – | | 202 `BatchReportDetail` |
-| 28 | POST | `/api/v1/batch/scripts/from-notebook` | `BatchScriptFromNotebook` | | 201 `ScriptView` |
+| 28 | POST | `/api/v1/batch/scripts/from-notebook` | `BatchScriptFromNotebook` | IK | 201 `ScriptView` |
 
 경로별 정확한 쿼리 파라미터, 한도, 응답 코드는 `openapi/batch-gateway.openapi.json`에 있습니다.
 

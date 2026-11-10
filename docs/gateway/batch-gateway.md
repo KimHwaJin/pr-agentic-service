@@ -224,7 +224,9 @@ BatchView에서 화면·로직에 쓰는 필드: `user_id`(소유자), `enabled`
 `POST /api/v1/batch/scripts/from-notebook` `{"artifact_id": "<executor NOTEBOOK artifact>", "name"?: "…"}` → 201 ScriptView(pr-batch 응답 그대로).
 
 - 이 서비스의 채팅 세션이 만든 노트북을 `NOTEBOOK` 스크립트로 올립니다. 그 아티팩트를 볼 수 있는 **이 서비스 tenant 사용자**만 됩니다(`X-User-Id`가 이 서비스의 활성 사용자).
-- 노트북이 아닌 아티팩트는 422입니다. `Idempotency-Key`는 필요 없습니다(같은 요청을 다시 보내면 같은 스크립트가 돌아옵니다).
+- 노트북이 아닌 아티팩트는 422입니다.
+- `Idempotency-Key` 헤더가 **필수**입니다(없거나 형식이 틀리면 422 `INVALID_BODY`). 형식과 뜻은 pr-batch의 다른 쓰기와 같고, 그대로 pr-batch의 스크립트 생성에 넘어갑니다. 키는 등록 한 번을 가리키므로, 같은 노트북을 다시 등록할 때(스크립트를 지운 뒤, 또는 다른 이름으로)는 새 키를 씁니다. 새 스크립트가 만들어집니다.
+- 응답의 `ETag`, `Location`과 오류(pr-batch가 응답하지 않으면 504, 연결되지 않으면 502, pr-batch 오류는 이 게이트웨이의 오류 모양)는 중계 경로와 같습니다.
 
 ### 5.6 배치 리포트 (이 서비스의 API)
 
@@ -624,6 +626,10 @@ Retry Report
 #### `POST /api/v1/batch/scripts/from-notebook`
 
 Notebook To Batch Script
+
+| 위치 | 이름 | 타입 | 필수 | 기본값 | 제약 | 설명 |
+| --- | --- | --- | --- | --- | --- | --- |
+| header | `Idempotency-Key` | string | O |  | 길이 ≥ 1, 길이 ≤ 255, `^[!-~]+$` | A new value per registration (a UUID); the same value only to retry it. Passed to pr-batch as sent. |
 
 - 요청 본문 (`application/json`): [BatchScriptFromNotebook](#schema-batchscriptfromnotebook)
 - 응답 `201` (`application/json`): [ScriptView](#schema-scriptview)
