@@ -1,6 +1,7 @@
 """Tools of the main (conversation) agent.
 
-Domain knowledge, project memory, hand-off to analysis.
+Domain knowledge (also read by the analyst), project memory, hand-off to
+analysis.
 """
 
 from langchain.tools import ToolRuntime, tool
@@ -161,7 +162,7 @@ async def start_analysis(
 
     task: what the user wants analysed, in your own words.
     context: only the domain facts / constraints / memory the analyst needs
-    (it cannot read knowledge skills).
+    (it can read knowledge skills itself; do not copy them here).
     """
     await runtime.context.emit(
         "agent_switched", {"agent": "analyst", "task": task}
