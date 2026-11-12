@@ -112,11 +112,11 @@ stateDiagram-v2
 | | 대화 담당 `main` | 분석 담당 `analyst` |
 | --- | --- | --- |
 | 프롬프트 | `prompts/main.md` | `prompts/analyst.md` |
-| 읽는 skill | 도메인 지식(`assets/knowledge`) | 분석 skill(`assets/skills`) |
-| 도구 | `ask_user`, `read_knowledge`, `save_memory`, `delete_memory`, `start_analysis` | `ask_user`, `read_skill`, `read_tool`, `search_tools`, `search_workflows`, `propose_plans`, `revise_call`, `run_plan`, `run_custom_code`(코드 레벨 2 이상), `write_report`, `save_workflow`, `finish_analysis` |
+| 읽는 skill | 도메인 지식(`assets/knowledge`) | 분석 skill(`assets/skills`), 도메인 지식(`assets/knowledge`) |
+| 도구 | `ask_user`, `read_knowledge`, `save_memory`, `delete_memory`, `start_analysis` | `ask_user`, `read_knowledge`, `read_skill`, `read_tool`, `search_tools`, `search_workflows`, `propose_plans`, `revise_call`, `run_plan`, `run_custom_code`(코드 레벨 2 이상), `write_report`, `save_workflow`, `finish_analysis` |
 | 하는 일 | 대화, 도메인 질문 답변, 메모리 관리, 분석이 필요하면 넘기기 | 계획 세우기, 승인 받기, executor 실행, 결과 판단, 리포트, 워크플로우 저장 |
 
-- 두 담당자는 **같은 메시지 기록**을 봅니다. 다만 상대가 읽은 자료(지식 skill, 분석 skill, tool 설명, 워크플로우 검색 결과)는 "(다른 담당자가 참고한 자료라 생략)"으로 가려서, 필요 없는 skill 내용을 끌고 다니지 않게 합니다.
+- 두 담당자는 **같은 메시지 기록**을 봅니다. 다만 상대가 읽은 자료(분석 skill, tool 설명, 워크플로우 검색 결과)는 "(다른 담당자가 참고한 자료라 생략)"으로 가려서, 필요 없는 skill 내용을 끌고 다니지 않게 합니다. 지식 skill은 두 담당자가 함께 쓰므로 가리지 않습니다(분석 담당은 대화 담당이 읽은 지식을 다시 읽지 않아도 됩니다).
 - 전환은 도구가 상태를 바꾸는 것(`Command(update={"active_agent": …})`)이라, 다음 모델 호출부터 다른 프롬프트와 도구로 바뀝니다.
 - 프롬프트는 모두 `.md` 파일이고, 고치면 다음 모델 호출부터 반영됩니다(재시작 불필요).
 

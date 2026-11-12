@@ -50,6 +50,7 @@ PERSONA_TOOLS = {
     },
     "analyst": {
         "ask_user",
+        "read_knowledge",
         "read_skill",
         "read_tool",
         "search_tools",
@@ -64,8 +65,10 @@ PERSONA_TOOLS = {
     },
 }
 # Tool results that only matter to the persona that asked for them.
+# Knowledge skills are read by both personas, so their text stays visible
+# to whichever one is active (the analyst need not re-read what main read).
 PRIVATE_RESULTS = {
-    "main": {"read_knowledge"},
+    "main": set(),
     "analyst": {"read_skill", "read_tool", "search_tools", "search_workflows"},
 }
 CODE_LEVELS = {
@@ -183,11 +186,16 @@ class PersonaMiddleware(AgentMiddleware[AnalysisState, RunContext]):
         allowed = set(PERSONA_TOOLS[persona])
         if ctx.code_level < 2:
             allowed.discard("run_custom_code")
-        skills = "\n\n".join(
-            ctx.services.skills(root).index() for root in prompt.skills
-        )
+        indexes = {
+            root: ctx.services.skills(root).index() for root in prompt.skills
+        }
         system = prompt.render(
-            skills=skills or "없음",
+            skills="\n\n".join(indexes.values()) or "없음",
+            # one list per root, for prompts that show them separately
+            **{
+                f"{root}_skills": idx or "없음"
+                for root, idx in indexes.items()
+            },
             code_level=CODE_LEVELS[ctx.code_level],
             plan=_plan_status(cast(AnalysisState, request.state)),
             plan_recommend=plan_recommend(ctx.services.settings),
