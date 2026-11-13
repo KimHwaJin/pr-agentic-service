@@ -1802,7 +1802,7 @@ async function loadRuns(id) {
     const badge = r.status === 'SKIPPED' && why ? `<span title="${esc(why)}" style="cursor:help;white-space:nowrap">${statusBadge(r.status)} <span class="muted">ⓘ</span></span>` : withError(statusBadge(r.status), why);
     return `<tr${r.execution_id ? ` class="click" title="눌러서 executor 실행 상세 보기" onclick="openExecution('${r.execution_id}', '${esc(runTenant)}')"` : ''}><td onclick="event.stopPropagation()">${badge}</td><td>${short(r.id)}</td>
       <td>${esc(r.trigger)}</td><td>${fmtTime(start) || '<span class="muted">-</span>'}</td><td>${fmtTime(end) || '<span class="muted">-</span>'}</td><td>${dur(start, end)}</td>
-      <td onclick="event.stopPropagation()">${nb ? `<a target="_blank" href="/view/artifacts/${nb}">보기</a>` : '<span class="muted">-</span>'}</td>
+      <td onclick="event.stopPropagation()">${nb ? `<a target="_blank" href="${viewUrl(nb, runTenant)}">보기</a>` : '<span class="muted">-</span>'}</td>
       <td onclick="event.stopPropagation()">${rep ? `<a href="#" onclick="event.preventDefault(); $('runsModal').classList.remove('open'); openReport('${rep.id}')">${reportBadge(rep.state)}</a>` : `<span class="muted">${r.status === 'COMPLETED' ? '대기 중' : '-'}</span>`}</td>
       <td onclick="event.stopPropagation()">${CANCELLABLE.includes(r.status) && !r.cancel_requested ? `<button class="ghost" style="color:var(--bad)" onclick="cancelBatchRun('${id}', '${r.id}')">취소</button>` : (r.cancel_requested && !['CANCELLED', 'COMPLETED', 'FAILED'].includes(r.status) ? '<span class="muted">취소 중</span>' : '')}</td></tr>`;
   }).join('')}</tbody></table>` : '<div class="muted">아직 실행이 없습니다.</div>';
@@ -2501,6 +2501,8 @@ function openExecution(id, tenant = '') {
   $('execTabs').innerHTML = EXEC_TABS.filter(([k]) => S.me.permissions?.execution_internals || !INTERNAL_EXEC_TABS.includes(k)).map(([k, label]) => `<button class="systab" data-ex="${k}" onclick="execTab('${k}')">${label}</button>`).join('');
   $('execModal').classList.add('open'); execTab('overview');
 }
+// an artifact's page; tenant: the executor tenant it is in ('' = ours, honoured for admins only)
+const viewUrl = (id, tenant = '') => `/view/artifacts/${id}${tenant ? `?tenant_id=${encodeURIComponent(tenant)}` : ''}`;
 const execApi = path => api(SYS.execTenant ? `${path}${path.includes('?') ? '&' : '?'}tenant_id=${encodeURIComponent(SYS.execTenant)}` : path);
 async function execTab(tab) {
   document.querySelectorAll('.systab[data-ex]').forEach(t => t.classList.toggle('on', t.dataset.ex === tab));
@@ -2535,7 +2537,7 @@ async function execEvents(base) {
 async function execNotebook(base) {
   const [nb, arts] = await Promise.all([execApi(`${base}/notebook`), execApi(`${base}/artifacts`)]);
   const notebook = arts.items.find(a => a.type === 'NOTEBOOK');
-  return `${notebook ? `<p><a target="_blank" href="/view/artifacts/${notebook.artifact_id}">노트북 전체 보기</a></p>` : ''}
+  return `${notebook ? `<p><a target="_blank" href="${viewUrl(notebook.artifact_id, SYS.execTenant)}">노트북 전체 보기</a></p>` : ''}
     ${nb.cells.map(c => `<div class="stat" style="margin-bottom:8px"><b>[${c.execution_count ?? ' '}] ${esc(c.type)} <span class="muted" style="font-weight:400">${c.line_count}줄</span></b>
       <pre class="sys-pre" style="max-height:160px">${esc(c.source_preview || '')}${c.source_truncated ? '\n…' : ''}</pre>
       ${c.output_summary ? `<div class="muted mono">${esc(JSON.stringify(c.output_summary)).slice(0, 200)}</div>` : ''}</div>`).join('')}
@@ -2544,7 +2546,7 @@ async function execNotebook(base) {
 async function execArtifacts(base) {
   const page = await execApi(`${base}/artifacts`);
   return page.items.length ? `<table class="tbl"><thead><tr><th>이름</th><th>종류</th><th>상태</th><th>생성</th><th></th></tr></thead><tbody>${page.items.map(a =>
-    `<tr><td>${esc(a.name)}</td><td>${esc(a.type)}</td><td>${statusBadge(a.status)}</td><td>${fmtTime(a.created_at)}</td><td><a target="_blank" href="/view/artifacts/${a.artifact_id}">보기</a></td></tr>`).join('')}</tbody></table>` : '<div class="muted">산출물이 없습니다.</div>';
+    `<tr><td>${esc(a.name)}</td><td>${esc(a.type)}</td><td>${statusBadge(a.status)}</td><td>${fmtTime(a.created_at)}</td><td><a target="_blank" href="${viewUrl(a.artifact_id, SYS.execTenant)}">보기</a></td></tr>`).join('')}</tbody></table>` : '<div class="muted">산출물이 없습니다.</div>';
 }
 async function execDiagnostics(base) {
   const page = await execApi(`${base}/diagnostics`);

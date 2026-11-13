@@ -71,7 +71,7 @@
 
 ## 5. 이미 있는 것과의 관계
 
-- `/api/v1/artifacts/{id}`, `/content`, `/view/artifacts/{id}`: 그대로 둡니다(이미 소유 확인 포함).
+- `/api/v1/artifacts/{id}`, `/content`, `/view/artifacts/{id}`: 그대로 둡니다(이미 소유 확인 포함). 관리자는 `tenant_id`로 다른 tenant의 것을 봅니다(7장).
 - `/api/v1/sessions/{id}/outputs?execution_id&path`: 단계 출력 파일(이미지). executor API가 아니라 공유 볼륨을 읽는 것이라 그대로 둡니다.
 - run에서 실행으로 가는 연결: 실행 목록을 `session_id`로 거르면 세션의 실행을 볼 수 있습니다. run 단위로 보려면 `code_sources`가 있지만, 앞서 run 기준 API는 두지 않기로 했습니다.
 
@@ -81,3 +81,21 @@
 - 경로: `/api/v1/executor/...`에 executor와 같은 모양.
 - 요청·응답: executor 본문 그대로. 관리자 쓰기는 `X-User-Id`(요청한 관리자)로 기록됨. executor는 body `actor`를 받지 않음(2026-11-03, 보내면 422).
 - 런타임 조작(probe, drain, activate, disable, 등록 삭제는 `DELETE /runtime-targets/{id}`)과 executor 점검 조작(maintenance drain, activate, runs 생성·조회)도 관리자 전용으로 열었음.
+
+## 7. 관리자의 다른 tenant 조회 (2026-11-13)
+
+executor는 실행과 artifact 조회를 항상 tenant 하나로 제한하고, 우리 키는 executor에서 `allowed_tenants: ["*"]`입니다. 그래서 관리자(SSO 로그인, `role=admin`)는 아래 조회 경로에 선택 쿼리 `tenant_id`를 붙여 다른 tenant의 것을 볼 수 있습니다. 화면에 묶인 방식이 아니므로 다른 프런트도 같은 방식으로 쓸 수 있습니다.
+
+| 경로 | `tenant_id`가 하는 일 |
+| --- | --- |
+| `GET /api/v1/executor/executions` | 그 tenant의 실행 목록 (`X-Tenant-Id`로 넘김) |
+| `GET /api/v1/executor/executions/{id}`와 하위 조회 (`/result`, `/steps`, `/operations`, `/events`, `/artifacts`, `/notebook`, `/attempts`, `/diagnostics`) | 그 tenant의 실행 하나 |
+| `GET /api/v1/artifacts/{artifact_id}` | 그 tenant의 artifact 정보. `view_url`에도 같은 `tenant_id`가 붙음 |
+| `GET /api/v1/artifacts/{artifact_id}/content` | 그 tenant의 artifact 파일 |
+| `GET /view/artifacts/{artifact_id}` | 그 tenant의 artifact 보기 페이지. 페이지가 불러오는 `/content`에도 같은 `tenant_id`가 붙음 |
+
+- 생략하면 우리 tenant(`EXECUTOR_TENANT_ID`)를 씁니다.
+- 형식이 틀렸거나 예약된 tenant(`dlq`, `work`)는 422 `tenant_id is malformed.`입니다.
+- 관리자가 아니거나 API 키로 호출하면 `tenant_id`는 무시됩니다. 키 호출자는 언제나 자기 키의 tenant로 갑니다.
+- 다른 tenant의 노트북은 "JupyterLab에서 열기" 링크가 우리 작업 공간 기준이라 맞지 않을 수 있습니다.
+- 모든 tenant를 한 목록으로 보는 기능은 executor 변경이 필요합니다(`executor-requests/all-tenant-execution-reads.md`).
