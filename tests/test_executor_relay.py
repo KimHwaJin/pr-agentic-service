@@ -326,3 +326,45 @@ def test_malformed_user_filter_is_refused():
     with pytest.raises(ApiError) as err:
         _keyed_read("master", b"user_id=Bad%20Id")
     assert (err.value.status, err.value.code) == (400, "INVALID_IDENTITY")
+
+
+def _admin_read(path: str, query: bytes, role: str = "admin"):
+    match = _match("GET", path)
+    assert match is not None
+    sent: list[httpx.Request] = []
+    user = cast(Any, SimpleNamespace(id="a-1", role=role))
+    request = _request("GET", path, {})
+    request.scope["query_string"] = query
+    asyncio.run(
+        relay._for_user(cast(Any, _services(sent)), request, path, match, user)
+    )
+    return sent[0]
+
+
+def test_admin_reads_another_tenant_by_query():
+    sent = _admin_read("executions", b"tenant_id=partner-a&status=QUEUED")
+    assert sent.headers["x-tenant-id"] == "partner-a"
+    assert sent.headers["x-api-key"] == "exe_ours"
+    assert dict(sent.url.params) == {"status": "QUEUED"}
+    for path in (f"executions/{E}", f"executions/{E}/attempts"):
+        assert (
+            _admin_read(path, b"tenant_id=partner-a").headers["x-tenant-id"]
+            == "partner-a"
+        )
+    # without it: our own tenant
+    ours = _admin_read("executions", b"")
+    assert ours.headers["x-tenant-id"] == "pr-agentic"
+
+
+def test_tenant_query_is_checked_and_admin_only(monkeypatch):
+    for bad in (b"tenant_id=Bad_Tenant", b"tenant_id=dlq"):
+        with pytest.raises(HTTPException) as err:
+            _admin_read("executions", bad)
+        assert err.value.status_code == 422
+
+    async def member(services, user, params):
+        return None
+
+    monkeypatch.setattr(relay, "scope_execution_list", member)
+    sent = _admin_read("executions", b"tenant_id=partner-a", role="user")
+    assert sent.headers["x-tenant-id"] == "pr-agentic"
