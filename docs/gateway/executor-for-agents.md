@@ -128,7 +128,7 @@ GET  /executions/{id}            until SUCCEEDED / FAILED
 - The next step `sequence` continues from the last one. For example, if the first operation used 0 and 1, the next one starts at 2.
 - The `202` reply gives the new `state.version` and `operation.operation_id`.
 - A stale `expected_version` returns `409 EXECUTION_VERSION_CONFLICT`. Re-read the state, then decide. The version check runs before step validation.
-- Within `operation_wait_timeout_seconds` you must add an operation or finalize. Otherwise the execution ends by itself (`state.finalized_by = "WAIT_TIMEOUT"`). Reads do not extend the deadline (`deadlines.operation_wait_expires_at`).
+- Within `operation_wait_timeout_seconds` you must add an operation or finalize. Otherwise the execution ends by itself (`state.reason.code = "WAIT_TIMEOUT"`). Reads do not extend the deadline (`deadlines.operation_wait_expires_at`).
 - `finalize` works only in `WAITING_FOR_OPERATION` after a **succeeded** last operation. Otherwise it returns `409 INVALID_STATE_TRANSITION`. After a failed operation, add a fixed operation or cancel.
 - For MULTI, idempotency keys of added operations are scoped to the execution. Submit keys are scoped to the tenant.
 
@@ -163,7 +163,7 @@ Ignore unknown `event_type`s; new ones may be added.
 
 ### 4.5 Reading results (cheapest first)
 
-1. `GET /executions/{id}` gives `state.status` and `failure` (`{type, message}` or null).
+1. `GET /executions/{id}` gives `state.status` and `state.reason` (`{code, message, detail}`): why the execution is in that status.
 2. `GET /executions/{id}/result` gives every operation and step with `result.status`, `error_message` and `output_summary` (`output_count`, `has_image`, `has_error`, `mime_types`, …), plus an artifact summary. It is small and has no paging.
 3. Raw output:
    - Use `GET /executions/{id}/notebook?view=SUMMARY&start_index=0&limit=20` to find cells.
@@ -271,7 +271,14 @@ States:
 - `ExecutionStatus`: `QUEUED`, `RUNNING`, `WAITING_FOR_OPERATION`, `FINALIZING`, `CANCEL_REQUESTED`, and the terminal `SUCCEEDED`, `FAILED` and `CANCELLED`.
 - Operation `result.status`: `QUEUED`, `RUNNING`, `SUCCEEDED`, `FAILED`, `CANCELLED`.
 - Step `result.status`: `PENDING`, `RUNNING`, `SUCCEEDED`, `FAILED`, `SKIPPED`, `CANCELLED`.
-- `failure.type`:
+- `state.reason.code` says why the execution is in its status. It is null only while `RUNNING` normally.
+  - `QUEUED` (what it waits for): `ADMISSION_DRAINING`, `NO_ACTIVE_TARGET`, `PROFILE_UNSUPPORTED`, `CAPACITY_FULL`, `MEMORY_LIMIT`, `TARGET_UNAVAILABLE`, `WAITING_FOR_WORKER`. `detail.queue_position` is its place in the queue.
+  - `RUNNING`: `WORKER_HANDOVER` while another worker takes it over.
+  - `WAITING_FOR_OPERATION`: `AWAITING_NEXT_OPERATION`.
+  - `FINALIZING` and `SUCCEEDED` (what ended it): `AGENT`, `WAIT_TIMEOUT`, `MAX_RUNTIME`, or `COMPLETED` for a SINGLE that ran to the end.
+  - `CANCEL_REQUESTED` and `CANCELLED`: `CANCELLED_BY_REQUEST` (`message` is the cancel reason) or `MAX_RUNTIME`.
+  - Treat a code you do not know as information and show `message`.
+- `state.reason.code` when `FAILED`:
   - `TOOL_ERROR` means your code raised.
   - The timeout types are `STEP_TIMEOUT`, `OPERATION_TIMEOUT`, `OPERATION_WAIT_TIMEOUT`, `EXECUTION_TIMEOUT` and `QUEUE_TIMEOUT`.
   - `OUTPUT_LIMIT_EXCEEDED`.
@@ -448,7 +455,7 @@ gw = ExecutorGateway("e12345", project_id="project-100")
 sub = gw.submit(["import pandas as pd", "print(pd.DataFrame({'a': [1, 2]}).sum())"])
 done = gw.wait(sub["execution_id"])
 if done["state"]["status"] != "SUCCEEDED":
-    print(done["failure"])                       # {"type": "TOOL_ERROR", "message": ...}
+    print(done["state"]["reason"])               # {"code": "TOOL_ERROR", "message": ..., "detail": ...}
 for op in gw.result(sub["execution_id"])["operations"]:
     for step in op["steps"]:
         print(step["sequence"], step["result"]["status"], step["result"]["error_message"])
@@ -484,7 +491,7 @@ for a in gw.artifacts(eid):
 - [ ] Step `sequence` continues across operations (MULTI). It does not restart at 0.
 - [ ] MULTI: `trigger.type = INTERACTIVE`, `operation_wait_timeout_seconds ≥ 30`. SINGLE: no `operation_wait_timeout_seconds`.
 - [ ] `expected_version` comes from the latest read. A `409` conflict means re-read, not blind resend.
-- [ ] `execution.completed` / `FAILED` / `CANCELLED` are all "done". Check `state.status` and `failure`.
+- [ ] `execution.completed` / `FAILED` / `CANCELLED` are all "done". Check `state.status` and `state.reason`.
 - [ ] Output comes from `/notebook`, files from `/artifacts/{id}/content`. Never from `result_ref`.
 - [ ] Follow `Location` only after rewriting `/api/v1/` → `/api/v1/executor/`.
 - [ ] Standard key: no `user_id` filter, or exactly your `X-User-Id`.
@@ -525,6 +532,7 @@ type ArtifactStorageType = "PV" | "S3";
 type ArtifactType = "DATASET" | "NOTEBOOK" | "REPORT" | "PLOT" | "MODEL" | "METRIC" | "LOG" | "OTHER";
 interface AttemptState {
   status: AttemptStatus;
+  reason: StatusReasonResponse | null;
 }
 type AttemptStatus = "RUNNING" | "WAITING" | "SUCCEEDED" | "FAILED" | "CANCELLED";
 type CodeSourceType = "INLINE" | "PATH";
@@ -596,7 +604,6 @@ interface ExecutionAttemptResponse {
   execution_id: string;
   attempt_number: number;
   state: AttemptState;
-  failure: FailureResponse | null;
   lifecycle: Lifecycle;
   step_count: number;
 }
@@ -741,7 +748,6 @@ interface ExecutionResponse {
   created_at: string;
   updated_at: string;
   execution_id: string;
-  trigger_type: TriggerType;
   trigger: ExecutionTrigger;
   tenant_id: string;
   context: ExecutionContext;
@@ -749,7 +755,6 @@ interface ExecutionResponse {
   runtime: ExecutionRuntime;
   state: ExecutionState;
   workspace: WorkspaceResponse;
-  failure: FailureResponse | null;
   retry: RetryResponse;
   recovery: RecoveryResponse;
   deadlines: DeadlinesResponse;
@@ -757,7 +762,7 @@ interface ExecutionResponse {
 }
 interface ExecutionResultExecutionResponse {
   execution_id: string;
-  state: ExecutionCommandState;
+  state: ExecutionState;
 }
 interface ExecutionResultOperationResponse {
   operation_id: string;
@@ -801,8 +806,7 @@ interface ExecutionSpec { // unknown fields → 422
 interface ExecutionState {
   status: ExecutionStatus;
   version: number;
-  cancellation_reason: string | null;
-  finalized_by?: FinalizedBy | null;
+  reason: StatusReasonResponse | null;
 }
 type ExecutionStatus = "QUEUED" | "RUNNING" | "WAITING_FOR_OPERATION" | "FINALIZING" | "CANCEL_REQUESTED" | "CANCELLED" | "SUCCEEDED" | "FAILED";
 interface ExecutionStepInput { // unknown fields → 422
@@ -868,12 +872,11 @@ interface ExecutionSummaryResponse {
   updated_at: string;
   execution_id: string;
   operation_mode: OperationMode;
-  trigger_type: TriggerType;
   trigger: ExecutionTrigger;
   tenant_id: string;
   context: ExecutionContext;
   metadata: Record<string, unknown>;
-  state: ExecutionCommandState;
+  state: ExecutionState;
   lifecycle: Lifecycle;
   step_count: number;
 }
@@ -882,10 +885,6 @@ interface ExecutionTrigger {
 }
 interface ExecutionTriggerInput { // unknown fields → 422
   type: TriggerType;
-}
-interface FailureResponse {
-  type: FailureType;
-  message: string;
 }
 type FailureType = "TOOL_ERROR" | "INFRASTRUCTURE_ERROR" | "WORKER_SHUTDOWN" | "RUNTIME_UNAVAILABLE" | "LEASE_EXPIRED" | "INTERNAL_ERROR" | "OPERATION_WAIT_TIMEOUT" | "OPERATION_TIMEOUT" | "STEP_TIMEOUT" | "EXECUTION_TIMEOUT" | "QUEUE_TIMEOUT" | "OUTPUT_LIMIT_EXCEEDED" | "RUNTIME_SESSION_LOST" | "COMPLETION_FAILED";
 type FinalizedBy = "AGENT" | "WAIT_TIMEOUT" | "MAX_RUNTIME";
@@ -986,6 +985,12 @@ type RuntimeAbortStatus = "NOT_REQUIRED" | "PENDING" | "IDLE_CONFIRMED" | "SESSI
 type RuntimePool = "INTERACTIVE" | "BATCH";
 type RuntimeSessionCleanupStatus = "NOT_REQUIRED" | "PENDING" | "SUCCEEDED" | "FAILED";
 type RuntimeType = "JUPYTER";
+type StatusReasonCode = "ADMISSION_DRAINING" | "NO_ACTIVE_TARGET" | "PROFILE_UNSUPPORTED" | "CAPACITY_FULL" | "MEMORY_LIMIT" | "TARGET_UNAVAILABLE" | "WAITING_FOR_WORKER" | "WORKER_HANDOVER" | "AWAITING_NEXT_OPERATION" | "CANCELLED_BY_REQUEST" | "COMPLETED";
+interface StatusReasonResponse {
+  code: FailureType | FinalizedBy | StatusReasonCode;
+  message: string;
+  detail: Record<string, unknown> | null;
+}
 interface StepLineage { // unknown fields → 422
   skill_name?: string | null; // 길이 ≤ 255
   tool_name?: string | null; // 길이 ≤ 255

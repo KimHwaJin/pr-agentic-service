@@ -130,7 +130,7 @@ GET  /executions/{id}            SUCCEEDED / FAILED 까지
 - 다음 step의 `sequence`는 마지막 번호에서 이어집니다. 예를 들어 첫 operation이 0과 1을 썼으면 다음은 2부터입니다.
 - `202` 응답에 새 `state.version`과 `operation.operation_id`가 옵니다.
 - `expected_version`이 낡았으면 `409 EXECUTION_VERSION_CONFLICT`입니다. 상태를 다시 읽고 판단합니다. 버전 확인은 step 검증보다 먼저 합니다.
-- `operation_wait_timeout_seconds` 안에 operation을 추가하거나 finalize해야 합니다. 그러지 않으면 실행이 저절로 끝납니다(`state.finalized_by = "WAIT_TIMEOUT"`). 조회는 기한(`deadlines.operation_wait_expires_at`)을 늘리지 않습니다.
+- `operation_wait_timeout_seconds` 안에 operation을 추가하거나 finalize해야 합니다. 그러지 않으면 실행이 저절로 끝납니다(`state.reason.code = "WAIT_TIMEOUT"`). 조회는 기한(`deadlines.operation_wait_expires_at`)을 늘리지 않습니다.
 - `finalize`는 마지막 operation이 **성공한** 뒤의 `WAITING_FOR_OPERATION`에서만 됩니다. 아니면 `409 INVALID_STATE_TRANSITION`입니다. operation이 실패했으면 고친 operation을 추가하거나 취소합니다.
 - MULTI에서 추가 operation의 idempotency key 범위는 그 실행이고, 제출 key의 범위는 tenant입니다.
 
@@ -165,7 +165,7 @@ GET  /executions/{id}            SUCCEEDED / FAILED 까지
 
 ### 4.5 결과 읽기 (가벼운 것부터)
 
-1. `GET /executions/{id}`: `state.status`와 `failure`(`{type, message}` 또는 null).
+1. `GET /executions/{id}`: `state.status`와 `state.reason`(`{code, message, detail}`, 이 상태인 이유).
 2. `GET /executions/{id}/result`: 모든 operation과 step의 `result.status`, `error_message`, `output_summary`(`output_count`, `has_image`, `has_error`, `mime_types`, …)와 아티팩트 요약. 작고 페이지가 없습니다.
 3. 출력 원문:
    - `GET /executions/{id}/notebook?view=SUMMARY&start_index=0&limit=20`으로 셀을 찾습니다.
@@ -273,7 +273,14 @@ GET  /executions/{id}            SUCCEEDED / FAILED 까지
 - `ExecutionStatus`: `QUEUED`, `RUNNING`, `WAITING_FOR_OPERATION`, `FINALIZING`, `CANCEL_REQUESTED`, 그리고 종료 상태 `SUCCEEDED`, `FAILED`, `CANCELLED`.
 - operation `result.status`: `QUEUED`, `RUNNING`, `SUCCEEDED`, `FAILED`, `CANCELLED`.
 - step `result.status`: `PENDING`, `RUNNING`, `SUCCEEDED`, `FAILED`, `SKIPPED`, `CANCELLED`.
-- `failure.type`:
+- `state.reason.code`는 실행이 왜 이 상태인지 알려 줍니다. `RUNNING`으로 정상 실행 중일 때만 null입니다.
+  - `QUEUED`(무엇을 기다리는지): `ADMISSION_DRAINING`, `NO_ACTIVE_TARGET`, `PROFILE_UNSUPPORTED`, `CAPACITY_FULL`, `MEMORY_LIMIT`, `TARGET_UNAVAILABLE`, `WAITING_FOR_WORKER`. `detail.queue_position`이 대기 순번입니다.
+  - `RUNNING`: 다른 worker가 이어받는 중이면 `WORKER_HANDOVER`.
+  - `WAITING_FOR_OPERATION`: `AWAITING_NEXT_OPERATION`.
+  - `FINALIZING`, `SUCCEEDED`(무엇이 끝냈는지): `AGENT`, `WAIT_TIMEOUT`, `MAX_RUNTIME`. 끝까지 실행된 SINGLE은 `COMPLETED`.
+  - `CANCEL_REQUESTED`, `CANCELLED`: `CANCELLED_BY_REQUEST`(`message`가 취소 사유) 또는 `MAX_RUNTIME`.
+  - 모르는 code는 오류로 처리하지 말고 `message`를 보여 주세요.
+- `FAILED`일 때의 `state.reason.code`:
   - `TOOL_ERROR`: 사용자 코드에서 예외가 났습니다.
   - 시간 초과: `STEP_TIMEOUT`, `OPERATION_TIMEOUT`, `OPERATION_WAIT_TIMEOUT`, `EXECUTION_TIMEOUT`, `QUEUE_TIMEOUT`.
   - `OUTPUT_LIMIT_EXCEEDED`.
@@ -452,7 +459,7 @@ gw = ExecutorGateway("e12345", project_id="project-100")
 sub = gw.submit(["import pandas as pd", "print(pd.DataFrame({'a': [1, 2]}).sum())"])
 done = gw.wait(sub["execution_id"])
 if done["state"]["status"] != "SUCCEEDED":
-    print(done["failure"])                       # {"type": "TOOL_ERROR", "message": ...}
+    print(done["state"]["reason"])               # {"code": "TOOL_ERROR", "message": ..., "detail": ...}
 for op in gw.result(sub["execution_id"])["operations"]:
     for step in op["steps"]:
         print(step["sequence"], step["result"]["status"], step["result"]["error_message"])
@@ -488,7 +495,7 @@ for a in gw.artifacts(eid):
 - [ ] step `sequence`는 operation이 바뀌어도 이어짐(MULTI). 0부터 다시 시작하지 않음.
 - [ ] MULTI: `trigger.type = INTERACTIVE`, `operation_wait_timeout_seconds ≥ 30`. SINGLE: `operation_wait_timeout_seconds` 없음.
 - [ ] `expected_version`은 가장 최근 조회 값. `409` 충돌이면 다시 읽고, 무작정 다시 보내지 않음.
-- [ ] `execution.completed` / `FAILED` / `CANCELLED`는 모두 "끝". `state.status`와 `failure`를 확인.
+- [ ] `execution.completed` / `FAILED` / `CANCELLED`는 모두 "끝". `state.status`와 `state.reason`을 확인.
 - [ ] 출력은 `/notebook`, 파일은 `/artifacts/{id}/content`에서. `result_ref`는 쓰지 않음.
 - [ ] `Location`은 `/api/v1/` → `/api/v1/executor/`로 바꾼 뒤에만 따라감.
 - [ ] 일반키: `user_id` 필터를 쓰지 않거나, 정확히 자기 `X-User-Id`만.
@@ -529,6 +536,7 @@ type ArtifactStorageType = "PV" | "S3";
 type ArtifactType = "DATASET" | "NOTEBOOK" | "REPORT" | "PLOT" | "MODEL" | "METRIC" | "LOG" | "OTHER";
 interface AttemptState {
   status: AttemptStatus;
+  reason: StatusReasonResponse | null;
 }
 type AttemptStatus = "RUNNING" | "WAITING" | "SUCCEEDED" | "FAILED" | "CANCELLED";
 type CodeSourceType = "INLINE" | "PATH";
@@ -600,7 +608,6 @@ interface ExecutionAttemptResponse {
   execution_id: string;
   attempt_number: number;
   state: AttemptState;
-  failure: FailureResponse | null;
   lifecycle: Lifecycle;
   step_count: number;
 }
@@ -745,7 +752,6 @@ interface ExecutionResponse {
   created_at: string;
   updated_at: string;
   execution_id: string;
-  trigger_type: TriggerType;
   trigger: ExecutionTrigger;
   tenant_id: string;
   context: ExecutionContext;
@@ -753,7 +759,6 @@ interface ExecutionResponse {
   runtime: ExecutionRuntime;
   state: ExecutionState;
   workspace: WorkspaceResponse;
-  failure: FailureResponse | null;
   retry: RetryResponse;
   recovery: RecoveryResponse;
   deadlines: DeadlinesResponse;
@@ -761,7 +766,7 @@ interface ExecutionResponse {
 }
 interface ExecutionResultExecutionResponse {
   execution_id: string;
-  state: ExecutionCommandState;
+  state: ExecutionState;
 }
 interface ExecutionResultOperationResponse {
   operation_id: string;
@@ -805,8 +810,7 @@ interface ExecutionSpec { // unknown fields → 422
 interface ExecutionState {
   status: ExecutionStatus;
   version: number;
-  cancellation_reason: string | null;
-  finalized_by?: FinalizedBy | null;
+  reason: StatusReasonResponse | null;
 }
 type ExecutionStatus = "QUEUED" | "RUNNING" | "WAITING_FOR_OPERATION" | "FINALIZING" | "CANCEL_REQUESTED" | "CANCELLED" | "SUCCEEDED" | "FAILED";
 interface ExecutionStepInput { // unknown fields → 422
@@ -872,12 +876,11 @@ interface ExecutionSummaryResponse {
   updated_at: string;
   execution_id: string;
   operation_mode: OperationMode;
-  trigger_type: TriggerType;
   trigger: ExecutionTrigger;
   tenant_id: string;
   context: ExecutionContext;
   metadata: Record<string, unknown>;
-  state: ExecutionCommandState;
+  state: ExecutionState;
   lifecycle: Lifecycle;
   step_count: number;
 }
@@ -886,10 +889,6 @@ interface ExecutionTrigger {
 }
 interface ExecutionTriggerInput { // unknown fields → 422
   type: TriggerType;
-}
-interface FailureResponse {
-  type: FailureType;
-  message: string;
 }
 type FailureType = "TOOL_ERROR" | "INFRASTRUCTURE_ERROR" | "WORKER_SHUTDOWN" | "RUNTIME_UNAVAILABLE" | "LEASE_EXPIRED" | "INTERNAL_ERROR" | "OPERATION_WAIT_TIMEOUT" | "OPERATION_TIMEOUT" | "STEP_TIMEOUT" | "EXECUTION_TIMEOUT" | "QUEUE_TIMEOUT" | "OUTPUT_LIMIT_EXCEEDED" | "RUNTIME_SESSION_LOST" | "COMPLETION_FAILED";
 type FinalizedBy = "AGENT" | "WAIT_TIMEOUT" | "MAX_RUNTIME";
@@ -990,6 +989,12 @@ type RuntimeAbortStatus = "NOT_REQUIRED" | "PENDING" | "IDLE_CONFIRMED" | "SESSI
 type RuntimePool = "INTERACTIVE" | "BATCH";
 type RuntimeSessionCleanupStatus = "NOT_REQUIRED" | "PENDING" | "SUCCEEDED" | "FAILED";
 type RuntimeType = "JUPYTER";
+type StatusReasonCode = "ADMISSION_DRAINING" | "NO_ACTIVE_TARGET" | "PROFILE_UNSUPPORTED" | "CAPACITY_FULL" | "MEMORY_LIMIT" | "TARGET_UNAVAILABLE" | "WAITING_FOR_WORKER" | "WORKER_HANDOVER" | "AWAITING_NEXT_OPERATION" | "CANCELLED_BY_REQUEST" | "COMPLETED";
+interface StatusReasonResponse {
+  code: FailureType | FinalizedBy | StatusReasonCode;
+  message: string;
+  detail: Record<string, unknown> | null;
+}
 interface StepLineage { // unknown fields → 422
   skill_name?: string | null; // 길이 ≤ 255
   tool_name?: string | null; // 길이 ≤ 255

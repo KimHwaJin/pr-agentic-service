@@ -134,7 +134,7 @@ GET  /executions/{id}                         → SUCCEEDED / FAILED
 
 - 다음 Operation의 Step 번호는 Execution 전체에서 이어집니다. 첫 Operation이 0, 1을 썼으면 다음은 2부터입니다.
 - `expected_version`은 직전에 읽은 `state.version`입니다. 그 사이 상태가 바뀌었으면 409 `EXECUTION_VERSION_CONFLICT`이고, 다시 읽은 뒤 판단합니다.
-- `operation_wait_timeout_seconds`(30초 이상) 안에 아무것도 안 보내면 Execution이 스스로 끝납니다(`finalized_by: WAIT_TIMEOUT`). 조회는 대기 기한을 늘리지 않습니다.
+- `operation_wait_timeout_seconds`(30초 이상) 안에 아무것도 안 보내면 Execution이 스스로 끝납니다(`state.reason.code`가 `WAIT_TIMEOUT`). 조회는 대기 기한을 늘리지 않습니다.
 - 마지막 Operation이 실패했으면 finalize는 409입니다. 고친 코드로 Operation을 하나 더 성공시킨 뒤 finalize하거나 cancel합니다.
 
 ### 3.3 취소와 재시도
@@ -161,11 +161,17 @@ GET  /executions/{id}                         → SUCCEEDED / FAILED
 | `FINALIZING` | finalize 처리 중 | |
 | `CANCEL_REQUESTED` | 취소 요청 받음, 정리 중 | |
 | `SUCCEEDED` | 성공 | 예 |
-| `FAILED` | 실패 (`failure.type`에 이유) | 예 |
+| `FAILED` | 실패 (`state.reason.code`에 이유) | 예 |
 | `CANCELLED` | 취소 확정 | 예 |
 
 - `state.version`은 상태가 바뀔 때마다 늘어납니다. MULTI 명령의 `expected_version`에 씁니다.
-- `failure.type`: `TOOL_ERROR`(코드 오류), `STEP_TIMEOUT`, `OPERATION_TIMEOUT`, `OPERATION_WAIT_TIMEOUT`, `EXECUTION_TIMEOUT`(전체 7일), `QUEUE_TIMEOUT`(대기 24시간), `OUTPUT_LIMIT_EXCEEDED`, `RUNTIME_UNAVAILABLE`, `RUNTIME_SESSION_LOST`, `INFRASTRUCTURE_ERROR`, `WORKER_SHUTDOWN`, `LEASE_EXPIRED`, `COMPLETION_FAILED`(노트북·아티팩트 후처리 실패, 재시도 불가), `INTERNAL_ERROR`.
+- `state.reason` (`{code, message, detail}`)이 "왜 이 상태인가"를 알려 줍니다. `RUNNING`으로 정상 실행 중일 때만 null입니다.
+  - `QUEUED`: 무엇을 기다리는지. `ADMISSION_DRAINING`(점검으로 신규 시작 중단), `NO_ACTIVE_TARGET`(쓸 수 있는 런타임 없음), `PROFILE_UNSUPPORTED`, `CAPACITY_FULL`(런타임이 모두 동시 실행 한도), `MEMORY_LIMIT`, `TARGET_UNAVAILABLE`(커널을 가진 런타임이 내려감), `WAITING_FOR_WORKER`(자리는 있고 차례 대기). `detail.queue_position`이 대기 순번입니다.
+  - `RUNNING`: 다른 Worker가 이어받는 중이면 `WORKER_HANDOVER`.
+  - `WAITING_FOR_OPERATION`: `AWAITING_NEXT_OPERATION`.
+  - `FINALIZING`·`SUCCEEDED`: 무엇이 끝냈나. `AGENT`(finalize), `WAIT_TIMEOUT`(대기 기한), `MAX_RUNTIME`(전체 수명), SINGLE 정상 종료는 `COMPLETED`.
+  - `CANCEL_REQUESTED`·`CANCELLED`: `CANCELLED_BY_REQUEST`(`message`가 취소 사유) 또는 `MAX_RUNTIME`.
+  - `FAILED`: 실패 유형. `TOOL_ERROR`(코드 오류), `STEP_TIMEOUT`, `OPERATION_TIMEOUT`, `OPERATION_WAIT_TIMEOUT`, `EXECUTION_TIMEOUT`(전체 7일), `QUEUE_TIMEOUT`(대기 24시간), `OUTPUT_LIMIT_EXCEEDED`, `RUNTIME_UNAVAILABLE`, `RUNTIME_SESSION_LOST`, `INFRASTRUCTURE_ERROR`, `WORKER_SHUTDOWN`, `LEASE_EXPIRED`, `COMPLETION_FAILED`(노트북·아티팩트 후처리 실패, 재시도 불가), `INTERNAL_ERROR`.
 - `retry.strategy`: `NOT_RETRYABLE`, `FROM_FAILED_STEP`(보존한 커널에서 실패한 Step부터, 보존 1시간), `FROM_START`(새 커널에서 처음부터). executor가 정하고 호출자는 고르지 않습니다.
 - `CANCELLED`라도 커널 정리가 끝났다는 보장은 없습니다(`recovery.runtime_session_cleanup_status`).
 
@@ -220,9 +226,8 @@ GET  /executions/{id}                         → SUCCEEDED / FAILED
 
 | 필드 | 설명 |
 | --- | --- |
-| `state` | `status`, `version`, `cancellation_reason`, `finalized_by`(`AGENT`·`WAIT_TIMEOUT`·`MAX_RUNTIME`·null) |
+| `state` | `status`, `version`, `reason`(`{code, message, detail}`, 이 상태인 이유) |
 | `lifecycle` | `operation_mode`, `operation_wait_timeout_seconds`, `started_at`, `finished_at` |
-| `failure` | 실패하면 `{type, message}`, 아니면 null |
 | `retry` | `strategy`, `count`, `from_sequence`, `retained_runtime_session_until` |
 | `deadlines` | `operation_wait_expires_at`(MULTI 대기 기한), `execution_expires_at` |
 | `context` | `user_id`, `project_id`, `session_id` |
@@ -325,7 +330,7 @@ MULTI에서 방금 붙인 Operation의 결과만 볼 때는 `/operations/{operat
 
 ## 6. 결과를 읽는 순서 (권장)
 
-1. `GET /executions/{id}`로 끝났는지와 `failure`를 봅니다.
+1. `GET /executions/{id}`로 끝났는지와 `state.reason`을 봅니다.
 2. `GET /executions/{id}/result`로 Step별 `status`, `error_message`, `output_summary`를 봅니다. 여기까지는 응답이 작습니다.
 3. 출력 원문이 필요할 때만 `GET /executions/{id}/notebook?view=FULL`(또는 `/cells/{n}`)을 읽습니다. 셀 번호는 노트북 순서이고 Step `sequence`와 같지 않을 수 있으니, `SUMMARY`로 먼저 셀을 찾습니다.
 4. 파일은 `/artifacts` 목록에서 찾아 `/artifacts/{artifact_id}/content`로 받습니다.
@@ -692,6 +697,7 @@ executor OpenAPI에서 만든 표입니다. 필드 설명은 executor 원문(영
 | 필드 | 타입 | 필수 | 기본값 | 제약 | 설명 |
 | --- | --- | --- | --- | --- | --- |
 | `status` | [AttemptStatus](#schema-attemptstatus) | O |  |  |  |
+| `reason` | [StatusReasonResponse](#schema-statusreasonresponse) \| null | O |  |  |  |
 
 모르는 필드는 422로 거절합니다.
 
@@ -813,7 +819,6 @@ executor OpenAPI에서 만든 표입니다. 필드 설명은 executor 원문(영
 | `execution_id` | string (uuid) | O |  |  |  |
 | `attempt_number` | integer | O |  |  |  |
 | `state` | [AttemptState](#schema-attemptstate) | O |  |  |  |
-| `failure` | [FailureResponse](#schema-failureresponse) \| null | O |  |  |  |
 | `lifecycle` | [Lifecycle](#schema-lifecycle) | O |  |  |  |
 | `step_count` | integer | O |  |  |  |
 
@@ -1078,7 +1083,6 @@ executor OpenAPI에서 만든 표입니다. 필드 설명은 executor 원문(영
 | `created_at` | string (date-time) | O |  |  |  |
 | `updated_at` | string (date-time) | O |  |  |  |
 | `execution_id` | string (uuid) | O |  |  |  |
-| `trigger_type` | [TriggerType](#schema-triggertype) | O |  |  |  |
 | `trigger` | [ExecutionTrigger](#schema-executiontrigger) | O |  |  |  |
 | `tenant_id` | string | O |  |  |  |
 | `context` | [ExecutionContext](#schema-executioncontext) | O |  |  |  |
@@ -1086,7 +1090,6 @@ executor OpenAPI에서 만든 표입니다. 필드 설명은 executor 원문(영
 | `runtime` | [ExecutionRuntime](#schema-executionruntime) | O |  |  |  |
 | `state` | [ExecutionState](#schema-executionstate) | O |  |  |  |
 | `workspace` | [WorkspaceResponse](#schema-workspaceresponse) | O |  |  |  |
-| `failure` | [FailureResponse](#schema-failureresponse) \| null | O |  |  |  |
 | `retry` | [RetryResponse](#schema-retryresponse) | O |  |  |  |
 | `recovery` | [RecoveryResponse](#schema-recoveryresponse) | O |  |  |  |
 | `deadlines` | [DeadlinesResponse](#schema-deadlinesresponse) | O |  |  |  |
@@ -1100,7 +1103,7 @@ executor OpenAPI에서 만든 표입니다. 필드 설명은 executor 원문(영
 | 필드 | 타입 | 필수 | 기본값 | 제약 | 설명 |
 | --- | --- | --- | --- | --- | --- |
 | `execution_id` | string (uuid) | O |  |  |  |
-| `state` | [ExecutionCommandState](#schema-executioncommandstate) | O |  |  |  |
+| `state` | [ExecutionState](#schema-executionstate) | O |  |  |  |
 
 모르는 필드는 422로 거절합니다.
 
@@ -1192,8 +1195,7 @@ executor OpenAPI에서 만든 표입니다. 필드 설명은 executor 원문(영
 | --- | --- | --- | --- | --- | --- |
 | `status` | [ExecutionStatus](#schema-executionstatus) | O |  |  |  |
 | `version` | integer | O |  |  |  |
-| `cancellation_reason` | string \| null | O |  |  |  |
-| `finalized_by` | [FinalizedBy](#schema-finalizedby) \| null |  |  |  | What ended the Execution: AGENT (finalize call), WAIT_TIMEOUT (no next MULTI Operation before the wait deadline) or MAX_RUNTIME (EXECUTION_MAX_RUNTIME_SECONDS reached). Null while open, for a SINGLE Execution that ended normally, and for cancellation. |
+| `reason` | [StatusReasonResponse](#schema-statusreasonresponse) \| null | O |  |  |  |
 
 모르는 필드는 422로 거절합니다.
 
@@ -1305,12 +1307,11 @@ executor OpenAPI에서 만든 표입니다. 필드 설명은 executor 원문(영
 | `updated_at` | string (date-time) | O |  |  |  |
 | `execution_id` | string (uuid) | O |  |  |  |
 | `operation_mode` | [OperationMode](#schema-operationmode) | O |  |  |  |
-| `trigger_type` | [TriggerType](#schema-triggertype) | O |  |  |  |
 | `trigger` | [ExecutionTrigger](#schema-executiontrigger) | O |  |  |  |
 | `tenant_id` | string | O |  |  |  |
 | `context` | [ExecutionContext](#schema-executioncontext) | O |  |  |  |
 | `metadata` | object | O |  |  |  |
-| `state` | [ExecutionCommandState](#schema-executioncommandstate) | O |  |  |  |
+| `state` | [ExecutionState](#schema-executionstate) | O |  |  |  |
 | `lifecycle` | [Lifecycle](#schema-lifecycle) | O |  |  |  |
 | `step_count` | integer | O |  |  |  |
 
@@ -1331,16 +1332,6 @@ executor OpenAPI에서 만든 표입니다. 필드 설명은 executor 원문(영
 | 필드 | 타입 | 필수 | 기본값 | 제약 | 설명 |
 | --- | --- | --- | --- | --- | --- |
 | `type` | [TriggerType](#schema-triggertype) | O |  |  |  |
-
-모르는 필드는 422로 거절합니다.
-
-<a id="schema-failureresponse"></a>
-#### FailureResponse
-
-| 필드 | 타입 | 필수 | 기본값 | 제약 | 설명 |
-| --- | --- | --- | --- | --- | --- |
-| `type` | [FailureType](#schema-failuretype) | O |  |  |  |
-| `message` | string | O |  |  |  |
 
 모르는 필드는 422로 거절합니다.
 
@@ -1578,6 +1569,26 @@ What ended a MULTI Execution, or any Execution past its lifetime.
 #### RuntimeType
 
 값: `JUPYTER`
+
+<a id="schema-statusreasoncode"></a>
+#### StatusReasonCode
+
+Why an Execution is in its status, where no other enum says so.  A FAILED Execution's reason is its FailureType, and one ended by finalization or the maximum runtime carries its FinalizedBy.
+
+값: `ADMISSION_DRAINING`, `NO_ACTIVE_TARGET`, `PROFILE_UNSUPPORTED`, `CAPACITY_FULL`, `MEMORY_LIMIT`, `TARGET_UNAVAILABLE`, `WAITING_FOR_WORKER`, `WORKER_HANDOVER`, `AWAITING_NEXT_OPERATION`, `CANCELLED_BY_REQUEST`, `COMPLETED`
+
+<a id="schema-statusreasonresponse"></a>
+#### StatusReasonResponse
+
+Why the resource is in its status.
+
+| 필드 | 타입 | 필수 | 기본값 | 제약 | 설명 |
+| --- | --- | --- | --- | --- | --- |
+| `code` | [FailureType](#schema-failuretype) \| [FinalizedBy](#schema-finalizedby) \| [StatusReasonCode](#schema-statusreasoncode) | O |  |  | A FailureType for FAILED; AGENT, WAIT_TIMEOUT or MAX_RUNTIME for an Execution ended by finalization or its maximum runtime; otherwise a status-specific code such as CAPACITY_FULL for QUEUED. |
+| `message` | string | O |  |  |  |
+| `detail` | object \| null | O |  |  | Values behind the code: queue_position and per-Target targets for QUEUED, handover_reason and paused_since for WORKER_HANDOVER. Null when the code needs none. |
+
+모르는 필드는 422로 거절합니다.
 
 <a id="schema-steplineage"></a>
 #### StepLineage
