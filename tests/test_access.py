@@ -14,13 +14,13 @@ class _Executor:
     def __init__(self, execution):
         self.execution = execution
 
-    async def artifact(self, artifact_id):
+    async def artifact(self, artifact_id, who=None):
         return {
             "artifact_id": artifact_id,
             "produced_by": {"execution_id": "x"},
         }
 
-    async def get(self, execution_id):
+    async def get(self, execution_id, who=None):
         return self.execution
 
 
@@ -137,3 +137,45 @@ def test_admin_read_is_an_admins_sso_login(role, caller, expected):
     )
     user = SimpleNamespace(id="u", role=role)
     assert admin_read(request, user) is expected
+
+
+class _Recording(_Executor):
+    def __init__(self, execution):
+        super().__init__(execution)
+        self.who = []
+
+    async def artifact(self, artifact_id, who=None):
+        self.who.append(who)
+        return await super().artifact(artifact_id)
+
+    async def get(self, execution_id, who=None):
+        self.who.append(who)
+        return self.execution
+
+
+def test_an_admin_reads_another_tenants_artifact_in_that_tenant():
+    execution = {"trigger": {"type": "BATCH"}, "context": {"user_id": OWNER}}
+    executor = _Recording(execution)
+    services = cast(Any, SimpleNamespace(executor=executor))
+    admin = cast(Any, SimpleNamespace(id="a-1", role="admin"))
+    asyncio.run(
+        access.owned_artifact(
+            services, admin, "a-1", admin_read=True, tenant="partner-a"
+        )
+    )
+    assert [w.tenant for w in executor.who] == ["partner-a", "partner-a"]
+    # not an admin read: the tenant is ignored, ours is used
+    executor.who.clear()
+    user = cast(Any, SimpleNamespace(id=OWNER, role="user"))
+    asyncio.run(access.owned_artifact(services, user, "a-1", tenant="x-y"))
+    assert [w.tenant for w in executor.who] == [None, None]
+
+
+def test_admin_tenant_is_checked():
+    assert access.admin_tenant(None) is None
+    assert access.admin_tenant("") is None
+    assert access.admin_tenant("partner-a") == "partner-a"
+    for bad in ("Bad_Tenant", "dlq", "a"):
+        with pytest.raises(HTTPException) as err:
+            access.admin_tenant(bad)
+        assert err.value.status_code == 422

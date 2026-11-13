@@ -8,11 +8,12 @@ from html import escape
 from pathlib import Path
 from urllib.parse import quote
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Query, Request
 from fastapi.responses import HTMLResponse, StreamingResponse
 
 from src.dtest.api_service.deps import ServicesDep, UserDep, caller_of
-from src.dtest.api_service.services.access import owned_artifact
+from src.dtest.api_service.services.access import admin_tenant, owned_artifact
+from src.dtest.core.executor.client import Identity
 from src.dtest.core.notebook_links import lab_url
 
 router = APIRouter(tags=["artifacts"])
@@ -25,22 +26,54 @@ def admin_read(request: Request, user) -> bool:
     )
 
 
+# an administrator's read of another executor tenant's artifact; others
+# (and key callers) always read ours, whatever they send
+TenantQuery = Query(
+    None,
+    description=(
+        "Administrators (SSO) only: the executor tenant the artifact is in. "
+        "Omitted: this service's own. Ignored for anyone else."
+    ),
+)
+
+
+def _read_tenant(request: Request, user, tenant_id: str | None) -> str | None:
+    return admin_tenant(tenant_id) if admin_read(request, user) else None
+
+
+async def _artifact(services, request: Request, user, artifact_id, tenant):
+    return await owned_artifact(
+        services,
+        user,
+        artifact_id,
+        admin_read=admin_read(request, user),
+        tenant=tenant,
+    )
+
+
 @router.get("/api/v1/artifacts/{artifact_id}")
 async def artifact_detail(
-    artifact_id: str, request: Request, services: ServicesDep, user: UserDep
+    artifact_id: str,
+    request: Request,
+    services: ServicesDep,
+    user: UserDep,
+    tenant_id: str | None = TenantQuery,
 ):
     """Executor artifact metadata plus ``view_url`` (rendered page).
 
     For notebooks also ``lab_url`` (open in JupyterLab).
     """
-    artifact = await owned_artifact(
-        services, user, artifact_id, admin_read=admin_read(request, user)
-    )
+    tenant = _read_tenant(request, user, tenant_id)
+    artifact = await _artifact(services, request, user, artifact_id, tenant)
     return {
         **artifact,
-        "view_url": f"/view/artifacts/{artifact_id}",
+        "view_url": f"/view/artifacts/{artifact_id}{_tenant_query(tenant)}",
         "lab_url": _lab_url(services, user, artifact),
     }
+
+
+def _tenant_query(tenant: str | None) -> str:
+    return f"?tenant_id={tenant}" if tenant else ""
 
 
 def _lab_url(services, user, artifact: dict) -> str | None:
@@ -55,12 +88,17 @@ def _lab_url(services, user, artifact: dict) -> str | None:
 
 @router.get("/api/v1/artifacts/{artifact_id}/content")
 async def artifact_content(
-    artifact_id: str, request: Request, services: ServicesDep, user: UserDep
+    artifact_id: str,
+    request: Request,
+    services: ServicesDep,
+    user: UserDep,
+    tenant_id: str | None = TenantQuery,
 ):
-    artifact = await owned_artifact(
-        services, user, artifact_id, admin_read=admin_read(request, user)
+    tenant = _read_tenant(request, user, tenant_id)
+    artifact = await _artifact(services, request, user, artifact_id, tenant)
+    response, body = await services.executor.stream_artifact(
+        artifact_id, Identity(tenant=tenant)
     )
-    response, body = await services.executor.stream_artifact(artifact_id)
     media = artifact["storage"].get("media_type") or response.headers.get(
         "content-type", "application/octet-stream"
     )
@@ -112,16 +150,19 @@ def content_disposition(kind: str, name: str) -> str:
 
 @router.get("/view/artifacts/{artifact_id}", response_class=HTMLResponse)
 async def artifact_view(
-    artifact_id: str, request: Request, services: ServicesDep, user: UserDep
+    artifact_id: str,
+    request: Request,
+    services: ServicesDep,
+    user: UserDep,
+    tenant_id: str | None = TenantQuery,
 ):
     """Landing page linked from chat and the system view.
 
     Renders reports (.md), notebooks, images, CSV tables and text files;
     anything else gets a download link.
     """
-    artifact = await owned_artifact(
-        services, user, artifact_id, admin_read=admin_read(request, user)
-    )
+    tenant = _read_tenant(request, user, tenant_id)
+    artifact = await _artifact(services, request, user, artifact_id, tenant)
     kind = _view_kind(artifact)
     lab = _lab_url(services, user, artifact)
     lab_button = (
@@ -135,7 +176,9 @@ async def artifact_view(
         or artifact["name"],
         badge=artifact["type"],
         lab_button=lab_button,
-        content=f"/api/v1/artifacts/{escape(artifact_id)}/content",
+        content=escape(
+            f"/api/v1/artifacts/{artifact_id}/content{_tenant_query(tenant)}"
+        ),
         kind=kind,
     )
 

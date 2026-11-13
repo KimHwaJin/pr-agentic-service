@@ -42,12 +42,12 @@ from src.dtest.api_service.deps import (
 )
 from src.dtest.api_service.errors import ApiError
 from src.dtest.api_service.services.access import (
+    admin_tenant,
     check_execution,
     executor_unavailable,
     scope_execution_list,
 )
 from src.dtest.api_service.services.api_clients import Caller
-from src.dtest.core.config import RESERVED_TENANT_IDS
 from src.dtest.core.executor.client import SYSTEM, Identity
 from src.dtest.core.models import User
 from src.dtest.core.services import Services
@@ -57,8 +57,6 @@ router = APIRouter(prefix="/executor", tags=["executor"])
 
 UUID = r"[0-9a-fA-F-]{36}"
 E = rf"executions/(?P<execution>{UUID})"
-# executor and pr-batch TENANT_ID_PATTERN
-TENANT = re.compile(r"[a-z][a-z0-9-]{1,62}[a-z0-9]")
 # what the browser may do: list / execution (membership), admin (admins),
 # ops (admins, with the executor's operator key); None = not at all
 Sso = Literal["list", "execution", "admin", "ops"] | None
@@ -218,18 +216,9 @@ async def _for_user(
         await check_execution(services, user, match["execution"])
     # an admin may read another tenant's executions (our key may act for
     # every tenant); everyone else always reads ours
-    wanted_tenant = request.query_params.get("tenant_id")
-    if (
-        wanted_tenant
-        and user.role == "admin"
-        and access in {"list", "execution", "admin"}
-    ):
-        if (
-            not TENANT.fullmatch(wanted_tenant)
-            or wanted_tenant in RESERVED_TENANT_IDS
-        ):
-            raise HTTPException(422, "tenant_id is malformed.")
-        who = replace(who, tenant=wanted_tenant)
+    if user.role == "admin" and access in {"list", "execution", "admin"}:
+        if tenant := admin_tenant(request.query_params.get("tenant_id")):
+            who = replace(who, tenant=tenant)
     body = await request.body() if request.method == "POST" else None
     headers = services.executor.headers(who, admin=access == "ops")
     return await _forward(

@@ -8,6 +8,7 @@ execution's own context. User ids are our ``users.id`` (UUID) everywhere:
 executor ``context.user_id``, pr-batch owners and actors.
 """
 
+import re
 import time
 
 import httpx
@@ -16,7 +17,13 @@ from sqlalchemy import select
 
 from src.dtest.api_service.deps import project_for, session_for
 from src.dtest.api_service.errors import ApiError
-from src.dtest.core.executor.client import ExecutorError, trigger_type
+from src.dtest.core.config import RESERVED_TENANT_IDS
+from src.dtest.core.executor.client import (
+    SYSTEM,
+    ExecutorError,
+    Identity,
+    trigger_type,
+)
 from src.dtest.core.models import CodeSource, User
 from src.dtest.core.services import Services
 
@@ -96,8 +103,27 @@ async def execution_of_session(
     return owner == session_id
 
 
+# executor and pr-batch TENANT_ID_PATTERN
+TENANT = re.compile(r"[a-z][a-z0-9-]{1,62}[a-z0-9]")
+
+
+def admin_tenant(value: str | None) -> str | None:
+    """An administrator's ``tenant_id`` query: another executor tenant to
+    read (our key there may act for every tenant). None is ours."""
+    if not value:
+        return None
+    if not TENANT.fullmatch(value) or value in RESERVED_TENANT_IDS:
+        raise HTTPException(422, "tenant_id is malformed.")
+    return value
+
+
 async def owned_artifact(
-    services, user, artifact_id: str, *, admin_read: bool = False
+    services,
+    user,
+    artifact_id: str,
+    *,
+    admin_read: bool = False,
+    tenant: str | None = None,
 ) -> dict:
     """A session's artifact for its project members.
 
@@ -105,13 +131,16 @@ async def owned_artifact(
     who owns the batch. ``admin_read``: an administrator's SSO login on a
     read-only page sees any artifact of our tenant, as the executor relay
     shows them any execution (never for key callers, never for writes).
+    ``tenant``: with ``admin_read``, the executor tenant to read it in
+    (``admin_tenant``); ignored otherwise.
     """
+    who = Identity(tenant=tenant) if admin_read and tenant else SYSTEM
     try:
-        artifact = await services.executor.artifact(artifact_id)
+        artifact = await services.executor.artifact(artifact_id, who)
         execution_id = (artifact.get("produced_by") or {}).get("execution_id")
         if not execution_id:  # not produced by an execution: no owner
             raise HTTPException(404, "Artifact not found.")
-        execution = await services.executor.get(execution_id)
+        execution = await services.executor.get(execution_id, who)
     except ExecutorError as exc:
         if exc.status >= 500:
             raise executor_unavailable() from None

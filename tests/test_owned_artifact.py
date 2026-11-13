@@ -14,7 +14,7 @@ from src.dtest.core.executor.client import ExecutorError
 
 
 def _services(artifact=None, error=None):
-    async def get_artifact(artifact_id):
+    async def get_artifact(artifact_id, who=None):
         if error:
             raise error
         return artifact

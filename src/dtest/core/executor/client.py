@@ -177,8 +177,10 @@ class ExecutorClient:
             "POST", f"/executions/{execution_id}/cancel", who, json=body
         )
 
-    async def get(self, execution_id: str) -> dict[str, Any]:
-        return await self._call("GET", f"/executions/{execution_id}")
+    async def get(
+        self, execution_id: str, who: Identity = SYSTEM
+    ) -> dict[str, Any]:
+        return await self._call("GET", f"/executions/{execution_id}", who)
 
     async def opener(self, execution_id: str) -> Identity:
         """The identity an execution answers to (its ``context``).
@@ -281,8 +283,10 @@ class ExecutorClient:
         )
         return await self.artifact(found["artifact_id"]) if found else None
 
-    async def artifact(self, artifact_id: str) -> dict[str, Any]:
-        return await self._call("GET", f"/artifacts/{artifact_id}")
+    async def artifact(
+        self, artifact_id: str, who: Identity = SYSTEM
+    ) -> dict[str, Any]:
+        return await self._call("GET", f"/artifacts/{artifact_id}", who)
 
     async def create_report(
         self,
@@ -308,10 +312,12 @@ class ExecutorClient:
         )
 
     async def stream_artifact(
-        self, artifact_id: str
+        self, artifact_id: str, who: Identity = SYSTEM
     ) -> tuple[httpx.Response, AsyncIterator[bytes]]:
         request = self.http.build_request(
-            "GET", f"/artifacts/{artifact_id}/content", headers=self.headers()
+            "GET",
+            f"/artifacts/{artifact_id}/content",
+            headers=self.headers(who),
         )
         response = await self.http.send(request, stream=True)
         if response.status_code >= 400:
