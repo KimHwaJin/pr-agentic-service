@@ -1793,13 +1793,14 @@ async function loadRuns(id) {
   const body = $('runsBody'); body.innerHTML = '<div class="muted">불러오는 중…</div>';
   const [runs, reports] = await Promise.all([api(`/batch/batches/${id}/runs?limit=50`), api(`/batch-reports?batch_id=${id}&limit=100`)]);
   const byExec = Object.fromEntries(reports.items.map(r => [r.execution_id, r]));
+  const bt = BT.batches.find(x => x.id === id) || {}, runTenant = bt.tenant_id || bt.tenant || '';
   body.innerHTML = runs.items.length ? `<table class="tbl"><thead><tr><th>상태</th><th>실행</th><th>방식</th><th>시작</th><th>종료</th><th>소요</th><th>노트북</th><th>리포트</th><th></th></tr></thead><tbody>${runs.items.map(r => {
     const rep = r.execution_id && byExec[r.execution_id];
     const nb = r.result?.notebook_artifact_id;
     const start = r.started_at || r.submitted_at, end = r.finished_at || r.completed_at;
     const why = runReason(r);
     const badge = r.status === 'SKIPPED' && why ? `<span title="${esc(why)}" style="cursor:help;white-space:nowrap">${statusBadge(r.status)} <span class="muted">ⓘ</span></span>` : withError(statusBadge(r.status), why);
-    return `<tr${r.execution_id ? ` class="click" title="눌러서 executor 실행 상세 보기" onclick="openExecution('${r.execution_id}')"` : ''}><td onclick="event.stopPropagation()">${badge}</td><td>${short(r.id)}</td>
+    return `<tr${r.execution_id ? ` class="click" title="눌러서 executor 실행 상세 보기" onclick="openExecution('${r.execution_id}', '${esc(runTenant)}')"` : ''}><td onclick="event.stopPropagation()">${badge}</td><td>${short(r.id)}</td>
       <td>${esc(r.trigger)}</td><td>${fmtTime(start) || '<span class="muted">-</span>'}</td><td>${fmtTime(end) || '<span class="muted">-</span>'}</td><td>${dur(start, end)}</td>
       <td onclick="event.stopPropagation()">${nb ? `<a target="_blank" href="/view/artifacts/${nb}">보기</a>` : '<span class="muted">-</span>'}</td>
       <td onclick="event.stopPropagation()">${rep ? `<a href="#" onclick="event.preventDefault(); $('runsModal').classList.remove('open'); openReport('${rep.id}')">${reportBadge(rep.state)}</a>` : `<span class="muted">${r.status === 'COMPLETED' ? '대기 중' : '-'}</span>`}</td>
@@ -2455,27 +2456,35 @@ function renderExecutions() {
   const statuses = ['', 'QUEUED', 'RUNNING', 'WAITING_FOR_OPERATION', 'FINALIZING', 'CANCEL_REQUESTED', 'CANCELLED', 'SUCCEEDED', 'FAILED'];
   $('execScope').textContent = S.me.permissions?.all_executions ? 'executor 실행 (채팅 분석 · 배치) · 관리자: 전체 사용자' : '내 executor 실행 (채팅 분석 · 배치)';
   $('execListBody').innerHTML = `<div class="toolbar">
-      ${S.me.permissions?.all_executions ? '<input id="fxUser" placeholder="사용자 (이름·사번·ID)" style="width:170px">' : ''}
+      ${S.me.permissions?.all_executions ? '<select id="fxTenant" title="executor tenant" onchange="loadExecutions()"><option value="">우리 tenant</option></select><input id="fxUser" placeholder="사용자 (이름·사번·ID)" style="width:170px">' : ''}
       <select id="fxProject"><option value="">모든 프로젝트</option>${S.projects.map(p => `<option value="${esc(p.id)}">${esc(p.name)}</option>`).join('')}</select>
       <input id="fxSession" placeholder="세션 ID" style="width:200px">
-      <input id="fxExec" placeholder="실행 ID로 바로 열기" style="width:240px" onkeydown="if (event.key === 'Enter' && this.value.trim()) openExecution(this.value.trim())">
+      <input id="fxExec" placeholder="실행 ID로 바로 열기" style="width:240px" onkeydown="if (event.key === 'Enter' && this.value.trim()) openExecution(this.value.trim(), $('fxTenant')?.value || '')">
       <select id="fxStatus">${statuses.map(s => `<option value="${s}">${s || '모든 상태'}</option>`).join('')}</select>
       <select id="fxTrigger"><option value="INTERACTIVE">채팅 분석</option><option value="BATCH">배치</option><option value="">채팅 + 배치</option></select>
       <button class="btn" onclick="loadExecutions()">조회</button></div>
     <table class="tbl"><thead><tr><th>상태</th><th>실행</th><th>사용자</th><th>프로젝트 / 세션</th><th>방식</th><th>단계</th><th>시작</th><th>종료</th><th>소요</th></tr></thead><tbody id="execRows"></tbody></table>
     <div style="text-align:center;margin:12px" id="execMore"></div>`;
+  if (S.me.permissions?.all_executions) loadTenants();
   loadExecutions();
+}
+// the other tenants an admin may read: those we issued API keys for (our key at the executor may act for every tenant)
+async function loadTenants() {
+  const clients = await api('/admin/api-clients').catch(() => []);
+  const tenants = [...new Set(clients.map(c => c.tenant))].sort();
+  $('fxTenant')?.insertAdjacentHTML('beforeend', tenants.map(t => `<option value="${esc(t)}">${esc(t)}</option>`).join(''));
 }
 async function loadExecutions(more = false) {
   // chat runs by default; batch runs too when asked (also under 배치 > 실행 이력)
-  const q = qs({ trigger_type: $('fxTrigger').value, user_id: await userFilter($('fxUser')?.value || ''), project_id: $('fxProject').value, session_id: $('fxSession').value.trim(), status: $('fxStatus').value, limit: 30, cursor: more ? SYS.cursor : '' });
+  const tenant = $('fxTenant')?.value || '';
+  const q = qs({ tenant_id: tenant, trigger_type: $('fxTrigger').value, user_id: await userFilter($('fxUser')?.value || ''), project_id: $('fxProject').value, session_id: $('fxSession').value.trim(), status: $('fxStatus').value, limit: 30, cursor: more ? SYS.cursor : '' });
   const page = await api(`/executor/executions?${q}`);
   SYS.cursor = page.next_cursor;
   await ensureUsers(page.items.map(e => e.context?.user_id));
   const rows = page.items.map(e => {
     const c = e.context || {}, lc = e.lifecycle || {};
-    return `<tr class="click" onclick="openExecution('${esc(e.execution_id)}')"><td>${statusWithReason(e.state?.status, e.state?.reason)}</td><td>${short(e.execution_id)}</td>
-      <td>${userLabel(c.user_id)}</td><td>${esc(projectName(c.project_id) || '')} ${c.project_id ? '' : '<span class="muted">-</span>'}<br>${short(c.session_id)}</td>
+    return `<tr class="click" onclick="openExecution('${esc(e.execution_id)}', '${esc(tenant)}')"><td>${statusWithReason(e.state?.status, e.state?.reason)}</td><td>${short(e.execution_id)}</td>
+      <td>${userLabel(c.user_id)}</td><td>${c.project_id ? (projectName(c.project_id) ? esc(projectName(c.project_id)) : short(c.project_id)) : '<span class="muted">-</span>'}<br>${short(c.session_id)}</td>
       <td>${esc(lc.operation_mode || '')}<br><span class="muted">${esc(e.trigger?.type || '')}</span></td><td>${e.step_count ?? ''}</td>
       <td>${fmtTime(lc.started_at || e.created_at)}</td><td>${lc.finished_at ? fmtTime(lc.finished_at) : '<span class="muted">진행 중</span>'}</td><td>${dur(lc.started_at, lc.finished_at)}</td></tr>`;
   }).join('');
@@ -2485,21 +2494,23 @@ async function loadExecutions(more = false) {
 
 const INTERNAL_EXEC_TABS = ['diagnostics', 'attempts'];  // permissions.execution_internals
 const EXEC_TABS = [['overview', '개요'], ['steps', '단계'], ['events', '이벤트'], ['result', '결과'], ['notebook', '노트북'], ['artifacts', '산출물'], ['diagnostics', '진단'], ['attempts', '시도']];
-function openExecution(id) {
-  SYS.exec = id;
-  $('execTitle').innerHTML = `실행 <span class="mono" style="font-size:13px;font-weight:400">${esc(id)}</span> <button class="ghost" title="복사" onclick="navigator.clipboard.writeText('${esc(id)}')">복사</button>`;
+// tenant: the executor tenant the execution is in ('' = ours); admins only, others always read ours
+function openExecution(id, tenant = '') {
+  SYS.exec = id; SYS.execTenant = tenant;
+  $('execTitle').innerHTML = `실행 <span class="mono" style="font-size:13px;font-weight:400">${esc(id)}</span>${tenant ? ` <span class="badge">${esc(tenant)}</span>` : ''} <button class="ghost" title="복사" onclick="navigator.clipboard.writeText('${esc(id)}')">복사</button>`;
   $('execTabs').innerHTML = EXEC_TABS.filter(([k]) => S.me.permissions?.execution_internals || !INTERNAL_EXEC_TABS.includes(k)).map(([k, label]) => `<button class="systab" data-ex="${k}" onclick="execTab('${k}')">${label}</button>`).join('');
   $('execModal').classList.add('open'); execTab('overview');
 }
+const execApi = path => api(SYS.execTenant ? `${path}${path.includes('?') ? '&' : '?'}tenant_id=${encodeURIComponent(SYS.execTenant)}` : path);
 async function execTab(tab) {
   document.querySelectorAll('.systab[data-ex]').forEach(t => t.classList.toggle('on', t.dataset.ex === tab));
   const body = $('execBody'); body.innerHTML = '<div class="muted">불러오는 중…</div>';
   const base = `/executor/executions/${SYS.exec}`;
-  try { body.innerHTML = await ({ overview: execOverview, steps: execSteps, events: execEvents, result: async b => pre(await api(`${b}/result`)), notebook: execNotebook, artifacts: execArtifacts, diagnostics: execDiagnostics, attempts: execAttempts })[tab](base); }
+  try { body.innerHTML = await ({ overview: execOverview, steps: execSteps, events: execEvents, result: async b => pre(await execApi(`${b}/result`)), notebook: execNotebook, artifacts: execArtifacts, diagnostics: execDiagnostics, attempts: execAttempts })[tab](base); }
   catch { body.innerHTML = '<div class="muted">불러오지 못했습니다.</div>'; }
 }
 async function execOverview(base) {
-  const e = await api(base); const c = e.context || {}, r = e.runtime || {}, lc = e.lifecycle || {};
+  const e = await execApi(base); const c = e.context || {}, r = e.runtime || {}, lc = e.lifecycle || {};
   await ensureUsers([c.user_id]);
   const kv = [['실행 ID', `<span class="mono">${esc(e.execution_id)}</span>`], ['상태', statusBadge(e.state?.status) + reasonDetail(e.state?.reason)], ['방식', `${esc(lc.operation_mode || '')} · ${esc(e.trigger?.type || '')}`],
     ['tenant', `<span class="mono">${esc(e.tenant_id || c.tenant_id || '-')}</span>`], ['요청자 (created_by · created_by_client)', `<span class="mono">${esc(e.created_by || '-')}</span> · <span class="mono">${esc(e.created_by_client || '-')}</span>`],
@@ -2509,7 +2520,7 @@ async function execOverview(base) {
   return `<dl class="kv">${kv.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('')}</dl><details><summary class="muted">원본 JSON</summary>${pre(e)}</details>`;
 }
 async function execSteps(base) {
-  const page = await api(`${base}/steps?limit=200`);
+  const page = await execApi(`${base}/steps?limit=200`);
   return `<table class="tbl"><thead><tr><th>#</th><th>skill / tool</th><th>상태</th><th>소요</th><th>출력</th><th>오류</th></tr></thead><tbody>${page.items.map(s => {
     const l = s.lineage || {}, r = s.result || {}, o = r.output_summary || {}, lc = s.lifecycle || {};
     return `<tr><td>${s.sequence}</td><td>${esc(l.skill_name || '')} / <b>${esc(l.tool_name || '')}</b>${l.input_parameters && Object.keys(l.input_parameters).length ? `<div class="mono muted">${esc(JSON.stringify(l.input_parameters)).slice(0, 200)}</div>` : ''}</td>
@@ -2517,12 +2528,12 @@ async function execSteps(base) {
   }).join('')}</tbody></table>`;
 }
 async function execEvents(base) {
-  const page = await api(`${base}/events?limit=500`);
+  const page = await execApi(`${base}/events?limit=500`);
   return `<table class="tbl"><thead><tr><th>#</th><th>시각</th><th>이벤트</th><th>내용</th></tr></thead><tbody>${page.items.map(e =>
     `<tr><td>${e.event_sequence}</td><td style="white-space:nowrap">${fmtTime(e.occurred_at)}</td><td>${esc(e.event_type)}</td><td class="mono">${esc(JSON.stringify(e.payload)).slice(0, 300)}</td></tr>`).join('')}</tbody></table>`;
 }
 async function execNotebook(base) {
-  const [nb, arts] = await Promise.all([api(`${base}/notebook`), api(`${base}/artifacts`)]);
+  const [nb, arts] = await Promise.all([execApi(`${base}/notebook`), execApi(`${base}/artifacts`)]);
   const notebook = arts.items.find(a => a.type === 'NOTEBOOK');
   return `${notebook ? `<p><a target="_blank" href="/view/artifacts/${notebook.artifact_id}">노트북 전체 보기</a></p>` : ''}
     ${nb.cells.map(c => `<div class="stat" style="margin-bottom:8px"><b>[${c.execution_count ?? ' '}] ${esc(c.type)} <span class="muted" style="font-weight:400">${c.line_count}줄</span></b>
@@ -2531,16 +2542,16 @@ async function execNotebook(base) {
     <div class="muted">${nb.page.total_count}개 셀 중 ${nb.cells.length}개</div>`;
 }
 async function execArtifacts(base) {
-  const page = await api(`${base}/artifacts`);
+  const page = await execApi(`${base}/artifacts`);
   return page.items.length ? `<table class="tbl"><thead><tr><th>이름</th><th>종류</th><th>상태</th><th>생성</th><th></th></tr></thead><tbody>${page.items.map(a =>
     `<tr><td>${esc(a.name)}</td><td>${esc(a.type)}</td><td>${statusBadge(a.status)}</td><td>${fmtTime(a.created_at)}</td><td><a target="_blank" href="/view/artifacts/${a.artifact_id}">보기</a></td></tr>`).join('')}</tbody></table>` : '<div class="muted">산출물이 없습니다.</div>';
 }
 async function execDiagnostics(base) {
-  const page = await api(`${base}/diagnostics`);
+  const page = await execApi(`${base}/diagnostics`);
   return page.items.length ? page.items.map(pre).join('') : '<div class="muted">기록된 실패가 없습니다.</div>';
 }
 async function execAttempts(base) {
-  const page = await api(`${base}/attempts`);
+  const page = await execApi(`${base}/attempts`);
   return `<table class="tbl"><thead><tr><th>시도</th><th>상태</th><th>시작 · 종료</th><th>단계</th><th>실패 이유</th></tr></thead><tbody>${page.items.map(a =>
     `<tr><td>${a.attempt_number} ${short(a.attempt_id)}</td><td>${statusBadge(a.state?.status)}</td><td>${fmtTime(a.lifecycle?.started_at)} → ${fmtTime(a.lifecycle?.finished_at)}</td><td>${a.step_count ?? ''}</td><td>${a.state?.reason ? reasonDetail(a.state.reason) : '-'}</td></tr>`).join('')}</tbody></table>`;
 }
