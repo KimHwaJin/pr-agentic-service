@@ -40,6 +40,21 @@
 - 비활성화하면 그 사용자의 진행 중인 턴과 executor 커널은 바로 취소됩니다. 캐시 시간 동안 남는 것은 "새 요청이 받아들여질 수 있다"는 것뿐입니다.
 - 유출된 키처럼 바로 막아야 하면 폐기 후 `API_CLIENT_CACHE_SECONDS`만큼 기다리거나, Pod를 재시작합니다. 값을 줄이면 반영은 빨라지고 DB 조회는 늘어납니다.
 
+### 역할(권한)을 DB에서 직접 바꾸기
+
+평소에는 관리자 화면의 `PATCH /api/v1/admin/users/{user_id}` `{"role": "admin" | "user"}`로 바꿉니다(받은 Pod의 캐시도 바로 비웁니다). 관리자가 아무도 없거나 DB에서 직접 고쳐야 하면 서비스와 같은 config로 아래 스크립트를 씁니다.
+
+```
+python scripts/set_user_role.py --list                 # 관리자 목록
+python scripts/set_user_role.py A10054 admin --dry-run # 확인만, 롤백
+python scripts/set_user_role.py A10054 admin           # 승격 (강등은 user)
+```
+
+- 대상은 사번(대소문자 무시) 또는 `users.id`이고, 정확히 한 명일 때만 바꿉니다. 마지막 활성 관리자는 강등하지 않습니다.
+- `--dsn` 또는 환경변수 `DATABASE_URL`을 주면 그 DB에 붙습니다.
+- psql로 직접 하려면 `scripts/set_user_role.sql`을 씁니다. `role`에는 DB 제약이 없으니 `user`, `admin` 외의 값을 넣지 않도록 주의합니다.
+- 재로그인은 필요 없고 모든 Pod에 최대 30초 안에 반영됩니다(위 표). `ADMIN_EMPLOYEE_IDS`는 최초 로그인 때만 쓰이므로 이후 로그인이 바꾼 역할을 덮어쓰지 않습니다.
+
 ## 3. DB 마이그레이션 (`AUTO_MIGRATE`)
 
 `AUTO_MIGRATE: true`(기본)이면 Pod가 시작할 때 마이그레이션을 실행합니다. 여러 Pod가 동시에 떠도 advisory lock으로 한 Pod만 실행합니다. 다만 마이그레이션이 실패하면 **모든 Pod가 시작에 실패해 CrashLoop**에 빠지고, 이전 버전 Pod도 롤링 업데이트로 내려간 뒤라면 서비스가 멈춥니다.
