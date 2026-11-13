@@ -45,13 +45,13 @@
 평소에는 관리자 화면의 `PATCH /api/v1/admin/users/{user_id}` `{"role": "admin" | "user"}`로 바꿉니다(받은 Pod의 캐시도 바로 비웁니다). 관리자가 아무도 없거나 DB에서 직접 고쳐야 하면 서비스와 같은 config로 아래 스크립트를 씁니다.
 
 ```
-python scripts/set_user_role.py --list                 # 관리자 목록
-python scripts/set_user_role.py A10054 admin --dry-run # 확인만, 롤백
-python scripts/set_user_role.py A10054 admin           # 승격 (강등은 user)
+python scripts/set_user_role.py --env prd --list                 # 관리자 목록
+python scripts/set_user_role.py --env prd A10054 admin --dry-run # 확인만, 롤백
+python scripts/set_user_role.py --env prd A10054 admin           # 승격 (강등은 user)
 ```
 
 - 대상은 사번(대소문자 무시) 또는 `users.id`이고, 정확히 한 명일 때만 바꿉니다. 마지막 활성 관리자는 강등하지 않습니다.
-- `--dsn` 또는 환경변수 `DATABASE_URL`을 주면 그 DB에 붙습니다.
+- `--env prd`는 `config.prd.yml`(없으면 `config.yml`)의 `DATABASE_URL`만 씁니다. `--env` 없이 실행하면 서비스와 같은 순서(환경변수, `.env`, `config.{APP_ENV}.yml`, `config.yml`)로 찾고, `--dsn`은 언제나 가장 우선입니다. 접속할 DB를 먼저 출력합니다(비밀번호는 가림).
 - psql로 직접 하려면 `scripts/set_user_role.sql`을 씁니다. `role`에는 DB 제약이 없으니 `user`, `admin` 외의 값을 넣지 않도록 주의합니다.
 - 재로그인은 필요 없고 모든 Pod에 최대 30초 안에 반영됩니다(위 표). `ADMIN_EMPLOYEE_IDS`는 최초 로그인 때만 쓰이므로 이후 로그인이 바꾼 역할을 덮어쓰지 않습니다.
 

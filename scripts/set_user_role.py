@@ -1,14 +1,19 @@
 """pr-agentic-service 유저 권한(users.role) 변경 스크립트.
 
-저장소 루트에서 서비스와 같은 설정(APP_ENV, config.*.yml, .env)으로 실행:
+저장소 루트에서 실행:
 
-    uv run python scripts/set_user_role.py --list
-    uv run python scripts/set_user_role.py A10054 admin --dry-run
-    uv run python scripts/set_user_role.py A10054 admin
-    uv run python scripts/set_user_role.py a10054 user
+    uv run python scripts/set_user_role.py --env prd --list
+    uv run python scripts/set_user_role.py --env prd A10054 admin --dry-run
+    uv run python scripts/set_user_role.py --env prd A10054 admin
+    uv run python scripts/set_user_role.py --env prd a10054 user
 
-대상은 사번(employee_id, 대소문자 무시) 또는 users.id. --dsn 이나 환경변수
-DATABASE_URL 을 주면 config 대신 그 DB 에 접속한다.
+대상은 사번(employee_id, 대소문자 무시) 또는 users.id.
+
+접속할 DB(DATABASE_URL): --dsn 이 가장 우선. --env prd 를 주면
+config.prd.yml(없으면 config.yml)의 값만 쓰고 환경변수와 .env 는 보지 않는다.
+--env 가 없으면 서비스와 같은 순서로 찾는다: 환경변수 DATABASE_URL, .env,
+config.{APP_ENV}.yml, config.yml. 어느 곳의 어떤 DB 인지 실행 전에 출력한다
+(비밀번호는 가림).
 
 변경은 각 파드의 유저 캐시(api_service.deps.USER_CACHE_SECONDS=30초)가 지나면
 다음 요청부터 적용되고 재로그인은 필요 없다. ADMIN_EMPLOYEE_IDS 는 최초
@@ -17,24 +22,58 @@ DATABASE_URL 을 주면 config 대신 그 DB 에 접속한다.
 
 import argparse
 import os
+import re
 import sys
+from pathlib import Path
 
 import psycopg
+import yaml
+from dotenv import dotenv_values
+
+ROOT = Path(__file__).resolve().parents[1]
 
 ROLES = ("user", "admin")
 COLS = "id, employee_id, name, department, role, is_active"
 
 
-def dsn_of(arg: str | None) -> str:
-    url = arg or os.environ.get("DATABASE_URL")
-    if not url:
-        sys.path.insert(
-            0, os.path.join(os.path.dirname(__file__), "..", "src")
-        )
-        from core.config import get_settings
+def _key(values: dict | None, key: str) -> str | None:
+    """A config value by case-insensitive key (as the service reads it)."""
+    for k, v in (values or {}).items():
+        if isinstance(k, str) and k.lower() == key.lower() and v:
+            return str(v)
+    return None
 
-        url = get_settings().database_url
-    return url.replace("postgresql+psycopg://", "postgresql://")
+
+def dsn_of(dsn: str | None, env: str | None) -> tuple[str, str]:
+    """(DATABASE_URL, where it came from), highest precedence first."""
+    found = [("--dsn", dsn)]
+    if not env:  # the service's order: environment, .env, then files
+        dotenv = dotenv_values(ROOT / ".env", encoding="utf-8")
+        env = os.environ.get("APP_ENV") or dotenv.get("APP_ENV")
+        found.append(("DATABASE_URL", os.environ.get("DATABASE_URL")))
+        found.append((".env", _key(dotenv, "DATABASE_URL")))
+    if env:
+        path = ROOT / f"config.{env}.yml"
+        if not path.is_file():
+            sys.exit(f"{path.name} 이 없습니다.")
+        found.append((path.name, _key(_yaml(path), "DATABASE_URL")))
+    common = ROOT / "config.yml"
+    if common.is_file():
+        found.append((common.name, _key(_yaml(common), "DATABASE_URL")))
+    for source, url in found:
+        if url:
+            return url.replace(
+                "postgresql+psycopg://", "postgresql://"
+            ), source
+    sys.exit("DATABASE_URL 을 찾지 못했습니다. --env 나 --dsn 을 주세요.")
+
+
+def _yaml(path: Path) -> dict:
+    return yaml.safe_load(path.read_text("utf-8")) or {}
+
+
+def masked(url: str) -> str:
+    return re.sub(r"(//[^:/@]+:)[^@]*@", r"\1***@", url)
 
 
 def show(rows) -> None:
@@ -55,13 +94,18 @@ def main() -> int:
         "--dry-run", action="store_true", help="바꾸지 않고 결과만 확인"
     )
     p.add_argument(
-        "--dsn", help="PostgreSQL URL (기본: DATABASE_URL 또는 config)"
+        "--env",
+        choices=("dev", "stg", "prd"),
+        help="config.{env}.yml 의 DATABASE_URL (기본: APP_ENV)",
     )
+    p.add_argument("--dsn", help="PostgreSQL URL (가장 우선)")
     a = p.parse_args()
     if not a.list and not (a.target and a.role):
         p.error("target 과 role 이 필요합니다 (또는 --list)")
 
-    with psycopg.connect(dsn_of(a.dsn)) as conn:
+    url, source = dsn_of(a.dsn, a.env)
+    print(f"DB: {masked(url)}  ({source})")
+    with psycopg.connect(url) as conn:
         if a.list:
             rows = conn.execute(
                 f"SELECT {COLS} FROM users WHERE role = 'admin' ORDER BY name"
