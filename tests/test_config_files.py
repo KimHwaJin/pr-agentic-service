@@ -292,3 +292,16 @@ def test_config_example_documents_every_setting():
         assert documented == value, key
     for model in example["models"]:
         config.ModelSpec.model_validate(model)
+
+
+def test_run_mode_comes_from_the_file_and_the_environment_wins(
+    root, monkeypatch
+):
+    assert Settings().run_mode == "all"
+    (root / "config.yml").write_text("RUN_MODE: api\n")
+    assert Settings().run_mode == "api"
+    monkeypatch.setenv("RUN_MODE", "worker")
+    assert Settings().run_mode == "worker"
+    monkeypatch.setenv("RUN_MODE", "both")
+    with pytest.raises(ValueError):
+        Settings()

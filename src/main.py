@@ -1,12 +1,12 @@
 """Service entrypoint: ``uvicorn main:app --app-dir src``.
 
-RUN_MODE=all (default, one container) | api | worker. The deployment runs
-everything in one process; the split lets the worker move to its own
+RUN_MODE=all (default, one container) | api | worker, a setting like any
+other (config.yml, or the environment variable, which wins). The deployment
+runs everything in one process; the split lets the worker move to its own
 Deployment later without code changes.
 """
 
 import logging
-import os
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -23,7 +23,7 @@ configure_logging()  # logger.yml (or HCP's own inside the company network)
 settings = get_settings()
 tracing_phoenix.setup(settings)
 log = logging.getLogger(__name__)
-mode = os.environ.get("RUN_MODE", "all")
+mode = settings.run_mode
 api_enabled, worker_enabled = mode in {"all", "api"}, mode in {"all", "worker"}
 
 
