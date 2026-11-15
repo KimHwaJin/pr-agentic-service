@@ -14,13 +14,13 @@ handles the lifespan messages itself, so they survive the template's own
 lifespan. Outside the network ``src/dtest/local.py`` attaches the same way
 to a plain FastAPI app.
 
-RUN_MODE=all (default, one container) | api | worker. The deployment runs
-everything in one process; the split lets the worker move to its own
+RUN_MODE=all (default, one container) | api | worker, a setting like any
+other (config.yml, or the environment variable, which wins). The deployment
+runs everything in one process; the split lets the worker move to its own
 Deployment later without code changes.
 """
 
 import logging
-import os
 from contextlib import AsyncExitStack
 from typing import Any
 
@@ -45,9 +45,9 @@ from src.dtest.worker.runtime import Worker
 log = logging.getLogger(__name__)
 
 
-def run_mode() -> tuple[bool, bool]:
-    """(api enabled, worker enabled) from RUN_MODE."""
-    mode = os.environ.get("RUN_MODE", "all")
+def run_mode(settings: Any) -> tuple[bool, bool]:
+    """(api enabled, worker enabled) from the RUN_MODE setting."""
+    mode = settings.run_mode
     return mode in {"all", "api"}, mode in {"all", "worker"}
 
 
@@ -64,7 +64,7 @@ def attach(app: FastAPI) -> None:
     install_log_field()  # record.request_id for HCP's formatter too
     settings = get_settings()
     tracing_phoenix.setup(settings)
-    api_enabled, _ = run_mode()
+    api_enabled, _ = run_mode(settings)
     if api_enabled:
         mount_api(app, settings)
     if not settings.docs_enabled:  # internal network rules: docs off
@@ -150,7 +150,7 @@ class DtestLifespan:
 
     async def _start(self, app: Any, stack: AsyncExitStack) -> None:
         settings = get_settings()
-        api_enabled, worker_enabled = run_mode()
+        api_enabled, worker_enabled = run_mode(settings)
         services = await stack.enter_async_context(build_services(settings))
         app.state.services = services
         gaia_runtime.set_services(services)  # the gaia workflow's graph

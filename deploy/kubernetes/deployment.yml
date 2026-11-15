@@ -24,7 +24,6 @@ spec:
           # only picks the environment and overrides single values when needed.
           env:
             - {name: APP_ENV, value: prd}
-            - {name: RUN_MODE, value: all}
           readinessProbe:
             httpGet: {path: /api/admin/appReady, port: 8080}
             periodSeconds: 5

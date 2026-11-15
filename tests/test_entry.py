@@ -10,6 +10,7 @@ import pytest
 from fastapi import FastAPI
 
 from src.dtest import entry
+from src.dtest.core.config import Settings
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -116,6 +117,8 @@ async def test_failed_startup_is_reported_not_skipped(log, monkeypatch):
 
 async def test_worker_only_mode_starts_no_api(log, monkeypatch):
     monkeypatch.setenv("RUN_MODE", "worker")
+    # RUN_MODE is a setting: read it fresh, not from the cached one
+    monkeypatch.setattr(entry, "get_settings", lambda: Settings())
     await run_lifespan(gaia_like_app(log))
     assert "api.start" not in log and "worker.start" in log
 

@@ -9,8 +9,12 @@
 # SERVICE_ID).
 # Locally (APP_ENV empty) the docker-compose.yml environment or .env adds the
 # local values. Precedence: environment > .env > config.{APP_ENV}.yml > this
-# file. Relative paths are under the repo root. RUN_MODE is read from the
-# environment only. config.example.yml explains every key.
+# file. Relative paths are under the repo root. config.example.yml explains
+# every key.
+
+# all (API + worker in one process) | api | worker. The RUN_MODE environment
+# variable, when set, wins over this line.
+RUN_MODE: all
 
 # Database / Redis.
 REDIS_NAMESPACE: agentic

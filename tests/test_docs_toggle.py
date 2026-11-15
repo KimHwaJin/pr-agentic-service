@@ -47,7 +47,7 @@ def test_attach_hides_the_template_docs(monkeypatch):
     from src.dtest import entry
 
     monkeypatch.setattr(entry, "use_selector_loop", lambda: None)
-    monkeypatch.setattr(entry, "run_mode", lambda: (False, False))
+    monkeypatch.setattr(entry, "run_mode", lambda s: (False, False))
     monkeypatch.setattr(entry, "get_settings", lambda: Settings())
     app = FastAPI()
     entry.attach(app)
