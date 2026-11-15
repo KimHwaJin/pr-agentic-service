@@ -42,7 +42,7 @@ DATABASE_URL: postgresql+psycopg://<user>:<password>@<pg-host>:5432/agentic
 
 # [환경별] Redis URL. 실행 완료 이벤트를 받으려면 executor 가 이벤트를 쓰는
 # Redis 와 같아야 합니다(run 깨우기, 락, 캐시에도 사용). 서버는 Redis 6.2
-# 이상이어야 합니다(XAUTOCLAIM, GETDEL, EXAT). 8.x 기준으로 확인했습니다.
+# 이상이어야 합니다(XAUTOCLAIM, GETDEL, EXAT). 운영 대상은 8.x 입니다.
 # 기본값: redis://localhost:6379/0
 REDIS_URL: redis://<redis-host>:6379/0
 
