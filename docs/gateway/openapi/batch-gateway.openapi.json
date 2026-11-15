@@ -3970,16 +3970,47 @@
           "batch (pr-agentic-service)"
         ],
         "summary": "Notebook To Batch Script",
-        "description": "Registers a session notebook (executor artifact).\n\nIt becomes a pr-batch NOTEBOOK script.",
+        "description": "Registers a session notebook (executor artifact).\n\nIt becomes a pr-batch NOTEBOOK script. The caller's ``Idempotency-Key``\ngoes to pr-batch as sent, as on the relayed writes: a key names one\nregistration, not the notebook, so registering a notebook again (after\ndeleting its script, or under another name) is a new script.",
+        "security": [
+          {
+            "X-Api-Key": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255,
+              "pattern": "^[!-~]+$",
+              "description": "A new value per registration (a UUID); the same value only to retry it. Passed to pr-batch as sent.",
+              "title": "Idempotency-Key"
+            },
+            "description": "A new value per registration (a UUID); the same value only to retry it. Passed to pr-batch as sent."
+          },
+          {
+            "name": "X-User-Id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$"
+            },
+            "description": "One of our active users (users.id or employee id). These routes are this service's own and need a user of our tenant."
+          }
+        ],
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/BatchScriptFromNotebook"
               }
             }
-          },
-          "required": true
+          }
         },
         "responses": {
           "201": {
@@ -4072,38 +4103,7 @@
               }
             }
           }
-        },
-        "security": [
-          {
-            "X-Api-Key": []
-          }
-        ],
-        "parameters": [
-          {
-            "name": "Idempotency-Key",
-            "in": "header",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 255,
-              "pattern": "^[!-~]+$",
-              "description": "A new value per registration (a UUID); the same value only to retry it. Passed to pr-batch as sent.",
-              "title": "Idempotency-Key"
-            },
-            "description": "A new value per registration (a UUID); the same value only to retry it. Passed to pr-batch as sent."
-          },
-          {
-            "name": "X-User-Id",
-            "in": "header",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$"
-            },
-            "description": "One of our active users (users.id or employee id). These routes are this service's own and need a user of our tenant."
-          }
-        ]
+        }
       }
     }
   },

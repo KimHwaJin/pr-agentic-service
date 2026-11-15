@@ -190,6 +190,7 @@ SKIPPED                                       (정책이 실행하지 않기로 
 - 결과 노트북: run이 `COMPLETED`면 `result.notebook_artifact_id`를 executor 게이트웨이에서 `GET /api/v1/executor/artifacts/{notebook_artifact_id}/content`로 받습니다. key와 `X-User-Id`는 같은 값을 씁니다.
 - 실행 상세는 `GET /api/v1/executor/executions/{execution_id}`입니다. 노트북과 셀 경로는 `executor-for-agents.ko.md`를 봅니다.
 - 쓰게 될 RunView 필드: `id`, `batch_id`, `user_id`(소유자), `status`, `skip_reason`, `failure_type`, `cancel_requested`, `trigger`(`MANUAL` 또는 `SCHEDULED`), `scheduled_for`, `execution_id`, `notebook_status`, `result.notebook_artifact_id`, `last_error`, `completed_at`.
+- `failure_type`은 실행이 `FAILED`일 때만 값이 있습니다. 실패한 execution의 executor `state.reason.code`(예: `TOOL_ERROR`, 목록은 `executor-for-agents.ko.md`)이거나, pr-batch가 직접 넣는 `SUBMIT_REJECTED`(executor가 제출을 거절함) 또는 `ABANDONED`(executor와 24시간 동안 통신하지 못함)입니다. 모르는 값은 `last_error`와 함께 그대로 보여 줍니다.
 - RunDetail에는 `steps[]`(`sequence`, `original_index` = 노트북 셀 index, `status`)가 더 있습니다.
 
 ### 4.5 채팅 노트북을 스크립트로 (이 서비스의 경로)
