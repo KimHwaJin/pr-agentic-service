@@ -19,22 +19,22 @@
 
 ## ID 규칙
 
-영역 약어-번호입니다. PREP 사전 준비 · AUTH 인증 · RUN 세션·run 실행 · EXEC executor 연동 · BAT 배치 · TEN tenant·사용자 · ADM 관리자 · OPS 장애·설정·부하. 11/01판의 A1~H6은 번호가 그대로 이어집니다(A1 → AUTH-01, D3 → BAT-03).
+영역 약어-번호입니다. PREP 사전 준비 · AUTH 인증 · RUN 세션·run 실행 · EXEC executor 연동 · BAT 배치 · TEN tenant·사용자 · ADM 관리자 · OPS 장애·설정·부하.
 
-## 테스트 대상과 연동 경로
+## 테스트 대상
 
-연동 경로는 아홉 개입니다. 시나리오마다 어느 경로를 지나는지 아래 번호(I1~I9)로 표시했습니다. 모든 경로를 한 번 이상 지나야 통합테스트가 끝난 것으로 봅니다.
+세 서비스와 그 사이의 연결입니다. 아래 표의 모든 구간을 한 번 이상 지나야 통합테스트가 끝난 것으로 봅니다.
 
 ```
   브라우저                 key 호출자                gaia
   SSO 쿠키+X-CSRF-Token    X-Api-Key+X-User-Id      내부망, 사번 전달
-        | I1                    | I2                     | I8
+        |                       |                        |
         v                       v                        v
-  +--------------------------------------------------------------+   I9   +-----------+
+  +--------------------------------------------------------------+        +-----------+
   | pr-agentic-service                                           | -----> | SSO (idp) |
   | API · 에이전트 워커 · 배치 리포트 · tenant dtest-agent-service |        | prj_re    |
   +--------------------------------------------------------------+        +-----------+
-        | I3 · I4                ^ I5                    | I6
+        |                        ^                       |
         v                        |                       v
   +-----------+   이벤트   +--------------------------+   +-----------+
   | executor  | ---------> | Redis 스트림               |   | pr-batch  |
@@ -42,22 +42,22 @@
   | 공간·이벤트|            +--------------------------+   | 배치·일정 |
   +-----------+                                         +-----------+
         ^                                                     |
-        +---------- I7 배치 실행: pr-batch 키로 executor에 직접 제출 ----+
+        +---------- 배치 실행: pr-batch 키로 executor에 직접 제출 -------+
 
   공유 자원: PostgreSQL(서비스별 DB 3개) · Redis · 공유 PV(입력 코드·실행 결과)
 ```
 
-| 경로 | 보내는 쪽 → 받는 쪽 | 인증 | 확인할 것 |
-| --- | --- | --- | --- |
-| I1 | 브라우저 → 우리 API | SSO 쿠키 + `X-CSRF-Token` | `users.id` = 소문자 사번, 쓰기 요청에 CSRF |
-| I2 | key 호출자(Swagger·상위 에이전트) → 우리 API | `X-Api-Key` + `X-User-Id` | 우리 tenant 키는 `own_tenant`, 감사 로그 `api_client_request` |
-| I3 | 우리 → executor | `EXECUTOR_API_KEY`(relay) + `X-Tenant-Id` | 실행 제출·조회·취소, 작업 공간 `tenants/{tenant}/users/{사번}` |
-| I4 | 우리 → executor (시스템 화면) | `EXECUTOR_ADMIN_API_KEY`(ops) | 런타임·점검 탭, 비어 있으면 503 |
-| I5 | executor → Redis → 우리 워커 | 스트림 `executor.events.dtest-agent-service` | 이벤트를 받고 executor에 다시 물어본 뒤 run 재개, 놓친 이벤트 복구 |
-| I6 | 우리 → pr-batch | `BATCH_API_KEY`(relay + admin) | 스크립트·배치 게이트웨이, `disable-by-owner`, `disable-by-tenant` |
-| I7 | pr-batch → executor | pr-batch의 `EXECUTOR_API_KEY` | `trigger {type: BATCH}` + `X-User-Id`(owner), 배치의 tenant로 제출 |
-| I8 | gaia → 우리 (internal/gaia만) | gaia가 넘기는 사번 | gaia 세션 ↔ 우리 세션 매핑, 확인 단계 자동 응답 |
-| I9 | 우리 → SSO(idp) | idp 로그인 페이지·userinfo | `SSO_ALLOWED_ORIGINS`, 사번 표기(대소문자), 관리자 최초 로그인 |
+| 보내는 쪽 → 받는 쪽 | 인증 | 확인할 것 |
+| --- | --- | --- |
+| 브라우저 → 우리 API | SSO 쿠키 + `X-CSRF-Token` | `users.id` = 소문자 사번, 쓰기 요청에 CSRF |
+| key 호출자(Swagger·상위 에이전트) → 우리 API | `X-Api-Key` + `X-User-Id` | 우리 tenant 키는 `own_tenant`, 감사 로그 `api_client_request` |
+| 우리 → executor | `EXECUTOR_API_KEY`(relay) + `X-Tenant-Id` | 실행 제출·조회·취소, 작업 공간 `tenants/{tenant}/users/{사번}` |
+| 우리 → executor (시스템 화면) | `EXECUTOR_ADMIN_API_KEY`(ops) | 런타임·점검 탭, 비어 있으면 503 |
+| executor → Redis → 우리 워커 | 스트림 `executor.events.dtest-agent-service` | 이벤트를 받고 executor에 다시 물어본 뒤 run 재개, 놓친 이벤트 복구 |
+| 우리 → pr-batch | `BATCH_API_KEY`(relay + admin) | 스크립트·배치 게이트웨이, `disable-by-owner`, `disable-by-tenant` |
+| pr-batch → executor | pr-batch의 `EXECUTOR_API_KEY` | `trigger {type: BATCH}` + `X-User-Id`(owner), 배치의 tenant로 제출 |
+| gaia → 우리 (internal/gaia만) | gaia가 넘기는 사번 | gaia 세션 ↔ 우리 세션 매핑, 확인 단계 자동 응답 |
+| 우리 → SSO(idp) | idp 로그인 페이지·userinfo | `SSO_ALLOWED_ORIGINS`, 사번 표기(대소문자), 관리자 최초 로그인 |
 
 공유 자원: PostgreSQL(서비스별 DB 3개), Redis(이벤트 스트림), 공유 PV(입력 코드·실행 결과).
 
@@ -82,10 +82,10 @@
 
 **S0 연결 스모크** (시나리오 전에 5분 안에 끝내는 확인)
 
-1. 우리 → executor: 관리자 화면 실행 목록 200 (I3), 시스템 > 런타임 탭 200 (I4)
-2. 우리 → pr-batch: 배치 화면 런타임 목록 200 (`GET /api/v1/batch/runtimes`, I6)
-3. pr-batch → executor: 일정 있는 배치를 하나 만들어 `enable_blocked_reason`이 `EXECUTOR_NOT_CONFIGURED`가 아닌지 (I7)
-4. Redis: `XINFO GROUPS executor.events.dtest-agent-service`에 우리 그룹이 있음 (I5)
+1. 우리 → executor: 관리자 화면 실행 목록 200, 시스템 > 런타임 탭 200
+2. 우리 → pr-batch: 배치 화면 런타임 목록 200 (`GET /api/v1/batch/runtimes`)
+3. pr-batch → executor: 일정 있는 배치를 하나 만들어 `enable_blocked_reason`이 `EXECUTOR_NOT_CONFIGURED`가 아닌지
+4. Redis: `XINFO GROUPS executor.events.dtest-agent-service`에 우리 그룹이 있음
 
 401이 나면 해당 쌍의 키·해시부터 다시 봅니다. 많이 틀리는 곳은 3번입니다.
 
@@ -98,112 +98,112 @@
 
 ### A. 인증 (AUTH)
 
-| ID | 시나리오 | 기대 결과 | 경로 | 화면 | 단독 | 우선 |
-| --- | --- | --- | --- | --- | --- | --- |
-| AUTH-01 | SSO 첫 로그인 | `users.id` = 소문자 사번, 기본 프로젝트 생성 | I1 I9 | O |  | P0 |
-| AUTH-02 | `ADMIN_EMPLOYEE_IDS`에 있는 사번의 최초 로그인 | admin, `/users/me` `permissions.system: true` | I1 I9 | O |  | P0 |
-| AUTH-03 | 브라우저 쓰기 요청에 `X-CSRF-Token` 없음 | 403 | I1 | O |  | P0 |
-| AUTH-04 | 키 + `X-User-Id`로 `GET /users/me` | 200, 감사 로그에 client·tenant·user·`request_id` | I2 | O |  | P0 |
-| AUTH-05 | `X-User-Id`가 우리 DB에 없는 사번 / 형식 위반 | 403 / 400 | I2 | O |  | P0 |
-| AUTH-06 | 키로 관리자 API 호출 | 403 "SSO login" | I2 | O |  | P0 |
-| AUTH-07 | 키 개별 폐기 | 60초 안에 모든 Pod에서 401 `INVALID_API_KEY` | I2 | O |  | P0 |
-| AUTH-08 | 우리 tenant 키를 `own_tenant` 없이 발급 | 422 | I2 | O |  | P1 |
-| AUTH-09 | 쿠키와 키를 함께 보냄 | 쿠키 사용자로 처리, 키·`X-User-Id` 무시 | I1 I2 | O |  | P1 |
-| AUTH-10 | SSO 로그인 페이지 도메인이 `SSO_ALLOWED_ORIGINS`에 없음 | 502, 로그 `sso_login_url_rejected` | I9 | X (운영) | 단독 | P1 |
-| AUTH-11 | 비관리자 사용자가 dev 역할 변경 `POST /auth/dev/role` | 비관리자 dev 역할 변경은 dev·prd에서 404 (로컬 전용) | I1 | O |  | P1 |
+| ID | 시나리오 | 기대 결과 | 화면 | 단독 | 우선 |
+| --- | --- | --- | --- | --- | --- |
+| AUTH-01 | SSO 첫 로그인 | `users.id` = 소문자 사번, 기본 프로젝트 생성 | O |  | P0 |
+| AUTH-02 | `ADMIN_EMPLOYEE_IDS`에 있는 사번의 최초 로그인 | admin, `/users/me` `permissions.system: true` | O |  | P0 |
+| AUTH-03 | 브라우저 쓰기 요청에 `X-CSRF-Token` 없음 | 403 | O |  | P0 |
+| AUTH-04 | 키 + `X-User-Id`로 `GET /users/me` | 200, 감사 로그에 client·tenant·user·`request_id` | O |  | P0 |
+| AUTH-05 | `X-User-Id`가 우리 DB에 없는 사번 / 형식 위반 | 403 / 400 | O |  | P0 |
+| AUTH-06 | 키로 관리자 API 호출 | 403 "SSO login" | O |  | P0 |
+| AUTH-07 | 키 개별 폐기 | 60초 안에 모든 Pod에서 401 `INVALID_API_KEY` | O |  | P0 |
+| AUTH-08 | 우리 tenant 키를 `own_tenant` 없이 발급 | 422 | O |  | P1 |
+| AUTH-09 | 쿠키와 키를 함께 보냄 | 쿠키 사용자로 처리, 키·`X-User-Id` 무시 | O |  | P1 |
+| AUTH-10 | SSO 로그인 페이지 도메인이 `SSO_ALLOWED_ORIGINS`에 없음 | 502, 로그 `sso_login_url_rejected` | X (운영) | 단독 | P1 |
+| AUTH-11 | 비관리자 사용자가 dev 역할 변경 `POST /auth/dev/role` | 비관리자 dev 역할 변경은 dev·prd에서 404 (로컬 전용) | O |  | P1 |
 
 ### B. 세션·run 실행 (RUN)
 
-| ID | 시나리오 | 기대 결과 | 경로 | 화면 | 단독 | 우선 |
-| --- | --- | --- | --- | --- | --- | --- |
-| RUN-01 | 브라우저: 새 세션 + 분석 요청 → plan_approval 승인 → executor 실행 → 리포트 | run `succeeded`, `execution_completed`·`artifact` 이벤트, 답변에 attachments | I1 I3 I5 | O |  | P0 |
-| RUN-02 | 같은 흐름을 키 호출자로 (Swagger 가이드 1절) | RUN-01과 같음, executor `X-User-Id` = 사번 | I2 I3 I5 | O |  | P0 |
-| RUN-03 | Ingress를 거친 SSE `GET /sessions/{id}/events` | token이 묶여 오지 않고 5분 넘게 연결 유지 | I1 | O |  | P0 |
-| RUN-04 | code_approval·question·workflow_save 응답 | 202 `resumed: true`, 같은 run이 이어짐 | I1 | O |  | P0 |
-| RUN-05 | 실행 중 run 취소 (채팅 중지 버튼) | run `cancelled`, executor 실행도 취소(소유자 `X-User-Id`) | I1 I3 | O |  | P0 |
-| RUN-06 | `waiting_executor` 중 우리 워커 재시작 | 놓친 이벤트 복구로 run이 이어짐(복구 주기 120초) | I3 I5 | 일부 (운영) | 단독 | P0 |
-| RUN-07 | reject_templates (`allow_reject_templates: true`인 카드) | 새 계획의 plan_approval 재도착. false인 카드에 보내면 422 | I1 | O |  | P1 |
-| RUN-08 | 자동 실행 조건 충족(후보 1개, 유사도 0.77 이상). 임베딩을 켠 환경(`EMBEDDING_PROVIDER: openai`, `EMBEDDING_SEND_DIMENSIONS: false`)에서만 | `plan_auto_approved` 이벤트, 새로고침 후에도 남음 | I1 | O |  | P1 |
-| RUN-09 | 진행 중 세션에 새 턴 | 409 `SESSION_BUSY` | I1 | O |  | P1 |
-| RUN-10 | 오래된 `interrupt_id`로 재개 | 409 `STALE_INTERRUPT` | I1 | O |  | P1 |
-| RUN-11 | 필수 입력을 비우고 승인 | 빈칸이 있어도 승인 요청이 서버로 감(화면이 먼저 막지 않음). 승인하면 422 `INVALID_ANSWER`, `details[].location`이 그 칸 | I1 | O |  | P1 |
-| RUN-12 | 실행 중 세션 삭제 | 진행 중 executor 실행 취소 | I1 I3 | O |  | P1 |
-| RUN-13 | 코드 레벨 4로 분석 요청 (세션 또는 프로젝트 설정) | 계획 승인 카드 없이 바로 `run_custom_code` 실행. 레벨 3에서는 plan_approval | I1 I3 I5 | O |  | P1 |
-| RUN-14 | 임베딩 없는 환경(`EMBEDDING_PROVIDER: none`)에서 템플릿이 있는 요청 | 채팅 모델이 고른 후보가 나오고 similarity는 null, 자동 실행 없이 항상 승인 카드 | I1 | O |  | P1 |
-| RUN-15 | 일회성 지시와 지속 선호, 분석 대상 이름을 섞어 대화 | 지속 선호와 이름을 댄 분석 대상(관심 한 줄)은 공유 메모리에 남고 일회성 지시는 남지 않음. 처리마다 `memory_extract_done`·`memory_extract_skipped` 로그 | I1 | 일부 (운영) |  | P1 |
-| RUN-16 | 계획 후보 중복 없음, 한 응답에 계획 카드 하나 | 후보 최대 `PLAN_CANDIDATES`개, 단계·입력이 같은 후보 없음, 한 턴에 plan_approval 1개, 승인 후 run 성공(3회 반복). 중복이 있었으면 `plan_duplicates_removed`·`tool_calls_deduplicated` 로그 | I1 | 일부 (운영) |  | P0 |
-| RUN-17 | 계획 규칙: 2그룹 비교, 챔버 비교, 정리 후 분석 | 설비 2개 비교는 t-test 계열(ANOVA 계열 없음), 챔버 비교는 `filter_rows`로 설비 하나를 거른 뒤, 정리 후 분석은 `clean_data`까지 계획하고 실행 뒤 `run_custom_code`로 이어 감 | I1 I3 | O |  | P1 |
-| RUN-18 | 같은 이유로 계획이 계속 거부될 때 반복 제한 | 거부 결과에 고치는 법 안내, 같은 거부 3회·연속 실패 5회 안에 멈추고 턴이 카드나 답변으로 끝남 | I1 | 일부 (운영) |  | P1 |
-| RUN-19 | 답변 값이 실제 데이터와 같음(지어낸 데이터 없음) | 답변 통계가 기준값과 같고, 코드에 `np.random` 등 임의 데이터 없음, 커널이 닫힌 뒤에도 지어내지 않음(3회 반복) | I1 I3 I5 | 일부 (운영) |  | P0 |
+| ID | 시나리오 | 기대 결과 | 화면 | 단독 | 우선 |
+| --- | --- | --- | --- | --- | --- |
+| RUN-01 | 브라우저: 새 세션 + 분석 요청 → plan_approval 승인 → executor 실행 → 리포트 | run `succeeded`, `execution_completed`·`artifact` 이벤트, 답변에 attachments | O |  | P0 |
+| RUN-02 | 같은 흐름을 키 호출자로 (Swagger 가이드 1절) | RUN-01과 같음, executor `X-User-Id` = 사번 | O |  | P0 |
+| RUN-03 | Ingress를 거친 SSE `GET /sessions/{id}/events` | token이 묶여 오지 않고 5분 넘게 연결 유지 | O |  | P0 |
+| RUN-04 | code_approval·question·workflow_save 응답 | 202 `resumed: true`, 같은 run이 이어짐 | O |  | P0 |
+| RUN-05 | 실행 중 run 취소 (채팅 중지 버튼) | run `cancelled`, executor 실행도 취소(소유자 `X-User-Id`) | O |  | P0 |
+| RUN-06 | `waiting_executor` 중 우리 워커 재시작 | 놓친 이벤트 복구로 run이 이어짐(복구 주기 120초) | 일부 (운영) | 단독 | P0 |
+| RUN-07 | reject_templates (`allow_reject_templates: true`인 카드) | 새 계획의 plan_approval 재도착. false인 카드에 보내면 422 | O |  | P1 |
+| RUN-08 | 자동 실행 조건 충족(후보 1개, 유사도 0.77 이상). 임베딩을 켠 환경(`EMBEDDING_PROVIDER: openai`, `EMBEDDING_SEND_DIMENSIONS: false`)에서만 | `plan_auto_approved` 이벤트, 새로고침 후에도 남음 | O |  | P1 |
+| RUN-09 | 진행 중 세션에 새 턴 | 409 `SESSION_BUSY` | O |  | P1 |
+| RUN-10 | 오래된 `interrupt_id`로 재개 | 409 `STALE_INTERRUPT` | O |  | P1 |
+| RUN-11 | 필수 입력을 비우고 승인 | 빈칸이 있어도 승인 요청이 서버로 감(화면이 먼저 막지 않음). 승인하면 422 `INVALID_ANSWER`, `details[].location`이 그 칸 | O |  | P1 |
+| RUN-12 | 실행 중 세션 삭제 | 진행 중 executor 실행 취소 | O |  | P1 |
+| RUN-13 | 코드 레벨 4로 분석 요청 (세션 또는 프로젝트 설정) | 계획 승인 카드 없이 바로 `run_custom_code` 실행. 레벨 3에서는 plan_approval | O |  | P1 |
+| RUN-14 | 임베딩 없는 환경(`EMBEDDING_PROVIDER: none`)에서 템플릿이 있는 요청 | 채팅 모델이 고른 후보가 나오고 similarity는 null, 자동 실행 없이 항상 승인 카드 | O |  | P1 |
+| RUN-15 | 일회성 지시와 지속 선호, 분석 대상 이름을 섞어 대화 | 지속 선호와 이름을 댄 분석 대상(관심 한 줄)은 공유 메모리에 남고 일회성 지시는 남지 않음. 처리마다 `memory_extract_done`·`memory_extract_skipped` 로그 | 일부 (운영) |  | P1 |
+| RUN-16 | 계획 후보 중복 없음, 한 응답에 계획 카드 하나 | 후보 최대 `PLAN_CANDIDATES`개, 단계·입력이 같은 후보 없음, 한 턴에 plan_approval 1개, 승인 후 run 성공(3회 반복). 중복이 있었으면 `plan_duplicates_removed`·`tool_calls_deduplicated` 로그 | 일부 (운영) |  | P0 |
+| RUN-17 | 계획 규칙: 2그룹 비교, 챔버 비교, 정리 후 분석 | 설비 2개 비교는 t-test 계열(ANOVA 계열 없음), 챔버 비교는 `filter_rows`로 설비 하나를 거른 뒤, 정리 후 분석은 `clean_data`까지 계획하고 실행 뒤 `run_custom_code`로 이어 감 | O |  | P1 |
+| RUN-18 | 같은 이유로 계획이 계속 거부될 때 반복 제한 | 거부 결과에 고치는 법 안내, 같은 거부 3회·연속 실패 5회 안에 멈추고 턴이 카드나 답변으로 끝남 | 일부 (운영) |  | P1 |
+| RUN-19 | 답변 값이 실제 데이터와 같음(지어낸 데이터 없음) | 답변 통계가 기준값과 같고, 코드에 `np.random` 등 임의 데이터 없음, 커널이 닫힌 뒤에도 지어내지 않음(3회 반복) | 일부 (운영) |  | P0 |
 
 ### C. executor 연동·게이트웨이 (EXEC)
 
-| ID | 시나리오 | 기대 결과 | 경로 | 화면 | 단독 | 우선 |
-| --- | --- | --- | --- | --- | --- | --- |
-| EXEC-01 | 우리 tenant 일반키 + `X-User-Id`로 `GET /executor/executions` | 본인 실행만 | I2 I3 | O |  | P0 |
-| EXEC-02 | INLINE `print(1+1)` 제출(curl) | result에 `2`. 작업 공간은 PV `tenants/dtest-agent-service/users/<사번>/…`, 결과 경로는 통합 루트 기준 `executor/executions/<id>/…`이고 세션 화면 이미지·단계 결과가 열림. 실행과 `execution.started`의 `runtime.kernel_id` | I2 I3 | O |  | P0 |
-| EXEC-03 | 외부 tenant(`it-ext`) 키로 실행 제출 | `tenants/it-ext/…`에 생성, 이벤트는 `executor.events.it-ext`, 우리 run 변화 없음 | I2 I3 | 일부 (운영) |  | P0 |
-| EXEC-04 | 키로 runtime·maintenance·attempts 경로 | 404, executor로 가지 않음(`DELETE /runtime-targets/{id}` 포함) | I2 | O |  | P0 |
-| EXEC-05 | 결과물 `/artifacts/{id}`·`/view/artifacts/{id}` | 프로젝트 멤버만, 비멤버 거부, 외부 tenant 결과물은 안 보임 | I1 I3 | O |  | P0 |
-| EXEC-06 | 일반키·마스터키의 조회 범위와 `X-User-Id` 필수 | `X-User-Id`가 없으면 key 종류와 관계없이 GET·POST 400 `INVALID_IDENTITY`. 일반키는 `X-User-Id` 사용자 실행만(다른 `user_id`는 403 `FORBIDDEN`), 마스터키는 tenant 전체와 `user_id` 필터(형식이 틀리면 400) | I2 I3 | O |  | P1 |
-| EXEC-07 | 우리 tenant 키로 남의 프로젝트·세션 헤더 | 403 | I2 | O |  | P1 |
-| EXEC-08 | 관리자 시스템 > 런타임·점검 탭 | 200. `EXECUTOR_ADMIN_API_KEY`를 비우면 그 탭만 503. 런타임 제거는 `DELETE /runtime-targets/{id}`로 성공 | I1 I4 | 일부 (관리자) |  | P1 |
+| ID | 시나리오 | 기대 결과 | 화면 | 단독 | 우선 |
+| --- | --- | --- | --- | --- | --- |
+| EXEC-01 | 우리 tenant 일반키 + `X-User-Id`로 `GET /executor/executions` | 본인 실행만 | O |  | P0 |
+| EXEC-02 | INLINE `print(1+1)` 제출(curl) | result에 `2`. 작업 공간은 PV `tenants/dtest-agent-service/users/<사번>/…`, 결과 경로는 통합 루트 기준 `executor/executions/<id>/…`이고 세션 화면 이미지·단계 결과가 열림. 실행과 `execution.started`의 `runtime.kernel_id` | O |  | P0 |
+| EXEC-03 | 외부 tenant(`it-ext`) 키로 실행 제출 | `tenants/it-ext/…`에 생성, 이벤트는 `executor.events.it-ext`, 우리 run 변화 없음 | 일부 (운영) |  | P0 |
+| EXEC-04 | 키로 runtime·maintenance·attempts 경로 | 404, executor로 가지 않음(`DELETE /runtime-targets/{id}` 포함) | O |  | P0 |
+| EXEC-05 | 결과물 `/artifacts/{id}`·`/view/artifacts/{id}` | 프로젝트 멤버만, 비멤버 거부, 외부 tenant 결과물은 안 보임 | O |  | P0 |
+| EXEC-06 | 일반키·마스터키의 조회 범위와 `X-User-Id` 필수 | `X-User-Id`가 없으면 key 종류와 관계없이 GET·POST 400 `INVALID_IDENTITY`. 일반키는 `X-User-Id` 사용자 실행만(다른 `user_id`는 403 `FORBIDDEN`), 마스터키는 tenant 전체와 `user_id` 필터(형식이 틀리면 400) | O |  | P1 |
+| EXEC-07 | 우리 tenant 키로 남의 프로젝트·세션 헤더 | 403 | O |  | P1 |
+| EXEC-08 | 관리자 시스템 > 런타임·점검 탭 | 200. `EXECUTOR_ADMIN_API_KEY`를 비우면 그 탭만 503. 런타임 제거는 `DELETE /runtime-targets/{id}`로 성공 | 일부 (관리자) |  | P1 |
 
 ### D. 배치: pr-batch → executor → 리포트 (BAT)
 
-| ID | 시나리오 | 기대 결과 | 경로 | 화면 | 단독 | 우선 |
-| --- | --- | --- | --- | --- | --- | --- |
-| BAT-01 | 분석 노트북으로 스크립트 등록(`from-notebook`) | pr-batch 스크립트 생성, owner = 사번 | I1 I3 I6 | O |  | P0 |
-| BAT-02 | 일정 있는 배치 생성 | `can_enable: true`, tenant `dtest-agent-service` 저장 | I6 | O |  | P0 |
-| BAT-03 | 지금 실행 | run `SUBMITTED → RUNNING → COLLECTING → COMPLETED`, executor `trigger {type: BATCH}`, `context.user_id`·`created_by` = `<사번>`, `created_by_client` = pr-batch key 이름 | I6 I7 | O |  | P0 |
-| BAT-04 | 배치 리포트 | `/batch-reports` job `SUCCEEDED` + `artifact_id`, 노트북 마지막 셀에 리포트 | I3 I5 | O |  | P0 |
-| BAT-05 | 일정에 의한 실행(5분 뒤 1회) | 예정 시각 1분 안에 제출, BAT-03·BAT-04와 같은 결과 | I7 | O |  | P0 |
-| BAT-06 | 실패하는 스크립트 | run `FAILED`, 리포트 job 없음 | I7 | O |  | P0 |
-| BAT-07 | 같은 배치 2회차 | 리포트가 1회차 요약을 참고(배치 메모리) | I5 | O |  | P1 |
-| BAT-08 | 우리 워커를 내린 채 배치 성공 → 재기동 | 10분 안에 복구 스위프로 리포트 생성 | I3 | 일부 (운영) | 단독 | P1 |
-| BAT-09 | 일정 없는 배치 / 지난 일정만 있는 배치 | `enable_blocked_reason` `SCHEDULE_REQUIRED` / `NO_FUTURE_OCCURRENCE`, 켜기 409 / 422 | I6 | O |  | P1 |
-| BAT-10 | 외부 tenant 키로 배치 등록·실행 | tenant `it-ext`로 저장·제출, 우리 리포트는 만들어지지 않음 | I2 I6 I7 | 일부 (운영) |  | P1 |
-| BAT-11 | 일반키·마스터키의 배치 조회 범위와 `X-User-Id` 필수 | 일반키는 `X-User-Id` 사용자 배치만(다른 `user_id`는 403), 마스터키는 tenant 전체와 `user_id` 필터, `X-User-Id` 없으면 400, 마스터키 쓰기는 `X-User-Id` 사용자 소유 | I2 I6 | O |  | P1 |
+| ID | 시나리오 | 기대 결과 | 화면 | 단독 | 우선 |
+| --- | --- | --- | --- | --- | --- |
+| BAT-01 | 분석 노트북으로 스크립트 등록(`from-notebook`) | pr-batch 스크립트 생성, owner = 사번 | O |  | P0 |
+| BAT-02 | 일정 있는 배치 생성 | `can_enable: true`, tenant `dtest-agent-service` 저장 | O |  | P0 |
+| BAT-03 | 지금 실행 | run `SUBMITTED → RUNNING → COLLECTING → COMPLETED`, executor `trigger {type: BATCH}`, `context.user_id`·`created_by` = `<사번>`, `created_by_client` = pr-batch key 이름 | O |  | P0 |
+| BAT-04 | 배치 리포트 | `/batch-reports` job `SUCCEEDED` + `artifact_id`, 노트북 마지막 셀에 리포트 | O |  | P0 |
+| BAT-05 | 일정에 의한 실행(5분 뒤 1회) | 예정 시각 1분 안에 제출, BAT-03·BAT-04와 같은 결과 | O |  | P0 |
+| BAT-06 | 실패하는 스크립트 | run `FAILED`, 리포트 job 없음 | O |  | P0 |
+| BAT-07 | 같은 배치 2회차 | 리포트가 1회차 요약을 참고(배치 메모리) | O |  | P1 |
+| BAT-08 | 우리 워커를 내린 채 배치 성공 → 재기동 | 10분 안에 복구 스위프로 리포트 생성 | 일부 (운영) | 단독 | P1 |
+| BAT-09 | 일정 없는 배치 / 지난 일정만 있는 배치 | `enable_blocked_reason` `SCHEDULE_REQUIRED` / `NO_FUTURE_OCCURRENCE`, 켜기 409 / 422 | O |  | P1 |
+| BAT-10 | 외부 tenant 키로 배치 등록·실행 | tenant `it-ext`로 저장·제출, 우리 리포트는 만들어지지 않음 | 일부 (운영) |  | P1 |
+| BAT-11 | 일반키·마스터키의 배치 조회 범위와 `X-User-Id` 필수 | 일반키는 `X-User-Id` 사용자 배치만(다른 `user_id`는 403), 마스터키는 tenant 전체와 `user_id` 필터, `X-User-Id` 없으면 400, 마스터키 쓰기는 `X-User-Id` 사용자 소유 | O |  | P1 |
 
 ### E. tenant 폐기·사용자 비활성화 (TEN)
 
-| ID | 시나리오 | 기대 결과 | 경로 | 화면 | 단독 | 우선 |
-| --- | --- | --- | --- | --- | --- | --- |
-| TEN-01 | 외부 tenant `it-ext` 일괄 폐기 (BAT-10 배치가 켜진 상태) | 키 60초 안에 401, `disable-by-tenant`로 배치 꺼짐(`TENANT_REVOKED`), 응답 `batches_disabled: true`(실패 시 `batches_disable_pending: true`), 이미 제출된 실행은 끝까지 | I6 | 일부 (운영) | 단독 | P0 |
-| TEN-02 | pr-batch를 내린 채 tenant 폐기 | `batches_disable_pending: true`, pr-batch 복구 후 5분 안에 재시도로 꺼짐 | I6 | 일부 (운영) | 단독 | P0 |
-| TEN-03 | 사용자 B 비활성화 | 30초 안에 SSO·키 모두 차단, `disable-by-owner`로 B의 배치 꺼짐, 수동 실행 409 `OWNER_DEACTIVATED` | I1 I6 | O | 단독 | P0 |
-| TEN-04 | tenant의 마지막 active 키를 개별 폐기 | TEN-01과 같음 | I6 | 일부 (운영) | 단독 | P1 |
-| TEN-05 | 우리 tenant 키 폐기 | 그 키만 401, SSO 사용자의 배치는 켜진 채 | I2 | O |  | P1 |
-| TEN-06 | B 재활성화 | 로그인 가능, 배치는 꺼진 채 | I1 | O |  | P1 |
-| TEN-07 | pr-batch를 내린 채 사용자 비활성화 | `batches_disable_pending`, 5분 재시도로 꺼짐 | I6 | 일부 (운영) | 단독 | P1 |
+| ID | 시나리오 | 기대 결과 | 화면 | 단독 | 우선 |
+| --- | --- | --- | --- | --- | --- |
+| TEN-01 | 외부 tenant `it-ext` 일괄 폐기 (BAT-10 배치가 켜진 상태) | 키 60초 안에 401, `disable-by-tenant`로 배치 꺼짐(`TENANT_REVOKED`), 응답 `batches_disabled: true`(실패 시 `batches_disable_pending: true`), 이미 제출된 실행은 끝까지 | 일부 (운영) | 단독 | P0 |
+| TEN-02 | pr-batch를 내린 채 tenant 폐기 | `batches_disable_pending: true`, pr-batch 복구 후 5분 안에 재시도로 꺼짐 | 일부 (운영) | 단독 | P0 |
+| TEN-03 | 사용자 B 비활성화 | 30초 안에 SSO·키 모두 차단, `disable-by-owner`로 B의 배치 꺼짐, 수동 실행 409 `OWNER_DEACTIVATED` | O | 단독 | P0 |
+| TEN-04 | tenant의 마지막 active 키를 개별 폐기 | TEN-01과 같음 | 일부 (운영) | 단독 | P1 |
+| TEN-05 | 우리 tenant 키 폐기 | 그 키만 401, SSO 사용자의 배치는 켜진 채 | O |  | P1 |
+| TEN-06 | B 재활성화 | 로그인 가능, 배치는 꺼진 채 | O |  | P1 |
+| TEN-07 | pr-batch를 내린 채 사용자 비활성화 | `batches_disable_pending`, 5분 재시도로 꺼짐 | 일부 (운영) | 단독 | P1 |
 
 ### F. 관리자 (ADM)
 
-| ID | 시나리오 | 기대 결과 | 경로 | 화면 | 단독 | 우선 |
-| --- | --- | --- | --- | --- | --- | --- |
-| ADM-01 | 시스템 > API 키 발급·목록·폐기 | 원문은 발급 응답에만 1회, 목록에 원문 없음, 종류 칸과 `kind` | I1 | O |  | P0 |
-| ADM-02 | 일반 사용자의 관리자 화면·API 접근 | `permissions.system` false, API 403 | I1 | O |  | P0 |
-| ADM-03 | 사용자 관리 화면에서 비활성화·재활성화 | TEN-03·TEN-06과 같은 결과(`PATCH /admin/users/{id}` 응답, 배치 `disabled_reason`) | I1 | O |  | P0 |
-| ADM-04 | `/users/me` `permissions` | 관리자·일반 각각 `system`·`all_executions`·`execution_internals` 값(관리자 모두 true, 일반 모두 false) | I1 | O |  | P1 |
-| ADM-05 | 관리자 전체 실행 보기 + 사용자 필터 | 필터 사번이 `X-User-Id`로 전달되고 그 사람 실행만 | I1 I3 | O |  | P1 |
-| ADM-06 | 워크플로 승격·삭제 | 승격 뒤 `recommendable` true, 남의 워크플로우 `can_delete` false | I1 | O |  | P1 |
-| ADM-07 | API 키 재발급 | 이름·tenant·종류 그대로 새 키 원문이 응답에 1회, 이전 키는 60초 안에 401(유예 없음), 폐기한 키는 409, `api_client_reissued` 로그 | I1 I2 | O |  | P1 |
+| ID | 시나리오 | 기대 결과 | 화면 | 단독 | 우선 |
+| --- | --- | --- | --- | --- | --- |
+| ADM-01 | 시스템 > API 키 발급·목록·폐기 | 원문은 발급 응답에만 1회, 목록에 원문 없음, 종류 칸과 `kind` | O |  | P0 |
+| ADM-02 | 일반 사용자의 관리자 화면·API 접근 | `permissions.system` false, API 403 | O |  | P0 |
+| ADM-03 | 사용자 관리 화면에서 비활성화·재활성화 | TEN-03·TEN-06과 같은 결과(`PATCH /admin/users/{id}` 응답, 배치 `disabled_reason`) | O |  | P0 |
+| ADM-04 | `/users/me` `permissions` | 관리자·일반 각각 `system`·`all_executions`·`execution_internals` 값(관리자 모두 true, 일반 모두 false) | O |  | P1 |
+| ADM-05 | 관리자 전체 실행 보기 + 사용자 필터 | 필터 사번이 `X-User-Id`로 전달되고 그 사람 실행만 | O |  | P1 |
+| ADM-06 | 워크플로 승격·삭제 | 승격 뒤 `recommendable` true, 남의 워크플로우 `can_delete` false | O |  | P1 |
+| ADM-07 | API 키 재발급 | 이름·tenant·종류 그대로 새 키 원문이 응답에 1회, 이전 키는 60초 안에 401(유예 없음), 폐기한 키는 409, `api_client_reissued` 로그 | O |  | P1 |
 
 ### G. 장애·설정 오류·부하 (OPS)
 
-| ID | 시나리오 | 기대 결과 | 경로 | 화면 | 단독 | 우선 |
-| --- | --- | --- | --- | --- | --- | --- |
-| OPS-01 | executor를 내린 채 분석 요청, 이후 복구 | run이 `failed`와 오류 정보로 끝나고 세션이 다음 요청을 받음. 복구 후 새 run 정상 | I3 | 일부 (운영) | 단독 | P0 |
-| OPS-02 | Redis 재시작 | 컨슈머 그룹 재생성, 놓친 이벤트 복구로 run 완료 | I5 | 일부 (운영) | 단독 | P0 |
-| OPS-03 | 키 해시 불일치(일부러 틀린 키) | 표준 오류 응답(code, message), 로그에 대상 서비스와 401 | I3 I6 | 일부 (운영) | 단독 | P0 |
-| OPS-04 | pr-batch를 내린 채 배치 화면 | 표준 오류 형식(code, message), 다른 화면은 정상 | I6 | 일부 (운영) | 단독 | P1 |
-| OPS-05 | 백그라운드 루프 정지 | `/healthz` 503 → Pod 재시작 (gaia는 `/api/v1/healthz`) | - | X (운영) | 단독 | P1 |
-| OPS-06 | prd 설정에 `<...>` 자리 남김, 빈 `SSO_ALLOWED_ORIGINS` | 기동 실패 | - | X (운영) | 단독 | P1 |
-| OPS-07 | 32MB에 가까운 요청, 이미지 한도 초과 | 우리 413/422 응답(`code`, `message`), Ingress가 먼저 끊지 않음 | I1 | O |  | P1 |
-| OPS-08 | 없는 모델, LLM 장애 | 422 `UNKNOWN_MODEL` / run `failed`. 오류 문구에 원인(사용량 한도·권한·컨텍스트 초과·서버 오류)과 게이트웨이 메시지, 오류 ID. 주소·비밀값은 가려짐 | - | 일부 (운영) |  | P1 |
-| OPS-09 | 동시 사용자 부하(`scripts/loadtest.py`) | executor 런타임·PG 연결 고갈 없음, 커널 대기 1800초 설정 조정 근거 확보 | I3 | X (운영) | 단독 | P1 |
-| OPS-10 | 항상 실패하는 코드를 요구하는 요청 | 같은 tool이 연속 5회(`AGENT_TOOL_FAILURE_ANY_LIMIT`) 실패하면 멈추고 턴이 끝남. executor 재개 후에도 턴당 모델 호출 40회 상한 유지, 실행이 계속 늘지 않음 | I1 I3 I5 | O |  | P0 |
-| OPS-11 | pr-batch `EXECUTOR_API_KEY`에 해시를 넣은 설정 | 배치 실행 FAILED, 사유 `SUBMIT_REJECTED`와 401, pr-batch·executor 로그에 401. 원복 후 정상 | I7 | 일부 (운영) | 단독 | P1 |
+| ID | 시나리오 | 기대 결과 | 화면 | 단독 | 우선 |
+| --- | --- | --- | --- | --- | --- |
+| OPS-01 | executor를 내린 채 분석 요청, 이후 복구 | run이 `failed`와 오류 정보로 끝나고 세션이 다음 요청을 받음. 복구 후 새 run 정상 | 일부 (운영) | 단독 | P0 |
+| OPS-02 | Redis 재시작 | 컨슈머 그룹 재생성, 놓친 이벤트 복구로 run 완료 | 일부 (운영) | 단독 | P0 |
+| OPS-03 | 키 해시 불일치(일부러 틀린 키) | 표준 오류 응답(code, message), 로그에 대상 서비스와 401 | 일부 (운영) | 단독 | P0 |
+| OPS-04 | pr-batch를 내린 채 배치 화면 | 표준 오류 형식(code, message), 다른 화면은 정상 | 일부 (운영) | 단독 | P1 |
+| OPS-05 | 백그라운드 루프 정지 | `/healthz` 503 → Pod 재시작 (gaia는 `/api/v1/healthz`) | X (운영) | 단독 | P1 |
+| OPS-06 | prd 설정에 `<...>` 자리 남김, 빈 `SSO_ALLOWED_ORIGINS` | 기동 실패 | X (운영) | 단독 | P1 |
+| OPS-07 | 32MB에 가까운 요청, 이미지 한도 초과 | 우리 413/422 응답(`code`, `message`), Ingress가 먼저 끊지 않음 | O |  | P1 |
+| OPS-08 | 없는 모델, LLM 장애 | 422 `UNKNOWN_MODEL` / run `failed`. 오류 문구에 원인(사용량 한도·권한·컨텍스트 초과·서버 오류)과 게이트웨이 메시지, 오류 ID. 주소·비밀값은 가려짐 | 일부 (운영) |  | P1 |
+| OPS-09 | 동시 사용자 부하(`scripts/loadtest.py`) | executor 런타임·PG 연결 고갈 없음, 커널 대기 1800초 설정 조정 근거 확보 | X (운영) | 단독 | P1 |
+| OPS-10 | 항상 실패하는 코드를 요구하는 요청 | 같은 tool이 연속 5회(`AGENT_TOOL_FAILURE_ANY_LIMIT`) 실패하면 멈추고 턴이 끝남. executor 재개 후에도 턴당 모델 호출 40회 상한 유지, 실행이 계속 늘지 않음 | O |  | P0 |
+| OPS-11 | pr-batch `EXECUTOR_API_KEY`에 해시를 넣은 설정 | 배치 실행 FAILED, 사유 `SUBMIT_REJECTED`와 401, pr-batch·executor 로그에 401. 원복 후 정상 | 일부 (운영) | 단독 | P1 |
 
 ### H. gaia (GAIA)
 
@@ -250,7 +250,7 @@
 | 단계 | 통과 기준 |
 | --- | --- |
 | 환경 종료 | 그 환경 P0 100%, P1 90% 이상. 남은 P1은 담당·수정 예정일이 있음 (dev는 수행 완료가 기준) |
-| 통합테스트 종료 | I1~I9 경로를 모두 한 번 이상 통과, prd P0 100%, 열린 결함에 막는 것(데이터 손상·권한 우회·배치 미중지) 없음 |
+| 통합테스트 종료 | "테스트 대상" 표의 모든 구간을 한 번 이상 통과, prd P0 100%, 열린 결함에 막는 것(데이터 손상·권한 우회·배치 미중지) 없음 |
 | 시간 기준 | 키 폐기 60초, 사용자 차단 30초, 배치 끄기 재시도 5분, 배치 리포트 복구 10분, 놓친 run 이벤트 복구 120초 |
 
 **증적**(시나리오마다 한 줄 기록)
