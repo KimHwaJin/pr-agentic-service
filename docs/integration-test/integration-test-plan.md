@@ -4,13 +4,13 @@
 
 ## 요약
 
-**결론: 사전 준비(PREP)를 끝내면 dev에서 예습하고 prd(오픈 전)에서 본 테스트를 합니다. 7개 영역 75개 시나리오(P0 36개)를 두 환경 모두에서 돌립니다.** 진행 현황은 상황판([integration-test-tracker.xlsx](integration-test-tracker.xlsx), 이후 컨플루언스)으로, 시나리오별 수행 내용·결과·증빙은 시나리오마다 컨플루언스 페이지로 남깁니다.
+**결론: 사전 준비(PREP)를 끝내면 dev에서 예습하고 prd(오픈 전)에서 본 테스트를 합니다. 7개 영역 74개 시나리오(P0 36개)를 두 환경 모두에서 돌립니다.** 진행 현황은 상황판([integration-test-tracker.xlsx](integration-test-tracker.xlsx), 이후 컨플루언스)으로, 시나리오별 수행 내용·결과·증빙은 시나리오마다 컨플루언스 페이지로 남깁니다.
 
 - 기준 커밋: pr-agentic-service main `c7daac1`, internal/gaia `746c568`. executor·pr-batch·prj_re 기준 커밋은 PREP-01에서 수행 시점에 기록합니다.
-- 11/04 현행화: 익스큐터 actor 제거, 통합 루트 상대경로, gaia access key 우회, 키워드 판정의 모델 판단 교체, 코드 레벨 4, 실패 재시도 상한, 실패 원인 표시를 반영했습니다. 신규 시나리오는 RUN-14~17, OPS-10, GAIA-07입니다.
+- 11/04 현행화: 익스큐터 actor 제거, 통합 루트 상대경로, gaia access key 우회, 키워드 판정의 모델 판단 교체, 코드 레벨 4, 실패 재시도 상한, 실패 원인 표시를 반영했습니다. 신규 시나리오는 RUN-13~17, OPS-10, GAIA-07입니다.
 - 11/05: 프로젝트 공유 기능이 범위 밖이라 공유 프로젝트 시나리오(당시 RUN-12)를 뺐습니다.
-- 11/15: 빈 번호를 없애려고 RUN 번호를 당겼습니다. 이전 RUN-13~21이 RUN-12~20입니다(TC ID도 같이 바뀜). 이 날짜 이전 기록의 RUN 번호는 당긴 뒤 번호로 고쳐 적었습니다.
-- 11/08 현행화: API 키 종류(일반키·마스터키, 마이그레이션 0008)와 모든 게이트웨이 호출의 `X-User-Id` 필수, 키 재발급, executor `runtime.kernel_id`·`DELETE /runtime-targets/{id}`, 계획 후보 중복 방지(한 응답에 계획 카드 하나), 계획 규칙(그룹 수별 검정, 챔버는 설비 하나로 거른 뒤, 정리 후 분석은 `clean_data`까지), 반복 거부 상한, 메모리 워커의 분석 대상 저장·처리 로그를 반영했습니다. 신규 시나리오는 RUN-17~21, BAT-11, ADM-07, OPS-11입니다.
+- 11/15: 분석 시나리오 묶음(`scripts/run_scenarios.py`)을 통합 테스트에서 뺐습니다(아래 "통합 테스트 밖"). 빈 번호가 없도록 RUN 번호를 당겼습니다. 11/09판 RUN-13은 RUN-12, RUN-15~21은 RUN-13~19입니다(TC ID도 같이 바뀜). 이 날짜 이전 기록의 RUN 번호는 당긴 뒤 번호로 고쳐 적었습니다.
+- 11/08 현행화: API 키 종류(일반키·마스터키, 마이그레이션 0008)와 모든 게이트웨이 호출의 `X-User-Id` 필수, 키 재발급, executor `runtime.kernel_id`·`DELETE /runtime-targets/{id}`, 계획 후보 중복 방지(한 응답에 계획 카드 하나), 계획 규칙(그룹 수별 검정, 챔버는 설비 하나로 거른 뒤, 정리 후 분석은 `clean_data`까지), 반복 거부 상한, 메모리 워커의 분석 대상 저장·처리 로그를 반영했습니다. 신규 시나리오는 RUN-16~21, BAT-11, ADM-07, OPS-11입니다.
 - 11/09: gaia 관련 시나리오(GAIA-01~07)는 이번 통합 테스트에서 제외했습니다. prd는 internal/gaia 빌드이므로 PREP-05는 그대로 수행합니다.
 - 세 서비스 모두 헤더 모드가 삭제되어 모든 환경이 키 인증입니다.
 - **prd도 오픈 전이라 장애 주입, 키·tenant 폐기, 사용자 비활성화, DB 리셋까지 prd에서 그대로 합니다.**
@@ -127,14 +127,13 @@
 | RUN-10 | 오래된 `interrupt_id`로 재개 | 409 `STALE_INTERRUPT` | I1 | O |  | P1 |
 | RUN-11 | 필수 입력을 비우고 승인 | 계획 카드에 빈 필수 입력 수가 표시되고 승인 버튼은 막히지 않음. 승인하면 422 `INVALID_ANSWER`, `details[].location`이 그 칸 | I1 | O |  | P1 |
 | RUN-12 | 실행 중 세션 삭제 | 진행 중 executor 실행 취소 | I1 I3 | O |  | P1 |
-| RUN-13 | 분석 시나리오 묶음 `scripts/run_scenarios.py` | 점수표 JSON, 이전 기준선 이상 | I1 I3 | X (운영) |  | P1 |
-| RUN-14 | 코드 레벨 4로 분석 요청 (세션 또는 프로젝트 설정) | 계획 승인 카드 없이 바로 `run_custom_code` 실행. 레벨 3에서는 plan_approval | I1 I3 I5 | O |  | P1 |
-| RUN-15 | 임베딩 없는 환경(`EMBEDDING_PROVIDER: none`)에서 템플릿이 있는 요청 | 채팅 모델이 고른 후보가 나오고 similarity는 null, 자동 실행 없이 항상 승인 카드 | I1 | O |  | P1 |
-| RUN-16 | 일회성 지시와 지속 선호, 분석 대상 이름을 섞어 대화 | 지속 선호와 이름을 댄 분석 대상(관심 한 줄)은 공유 메모리에 남고 일회성 지시는 남지 않음. 처리마다 `memory_extract_done`·`memory_extract_skipped` 로그 | I1 | 일부 (운영) |  | P1 |
-| RUN-17 | 계획 후보 중복 없음, 한 응답에 계획 카드 하나 | 후보 최대 `PLAN_CANDIDATES`개, 단계·입력이 같은 후보 없음, 한 턴에 plan_approval 1개, 승인 후 run 성공(3회 반복). 중복이 있었으면 `plan_duplicates_removed`·`tool_calls_deduplicated` 로그 | I1 | 일부 (운영) |  | P0 |
-| RUN-18 | 계획 규칙: 2그룹 비교, 챔버 비교, 정리 후 분석 | 설비 2개 비교는 t-test 계열(ANOVA 계열 없음), 챔버 비교는 `filter_rows`로 설비 하나를 거른 뒤, 정리 후 분석은 `clean_data`까지 계획하고 실행 뒤 `run_custom_code`로 이어 감 | I1 I3 | O |  | P1 |
-| RUN-19 | 같은 이유로 계획이 계속 거부될 때 반복 제한 | 거부 결과에 고치는 법 안내, 같은 거부 3회·연속 실패 5회 안에 멈추고 턴이 카드나 답변으로 끝남 | I1 | 일부 (운영) |  | P1 |
-| RUN-20 | 답변 값이 실제 데이터와 같음(지어낸 데이터 없음) | 답변 통계가 기준값과 같고, 코드에 `np.random` 등 임의 데이터 없음, 커널이 닫힌 뒤에도 지어내지 않음(3회 반복) | I1 I3 I5 | 일부 (운영) |  | P0 |
+| RUN-13 | 코드 레벨 4로 분석 요청 (세션 또는 프로젝트 설정) | 계획 승인 카드 없이 바로 `run_custom_code` 실행. 레벨 3에서는 plan_approval | I1 I3 I5 | O |  | P1 |
+| RUN-14 | 임베딩 없는 환경(`EMBEDDING_PROVIDER: none`)에서 템플릿이 있는 요청 | 채팅 모델이 고른 후보가 나오고 similarity는 null, 자동 실행 없이 항상 승인 카드 | I1 | O |  | P1 |
+| RUN-15 | 일회성 지시와 지속 선호, 분석 대상 이름을 섞어 대화 | 지속 선호와 이름을 댄 분석 대상(관심 한 줄)은 공유 메모리에 남고 일회성 지시는 남지 않음. 처리마다 `memory_extract_done`·`memory_extract_skipped` 로그 | I1 | 일부 (운영) |  | P1 |
+| RUN-16 | 계획 후보 중복 없음, 한 응답에 계획 카드 하나 | 후보 최대 `PLAN_CANDIDATES`개, 단계·입력이 같은 후보 없음, 한 턴에 plan_approval 1개, 승인 후 run 성공(3회 반복). 중복이 있었으면 `plan_duplicates_removed`·`tool_calls_deduplicated` 로그 | I1 | 일부 (운영) |  | P0 |
+| RUN-17 | 계획 규칙: 2그룹 비교, 챔버 비교, 정리 후 분석 | 설비 2개 비교는 t-test 계열(ANOVA 계열 없음), 챔버 비교는 `filter_rows`로 설비 하나를 거른 뒤, 정리 후 분석은 `clean_data`까지 계획하고 실행 뒤 `run_custom_code`로 이어 감 | I1 I3 | O |  | P1 |
+| RUN-18 | 같은 이유로 계획이 계속 거부될 때 반복 제한 | 거부 결과에 고치는 법 안내, 같은 거부 3회·연속 실패 5회 안에 멈추고 턴이 카드나 답변으로 끝남 | I1 | 일부 (운영) |  | P1 |
+| RUN-19 | 답변 값이 실제 데이터와 같음(지어낸 데이터 없음) | 답변 통계가 기준값과 같고, 코드에 `np.random` 등 임의 데이터 없음, 커널이 닫힌 뒤에도 지어내지 않음(3회 반복) | I1 I3 I5 | 일부 (운영) |  | P0 |
 
 ### C. executor 연동·게이트웨이 (EXEC)
 
@@ -209,9 +208,16 @@
 
 이번 통합 테스트에서 제외합니다(11/09). GAIA-01~07은 결번입니다.
 
+## 통합 테스트 밖: 배포 전 품질 회귀 점검
+
+분석 시나리오 묶음(`scripts/run_scenarios.py`, 질문 15개는 `src/dtest/catalogs/analysis_test/scenarios.yml`)은 통합 테스트 시나리오가 아닙니다(11/15). 서비스 사이 연동이 아니라 에이전트의 분석 품질(계획에 들어간 skill·tool, 답변의 사실)을 채점하고, 모델 응답에 따라 점수가 달라져 TC로 통과·실패를 판정하기 어렵습니다. 연동 경로는 RUN-01·RUN-02가 확인합니다.
+
+- 릴리스 전에 로컬이나 dev에서 한 번 돌려 `scenario-results.json`의 통과 수를 이전 실행과 비교합니다. 통합 테스트 통과율에는 넣지 않습니다.
+- 스크립트는 dev SSO 로그인만 지원합니다(설계 리뷰 R3). 실제 SSO가 붙은 환경에서 돌리려면 키 모드가 필요합니다.
+
 ## 화면 수행 기준
 
-- 75개 중 우리 화면만으로 되는 것 51개, 화면 + 보조 확인 19개, 화면 밖 5개입니다(PREP 제외, 11/08 기준). 상세는 공유 폴더 `integration-test/screen-coverage-review.md`.
+- 74개 중 우리 화면만으로 되는 것 51개, 화면 + 보조 확인 19개, 화면 밖 4개입니다(PREP 제외, 11/15 기준). 상세는 공유 폴더 `integration-test/screen-coverage-review.md`.
 - 키 호출 시나리오는 관리자 **시스템 > API 호출 시험** 화면에서 합니다. 시나리오를 고르면 경로·본문·헤더가 채워지고, 서버 응답(상태 코드, request id, 본문)을 그대로 보여 줍니다. 키는 저장하지 않고 요청·응답 기록에서 가립니다.
 - 시나리오별 수행 절차는 [scenarios/](scenarios/README.md)에 있습니다.
 - 화면 밖으로 남는 것은 **운영**(서비스 중지·재시작, 설정 변경, Redis·DB·로그 확인, 부하 스크립트)입니다. 담당 팀이 수행하고, 결과 확인은 우리 화면에서 같이 합니다.
@@ -250,7 +256,7 @@
 - 우리 `request_id`와 감사 로그 `api_client_request …`
 - run ID, executor `execution_id`, pr-batch run ID
 - executor `GET /executions/{id}`의 `trigger`·`context`, pr-batch 배치의 owner·tenant·`disabled_reason`
-- 화면 스크린샷(브라우저 시나리오만), `run_scenarios.py` 결과 JSON
+- 화면 스크린샷(브라우저 시나리오만)
 
 결과는 상황판(ID · 환경 · 상태 · 링크 · 결함번호)과 시나리오별 컨플루언스 페이지로 남깁니다. 페이지 양식은 `scenario-page-template.md`.
 
@@ -262,7 +268,7 @@
 | --- | --- | --- | --- | --- | --- |
 | R1 | pr-batch `compose.yaml`에 `EXECUTOR_API_KEY` 항목 없음 | 로컬 배치 실행 실패 | pr-batch compose에 기본값 추가 | pr-batch | 로컬 개발용, 통합테스트(dev·prd) 범위 밖 |
 | R2 | 우리 `docker-compose.yml`의 `BATCH_API_KEY` 기본값이 빈 값 | 로컬 게이트웨이 호출 401 | pr-batch 로컬 키가 정해지면 기본값으로 | 우리 | 로컬 개발용, 미반영 |
-| R3 | `smoke_e2e.py`·`run_scenarios.py`·`loadtest.py`가 dev SSO 로그인만 지원 | dev·prd(idp)에서 RUN-13·OPS-09 자동화 불가 | `X-Api-Key` + `X-User-Id` 모드 옵션 추가 | 우리 | 미반영 |
+| R3 | `smoke_e2e.py`·`run_scenarios.py`·`loadtest.py`가 dev SSO 로그인만 지원 | dev·prd(idp)에서 OPS-09와 배포 전 품질 회귀 점검(통합 테스트 밖) 자동화 불가 | `X-Api-Key` + `X-User-Id` 모드 옵션 추가 | 우리 | 미반영 |
 | R4 | 이전 리셋 요청에 Redis 스트림이 빠져 있음 | 옛 uuid 사용자의 이벤트가 남음 | PREP-06에 포함 | 인프라 | 반영(문서) |
 | R5 | Go/No-Go F1·F2·F3·F8 | 미반영이면 OPS-06 실패 | 반영 여부 확인 | 우리 | 완료(main `f0fed74`, internal/gaia `60aa017`) |
 | R6 | pr-batch가 `can_enable`·`can_disable`·`enable_blocked_reason`을 직접 줌 | 우리 계산이 덮으면 BAT-09 사유가 빠짐 | pr-batch 값을 그대로 넘김 | 우리 | 완료(게이트웨이가 그대로 전달, `tests/test_batch_gateway.py`) |

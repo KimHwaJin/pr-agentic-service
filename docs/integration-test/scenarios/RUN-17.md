@@ -1,45 +1,41 @@
-# RUN-17 계획 후보 중복 없음, 한 응답에 계획 카드 하나
+# RUN-17 계획 규칙: 2그룹 비교, 챔버 비교, 정리 후 분석
 
 | 항목 | 값 |
 | --- | --- |
 | 서비스구분 | RUN 세션·run 실행 |
-| 우선순위 | P0 |
-| 화면 | 일부 화면 + 보조 확인 |
+| 우선순위 | P1 |
+| 화면 | O 우리 화면만 |
 | 필요 권한 | 일반 |
 | 단독 수행 | 아니오 |
-| 연동 경로 | I1 |
+| 연동 경로 | I1 I3 |
 | 11/01판 ID | - |
 
 ## 1. 목적
-계획 후보가 "최대 N개"로 나오고 같은 계획이 반복되지 않으며, 한 응답에 계획 카드가 하나만 떠서 승인 뒤 턴이 끝까지 가는지 확인합니다.
+계획이 그룹 수에 맞는 검정을 고르고, 챔버는 설비 하나로 거른 뒤 비교하며, 정리 후 분석 요청은 clean_data까지만 계획하고 나머지는 결과를 본 뒤 이어 가는지 확인합니다.
 
 ## 2. 사전 조건
-- 일반 A 로그인
-- PLAN_CANDIDATES 5, PLAN_RECOMMEND_MODE mixed(기본)
-- 운영 담당(로그 확인)
+- 일반 A 로그인, 코드 레벨 기본
+- 합성 yield·fdc·nce 데이터(PREP-10)
 
 ## 3. 수행 절차
-1. 새 대화에서 "nce 데이터 불러와서 기술통계 보여줘"를 보냅니다.
-2. "실행 계획 확인" 카드의 후보 수와 각 후보의 단계(tool·입력값)를 비교합니다.
-3. 요청·응답 창 SSE에서 이번 턴의 plan_approval 이벤트 수를 셉니다.
-4. 첫 후보를 승인하고 실행을 누릅니다. 끝날 때까지 기다립니다.
-5. 같은 요청을 새 대화에서 두 번 더 보내 2~4를 반복합니다.
-6. 운영 담당이 로그에서 이 run들의 plan_duplicates_removed, tool_calls_deduplicated를 찾습니다.
+1. 새 대화에서 "yield 데이터에서 설비(eqp_id)별 수율 차이가 유의한지 검정해줘"를 보냅니다. 계획 카드의 단계를 봅니다.
+2. 새 대화에서 "fdc 데이터에서 챔버별 CH_PRESSURE 차이를 비교해줘"를 보냅니다. 계획 카드의 단계를 봅니다.
+3. 새 대화에서 "nce 데이터 품질 점검하고, 정리한 데이터로 LOT별 평균 비교까지 해줘"를 보냅니다. 계획 카드의 단계를 봅니다.
+4. 3의 계획을 승인하고 끝까지 진행합니다. 답변 노트북을 엽니다.
 
 ## 4. 예상 결과
-- 2: 후보 5개 이하. 제목·근거만 다르고 단계·입력값이 같은 후보가 없음
-- 3: 이번 턴 plan_approval 카드 1개
-- 4: run succeeded. 계획을 두 번 기록하는 오류로 턴이 실패하지 않음
-- 5: 세 번 모두 RUN-17-01~03과 같음
-- 6: 중복이 있었으면 plan_duplicates_removed run_id=<run> count=… titles=… 또는 tool_calls_deduplicated … dropped=[…] 로그가 남음. 없으면 비고에 "중복 없음" 기록
+- 1: compare_groups_ttest 또는 compare_groups_nonparametric. anova_test·kruskal_test·tukey_posthoc 없음
+- 2: filter_rows로 eqp_id 하나를 거른 뒤 group_column: chamber_id. 두 설비를 다 보면 설비별로 따로 거름(chamber_id만으로 묶지 않음)
+- 3: 계획 마지막이 clean_data(조건부). clean_data 출력이나 원본 data에 LOT 비교 tool이 이어지지 않음
+- 4: clean_data 실행 뒤 run_custom_code가 정리된 데이터(결과 변수의 ["data"])로 LOT 비교를 하고 답변이 끝남
 
 ## 5. 확인 방법
-화면, 요청·응답 창, 로그
+계획 카드, 요청·응답 창의 plan_approval 내용, 노트북
 
 ## 6. 정리 (원상복구)
 없음
 
-참고: 중복 계획 방지(최대 n개 프롬프트, 서버 중복 제거, ToolCallDedupMiddleware)
+참고: 계획 지도(planning map) 규칙, data_quality skill 규칙
 
 ---
 
