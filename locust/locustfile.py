@@ -38,6 +38,9 @@ ANALYSIS_PROMPT = _env(
 )
 QUESTION_ANSWER = _env("LOAD_QUESTION_ANSWER", "기본값으로 진행해줘")
 POLL_SECONDS = float(_env("LOAD_POLL_SECONDS", "2"))
+# pause between two actions of one user
+WAIT_MIN = float(_env("LOAD_WAIT_MIN_SECONDS", "1"))
+WAIT_MAX = float(_env("LOAD_WAIT_MAX_SECONDS", "5"))
 RUN_TIMEOUT = float(_env("LOAD_RUN_TIMEOUT_SECONDS", "900"))
 READ_WEIGHT = int(_env("LOAD_READ_WEIGHT", "6"))
 CHAT_WEIGHT = int(_env("LOAD_CHAT_WEIGHT", "3"))
@@ -158,7 +161,7 @@ if STEP_USERS > 0:
 
 
 class ServiceUser(HttpUser):
-    wait_time = between(1, 5)
+    wait_time = between(WAIT_MIN, WAIT_MAX)
 
     def on_start(self):
         self.client.verify = VERIFY_TLS
