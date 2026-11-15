@@ -217,6 +217,7 @@ BatchView에서 화면·로직에 쓰는 필드: `user_id`(소유자), `enabled`
 
 - 수동 실행이 동시 실행 한도에 걸리면 pr-batch는 409와 함께 `status: "SKIPPED"`, `skip_reason: "SKIPPED_CAPACITY"`인 RunView를 돌려줍니다. **이 게이트웨이에서는 이것이 `{"error": {"code": "CONFLICT", "message": "pr-batch refused the request.", "details": [], "context": {<RunView 필드>}}}`로 옵니다.** `error.context.skip_reason`으로 구분합니다.
 - RunView 주요 필드: `id`, `user_id`(소유자), `status`, `skip_reason`, `failure_type`, `cancel_requested`, `trigger`(`MANUAL`·`SCHEDULED`), `scheduled_for`, `execution_id`, `notebook_status`, `result.notebook_artifact_id`, `completed_at`.
+- `failure_type`은 실행이 `FAILED`일 때만 값이 있습니다. 실패한 execution의 executor `state.reason.code`(예: `TOOL_ERROR`, 목록은 [executor-gateway.md](executor-gateway.md))이거나, pr-batch가 직접 넣는 `SUBMIT_REJECTED`(executor가 제출을 거절함) 또는 `ABANDONED`(executor와 24시간 동안 통신하지 못함)입니다.
 - 실행 결과 파일은 pr-batch가 주지 않습니다. `COMPLETED`면 `result.notebook_artifact_id`를 executor 게이트웨이에서 받습니다: `GET /api/v1/executor/artifacts/{notebook_artifact_id}/content`(같은 key, 같은 `X-User-Id`). 실행 상세는 `GET /api/v1/executor/executions/{execution_id}`입니다.
 
 ### 5.5 세션 노트북을 배치 스크립트로 (이 서비스의 API)
