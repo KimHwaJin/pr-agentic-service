@@ -51,7 +51,7 @@ docker compose up -d --build
 
 ## 로컬 실행
 
-필요: PostgreSQL(pgvector), Redis, executor 스택(`../executor`), LLM 게이트웨이 또는 mock.
+필요: PostgreSQL(pgvector), Redis 6.2 이상(운영 대상은 8.x), executor 스택(`../executor`), LLM 게이트웨이 또는 mock.
 
 ```bash
 cp .env.example .env   # DATABASE_URL, EXECUTOR_* 경로 등 수정
