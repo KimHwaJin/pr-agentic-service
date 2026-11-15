@@ -520,13 +520,21 @@ PHOENIX_API_KEY: <phoenix-key>
 SERVICE_ID: agent-service
 
 
+# -----------------------------------------------------------------------------
+# 16. 실행 모드
+# -----------------------------------------------------------------------------
+# all(API + 워커 한 프로세스) | api(API 만) | worker(워커만). 기본값: all
+# 환경변수 RUN_MODE 가 있으면 그 값이 우선. api 로 두면 채팅 run 진행, executor
+# 이벤트 처리, 배치 리포트, 메모리 추출이 모두 멈춤(통합테스트 BAT-08).
+RUN_MODE: all
+
+
 # =============================================================================
 # 부록 A. 환경변수로만 읽는 값 (설정 파일에 써도 무시됨)
 # =============================================================================
 # APP_ENV                      dev | stg | prd. 읽을 config.{APP_ENV}.yml 선택.
 #                              비우면 local (k8s 에서 비어 있으면 기동 거부).
 #                              Deployment env: 또는 Dockerfile --build-arg APP_ENV=...
-# RUN_MODE                     all(기본, API + 워커 한 프로세스) | api | worker
 # PORT                         internal/gaia 전용: 로컬 진입점(src/dtest/local.py) 포트, 기본 8080
 # KUBERNETES_SERVICE_HOST      k8s 가 자동으로 넣음 (APP_ENV 누락 검사에 사용, 직접 설정 X)
 #

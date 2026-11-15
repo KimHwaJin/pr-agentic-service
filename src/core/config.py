@@ -144,6 +144,9 @@ class Settings(BaseSettings):
 
     # APP_ENV, or local when it is empty (not a settings key).
     _env: Literal["local", "dev", "stg", "prd"] = PrivateAttr("local")
+    # all: API + worker in one process; api / worker run one side only.
+    # config.yml, or the RUN_MODE environment variable (which wins).
+    run_mode: Literal["all", "api", "worker"] = "all"
     cors_origins: list[str] = []
 
     database_url: str = (
