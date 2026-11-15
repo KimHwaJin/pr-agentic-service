@@ -45,6 +45,22 @@ $env:LOAD_READ_WEIGHT=0; $env:LOAD_CHAT_WEIGHT=0; $env:LOAD_ANALYSIS_WEIGHT=0; $
    ```
 5. 배치 실행을 쓰려면 테스트 사번마다 이름이 `load-`로 시작하는 배치를 하나 이상 미리 등록해 둡니다(화면의 **배치**에서 BAT-02 방법대로, 예약은 꺼 둬도 됨). 그런 배치가 없는 사번은 배치 실행을 건너뜁니다.
 
+## 설정 파일로 실행하기
+
+환경 변수를 하나씩 넣는 대신 설정 파일 하나로 실행할 수 있습니다.
+
+1. `locust\config.example.yml`을 `locust\config.yml`로 복사해 값을 고칩니다. 대상 주소(`LOAD_HOST`), 사용자 수, 시간, 비율까지 모두 들어 있습니다. `config.yml`은 커밋되지 않습니다.
+2. 실행합니다. 주소와 사용자 수를 파일에서 읽으므로 `--host`, `-u`, `-r`, `-t`가 필요 없습니다.
+   ```powershell
+   locust -f locust\locustfile.py --headless --html report.html --csv result
+   ```
+3. 상황별 파일을 여러 개 두고 골라 쓸 수 있습니다(이름이 `config`로 시작하는 `.yml`은 커밋되지 않음).
+   ```powershell
+   $env:LOAD_CONFIG = "locust\config.executor.yml"
+   ```
+
+값을 읽는 순서는 환경 변수, 설정 파일, 기본값입니다. 키는 파일에 적어도 되고, 파일에는 비워 두고 `$env:LOAD_API_KEY`로만 줘도 됩니다. 파일에 모르는 이름이 있으면 시작할 때 알려 주고 멈춥니다. `LOAD_USERS`나 `LOAD_STEP_USERS`를 주면 사용자 수는 파일이 정하므로 `-u`, `-r`과 화면에서 넣는 수는 쓰이지 않습니다.
+
 ## 실행
 
 저장소 루트에서 실행합니다.
@@ -75,6 +91,9 @@ locust -f locust\locustfile.py --host https://<host> --headless --html report.ht
 
 | 이름 | 기본값 | 뜻 |
 | --- | --- | --- |
+| `LOAD_CONFIG` | `locust/config.yml`(있으면) | 읽을 설정 파일. 환경 변수로만 줌 |
+| `LOAD_HOST` | (비움) | 대상 주소. 명령의 `--host`가 있으면 그쪽이 우선 |
+| `LOAD_USERS` / `LOAD_SPAWN_RATE` / `LOAD_RUN_SECONDS` | 0 / 1 / 0 | 고정 부하: 사용자 수, 초당 증가 수, 수행 시간(초, 0이면 멈출 때까지). `LOAD_USERS`가 0이면 `-u`, `-r`, `-t`를 따름 |
 | `LOAD_API_KEY` | (필수) | 우리 테넌트 표준 키 원문 |
 | `LOAD_USERS_FILE` | `locust/users.csv` | 사번 목록 파일 |
 | `LOAD_API_PREFIX` | `/api/v1` | API 경로 앞부분 |
