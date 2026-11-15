@@ -14,6 +14,7 @@
 - 11/09: gaia 관련 시나리오(GAIA-01~07)는 이번 통합 테스트에서 제외했습니다. prd는 internal/gaia 빌드이므로 PREP-05는 그대로 수행합니다.
 - 세 서비스 모두 헤더 모드가 삭제되어 모든 환경이 키 인증입니다.
 - **prd도 오픈 전이라 장애 주입, 키·tenant 폐기, 사용자 비활성화, DB 리셋까지 prd에서 그대로 합니다.**
+- **우리 화면(`/dev/`)은 테스트를 수행하기 위한 보조 도구이고 통합 테스트 대상이 아닙니다.** 시험 대상은 우리 서버 API와 세 서비스의 연동입니다. 통과·실패는 서버 응답(상태 코드, 응답 본문, 이벤트)과 세 서비스의 기록으로 판정하고, 화면의 글자·버튼·알림은 그 값을 읽는 수단으로만 씁니다. 화면만 이상하고 서버 응답이 예상과 같으면 통과이며, 화면 문제는 결함으로 올리지 않고 따로 알립니다(11/15).
 - 가능한 한 우리 화면에서 수행합니다. 화면 칸이 X인 시나리오는 따로 모아 수행합니다(아래 "화면 수행 기준"). prd도 오픈 전 동안 화면을 켭니다(`WEB_CONSOLE_ENABLED: true`, 오픈 때 끔).
 
 ## ID 규칙
@@ -125,7 +126,7 @@
 | RUN-08 | 자동 실행 조건 충족(후보 1개, 유사도 0.77 이상). 임베딩을 켠 환경(`EMBEDDING_PROVIDER: openai`, `EMBEDDING_SEND_DIMENSIONS: false`)에서만 | `plan_auto_approved` 이벤트, 새로고침 후에도 남음 | I1 | O |  | P1 |
 | RUN-09 | 진행 중 세션에 새 턴 | 409 `SESSION_BUSY` | I1 | O |  | P1 |
 | RUN-10 | 오래된 `interrupt_id`로 재개 | 409 `STALE_INTERRUPT` | I1 | O |  | P1 |
-| RUN-11 | 필수 입력을 비우고 승인 | 계획 카드에 빈 필수 입력 수가 표시되고 승인 버튼은 막히지 않음. 승인하면 422 `INVALID_ANSWER`, `details[].location`이 그 칸 | I1 | O |  | P1 |
+| RUN-11 | 필수 입력을 비우고 승인 | 빈칸이 있어도 승인 요청이 서버로 감(화면이 먼저 막지 않음). 승인하면 422 `INVALID_ANSWER`, `details[].location`이 그 칸 | I1 | O |  | P1 |
 | RUN-12 | 실행 중 세션 삭제 | 진행 중 executor 실행 취소 | I1 I3 | O |  | P1 |
 | RUN-13 | 코드 레벨 4로 분석 요청 (세션 또는 프로젝트 설정) | 계획 승인 카드 없이 바로 `run_custom_code` 실행. 레벨 3에서는 plan_approval | I1 I3 I5 | O |  | P1 |
 | RUN-14 | 임베딩 없는 환경(`EMBEDDING_PROVIDER: none`)에서 템플릿이 있는 요청 | 채팅 모델이 고른 후보가 나오고 similarity는 null, 자동 실행 없이 항상 승인 카드 | I1 | O |  | P1 |
@@ -181,24 +182,24 @@
 | ID | 시나리오 | 기대 결과 | 경로 | 화면 | 단독 | 우선 |
 | --- | --- | --- | --- | --- | --- | --- |
 | ADM-01 | 시스템 > API 키 발급·목록·폐기 | 원문은 발급 응답에만 1회, 목록에 원문 없음, 종류 칸과 `kind` | I1 | O |  | P0 |
-| ADM-02 | 일반 사용자의 관리자 화면·API 접근 | 메뉴 안 보임, API 403 | I1 | O |  | P0 |
-| ADM-03 | 사용자 관리 화면에서 비활성화·재활성화 | TEN-03·TEN-06과 같은 결과를 화면에서 확인 | I1 | O |  | P0 |
-| ADM-04 | `/users/me` `permissions` | 관리자·일반 각각 `system`·`all_executions`·`execution_internals` 값이 화면과 일치 | I1 | O |  | P1 |
+| ADM-02 | 일반 사용자의 관리자 화면·API 접근 | `permissions.system` false, API 403 | I1 | O |  | P0 |
+| ADM-03 | 사용자 관리 화면에서 비활성화·재활성화 | TEN-03·TEN-06과 같은 결과(`PATCH /admin/users/{id}` 응답, 배치 `disabled_reason`) | I1 | O |  | P0 |
+| ADM-04 | `/users/me` `permissions` | 관리자·일반 각각 `system`·`all_executions`·`execution_internals` 값(관리자 모두 true, 일반 모두 false) | I1 | O |  | P1 |
 | ADM-05 | 관리자 전체 실행 보기 + 사용자 필터 | 필터 사번이 `X-User-Id`로 전달되고 그 사람 실행만 | I1 I3 | O |  | P1 |
-| ADM-06 | 워크플로 승격·삭제 | `recommendable`·`can_delete` 값대로 버튼 동작 | I1 | O |  | P1 |
-| ADM-07 | API 키 재발급 | 이름·tenant·종류 그대로 새 키 1회 표시, 이전 키는 60초 안에 401(유예 없음), 폐기한 키는 409, `api_client_reissued` 로그 | I1 I2 | O |  | P1 |
+| ADM-06 | 워크플로 승격·삭제 | 승격 뒤 `recommendable` true, 남의 워크플로우 `can_delete` false | I1 | O |  | P1 |
+| ADM-07 | API 키 재발급 | 이름·tenant·종류 그대로 새 키 원문이 응답에 1회, 이전 키는 60초 안에 401(유예 없음), 폐기한 키는 409, `api_client_reissued` 로그 | I1 I2 | O |  | P1 |
 
 ### G. 장애·설정 오류·부하 (OPS)
 
 | ID | 시나리오 | 기대 결과 | 경로 | 화면 | 단독 | 우선 |
 | --- | --- | --- | --- | --- | --- | --- |
-| OPS-01 | executor를 내린 채 분석 요청, 이후 복구 | run이 오류 문구와 함께 끝나고 화면이 멈추지 않음. 복구 후 새 run 정상 | I3 | 일부 (운영) | 단독 | P0 |
+| OPS-01 | executor를 내린 채 분석 요청, 이후 복구 | run이 `failed`와 오류 정보로 끝나고 세션이 다음 요청을 받음. 복구 후 새 run 정상 | I3 | 일부 (운영) | 단독 | P0 |
 | OPS-02 | Redis 재시작 | 컨슈머 그룹 재생성, 놓친 이벤트 복구로 run 완료 | I5 | 일부 (운영) | 단독 | P0 |
-| OPS-03 | 키 해시 불일치(일부러 틀린 키) | 화면에는 표준 오류, 로그에 대상 서비스와 401 | I3 I6 | 일부 (운영) | 단독 | P0 |
+| OPS-03 | 키 해시 불일치(일부러 틀린 키) | 표준 오류 응답(code, message), 로그에 대상 서비스와 401 | I3 I6 | 일부 (운영) | 단독 | P0 |
 | OPS-04 | pr-batch를 내린 채 배치 화면 | 표준 오류 형식(code, message), 다른 화면은 정상 | I6 | 일부 (운영) | 단독 | P1 |
 | OPS-05 | 백그라운드 루프 정지 | `/healthz` 503 → Pod 재시작 (gaia는 `/api/v1/healthz`) | - | X (운영) | 단독 | P1 |
 | OPS-06 | prd 설정에 `<...>` 자리 남김, 빈 `SSO_ALLOWED_ORIGINS` | 기동 실패 | - | X (운영) | 단독 | P1 |
-| OPS-07 | 32MB에 가까운 요청, 이미지 한도 초과 | 우리 413/422가 화면에 표시, Ingress가 먼저 끊지 않음 | I1 | O |  | P1 |
+| OPS-07 | 32MB에 가까운 요청, 이미지 한도 초과 | 우리 413/422 응답(`code`, `message`), Ingress가 먼저 끊지 않음 | I1 | O |  | P1 |
 | OPS-08 | 없는 모델, LLM 장애 | 422 `UNKNOWN_MODEL` / run `failed`. 오류 문구에 원인(사용량 한도·권한·컨텍스트 초과·서버 오류)과 게이트웨이 메시지, 오류 ID. 주소·비밀값은 가려짐 | - | 일부 (운영) |  | P1 |
 | OPS-09 | 동시 사용자 부하(`scripts/loadtest.py`) | executor 런타임·PG 연결 고갈 없음, 커널 대기 1800초 설정 조정 근거 확보 | I3 | X (운영) | 단독 | P1 |
 | OPS-10 | 항상 실패하는 코드를 요구하는 요청 | 같은 tool이 연속 5회(`AGENT_TOOL_FAILURE_ANY_LIMIT`) 실패하면 멈추고 턴이 끝남. executor 재개 후에도 턴당 모델 호출 40회 상한 유지, 실행이 계속 늘지 않음 | I1 I3 I5 | O |  | P0 |
@@ -222,6 +223,7 @@
 - 시나리오별 수행 절차는 [scenarios/](scenarios/README.md)에 있습니다.
 - 화면 밖으로 남는 것은 **운영**(서비스 중지·재시작, 설정 변경, Redis·DB·로그 확인, 부하 스크립트)입니다. 담당 팀이 수행하고, 결과 확인은 우리 화면에서 같이 합니다.
 - 증빙은 화면 우측 상단 **요청·응답** 창(요청·응답 본문, SSE), 오류 메시지의 request id, 채팅 머리의 프로젝트·세션·run id, 실행 이력 > 개요(tenant, created_by, created_by_client)를 씁니다.
+- 화면은 시험 대상이 아닙니다. 예상 결과에 화면 표시가 적혀 있어도 판정은 그 표시의 근거인 서버 응답 값으로 합니다. 시나리오 페이지의 수행 절차에 단계마다 어느 요청의 어느 값을 보는지 적어 두었습니다.
 - 화면에는 판단 로직을 넣지 않습니다. 화면은 백엔드가 준 값(`permissions`, `can_enable`, `enable_blocked_reason`, `allow_reject_templates`, `recommendable`, `can_delete`, `batches_disable_pending` 등)만 보고 그립니다. 화면에서 막힌 것처럼 보여도 서버가 판정한 결과인지 확인합니다.
 - 수행자 PC는 Windows입니다. 명령이 필요하면 PowerShell 기준(`curl.exe`, 줄바꿈은 백틱)으로 씁니다.
 
@@ -238,7 +240,7 @@
 
 ## 통과 기준과 증적
 
-통과 판정은 화면만 보지 않고 세 서비스의 기록이 서로 맞는지까지 봅니다. 시나리오 하나의 통과는 아래 네 가지가 모두 맞는 것입니다.
+통과 판정은 화면이 아니라 서버 응답과 세 서비스의 기록으로 합니다(화면은 수행 도구이고 시험 대상이 아님). 세 서비스의 기록이 서로 맞는지까지 봅니다. 시나리오 하나의 통과는 아래 네 가지가 모두 맞는 것입니다.
 
 1. 기대 결과(상태 코드, 상태 값, 오류 코드, 카드·이벤트 종류)가 표와 같음. 에이전트 답변 문구는 매번 달라지므로 문장으로 판정하지 않음
 2. 사용자 ID가 세 서비스에서 같은 소문자 사번: 우리 `users.id`, executor `context.user_id`·`created_by`·작업 공간 경로, pr-batch owner
