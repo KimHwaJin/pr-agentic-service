@@ -13,7 +13,7 @@ Redis has no ACL here, so anyone on it can write a stream entry. An event
 that resumes a run is therefore taken from the executor's own timeline of
 that execution (matched by event_id), never from the stream entry; an
 event the executor does not know is dropped.
-Needs Redis 6.2 or newer (XAUTOCLAIM); runs on Redis 8.x. Entries left
+Needs Redis 6.2 or newer (XAUTOCLAIM); targets Redis 8.x. Entries left
 pending for a minute (a pod died, a handler failed) are reclaimed with
 XAUTOCLAIM, which also drops entries deleted from the stream (executor
 retention) from the pending list. A lost group (a new or flushed Redis, a
