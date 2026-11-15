@@ -1,10 +1,10 @@
-# OPS-08 동시 사용자 부하(`scripts/loadtest.py`)
+# OPS-08 동시 사용자 부하(`locust/`)
 
 | 항목 | 값 |
 | --- | --- |
 | 서비스구분 | OPS 장애·설정·부하 |
 | 우선순위 | P1 |
-| 화면 | X 화면 밖 · loadtest 스크립트 키 모드 대기 (설계 리뷰 R3) |
+| 화면 | X 화면 밖 · Locust로 키 호출 |
 | 필요 권한 | 운영 |
 | 단독 수행 | 예 |
 
@@ -12,18 +12,26 @@
 동시 사용자 부하에서 executor 런타임과 DB 연결이 바닥나지 않는지 확인하고 설정값 근거를 얻습니다.
 
 ## 2. 사전 조건
-- 운영 담당, `scripts/loadtest.py`
-- **스크립트가 지금은 dev SSO 로그인만 지원합니다(설계 리뷰 R3).**
-- **단독 수행**
+- 운영 담당, 부하를 걸 PC(Python 3.10 이상, 대상 서비스 주소에 접속 가능)
+- 저장소의 `locust/` 디렉토리와 설치(`pip install -r locust\requirements.txt`). 자세한 사용법은 `locust/README.md`
+- 우리 테넌트 표준 키 원문, 한 번 이상 로그인한 테스트 사번 목록(`locust\users.csv`)
+- 목표 값(동시 사용자 수, 초당 증가 수, 수행 시간)을 미리 정해 둡니다. ※ 미확인: 목표 값은 운영 예상 사용자 수로 정해야 하며 이 문서에 정해 두지 않았습니다.
+- 분석 턴에 쓸 데이터(PREP-10)가 준비되어 있어야 합니다.
+- **단독 수행**: 실제 LLM과 executor를 쓰므로 다른 테스트가 느려지거나 실패합니다.
 
 ## 3. 수행 절차
 처음 수행하는 사람은 아래 3-1절 "화면 조작 안내"를 먼저 읽습니다. 번호 줄은 할 일이고, 그 아래 작은 항목은 실제로 누르고 입력하고 확인할 내용입니다. "※ 미확인"은 코드로 확인하지 못해 환경에서 한 번 확인이 필요한 내용입니다. 우리 화면(`/dev/`)은 테스트를 수행하기 위한 보조 도구이고 통합 테스트 대상이 아닙니다. 통과·실패는 서버 응답(상태 코드, 응답 본문, 이벤트)과 세 서비스의 기록으로 판정하고, 화면에 보이는 글자나 버튼은 그 값을 읽는 수단으로만 씁니다.
 
-1. 키 모드가 들어오면 PowerShell에서 `uv run python scripts\loadtest.py`를 실행합니다.
-   - 지금은 수행할 수 없습니다. 스크립트가 로컬용 dev 로그인만 지원해 실제 SSO가 붙은 dev·prd에서 돌지 않습니다. 키 모드가 들어오기 전까지 상황판에 "보류"로 둡니다.
-   - 키 모드가 들어오면 운영 담당이 저장소 루트에서 실행합니다. ※ 미확인: 그때의 옵션(대상 주소, 키, 동시 사용자 수)은 스크립트가 바뀐 뒤 `--help`로 확인합니다.
+1. 부하를 걸 PC의 PowerShell에서 `locust -f locust\locustfile.py --host https://<host>`를 실행합니다.
+   - 먼저 키와 사번을 준비합니다. `locust\users.example.csv`를 `locust\users.csv`로 복사해 테스트 사번을 적고, `$env:LOAD_API_KEY = "<우리 테넌트 표준 키 원문>"`을 실행합니다.
+   - 한 명으로 먼저 확인합니다: `locust -f locust\locustfile.py --host https://<host> --headless -u 1 -t 2m`. 끝에 나오는 표에서 실패(# fails)가 모두 0이고 `RUN chat turn`, `RUN analysis turn` 줄이 있으면 준비가 된 것입니다. 401이면 키, 403이면 로그인한 적 없는 사번입니다.
+   - 본 수행: `locust -f locust\locustfile.py --host https://<host> --headless -u <동시 사용자 수> -r <초당 증가 수> -t <시간> --html report.html --csv result`. 예: `-u 30 -r 2 -t 10m`.
+   - 화면으로 보려면 `--headless` 뒤를 빼고 실행한 뒤 `http://localhost:8089`에서 수를 넣고 시작합니다.
 2. executor 런타임 수, PostgreSQL 연결 수, 응답 시간을 기록합니다.
-   - 실행하는 동안 운영 담당이 executor 런타임의 사용 중 슬롯 수(**시스템 > 런타임** 카드의 실행 슬롯), PostgreSQL 연결 수(`select count(*) from pg_stat_activity`), 스크립트가 출력한 응답 시간을 기록합니다.
+   - 실행하는 동안 운영 담당이 본 값을 1~2분 간격으로 적습니다: executor 런타임의 사용 중 슬롯 수(**시스템 > 런타임** 카드의 실행 슬롯), PostgreSQL 연결 수(`select count(*) from pg_stat_activity`), 우리 서비스 파드 수.
+   - 키바나에서 수행 시간 범위의 우리 서비스 오류 로그(5xx, 연결 풀 대기 초과, executor 슬롯 없음)를 찾습니다.
+   - 응답 시간은 Locust 결과에서 적습니다. 종류 `RUN`의 `chat turn`, `analysis turn` 줄이 요청부터 run 종료까지 걸린 시간이고, 나머지 줄은 API 한 번의 응답 시간입니다. 중앙값, 95%, 실패 수를 적고 `report.html`을 8절에 붙입니다.
+   - 실패가 있으면 Locust의 Failures 표에 나온 사유(run `failed`의 오류, 제한 시간 초과, 5xx)를 그대로 적습니다.
 
 ## 3-1. 화면 조작 안내
 
@@ -51,10 +59,10 @@
 - 런타임·DB 연결 고갈 없음, 결과로 커널 대기 1800초 등 설정값 결정
 
 ## 5. 확인 방법
-부하 결과, 모니터링
+Locust 보고서(`report.html`), executor 런타임 슬롯, PostgreSQL 연결 수, 키바나 오류 로그
 
 ## 6. 정리 (원상복구)
-테스트 데이터 정리
+턴이 끝난 세션은 Locust가 지웁니다. 중간에 멈췄다면 테스트 사번의 세션 목록에 남은 세션을 지웁니다. `$env:LOAD_API_KEY`를 넣은 PowerShell 창을 닫습니다.
 
 ---
 

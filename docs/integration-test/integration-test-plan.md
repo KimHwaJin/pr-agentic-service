@@ -12,6 +12,7 @@
 - 11/15: 분석 시나리오 묶음(`scripts/run_scenarios.py`)을 통합 테스트에서 뺐습니다(아래 "통합 테스트 밖"). 빈 번호가 없도록 RUN 번호를 당겼습니다. 11/09판 RUN-13은 RUN-12, RUN-15~21은 RUN-13~19입니다(TC ID도 같이 바뀜). 이 날짜 이전 기록의 RUN 번호는 당긴 뒤 번호로 고쳐 적었습니다.
 - 11/08 현행화: API 키 종류(일반키·마스터키, 마이그레이션 0008)와 모든 게이트웨이 호출의 `X-User-Id` 필수, 키 재발급, executor `runtime.kernel_id`·`DELETE /runtime-targets/{id}`, 계획 후보 중복 방지(한 응답에 계획 카드 하나), 계획 규칙(그룹 수별 검정, 챔버는 설비 하나로 거른 뒤, 정리 후 분석은 `clean_data`까지), 반복 거부 상한, 메모리 워커의 분석 대상 저장·처리 로그를 반영했습니다. 신규 시나리오는 RUN-16~21, BAT-11, ADM-07, OPS-11입니다.
 - 11/15: 백그라운드 루프 정지 시나리오(이전 OPS-05)를 뺐습니다. 내부망에서는 kubectl을 쓸 수 없어 루프를 일부러 멈출 수단이 없습니다. 빈 번호가 없도록 OPS-06~11을 OPS-05~10으로 당겼습니다(TC ID도 같이). 이 문서의 OPS 번호는 모두 새 번호입니다.
+- 11/15: 부하 테스트(OPS-08)를 Locust로 바꿨습니다. 저장소의 `locust/` 디렉토리를 부하를 걸 PC에서 실행하고, 키 호출(`X-Api-Key` + `X-User-Id`)로 들어가므로 SSO 로그인이 필요 없습니다. 사용법은 `locust/README.md`에 있습니다.
 - 11/09: gaia 관련 시나리오(GAIA-01~07)는 이번 통합 테스트에서 제외했습니다. prd는 internal/gaia 빌드이므로 PREP-05는 그대로 수행합니다.
 - 세 서비스 모두 헤더 모드가 삭제되어 모든 환경이 키 인증입니다.
 - **prd도 오픈 전이라 장애 주입, 키·tenant 폐기, 사용자 비활성화, DB 리셋까지 prd에서 그대로 합니다.**
@@ -201,7 +202,7 @@
 | OPS-05 | prd 설정에 `<...>` 자리 남김, 빈 `SSO_ALLOWED_ORIGINS` | 기동 실패 | X (운영) | 단독 | P1 |
 | OPS-06 | 32MB에 가까운 요청, 이미지 한도 초과 | 우리 413/422 응답(`code`, `message`), Ingress가 먼저 끊지 않음 | O |  | P1 |
 | OPS-07 | 없는 모델, LLM 장애 | 422 `UNKNOWN_MODEL` / run `failed`. 오류 문구에 원인(사용량 한도·권한·컨텍스트 초과·서버 오류)과 게이트웨이 메시지, 오류 ID. 주소·비밀값은 가려짐 | 일부 (운영) |  | P1 |
-| OPS-08 | 동시 사용자 부하(`scripts/loadtest.py`) | executor 런타임·PG 연결 고갈 없음, 커널 대기 1800초 설정 조정 근거 확보 | X (운영) | 단독 | P1 |
+| OPS-08 | 동시 사용자 부하(`locust/`) | executor 런타임·PG 연결 고갈 없음, 커널 대기 1800초 설정 조정 근거 확보 | X (운영) | 단독 | P1 |
 | OPS-09 | 항상 실패하는 코드를 요구하는 요청 | 같은 tool이 연속 5회(`AGENT_TOOL_FAILURE_ANY_LIMIT`) 실패하면 멈추고 턴이 끝남. executor 재개 후에도 턴당 모델 호출 40회 상한 유지, 실행이 계속 늘지 않음 | O |  | P0 |
 | OPS-10 | pr-batch `EXECUTOR_API_KEY`에 해시를 넣은 설정 | 배치 실행 FAILED, 사유 `SUBMIT_REJECTED`와 401, pr-batch·executor 로그에 401. 원복 후 정상 | 일부 (운영) | 단독 | P1 |
 
@@ -232,7 +233,7 @@
 | 환경 | 구성 | 주로 보는 것 | 들어가는 조건 | 나오는 조건 |
 | --- | --- | --- | --- | --- |
 | dev (예습) | 클러스터, idp SSO, 실제 LLM, dev 전용 키 | 전 시나리오를 한 번 돌려 절차서와 기대 결과를 다듬음, 결함 조기 발견 | dev의 PREP 완료 | P0 전부 수행(실패는 결함 등록), 절차서 수정 반영 |
-| prd (본 테스트, 오픈 전) | 내부망, internal/gaia, prd 전용 키, 운영과 같은 설정 | 전 시나리오, 부하(OPS-08), 설정 검사(OPS-05), liveness(OPS-05) | dev 종료 + prd의 PREP 완료(리셋은 오픈 전 마지막으로 한 번 더) | P0 100%, P1 90% 이상, 부하 결과로 설정값 확정 |
+| prd (본 테스트, 오픈 전) | 내부망, internal/gaia, prd 전용 키, 운영과 같은 설정 | 전 시나리오, 부하(OPS-08), 설정 검사(OPS-05) | dev 종료 + prd의 PREP 완료(리셋은 오픈 전 마지막으로 한 번 더) | P0 100%, P1 90% 이상, 부하 결과로 설정값 확정 |
 
 **환경을 옮길 때** PREP를 처음부터 다시 밟습니다. 키는 환경별로 따로 만들고 DB·Redis·PV도 환경별로 비웁니다. **prd는 본 테스트가 끝난 뒤 오픈 전에 PREP-06(리셋)을 한 번 더** 해서 테스트 데이터·폐기된 키·비활성 사용자를 지웁니다.
 
@@ -270,7 +271,7 @@
 | --- | --- | --- | --- | --- | --- |
 | R1 | pr-batch `compose.yaml`에 `EXECUTOR_API_KEY` 항목 없음 | 로컬 배치 실행 실패 | pr-batch compose에 기본값 추가 | pr-batch | 로컬 개발용, 통합테스트(dev·prd) 범위 밖 |
 | R2 | 우리 `docker-compose.yml`의 `BATCH_API_KEY` 기본값이 빈 값 | 로컬 게이트웨이 호출 401 | pr-batch 로컬 키가 정해지면 기본값으로 | 우리 | 로컬 개발용, 미반영 |
-| R3 | `smoke_e2e.py`·`run_scenarios.py`·`loadtest.py`가 dev SSO 로그인만 지원 | dev·prd(idp)에서 OPS-09와 배포 전 품질 회귀 점검(통합 테스트 밖) 자동화 불가 | `X-Api-Key` + `X-User-Id` 모드 옵션 추가 | 우리 | 미반영 |
+| R3 | `smoke_e2e.py`·`run_scenarios.py`·`scripts/loadtest.py`가 dev SSO 로그인만 지원 | dev·prd(idp)에서 배포 전 품질 회귀 점검(통합 테스트 밖) 자동화 불가. 부하(OPS-08)는 키 호출을 쓰는 `locust/`로 따로 수행(11/15) | `X-Api-Key` + `X-User-Id` 모드 옵션 추가 | 우리 | 미반영 |
 | R4 | 이전 리셋 요청에 Redis 스트림이 빠져 있음 | 옛 uuid 사용자의 이벤트가 남음 | PREP-06에 포함 | 인프라 | 반영(문서) |
 | R5 | Go/No-Go F1·F2·F3·F8 | 미반영이면 OPS-05 실패 | 반영 여부 확인 | 우리 | 완료(main `f0fed74`, internal/gaia `60aa017`) |
 | R6 | pr-batch가 `can_enable`·`can_disable`·`enable_blocked_reason`을 직접 줌 | 우리 계산이 덮으면 BAT-09 사유가 빠짐 | pr-batch 값을 그대로 넘김 | 우리 | 완료(게이트웨이가 그대로 전달, `tests/test_batch_gateway.py`) |
