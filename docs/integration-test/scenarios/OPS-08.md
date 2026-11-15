@@ -28,6 +28,7 @@
    - 먼저 키와 사번을 준비합니다. `locust\users.example.csv`를 `locust\users.csv`로 복사해 테스트 사번을 적고, `$env:LOAD_API_KEY = "<우리 테넌트 표준 키 원문>"`을 실행합니다.
    - 한 명으로 먼저 확인합니다: `locust -f locust\locustfile.py --host https://<host> --headless -u 1 -t 2m`. 끝에 나오는 표에서 실패(# fails)가 모두 0이고 `RUN chat turn`, `RUN analysis turn` 줄이 있으면 준비가 된 것입니다. 401이면 키, 403이면 로그인한 적 없는 사번입니다.
    - 본 수행: `locust -f locust\locustfile.py --host https://<host> --headless -u <동시 사용자 수> -r <초당 증가 수> -t <시간> --html report.html --csv result`. 예: `-u 30 -r 2 -t 10m`.
+   - 환경 변수 대신 설정 파일로도 돌릴 수 있습니다. `locust\config.example.yml`을 `locust\config.yml`로 복사해 주소, 사용자 수, 시간, 비율을 적고 `locust -f locust\locustfile.py --headless --html report.html --csv result`만 실행합니다.
    - 화면으로 보려면 `--headless` 뒤를 빼고 실행한 뒤 `http://localhost:8089`에서 수를 넣고 시작합니다.
    - 한계를 찾을 때는 계단식으로 돌립니다: `$env:LOAD_STEP_USERS=10; $env:LOAD_STEP_SECONDS=300; $env:LOAD_MAX_USERS=150`을 넣고 `-u`, `-r`, `-t` 없이 `--headless --html report.html --csv result --csv-full-history`로 실행합니다.
    - 세 번 나눠 돌리면 원인을 가르기 쉽습니다. executor만(`LOAD_EXECUTOR_WEIGHT=1`, 나머지 0), 배치만(`LOAD_BATCH_WEIGHT=1`, 나머지 0), 섞어서(조회 6, 대화 3, 분석 1에 executor와 배치를 더함). 비율을 넣는 법은 `locust/README.md`에 있습니다.

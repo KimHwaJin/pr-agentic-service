@@ -8,7 +8,7 @@ chat turn, an analysis turn it approves by itself, a code execution sent
 straight to the executor (no LLM) and a run of one of its own batches
 (no LLM until the report). Each is followed to its end by polling and
 reported as its own row of type ``RUN``. Settings come from the
-environment: see README.md.
+environment, then ``config.yml`` next to this file: see README.md.
 """
 
 import itertools
@@ -18,15 +18,52 @@ import time
 import uuid
 from pathlib import Path
 
+import yaml
 from locust import HttpUser, LoadTestShape, between, events, task
 from locust.exception import StopUser
 
 HERE = Path(__file__).parent
 
 
-def _env(name: str, default: str) -> str:
-    return os.environ.get(name, default)
+def _file() -> dict:
+    """The settings file: ``LOAD_CONFIG``, else ``config.yml`` next to this
+    file when it is there."""
+    named = os.environ.get("LOAD_CONFIG")
+    path = Path(named) if named else HERE / "config.yml"
+    if not path.is_file():
+        if named:
+            raise SystemExit(f"[locust] LOAD_CONFIG: no file {path}")
+        return {}
+    values = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    if not isinstance(values, dict):
+        raise SystemExit(f"[locust] {path}: expected 'NAME: value' lines")
+    print(f"[locust] settings from {path}")
+    return values
 
+
+FILE = _file()
+
+
+def _env(name: str, default: str) -> str:
+    """A setting: the environment, then the settings file, then the
+    default."""
+    if name in os.environ:
+        return os.environ[name]
+    value = FILE.get(name)
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return str(value).lower()
+    if isinstance(value, dict | list):
+        return json.dumps(value, ensure_ascii=False)
+    return str(value)
+
+
+unknown = sorted(k for k in FILE if not str(k).startswith("LOAD_"))
+if unknown:
+    raise SystemExit(f"[locust] unknown settings in the file: {unknown}")
+
+HOST = _env("LOAD_HOST", "").rstrip("/")
 
 API_KEY = _env("LOAD_API_KEY", "")
 PREFIX = _env("LOAD_API_PREFIX", "/api/v1").rstrip("/")
@@ -54,8 +91,13 @@ EXECUTOR_CODE = _env(
 )
 EXECUTOR_PROFILE = _env("LOAD_EXECUTOR_PROFILE", "default")
 BATCH_PREFIX = _env("LOAD_BATCH_NAME_PREFIX", "load-")
-# users go up by STEP_USERS every STEP_SECONDS until MAX_USERS (0: off, the
-# -u / -r options decide)
+# a fixed load from the settings instead of -u / -r / -t: USERS users, RATE
+# more a second, for RUN_SECONDS (0: until stopped). USERS 0: off
+USERS = int(_env("LOAD_USERS", "0"))
+SPAWN_RATE = float(_env("LOAD_SPAWN_RATE", "1"))
+RUN_SECONDS = int(_env("LOAD_RUN_SECONDS", "0"))
+# users go up by STEP_USERS every STEP_SECONDS until MAX_USERS (0: off);
+# wins over LOAD_USERS
 STEP_USERS = int(_env("LOAD_STEP_USERS", "0"))
 STEP_SECONDS = int(_env("LOAD_STEP_SECONDS", "300"))
 MAX_USERS = int(_env("LOAD_MAX_USERS", "100"))
@@ -159,9 +201,21 @@ if STEP_USERS > 0:
                 return None
             return min(users, MAX_USERS), STEP_USERS
 
+elif USERS > 0:
+
+    class Fixed(LoadTestShape):
+        """USERS users for RUN_SECONDS."""
+
+        def tick(self):
+            if RUN_SECONDS and self.get_run_time() >= RUN_SECONDS:
+                return None
+            return USERS, SPAWN_RATE
+
 
 class ServiceUser(HttpUser):
     wait_time = between(WAIT_MIN, WAIT_MAX)
+    if HOST:
+        host = HOST  # --host on the command line still wins
 
     def on_start(self):
         self.client.verify = VERIFY_TLS
