@@ -15,7 +15,9 @@
 - 운영 담당, 부하를 걸 PC(Python 3.10 이상, 대상 서비스 주소에 접속 가능)
 - 저장소의 `locust/` 디렉토리와 설치(`pip install -r locust\requirements.txt`). 자세한 사용법은 `locust/README.md`
 - 우리 테넌트 표준 키 원문, 한 번 이상 로그인한 테스트 사번 목록(`locust\users.csv`)
-- 목표 값(동시 사용자 수, 초당 증가 수, 수행 시간)을 미리 정해 둡니다. ※ 미확인: 목표 값은 운영 예상 사용자 수로 정해야 하며 이 문서에 정해 두지 않았습니다.
+- 정해진 목표 값은 없습니다. 지금 설정(executor 실행 슬롯 100, PostgreSQL 연결 한도 150, 우리 파드 2~4개)으로 어느 수준까지 되는지 찾는 것이 목적입니다. 설정값으로 계산한 예상치는 `locust/README.md`의 "지금 설정으로 본 예상치"에 있습니다.
+- 주 대상은 executor와 배치입니다. 배치 실행을 쓰려면 테스트 사번마다 이름이 `load-`로 시작하는 배치를 미리 등록합니다(BAT-02 방법).
+- 분석 계획이 값을 넣으라고 하는 입력 칸이 있으면 `LOAD_PLAN_INPUTS`로 값을 정해 둡니다(`locust/README.md` 준비 4번).
 - 분석 턴에 쓸 데이터(PREP-10)가 준비되어 있어야 합니다.
 - **단독 수행**: 실제 LLM과 executor를 쓰므로 다른 테스트가 느려지거나 실패합니다.
 
@@ -27,6 +29,8 @@
    - 한 명으로 먼저 확인합니다: `locust -f locust\locustfile.py --host https://<host> --headless -u 1 -t 2m`. 끝에 나오는 표에서 실패(# fails)가 모두 0이고 `RUN chat turn`, `RUN analysis turn` 줄이 있으면 준비가 된 것입니다. 401이면 키, 403이면 로그인한 적 없는 사번입니다.
    - 본 수행: `locust -f locust\locustfile.py --host https://<host> --headless -u <동시 사용자 수> -r <초당 증가 수> -t <시간> --html report.html --csv result`. 예: `-u 30 -r 2 -t 10m`.
    - 화면으로 보려면 `--headless` 뒤를 빼고 실행한 뒤 `http://localhost:8089`에서 수를 넣고 시작합니다.
+   - 한계를 찾을 때는 계단식으로 돌립니다: `$env:LOAD_STEP_USERS=10; $env:LOAD_STEP_SECONDS=300; $env:LOAD_MAX_USERS=150`을 넣고 `-u`, `-r`, `-t` 없이 `--headless --html report.html --csv result --csv-full-history`로 실행합니다.
+   - 세 번 나눠 돌리면 원인을 가르기 쉽습니다. executor만(`LOAD_EXECUTOR_WEIGHT=1`, 나머지 0), 배치만(`LOAD_BATCH_WEIGHT=1`, 나머지 0), 섞어서(조회 6, 대화 3, 분석 1에 executor와 배치를 더함). 비율을 넣는 법은 `locust/README.md`에 있습니다.
 2. executor 런타임 수, PostgreSQL 연결 수, 응답 시간을 기록합니다.
    - 실행하는 동안 운영 담당이 본 값을 1~2분 간격으로 적습니다: executor 런타임의 사용 중 슬롯 수(**시스템 > 런타임** 카드의 실행 슬롯), PostgreSQL 연결 수(`select count(*) from pg_stat_activity`), 우리 서비스 파드 수.
    - 키바나에서 수행 시간 범위의 우리 서비스 오류 로그(5xx, 연결 풀 대기 초과, executor 슬롯 없음)를 찾습니다.
@@ -57,6 +61,7 @@
 
 ## 4. 예상 결과
 - 런타임·DB 연결 고갈 없음, 결과로 커널 대기 1800초 등 설정값 결정
+  - 판정 방법: 계단식 실행에서 실패가 처음 생기거나 `RUN` 줄의 시간이 급히 늘어난 단계의 사용자 수, 그때의 executor 사용 슬롯 수와 PostgreSQL 연결 수를 적습니다. 그 아래 단계가 "지금 설정으로 되는 수준"입니다. PostgreSQL 연결이 한도(150)에 닿지 않고, 슬롯이 찼을 때 요청이 오류 없이 기다렸다 처리되면 통과입니다.
 
 ## 5. 확인 방법
 Locust 보고서(`report.html`), executor 런타임 슬롯, PostgreSQL 연결 수, 키바나 오류 로그
