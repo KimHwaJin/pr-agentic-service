@@ -15,7 +15,7 @@
 - 운영 담당, 부하를 걸 PC(Python 3.10 이상, 대상 서비스 주소에 접속 가능)
 - 저장소의 `locust/` 디렉토리와 설치(`pip install -r locust\requirements.txt`). 자세한 사용법은 `locust/README.md`
 - 우리 테넌트 표준 키 원문, 한 번 이상 로그인한 테스트 사번 목록(`locust\users.csv`)
-- 정해진 목표 값은 없습니다. 지금 설정(executor 실행 슬롯 100, PostgreSQL 연결 한도 150, 우리 파드 2~4개)으로 어느 수준까지 되는지 찾는 것이 목적입니다. 설정값으로 계산한 예상치는 `locust/README.md`의 "지금 설정으로 본 예상치"에 있습니다.
+- 정해진 목표 값은 없습니다. 지금 설정(우리 서비스 파드 2개, executor와 pr-batch 각 1개, executor 실행 슬롯 100, PostgreSQL 연결 한도 150)으로 어느 수준까지 되는지 찾는 것이 목적입니다. 설정값으로 계산한 예상치는 `locust/README.md`의 "지금 설정으로 본 예상치"에 있습니다.
 - 주 대상은 executor와 배치입니다. 배치 실행을 쓰려면 테스트 사번마다 이름이 `load-`로 시작하는 배치를 미리 등록합니다(BAT-02 방법).
 - 분석 계획이 값을 넣으라고 하는 입력 칸이 있으면 `LOAD_PLAN_INPUTS`로 값을 정해 둡니다(`locust/README.md` 준비 4번).
 - 분석 턴에 쓸 데이터(PREP-10)가 준비되어 있어야 합니다.
