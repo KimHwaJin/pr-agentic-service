@@ -19,6 +19,8 @@ executor와 배치가 주 대상이면 아래처럼 비율만 바꿔 돌립니�
 ```powershell
 # executor만
 $env:LOAD_READ_WEIGHT=0; $env:LOAD_CHAT_WEIGHT=0; $env:LOAD_ANALYSIS_WEIGHT=0; $env:LOAD_EXECUTOR_WEIGHT=1; $env:LOAD_BATCH_WEIGHT=0
+# 순수 코드 실행만, 쉬지 않고 빠르게: 한 사용자가 "제출 1건 + 상태 조회 여러 건"을 계속 되풀이
+$env:LOAD_EXECUTOR_CODE="print(1 + 1)"; $env:LOAD_WAIT_MIN_SECONDS=0; $env:LOAD_WAIT_MAX_SECONDS=0; $env:LOAD_POLL_SECONDS=0.5
 # 배치만
 $env:LOAD_READ_WEIGHT=0; $env:LOAD_CHAT_WEIGHT=0; $env:LOAD_ANALYSIS_WEIGHT=0; $env:LOAD_EXECUTOR_WEIGHT=0; $env:LOAD_BATCH_WEIGHT=1
 ```
@@ -87,6 +89,7 @@ locust -f locust\locustfile.py --host https://<host> --headless --html report.ht
 | `LOAD_EXECUTOR_PROFILE` | default | executor 런타임 프로필 |
 | `LOAD_BATCH_NAME_PREFIX` | `load-` | 배치 실행에 쓸 배치 이름의 앞부분 |
 | `LOAD_STEP_USERS` / `LOAD_STEP_SECONDS` / `LOAD_MAX_USERS` | 0 / 300 / 100 | 계단식 부하. `LOAD_STEP_USERS`가 0이면 끄고 `-u`, `-r`을 따름 |
+| `LOAD_WAIT_MIN_SECONDS` / `LOAD_WAIT_MAX_SECONDS` | 1 / 5 | 한 사용자가 동작 하나를 끝내고 다음 동작까지 쉬는 시간(초)의 범위 |
 | `LOAD_POLL_SECONDS` | 2 | run 상태 조회 간격(초) |
 | `LOAD_RUN_TIMEOUT_SECONDS` | 900 | 턴 하나의 제한 시간(초). 넘으면 취소하고 실패 |
 | `LOAD_DELETE_SESSIONS` | true | 턴이 끝난 뒤 세션 삭제. 실패 원인을 화면에서 보려면 false |
@@ -96,6 +99,7 @@ locust -f locust\locustfile.py --host https://<host> --headless --html report.ht
 
 - 종류가 `RUN`인 줄(`chat turn`, `analysis turn`, `executor execution`, `batch run`)이 사용자가 느끼는 값입니다. 요청을 보낸 때부터 끝날 때까지의 시간이고, 실패·취소로 끝나거나 제한 시간을 넘으면 실패로 셉니다. 실패 사유는 Failures 탭에 나옵니다.
 - `batch run`은 배치 실행이 `COMPLETED`가 될 때까지입니다. 그 뒤에 쓰이는 배치 리포트(LLM)는 재지 않습니다. 리포트 적체는 화면의 배치 리포트 목록이나 키바나에서 봅니다.
+- 한 사용자가 분당 보내는 호출 수는 결과 표의 전체 req/s × 60 ÷ 사용자 수입니다. 새 실행 수는 `POST /executor/executions` 줄의 req/s로 봅니다. 호출 수를 늘리려면 `LOAD_POLL_SECONDS`와 쉬는 시간을 줄이고, 줄이려면 늘립니다.
 - `executor execution`의 시간에서 코드가 도는 시간(기본 10초)을 뺀 값이 대기와 준비 시간입니다. 사용자 수를 올렸을 때 이 값이 늘기 시작하면 executor 슬롯이 찬 것입니다.
 - 나머지 줄은 API 한 번의 응답 시간입니다. `GET /runs/[id]`는 상태 조회라 수가 많은 것이 정상입니다.
 - 실행하는 동안 서비스 쪽에서 함께 봐야 하는 값(executor 실행 슬롯, PostgreSQL 연결 수, 파드 수, 오류 로그)은 `docs/integration-test/scenarios/OPS-08.md`에 있습니다.
