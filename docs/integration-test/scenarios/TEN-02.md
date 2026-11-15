@@ -22,7 +22,7 @@ pr-batch가 내려간 동안 tenant를 폐기해도, pr-batch가 돌아오면 �
 1. 운영 담당이 pr-batch를 내립니다.
    - 단독 수행입니다. 먼저 준비합니다. **시스템** > **API 키** > **새 키 발급**으로 이름 `it-ext2-std`, tenant `it-ext2`(체크 상자는 체크 안 함), 일반키를 발급합니다. 그 키로 BAT-10의 3·4번과 같은 방법으로 배치를 만들고 켭니다.
    - 준비가 끝나면 운영 담당이 pr-batch를 내립니다(Pod 0개). 내려간 시각을 적습니다.
-   - 운영 방법: `kubectl -n <namespace> scale deployment/<pr-batch 이름> --replicas=0`으로 내리고 `kubectl -n <namespace> get pod`에서 pr-batch Pod가 없어진 것을 확인합니다. 내리기 전 Pod 수를 적어 둡니다. HPA가 있으면 먼저 지웁니다(3-1절 "서비스 내리기와 올리기").
+   - 운영 방법: 배포 도구에서 pr-batch를 중지합니다(인스턴스 수 0). 중지 전 인스턴스 수를 적어 둡니다. 내려간 시각을 적습니다.
 2. **시스템 > API 키**에서 it-ext2의 **tenant 전체 폐기**를 누릅니다.
    - **API 키** 탭에서 tenant가 `it-ext2`인 줄의 **tenant 전체 폐기**를 누르고 **확인**을 누릅니다.
 3. 알림과 키 목록의 표시를 봅니다.
@@ -30,7 +30,7 @@ pr-batch가 내려간 동안 tenant를 폐기해도, pr-batch가 돌아오면 �
    - 판정은 서버 응답으로 합니다. 요청·응답 창을 열고 **현재 대화만** 체크를 끕니다. 폐기 요청(`POST …/tenants/it-ext2/revoke`) 응답의 `batches_disable_pending`이 `true`이고, 이어진 `GET /api/v1/admin/api-clients` 응답에서 그 키 항목의 `batches_disable_pending`이 `true`인지 봅니다.
 4. 운영 담당이 pr-batch를 올립니다. 시각을 적습니다.
    - 운영 담당이 pr-batch를 다시 올리고 Ready 시각을 초 단위로 알려 줍니다.
-   - 운영 방법: `kubectl -n <namespace> scale deployment/<pr-batch 이름> --replicas=<원래 수>`로 올리고 `kubectl -n <namespace> rollout status deployment/<pr-batch 이름>`이 끝난 시각을 Ready 시각으로 적습니다. HPA를 지웠다면 다시 적용합니다.
+   - 운영 방법: 배포 도구에서 pr-batch를 원래 인스턴스 수로 다시 올립니다. 요청을 받기 시작한 시각을 Ready 시각으로 초 단위까지 적습니다.
 5. 5분 뒤 API 키 탭을 새로 엽니다. 운영 담당이 pr-batch에서 배치를 봅니다.
    - Ready 시각에서 5분(재시도 간격)이 지나면 **API 키** 탭을 다시 누릅니다. `GET /api/v1/admin/api-clients` 응답에서 그 항목의 `batches_disable_pending`이 `false`인지 봅니다. 아직 `true`이면 5분 더 기다립니다.
    - 운영 담당에게 pr-batch에서 그 배치가 `TENANT_REVOKED`로 꺼졌는지 확인을 요청합니다.
@@ -76,15 +76,15 @@ pr-batch가 내려간 동안 tenant를 폐기해도, pr-batch가 돌아오면 �
 - 폐기한 키는 상태가 "폐기"로 바뀌고 버튼이 사라집니다.
 
 **운영 담당과 함께 할 때**
-- "운영 담당이 …"로 시작하는 단계는 수행자가 직접 하지 않습니다. 클러스터 권한이 있는 운영 담당에게 요청하고, 끝났다는 답을 받은 뒤 다음 단계로 갑니다. 아래는 운영 담당이 쓰는 방법입니다. `<namespace>`는 환경의 네임스페이스로 바꿉니다.
-- **우리 서비스 설정을 잠깐 바꾸기**: 설정값은 이미지에 들어 있는 `config.<환경>.yml`에서 읽지만, 같은 이름의 환경 변수가 있으면 환경 변수가 우선합니다. 그래서 테스트용 변경은 이미지를 다시 만들지 않고 Deployment의 환경 변수로 합니다. `kubectl -n <namespace> set env deployment/pr-agentic-service 이름=값`을 실행하면 Pod가 하나씩 새 값으로 다시 뜹니다. `kubectl -n <namespace> rollout status deployment/pr-agentic-service`가 "successfully rolled out"으로 끝나면 새 Pod가 모두 뜬 것입니다. 그 시각을 적습니다.
-- **바꾸기 전에 지금 값 보관**: `kubectl -n <namespace> set env deployment/pr-agentic-service --list`로 지금 환경 변수를 봅니다. 바꾸려는 이름이 이미 목록에 있으면(예: PREP-03에서 환경 변수로 넣은 키) 그 값을 보관해 두고, 되돌릴 때 같은 명령으로 원래 값을 다시 넣습니다.
-- **되돌리기**: 목록에 없던 이름은 `kubectl -n <namespace> set env deployment/pr-agentic-service 이름-`(이름 뒤에 빼기 기호)로 환경 변수를 지웁니다. 그러면 다시 설정 파일의 값을 씁니다. 되돌린 뒤에도 `rollout status`로 끝난 것을 확인합니다.
-- **목록 값**은 JSON으로 넣습니다. 예: `SSO_ALLOWED_ORIGINS='["https://sso.example.com"]'`.
-- **재시작만**: `kubectl -n <namespace> rollout restart deployment/pr-agentic-service`.
-- **서비스 내리기와 올리기**(executor, pr-batch): `kubectl -n <namespace> get deployment`로 이름과 지금 Pod 수를 확인하고, `kubectl -n <namespace> scale deployment/<이름> --replicas=0`으로 내립니다. `kubectl -n <namespace> get pod`에서 그 서비스의 Pod가 없어지면 내려간 것입니다. 올릴 때는 `--replicas=<원래 수>`로 실행하고 `rollout status`로 확인합니다. 그 Deployment에 HPA가 걸려 있으면(`kubectl -n <namespace> get hpa`) Pod를 다시 올려 버리므로, 내리는 동안 HPA를 먼저 지우고 끝난 뒤 다시 적용합니다. 우리 서비스에는 HPA(최소 2개)가 있습니다.
-- **로그 찾기**: `kubectl -n <namespace> logs -l app=pr-agentic-service --prefix --since=10m --tail=-1 | grep <검색어>`. 로그 확인을 요청하는 사람은 검색어(단계에 적힌 로그 이름), 동작한 시각(초 단위), 있으면 request id나 run id를 전달합니다. 운영 담당은 찾은 줄을 그대로 복사해 주고, 수행자는 8절 증빙에 붙입니다.
-- ※ 미확인: 위 명령은 저장소의 `deploy/kubernetes/deployment.yml`(Deployment 이름 `pr-agentic-service`, 레이블 `app=pr-agentic-service`) 기준입니다. 내부망에서 이름이 다르거나, kubectl을 직접 못 쓰고 배포 파이프라인으로만 배포한다면 같은 환경 변수를 배포 설정의 `env`에 넣어 배포합니다. executor와 pr-batch의 Deployment 이름, 설정 방식, 사내 로그 도구는 각 담당의 방법을 따릅니다.
+- "운영 담당이 …"로 시작하는 단계는 수행자가 직접 하지 않습니다. 배포 권한이 있는 운영 담당에게 요청하고, 끝났다는 답을 받은 뒤 다음 단계로 갑니다. 내부망에서는 kubectl을 쓸 수 없으므로 모든 변경은 "값을 고쳐 다시 배포"로 합니다. 아래는 운영 담당이 하는 일입니다.
+- **우리 서비스 설정을 잠깐 바꾸기**: 설정값은 저장소 루트의 `config.<환경>.yml`(prd는 `config.prd.yml`)에 있고 이미지에 함께 들어갑니다. 단계에 적힌 이름의 줄을 찾아 값을 고친 뒤 이미지를 다시 만들어 배포합니다. 고치기 전의 줄을 그대로 복사해 보관합니다.
+- **환경 변수로 넣을 수 있는 환경이라면** 파일을 고치지 않아도 됩니다. 같은 이름의 환경 변수가 설정 파일보다 우선하므로, 배포 설정의 환경 변수에 `이름=값`을 넣어 배포하고 끝나면 그 환경 변수를 지워 다시 배포합니다. 목록 값은 JSON으로 넣습니다(예: `SSO_ALLOWED_ORIGINS=["https://sso.example.com"]`).
+- **되돌리기**: 보관한 원래 줄로 되돌려 다시 배포합니다. 테스트용으로 고친 값이 저장소의 main이나 internal/gaia에 남지 않게, 테스트용 변경은 커밋을 되돌리거나 별도 브랜치에서 배포합니다.
+- **배포가 끝난 시각**: 새 버전이 떠서 요청을 받기 시작한 시각입니다. 배포 도구의 완료 표시로 확인하고, 화면에서는 `https://<host>/dev/`가 다시 열리는지로 확인합니다. 시간 기준이 있는 시나리오는 이 시각을 초 단위로 적습니다.
+- **재시작만**: 값을 바꾸지 않고 같은 버전을 다시 배포합니다.
+- **서비스 내리기와 올리기**(executor, pr-batch): 배포 도구에서 그 서비스를 중지(인스턴스 수 0)하고, 끝나면 원래 수로 다시 올립니다. 내려갔는지는 우리 화면에서 그 서비스에 가는 요청이 502 등으로 실패하는지로 확인할 수 있습니다(executor는 **실행 이력**, pr-batch는 **배치**).
+- **로그 찾기**: 사내 로그 조회 도구에서 서비스 이름과 시각 범위를 정하고 단계에 적힌 로그 이름으로 검색합니다. 로그 확인을 요청하는 사람은 검색어, 동작한 시각(초 단위), 있으면 request id나 run id를 전달합니다. 운영 담당은 찾은 줄을 그대로 복사해 주고, 수행자는 8절 증빙에 붙입니다.
+- ※ 미확인: 내부망의 배포 도구(파이프라인 이름, 환경 변수를 넣는 자리, 서비스를 중지하는 메뉴)와 로그 조회 도구는 이 문서에 적지 못했습니다. executor와 pr-batch의 설정 방식은 각 담당의 방법을 따릅니다.
 - "단독 수행: 예"인 시나리오는 다른 사람의 테스트를 깨뜨립니다. 시작 전에 테스트 채널에 시작을 알리고, 6절 정리까지 끝낸 뒤 끝났다고 알립니다.
 
 **끝난 뒤 기록**
