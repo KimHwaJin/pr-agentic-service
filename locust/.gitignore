@@ -5,3 +5,5 @@ users.csv
 *_stats_history.csv
 *_failures.csv
 *_exceptions.csv
+config*.yml
+!config.example.yml

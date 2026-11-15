@@ -1,0 +1,59 @@
+# 부하 테스트 설정. 이 파일을 config.yml로 복사해 값을 고칩니다(config.yml은
+# 커밋되지 않음). 같은 이름의 환경 변수가 있으면 환경 변수가 우선합니다.
+# 다른 파일을 쓰려면: $env:LOAD_CONFIG = "locust\config.executor.yml"
+#
+# 실행: locust -f locust\locustfile.py --headless --html report.html
+
+# --- 대상 ---------------------------------------------------------------
+LOAD_HOST: https://<host>
+# 우리 테넌트 표준 키 원문. 파일에 두기 싫으면 비워 두고 환경 변수로 줍니다
+LOAD_API_KEY: ""
+# 사번 목록(한 줄에 하나). 상대 경로는 실행한 위치 기준
+LOAD_USERS_FILE: locust/users.csv
+LOAD_API_PREFIX: /api/v1
+LOAD_VERIFY_TLS: true
+
+# --- 부하 크기 (둘 중 하나) ------------------------------------------------
+# 1) 고정: USERS명을 초당 SPAWN_RATE명씩 올려 RUN_SECONDS초 동안
+LOAD_USERS: 50
+LOAD_SPAWN_RATE: 5
+LOAD_RUN_SECONDS: 600
+# 2) 계단식: STEP_SECONDS초마다 STEP_USERS명씩 MAX_USERS까지 (0이면 끔,
+#    켜면 위 고정 설정보다 우선)
+LOAD_STEP_USERS: 0
+LOAD_STEP_SECONDS: 300
+LOAD_MAX_USERS: 150
+
+# --- 무엇을 할지: 비율 (0이면 하지 않음) -------------------------------------
+# 아래는 "executor만"(LLM 없이 게이트웨이로 코드 실행만)입니다.
+# 배치만: LOAD_BATCH_WEIGHT만 1 / 섞어서: 조회 6, 대화 3, 분석 1 등
+LOAD_READ_WEIGHT: 0
+LOAD_CHAT_WEIGHT: 0
+LOAD_ANALYSIS_WEIGHT: 0
+LOAD_EXECUTOR_WEIGHT: 1
+LOAD_BATCH_WEIGHT: 0
+
+# --- 속도 ---------------------------------------------------------------
+# 한 사용자가 동작 하나를 끝내고 다음 동작까지 쉬는 시간(초)의 범위
+LOAD_WAIT_MIN_SECONDS: 0
+LOAD_WAIT_MAX_SECONDS: 0
+# 상태 조회 간격(초), 동작 하나의 제한 시간(초)
+LOAD_POLL_SECONDS: 0.5
+LOAD_RUN_TIMEOUT_SECONDS: 900
+
+# --- executor 실행 --------------------------------------------------------
+LOAD_EXECUTOR_PROFILE: default
+LOAD_EXECUTOR_CODE: |
+  print(1 + 1)
+
+# --- 배치 실행 ------------------------------------------------------------
+LOAD_BATCH_NAME_PREFIX: load-
+
+# --- 대화·분석 턴 (LLM을 씀) -------------------------------------------------
+LOAD_MODEL: ""
+LOAD_CHAT_PROMPT: 안녕, 오늘 할 수 있는 분석을 알려줘
+LOAD_ANALYSIS_PROMPT: nce 데이터 불러와서 기술통계 보여줘
+LOAD_QUESTION_ANSWER: 기본값으로 진행해줘
+# 분석 계획의 빈 입력 칸에 넣을 값: 파라미터 이름(또는 칸의 키): 값
+LOAD_PLAN_INPUTS: {}
+LOAD_DELETE_SESSIONS: true
