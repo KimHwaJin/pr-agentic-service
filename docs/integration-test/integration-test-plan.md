@@ -4,13 +4,14 @@
 
 ## 요약
 
-**결론: 사전 준비(PREP)를 끝내면 dev에서 예습하고 prd(오픈 전)에서 본 테스트를 합니다. 7개 영역 74개 시나리오(P0 36개)를 두 환경 모두에서 돌립니다.** 진행 현황은 상황판([integration-test-tracker.xlsx](integration-test-tracker.xlsx), 이후 컨플루언스)으로, 시나리오별 수행 내용·결과·증빙은 시나리오마다 컨플루언스 페이지로 남깁니다.
+**결론: 사전 준비(PREP)를 끝내면 dev에서 예습하고 prd(오픈 전)에서 본 테스트를 합니다. 7개 영역 73개 시나리오(P0 36개)를 두 환경 모두에서 돌립니다.** 진행 현황은 상황판([integration-test-tracker.xlsx](integration-test-tracker.xlsx), 이후 컨플루언스)으로, 시나리오별 수행 내용·결과·증빙은 시나리오마다 컨플루언스 페이지로 남깁니다.
 
 - 기준 커밋: pr-agentic-service main `c7daac1`, internal/gaia `746c568`. executor·pr-batch·prj_re 기준 커밋은 PREP-01에서 수행 시점에 기록합니다.
-- 11/04 현행화: 익스큐터 actor 제거, 통합 루트 상대경로, gaia access key 우회, 키워드 판정의 모델 판단 교체, 코드 레벨 4, 실패 재시도 상한, 실패 원인 표시를 반영했습니다. 신규 시나리오는 RUN-13~17, OPS-10, GAIA-07입니다.
+- 11/04 현행화: 익스큐터 actor 제거, 통합 루트 상대경로, gaia access key 우회, 키워드 판정의 모델 판단 교체, 코드 레벨 4, 실패 재시도 상한, 실패 원인 표시를 반영했습니다. 신규 시나리오는 RUN-13~17, OPS-09, GAIA-07입니다.
 - 11/05: 프로젝트 공유 기능이 범위 밖이라 공유 프로젝트 시나리오(당시 RUN-12)를 뺐습니다.
 - 11/15: 분석 시나리오 묶음(`scripts/run_scenarios.py`)을 통합 테스트에서 뺐습니다(아래 "통합 테스트 밖"). 빈 번호가 없도록 RUN 번호를 당겼습니다. 11/09판 RUN-13은 RUN-12, RUN-15~21은 RUN-13~19입니다(TC ID도 같이 바뀜). 이 날짜 이전 기록의 RUN 번호는 당긴 뒤 번호로 고쳐 적었습니다.
 - 11/08 현행화: API 키 종류(일반키·마스터키, 마이그레이션 0008)와 모든 게이트웨이 호출의 `X-User-Id` 필수, 키 재발급, executor `runtime.kernel_id`·`DELETE /runtime-targets/{id}`, 계획 후보 중복 방지(한 응답에 계획 카드 하나), 계획 규칙(그룹 수별 검정, 챔버는 설비 하나로 거른 뒤, 정리 후 분석은 `clean_data`까지), 반복 거부 상한, 메모리 워커의 분석 대상 저장·처리 로그를 반영했습니다. 신규 시나리오는 RUN-16~21, BAT-11, ADM-07, OPS-11입니다.
+- 11/15: 백그라운드 루프 정지 시나리오(이전 OPS-05)를 뺐습니다. 내부망에서는 kubectl을 쓸 수 없어 루프를 일부러 멈출 수단이 없습니다. 빈 번호가 없도록 OPS-06~11을 OPS-05~10으로 당겼습니다(TC ID도 같이). 이 문서의 OPS 번호는 모두 새 번호입니다.
 - 11/09: gaia 관련 시나리오(GAIA-01~07)는 이번 통합 테스트에서 제외했습니다. prd는 internal/gaia 빌드이므로 PREP-05는 그대로 수행합니다.
 - 세 서비스 모두 헤더 모드가 삭제되어 모든 환경이 키 인증입니다.
 - **prd도 오픈 전이라 장애 주입, 키·tenant 폐기, 사용자 비활성화, DB 리셋까지 prd에서 그대로 합니다.**
@@ -197,13 +198,12 @@
 | OPS-02 | Redis 재시작 | 컨슈머 그룹 재생성, 놓친 이벤트 복구로 run 완료 | 일부 (운영) | 단독 | P0 |
 | OPS-03 | 키 해시 불일치(일부러 틀린 키) | 표준 오류 응답(code, message), 로그에 대상 서비스와 401 | 일부 (운영) | 단독 | P0 |
 | OPS-04 | pr-batch를 내린 채 배치 화면 | 표준 오류 형식(code, message), 다른 화면은 정상 | 일부 (운영) | 단독 | P1 |
-| OPS-05 | 백그라운드 루프 정지 | `/healthz` 503 → Pod 재시작 (gaia는 `/api/v1/healthz`) | X (운영) | 단독 | P1 |
-| OPS-06 | prd 설정에 `<...>` 자리 남김, 빈 `SSO_ALLOWED_ORIGINS` | 기동 실패 | X (운영) | 단독 | P1 |
-| OPS-07 | 32MB에 가까운 요청, 이미지 한도 초과 | 우리 413/422 응답(`code`, `message`), Ingress가 먼저 끊지 않음 | O |  | P1 |
-| OPS-08 | 없는 모델, LLM 장애 | 422 `UNKNOWN_MODEL` / run `failed`. 오류 문구에 원인(사용량 한도·권한·컨텍스트 초과·서버 오류)과 게이트웨이 메시지, 오류 ID. 주소·비밀값은 가려짐 | 일부 (운영) |  | P1 |
-| OPS-09 | 동시 사용자 부하(`scripts/loadtest.py`) | executor 런타임·PG 연결 고갈 없음, 커널 대기 1800초 설정 조정 근거 확보 | X (운영) | 단독 | P1 |
-| OPS-10 | 항상 실패하는 코드를 요구하는 요청 | 같은 tool이 연속 5회(`AGENT_TOOL_FAILURE_ANY_LIMIT`) 실패하면 멈추고 턴이 끝남. executor 재개 후에도 턴당 모델 호출 40회 상한 유지, 실행이 계속 늘지 않음 | O |  | P0 |
-| OPS-11 | pr-batch `EXECUTOR_API_KEY`에 해시를 넣은 설정 | 배치 실행 FAILED, 사유 `SUBMIT_REJECTED`와 401, pr-batch·executor 로그에 401. 원복 후 정상 | 일부 (운영) | 단독 | P1 |
+| OPS-05 | prd 설정에 `<...>` 자리 남김, 빈 `SSO_ALLOWED_ORIGINS` | 기동 실패 | X (운영) | 단독 | P1 |
+| OPS-06 | 32MB에 가까운 요청, 이미지 한도 초과 | 우리 413/422 응답(`code`, `message`), Ingress가 먼저 끊지 않음 | O |  | P1 |
+| OPS-07 | 없는 모델, LLM 장애 | 422 `UNKNOWN_MODEL` / run `failed`. 오류 문구에 원인(사용량 한도·권한·컨텍스트 초과·서버 오류)과 게이트웨이 메시지, 오류 ID. 주소·비밀값은 가려짐 | 일부 (운영) |  | P1 |
+| OPS-08 | 동시 사용자 부하(`scripts/loadtest.py`) | executor 런타임·PG 연결 고갈 없음, 커널 대기 1800초 설정 조정 근거 확보 | X (운영) | 단독 | P1 |
+| OPS-09 | 항상 실패하는 코드를 요구하는 요청 | 같은 tool이 연속 5회(`AGENT_TOOL_FAILURE_ANY_LIMIT`) 실패하면 멈추고 턴이 끝남. executor 재개 후에도 턴당 모델 호출 40회 상한 유지, 실행이 계속 늘지 않음 | O |  | P0 |
+| OPS-10 | pr-batch `EXECUTOR_API_KEY`에 해시를 넣은 설정 | 배치 실행 FAILED, 사유 `SUBMIT_REJECTED`와 401, pr-batch·executor 로그에 401. 원복 후 정상 | 일부 (운영) | 단독 | P1 |
 
 ### H. gaia (GAIA)
 
@@ -218,7 +218,7 @@
 
 ## 화면 수행 기준
 
-- 74개 중 우리 화면만으로 되는 것 51개, 화면 + 보조 확인 19개, 화면 밖 4개입니다(PREP 제외, 11/15 기준). 상세는 공유 폴더 `integration-test/screen-coverage-review.md`.
+- 73개 중 우리 화면만으로 되는 것 51개, 화면 + 보조 확인 19개, 화면 밖 3개입니다(PREP 제외, 11/15 기준). 상세는 공유 폴더 `integration-test/screen-coverage-review.md`.
 - 키 호출 시나리오는 관리자 **시스템 > API 호출 시험** 화면에서 합니다. 시나리오를 고르면 경로·본문·헤더가 채워지고, 서버 응답(상태 코드, request id, 본문)을 그대로 보여 줍니다. 키는 저장하지 않고 요청·응답 기록에서 가립니다.
 - 시나리오별 수행 절차는 [scenarios/](scenarios/README.md)에 있습니다.
 - 화면 밖으로 남는 것은 **운영**(서비스 중지·재시작, 설정 변경, Redis·DB·로그 확인, 부하 스크립트)입니다. 담당 팀이 수행하고, 결과 확인은 우리 화면에서 같이 합니다.
@@ -232,7 +232,7 @@
 | 환경 | 구성 | 주로 보는 것 | 들어가는 조건 | 나오는 조건 |
 | --- | --- | --- | --- | --- |
 | dev (예습) | 클러스터, idp SSO, 실제 LLM, dev 전용 키 | 전 시나리오를 한 번 돌려 절차서와 기대 결과를 다듬음, 결함 조기 발견 | dev의 PREP 완료 | P0 전부 수행(실패는 결함 등록), 절차서 수정 반영 |
-| prd (본 테스트, 오픈 전) | 내부망, internal/gaia, prd 전용 키, 운영과 같은 설정 | 전 시나리오, 부하(OPS-09), 설정 검사(OPS-06), liveness(OPS-05) | dev 종료 + prd의 PREP 완료(리셋은 오픈 전 마지막으로 한 번 더) | P0 100%, P1 90% 이상, 부하 결과로 설정값 확정 |
+| prd (본 테스트, 오픈 전) | 내부망, internal/gaia, prd 전용 키, 운영과 같은 설정 | 전 시나리오, 부하(OPS-08), 설정 검사(OPS-05), liveness(OPS-05) | dev 종료 + prd의 PREP 완료(리셋은 오픈 전 마지막으로 한 번 더) | P0 100%, P1 90% 이상, 부하 결과로 설정값 확정 |
 
 **환경을 옮길 때** PREP를 처음부터 다시 밟습니다. 키는 환경별로 따로 만들고 DB·Redis·PV도 환경별로 비웁니다. **prd는 본 테스트가 끝난 뒤 오픈 전에 PREP-06(리셋)을 한 번 더** 해서 테스트 데이터·폐기된 키·비활성 사용자를 지웁니다.
 
@@ -272,7 +272,7 @@
 | R2 | 우리 `docker-compose.yml`의 `BATCH_API_KEY` 기본값이 빈 값 | 로컬 게이트웨이 호출 401 | pr-batch 로컬 키가 정해지면 기본값으로 | 우리 | 로컬 개발용, 미반영 |
 | R3 | `smoke_e2e.py`·`run_scenarios.py`·`loadtest.py`가 dev SSO 로그인만 지원 | dev·prd(idp)에서 OPS-09와 배포 전 품질 회귀 점검(통합 테스트 밖) 자동화 불가 | `X-Api-Key` + `X-User-Id` 모드 옵션 추가 | 우리 | 미반영 |
 | R4 | 이전 리셋 요청에 Redis 스트림이 빠져 있음 | 옛 uuid 사용자의 이벤트가 남음 | PREP-06에 포함 | 인프라 | 반영(문서) |
-| R5 | Go/No-Go F1·F2·F3·F8 | 미반영이면 OPS-06 실패 | 반영 여부 확인 | 우리 | 완료(main `f0fed74`, internal/gaia `60aa017`) |
+| R5 | Go/No-Go F1·F2·F3·F8 | 미반영이면 OPS-05 실패 | 반영 여부 확인 | 우리 | 완료(main `f0fed74`, internal/gaia `60aa017`) |
 | R6 | pr-batch가 `can_enable`·`can_disable`·`enable_blocked_reason`을 직접 줌 | 우리 계산이 덮으면 BAT-09 사유가 빠짐 | pr-batch 값을 그대로 넘김 | 우리 | 완료(게이트웨이가 그대로 전달, `tests/test_batch_gateway.py`) |
 | R7 | local은 dev SSO 어댑터라 실제 idp를 거치지 않음 | | dev 예습으로 대체 | 우리 | 해소(local 단계 없음) |
 | R8 | executor 10/21 점검 항목(handover 후 projection·완료 이벤트, 배치 대상 반환 뒤 리포트 저장) 현재 상태 모름 | BAT-04 실패 시 1순위 원인 후보 | executor에 확인 요청 | executor | 확인 대기 |
@@ -300,7 +300,7 @@
 1. 환경별(dev, prd) `scripts/generate_api_keys.py`로 `pr-agentic-service`·`pr-batch`·`ops` 키를 만들어 `AUTH_CLIENTS`의 0000… 해시를 교체하고, 키 원문은 우리와 pr-batch에 전달해 주세요. 로컬 compose의 로컬 키는 지금 값 그대로 유지해 주세요.
 2. 환경마다 통합테스트 시작 전에 executor DB, 공유 PV `tenants/*/users/*`, Redis `executor.events.*` 스트림을 우리·pr-batch와 같은 시간에 비워 주세요.
 3. 통합 루트(`/mnt/data/dtest`) 상대경로 버전을 우리보다 먼저 배포해 주세요. 우리는 옛 `executions/...` 형식을 더 이상 읽지 않습니다. 함께, 10/21 요청의 두 가지 현재 상태를 알려 주세요. handover가 일어난 SINGLE 실행에서도 노트북 projection `SUCCEEDED`와 `execution.completed`의 `execution{trigger, context}`가 나오는지, 배치 Jupyter 대상이 풀로 돌아간 뒤에도 `POST /executions/{id}/artifacts`(REPORT, `append_to_notebook`)가 되는지입니다.
-4. 테스트 중 OPS-01(executor 중지)과 OPS-09(부하)를 할 때 런타임 수와 로그를 함께 봐 주세요.
+4. 테스트 중 OPS-01(executor 중지)과 OPS-08(부하)를 할 때 런타임 수와 로그를 함께 봐 주세요.
 
 **pr-batch 담당께**
 
