@@ -2756,7 +2756,7 @@ const API_PRESETS = [
   ['EXEC-07', '남의 프로젝트 헤더', 'GET', '/api/v1/executor/executions?limit=20', null, { key: true, user: true, headers: { 'X-Project-Id': '<남의 project_id>' } }],
   ['BAT-10', '외부 tenant 키로 배치 목록', 'GET', '/api/v1/batch/batches?limit=20', null, { key: true, user: true }, '외부 tenant 키를 넣습니다.'],
   ['ADM-02', '일반 사용자 키로 관리자 API', 'GET', '/api/v1/admin/api-clients', null, { key: true, user: true }],
-  ['OPS-08', '없는 모델로 새 세션', 'POST', '/api/v1/projects/<project_id>/sessions', { input: { content: '안녕' }, model: 'no-such-model' }, { key: true, user: true }],
+  ['OPS-07', '없는 모델로 새 세션', 'POST', '/api/v1/projects/<project_id>/sessions', { input: { content: '안녕' }, model: 'no-such-model' }, { key: true, user: true }],
 ];
 const AT = { key: '', last: null };
 async function renderApiTest() {
