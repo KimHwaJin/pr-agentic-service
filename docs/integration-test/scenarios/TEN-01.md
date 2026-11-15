@@ -82,10 +82,16 @@
 - 폐기한 키는 상태가 "폐기"로 바뀌고 버튼이 사라집니다.
 
 **운영 담당과 함께 할 때**
-- "운영 담당이 …"로 시작하는 단계는 수행자가 직접 하지 않습니다. 서비스 중지·기동, 설정 변경·재배포, 로그·DB·Redis 조회 권한이 있는 운영 담당에게 요청하고, 끝났다는 답을 받은 뒤 다음 단계로 갑니다.
-- 로그 확인을 요청할 때는 검색어(단계에 적힌 로그 이름), 동작한 시각(초 단위), 그리고 있으면 request id나 run id를 함께 전달합니다. 운영 담당은 찾은 로그 줄을 그대로 복사해 주고, 수행자는 그것을 8절 증빙에 붙입니다.
-- ※ 미확인: 로그를 어디서 어떻게 검색하는지와 서비스를 내리고 올리는 명령은 환경(클러스터, 네임스페이스, 로그 도구)마다 달라 이 문서에 적지 못했습니다. 운영 담당이 쓰는 방법을 따릅니다.
-- 화면 칸에 "단독 수행: 예"인 시나리오는 다른 사람의 테스트를 깨뜨립니다. 시작 전에 테스트 채널에 시작을 알리고, 6절 정리까지 끝낸 뒤 끝났다고 알립니다.
+- "운영 담당이 …"로 시작하는 단계는 수행자가 직접 하지 않습니다. 클러스터 권한이 있는 운영 담당에게 요청하고, 끝났다는 답을 받은 뒤 다음 단계로 갑니다. 아래는 운영 담당이 쓰는 방법입니다. `<namespace>`는 환경의 네임스페이스로 바꿉니다.
+- **우리 서비스 설정을 잠깐 바꾸기**: 설정값은 이미지에 들어 있는 `config.<환경>.yml`에서 읽지만, 같은 이름의 환경 변수가 있으면 환경 변수가 우선합니다. 그래서 테스트용 변경은 이미지를 다시 만들지 않고 Deployment의 환경 변수로 합니다. `kubectl -n <namespace> set env deployment/pr-agentic-service 이름=값`을 실행하면 Pod가 하나씩 새 값으로 다시 뜹니다. `kubectl -n <namespace> rollout status deployment/pr-agentic-service`가 "successfully rolled out"으로 끝나면 새 Pod가 모두 뜬 것입니다. 그 시각을 적습니다.
+- **바꾸기 전에 지금 값 보관**: `kubectl -n <namespace> set env deployment/pr-agentic-service --list`로 지금 환경 변수를 봅니다. 바꾸려는 이름이 이미 목록에 있으면(예: PREP-03에서 환경 변수로 넣은 키) 그 값을 보관해 두고, 되돌릴 때 같은 명령으로 원래 값을 다시 넣습니다.
+- **되돌리기**: 목록에 없던 이름은 `kubectl -n <namespace> set env deployment/pr-agentic-service 이름-`(이름 뒤에 빼기 기호)로 환경 변수를 지웁니다. 그러면 다시 설정 파일의 값을 씁니다. 되돌린 뒤에도 `rollout status`로 끝난 것을 확인합니다.
+- **목록 값**은 JSON으로 넣습니다. 예: `SSO_ALLOWED_ORIGINS='["https://sso.example.com"]'`.
+- **재시작만**: `kubectl -n <namespace> rollout restart deployment/pr-agentic-service`.
+- **서비스 내리기와 올리기**(executor, pr-batch): `kubectl -n <namespace> get deployment`로 이름과 지금 Pod 수를 확인하고, `kubectl -n <namespace> scale deployment/<이름> --replicas=0`으로 내립니다. `kubectl -n <namespace> get pod`에서 그 서비스의 Pod가 없어지면 내려간 것입니다. 올릴 때는 `--replicas=<원래 수>`로 실행하고 `rollout status`로 확인합니다. 그 Deployment에 HPA가 걸려 있으면(`kubectl -n <namespace> get hpa`) Pod를 다시 올려 버리므로, 내리는 동안 HPA를 먼저 지우고 끝난 뒤 다시 적용합니다. 우리 서비스에는 HPA(최소 2개)가 있습니다.
+- **로그 찾기**: `kubectl -n <namespace> logs -l app=pr-agentic-service --prefix --since=10m --tail=-1 | grep <검색어>`. 로그 확인을 요청하는 사람은 검색어(단계에 적힌 로그 이름), 동작한 시각(초 단위), 있으면 request id나 run id를 전달합니다. 운영 담당은 찾은 줄을 그대로 복사해 주고, 수행자는 8절 증빙에 붙입니다.
+- ※ 미확인: 위 명령은 저장소의 `deploy/kubernetes/deployment.yml`(Deployment 이름 `pr-agentic-service`, 레이블 `app=pr-agentic-service`) 기준입니다. 내부망에서 이름이 다르거나, kubectl을 직접 못 쓰고 배포 파이프라인으로만 배포한다면 같은 환경 변수를 배포 설정의 `env`에 넣어 배포합니다. executor와 pr-batch의 Deployment 이름, 설정 방식, 사내 로그 도구는 각 담당의 방법을 따릅니다.
+- "단독 수행: 예"인 시나리오는 다른 사람의 테스트를 깨뜨립니다. 시작 전에 테스트 채널에 시작을 알리고, 6절 정리까지 끝낸 뒤 끝났다고 알립니다.
 
 **끝난 뒤 기록**
 - 각 단계에서 예상 결과와 비교할 화면을 캡처합니다(Windows는 Win+Shift+S). API 키 원문, 쿠키, CSRF 토큰이 보이면 가리고 올립니다.
