@@ -1,17 +1,20 @@
 import time
 
-from src.dtest.api_service.auth.store import AuthStore
+from src.dtest.api_service.auth.store import AuthFlow, AuthStore
 
 
 class FakeRedis:
     def __init__(self):
         self.data, self.ttl = {}, {}
 
-    async def set(self, key, value, ex=None):
-        self.data[key], self.ttl[key] = value, ex
+    async def set(self, key, value, ex=None, exat=None):
+        self.data[key], self.ttl[key] = value, exat or ex
 
     async def get(self, key):
         return self.data.get(key)
+
+    async def getdel(self, key):
+        return self.data.pop(key, None)
 
 
 async def test_activity_slides_the_idle_expiry_up_to_the_cap(monkeypatch):
@@ -40,3 +43,19 @@ async def test_idle_session_expires():
     sid, _ = await store.create_session("u1", ttl=60)
     assert await store.read_session(sid) is not None
     assert await store.read_session("x" * 43) is None
+
+
+async def test_session_expires_at_its_idle_expiry(monkeypatch):
+    redis = FakeRedis()
+    store = AuthStore(redis, "t")  # ty: ignore[invalid-argument-type]
+    monkeypatch.setattr(time, "time", lambda: 1_000_000.0)
+    sid, session = await store.create_session("u1", ttl=1800)
+    assert list(redis.ttl.values()) == [session.expires_at]  # EXAT
+
+
+async def test_login_flow_is_single_use():
+    store = AuthStore(FakeRedis(), "t")  # ty: ignore[invalid-argument-type]
+    token = "f" * 43
+    await store.create_flow(token, AuthFlow("/", "app"), ttl=300)
+    assert await store.consume_flow(token) == AuthFlow("/", "app")
+    assert await store.consume_flow(token) is None
