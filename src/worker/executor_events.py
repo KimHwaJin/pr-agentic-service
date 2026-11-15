@@ -13,8 +13,11 @@ Redis has no ACL here, so anyone on it can write a stream entry. An event
 that resumes a run is therefore taken from the executor's own timeline of
 that execution (matched by event_id), never from the stream entry; an
 event the executor does not know is dropped.
-Redis 6.0 compatible: stale pending entries are reclaimed
-with XPENDING + XCLAIM.
+Needs Redis 6.2 or newer (XAUTOCLAIM); runs on Redis 8.x. Entries left
+pending for a minute (a pod died, a handler failed) are reclaimed with
+XAUTOCLAIM, which also drops entries deleted from the stream (executor
+retention) from the pending list. A lost group (a new or flushed Redis, a
+deleted stream) is created again on the next read.
 """
 
 import asyncio
@@ -91,6 +94,10 @@ async def deliver(db: Database, event: dict[str, Any]) -> str | None:
     )
 
 
+# XAUTOCLAIM pages of 50 per reclaim (every ~minute): up to 1000 entries
+RECLAIM_ROUNDS = 20
+
+
 class ExecutorEventConsumer:
     def __init__(
         self,
@@ -154,24 +161,46 @@ class ExecutorEventConsumer:
                         await self._handle_one(message_id, fields)
             except asyncio.CancelledError:
                 raise
+            except ResponseError as exc:
+                if "NOGROUP" not in str(exc):
+                    log.exception("executor_event_consumer_error")
+                    await asyncio.sleep(2)
+                    continue
+                # Redis came back empty or the stream was deleted: the
+                # group starts again at the oldest entry; events of the gap
+                # come back through MissedEventRecovery
+                log.warning("executor_event_group_lost stream=%s", self.stream)
+                try:
+                    await self._create_group()
+                except Exception:  # noqa: BLE001 - Redis still down: retry
+                    log.exception("executor_event_group_create_failed")
+                    await asyncio.sleep(2)
             except Exception:  # noqa: BLE001 - keep consuming; failed entries stay pending
                 log.exception("executor_event_consumer_error")
                 await asyncio.sleep(2)
 
     async def _reclaim(self) -> None:
-        pending = await self.redis.xpending_range(
-            self.stream, self.group, min="-", max="+", count=50
-        )
-        stale = [
-            p["message_id"]
-            for p in pending
-            if p["time_since_delivered"] > 60000
-        ]
-        if stale:
-            for message_id, fields in await self.redis.xclaim(
-                self.stream, self.group, self.consumer, 60000, stale
-            ):
+        """Entries pending for over a minute, the whole pending list.
+
+        XAUTOCLAIM walks it with a cursor, so entries that keep failing
+        never hide the ones behind them, and drops entries the stream no
+        longer has (Redis 7.0+). Bounded per round; the rest next round.
+        """
+        start = "0-0"
+        for _ in range(RECLAIM_ROUNDS):
+            reply = await self.redis.xautoclaim(
+                self.stream,
+                self.group,
+                self.consumer,
+                min_idle_time=60000,
+                start_id=start,
+                count=50,
+            )
+            start, claimed = reply[0], reply[1]
+            for message_id, fields in claimed:
                 await self._handle_one(message_id, fields)
+            if start == "0-0":
+                return
 
     async def _handle_one(
         self, message_id: str, fields: dict[str, str]
