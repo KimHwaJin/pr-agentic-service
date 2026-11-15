@@ -7,8 +7,6 @@
 | 화면 | O 우리 화면만 · 배치 실행 이력 → executor 실행 상세(tenant, created_by) |
 | 필요 권한 | 일반 |
 | 단독 수행 | 아니오 |
-| 연동 경로 | I6 I7 |
-| 11/01판 ID | D3 |
 
 ## 1. 목적
 "지금 실행"이 pr-batch → executor로 제출되고, executor 기록의 사용자·요청자가 맞는지 확인합니다.
