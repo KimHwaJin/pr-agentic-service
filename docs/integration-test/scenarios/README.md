@@ -88,12 +88,11 @@
 | [OPS-02](OPS-02.md) | Redis 재시작 | P0 | 일부 | 운영 | 단독 |
 | [OPS-03](OPS-03.md) | 키 해시 불일치(일부러 틀린 키) | P0 | 일부 | 운영 | 단독 |
 | [OPS-04](OPS-04.md) | pr-batch를 내린 채 배치 화면 | P1 | 일부 | 운영 | 단독 |
-| [OPS-05](OPS-05.md) | 백그라운드 루프 정지 | P1 | X | 운영 | 단독 |
-| [OPS-06](OPS-06.md) | prd 설정에 `<...>` 자리 남김, 빈 `SSO_ALLOWED_ORIGINS` | P1 | X | 운영 | 단독 |
-| [OPS-07](OPS-07.md) | 32MB에 가까운 요청, 이미지 한도 초과 | P1 | O | 일반 |  |
-| [OPS-08](OPS-08.md) | 없는 모델, LLM 장애 | P1 | 일부 | 운영 |  |
-| [OPS-09](OPS-09.md) | 동시 사용자 부하(`scripts/loadtest.py`) | P1 | X | 운영 | 단독 |
-| [OPS-10](OPS-10.md) | 항상 실패하는 코드를 요구하는 요청 | P0 | O | 일반 |  |
-| [OPS-11](OPS-11.md) | pr-batch EXECUTOR_API_KEY에 해시를 넣은 설정 | P1 | 일부 | 운영 | 단독 |
+| [OPS-05](OPS-05.md) | prd 설정에 `<...>` 자리 남김, 빈 `SSO_ALLOWED_ORIGINS` | P1 | X | 운영 | 단독 |
+| [OPS-06](OPS-06.md) | 32MB에 가까운 요청, 이미지 한도 초과 | P1 | O | 일반 |  |
+| [OPS-07](OPS-07.md) | 없는 모델, LLM 장애 | P1 | 일부 | 운영 |  |
+| [OPS-08](OPS-08.md) | 동시 사용자 부하(`scripts/loadtest.py`) | P1 | X | 운영 | 단독 |
+| [OPS-09](OPS-09.md) | 항상 실패하는 코드를 요구하는 요청 | P0 | O | 일반 |  |
+| [OPS-10](OPS-10.md) | pr-batch EXECUTOR_API_KEY에 해시를 넣은 설정 | P1 | 일부 | 운영 | 단독 |
 
 gaia 관련 시나리오(GAIA-01~07)는 이번 통합 테스트에서 제외했습니다(11/09). prd는 internal/gaia 빌드이므로 PREP-05는 그대로 수행합니다.
