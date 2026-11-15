@@ -1,0 +1,7 @@
+users.csv
+.env
+*.html
+*_stats.csv
+*_stats_history.csv
+*_failures.csv
+*_exceptions.csv

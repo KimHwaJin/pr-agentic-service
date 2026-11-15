@@ -71,7 +71,8 @@ uv run python -m src.dtest.local   # 레포 루트에서, 포트 8080 (내부망
 - 종단 점검: `uv run python scripts/smoke_e2e.py`
 - 단위 테스트: `uv run pytest`
 - 정적 검사: `uv run ruff format`, `uv run ruff check`, `uv run ty check` (줄 길이 79, 설정은 `pyproject.toml`)
-- 부하 측정: `uv run python scripts/loadtest.py --users 100 --turns 3`
+- 부하 측정(로컬, mock LLM): `uv run python scripts/loadtest.py --users 100 --turns 3`
+- 부하 테스트(dev·prd, 키 호출): `locust/README.md`
 
 기동 시 Alembic, LangGraph checkpointer/store 테이블, Workflow 벡터 인덱스가 advisory lock 아래 한 번 적용됩니다(`AUTO_MIGRATE=false`로 끌 수 있음).
 
