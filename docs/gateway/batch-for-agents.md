@@ -188,6 +188,7 @@ SKIPPED                                       (policy decided not to run; termin
 - Result notebook: when the run is `COMPLETED`, download `result.notebook_artifact_id` from the executor gateway with `GET /api/v1/executor/artifacts/{notebook_artifact_id}/content`, using the same key and the same `X-User-Id`.
 - Execution details are at `GET /api/v1/executor/executions/{execution_id}`. See `executor-for-agents.md` for the notebook and cell routes.
 - RunView fields you need: `id`, `batch_id`, `user_id` (owner), `status`, `skip_reason`, `failure_type`, `cancel_requested`, `trigger` (`MANUAL` or `SCHEDULED`), `scheduled_for`, `execution_id`, `notebook_status`, `result.notebook_artifact_id`, `last_error` and `completed_at`.
+- `failure_type` is set only when the run is `FAILED`. It is the executor's `state.reason.code` of the failed execution (for example `TOOL_ERROR`; the list is in `executor-for-agents.md`), or pr-batch's own `SUBMIT_REJECTED` (the executor refused the submission) or `ABANDONED` (the executor could not be reached for 24 hours). Show an unknown value as it is, with `last_error`.
 - RunDetail adds `steps[]` (`sequence`, `original_index` = notebook cell index, `status`).
 
 ### 4.5 Turn a chat notebook into a script (agentic service route)
