@@ -15,7 +15,6 @@ from langgraph.store.postgres import AsyncPostgresStore
 from psycopg import AsyncConnection
 from psycopg.rows import DictRow, dict_row
 from psycopg_pool import AsyncConnectionPool
-from redis.asyncio import Redis
 from sqlalchemy import text
 
 from src.dtest.core.assets import AssetLoader, SkillCatalog, ToolCatalog
@@ -29,6 +28,7 @@ from src.dtest.core.executor.sources import CodeSources
 from src.dtest.core.executor.storage import SharedStorage
 from src.dtest.core.images import Images
 from src.dtest.core.memory.service import ProjectMemory
+from src.dtest.core.redis_client import create_redis
 from src.dtest.core.services import Services
 from src.dtest.core.workflows.service import WorkflowService
 
@@ -89,7 +89,7 @@ async def build_services(
     settings: Settings,
 ) -> AsyncGenerator[Services]:
     db = Database(settings.database_url, settings.db_pool_size)
-    redis = Redis.from_url(settings.redis_url, decode_responses=True)
+    redis = create_redis(settings)
     pool = checkpoint_pool(settings)
     await pool.open()
     embedder = build_embedder(settings)  # workflow search only

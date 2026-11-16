@@ -33,6 +33,7 @@ from src.dtest.core.models import (
     Run,
     RunEvent,
 )
+from src.dtest.core.redis_client import listen
 from src.dtest.core.services import Services
 from src.dtest.worker.executor_events import matches, wake_waiting_run
 from src.dtest.worker.memory import mark_dirty
@@ -139,7 +140,7 @@ class RunScheduler:
                 await pubsub.subscribe(
                     runs_wake_channel(self.settings.redis_namespace)
                 )
-                async for message in pubsub.listen():
+                async for message in listen(pubsub):
                     if message["type"] == "message":
                         self._wake.set()
             except asyncio.CancelledError:

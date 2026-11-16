@@ -113,3 +113,25 @@ GROUP BY 1, 2 ORDER BY 1, 2;
 ```
 
 서비스별 연결 예산은 [load-design.md](load-design.md)의 표를 따릅니다.
+
+## 9. Redis 접속 (`REDIS_MODE`)
+
+Redis는 executor가 이벤트를 쓰는 것과 같은 서버, 같은 DB 번호를 봐야 합니다. 다르면 오류 없이 이벤트가 하나도 오지 않습니다. 서버는 Redis 6.2 이상(운영 대상 8.x)입니다.
+
+| `REDIS_MODE` | 환경 | 읽는 설정 | 접속 대상 |
+| --- | --- | --- | --- |
+| `standalone` (기본) | 로컬, dev, stg | `REDIS_URL` | 그 주소, URL 끝의 DB 번호 |
+| `sentinel` | prd | `REDIS_SENTINEL_HOST`, `_PORT`, `_MASTER_NAME`, `_USERNAME`, `_AUTH` | Sentinel이 알려 주는 현재 마스터, DB 0번 |
+
+- `REDIS_SENTINEL_*`에는 executor의 같은 이름 설정과 같은 값을 넣습니다. 계정 하나로 Sentinel과 Redis에 모두 로그인합니다.
+- `REDIS_SENTINEL_AUTH`는 사내 가이드대로 AES로 암호화한 비밀번호이고 사내 `hcp` 라이브러리의 `AESCipher`로 복호화합니다. `hcp`가 없으면 `sentinel` 모드는 시작할 때 오류로 멈춥니다.
+- Sentinel 구성의 노드 하나를 `REDIS_URL`로 직접 가리키지 않습니다. 우리 명령(세션 저장, 이벤트 읽기, ACK)은 모두 쓰기라서, 그 노드가 마스터가 아니게 되면 `READONLY` 오류로 멈춥니다.
+- 장애 전환 때는 재시작이 필요 없습니다. 새 연결마다 Sentinel에 현재 마스터를 묻습니다. 로컬 Sentinel 구성(마스터 1, 레플리카 2, Sentinel 3, Redis 7.0.15)에서 잰 값은 다음과 같습니다(`down-after-milliseconds` 3초 기준).
+
+  | 상황 | 쓰기 재개 | 이벤트 수신 재개 | 실시간(SSE) 구독 재개 |
+  | --- | --- | --- | --- |
+  | 마스터 프로세스가 죽음 | 5~9초 | 6~10초 | 약 7초 |
+  | 마스터가 응답 없이 멈춤(연결은 열려 있음) | 약 16초 | 약 17초 | 약 31초 |
+
+- 응답 없는 서버는 오류를 내지 않으므로, 명령은 15초 안에 응답이 없으면 끊고 다시 연결하고(`SOCKET_TIMEOUT`), 구독은 15초 동안 조용하면 PING을 보내 15초 안에 답이 없으면 다시 연결합니다(`src/dtest/core/redis_client.py`).
+- 전환 중에 생기는 일: 그 사이 요청은 실패할 수 있고(로그인 확인 포함), SSE는 끊겼다가 브라우저가 마지막 이벤트 id로 다시 받습니다. Redis 복제가 비동기라 전환 직전 몇 초의 로그인 세션과 executor 이벤트는 새 마스터에 없을 수 있습니다. 사용자는 다시 로그인하고, 빠진 이벤트는 놓친 이벤트 복구(`EXECUTOR_EVENT_RECOVERY_SECONDS`, 기본 120초 뒤)가 executor에 물어 채웁니다.
