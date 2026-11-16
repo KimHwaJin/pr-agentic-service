@@ -43,8 +43,30 @@ DATABASE_URL: postgresql+psycopg://<user>:<password>@<pg-host>:5432/agentic
 # [환경별] Redis URL. 실행 완료 이벤트를 받으려면 executor 가 이벤트를 쓰는
 # Redis 와 같아야 합니다(run 깨우기, 락, 캐시에도 사용). 서버는 Redis 6.2
 # 이상이어야 합니다(XAUTOCLAIM, GETDEL, EXAT). 운영 대상은 8.x 입니다.
+# REDIS_MODE: standalone 일 때만 씁니다.
 # 기본값: redis://localhost:6379/0
 REDIS_URL: redis://<redis-host>:6379/0
+
+# [환경별] Redis 접속 방식. standalone 은 REDIS_URL 로 직접 붙고, sentinel 은
+# REDIS_SENTINEL_* 로 Sentinel 에 현재 마스터를 물어 붙습니다(DB 0번 고정,
+# REDIS_URL 미사용). executor 의 같은 이름 설정과 같은 값을 넣습니다.
+# dev, stg 는 standalone, prd 는 sentinel 입니다.
+# 기본값: standalone
+REDIS_MODE: standalone
+
+# [환경별] sentinel 모드 전용. Sentinel 주소와 포트.
+REDIS_SENTINEL_HOST: ""
+REDIS_SENTINEL_PORT: 26379
+
+# [환경별] Sentinel 이 감시하는 마스터 이름. sentinel 모드에서 필수.
+REDIS_SENTINEL_MASTER_NAME: ""
+
+# [환경별] Sentinel 과 Redis 에 같이 쓰는 계정. 계정 없이 비밀번호만 쓰면 "".
+REDIS_SENTINEL_USERNAME: ""
+
+# [환경별][비밀] AES 로 암호화한 비밀번호(사내 가이드). 사내 hcp 라이브러리의
+# AESCipher 로 복호화하므로 sentinel 모드는 hcp 가 설치된 환경에서만 뜹니다.
+REDIS_SENTINEL_AUTH: ""
 
 # [공통] Redis 키 앞에 붙는 접두어. 같은 Redis 를 쓰는 다른 서비스와 키 충돌 방지.
 REDIS_NAMESPACE: agentic
