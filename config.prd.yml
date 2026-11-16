@@ -2,7 +2,17 @@
 # (shared; every other key is there).
 # Fill the <...> values; environment variables (Deployment env:) win.
 DATABASE_URL: postgresql+psycopg://<user>:<password>@<pg-host>:5432/agentic
-REDIS_URL: redis://<redis-host>:6379/0
+# Redis runs behind Sentinel here: we ask it for the current master and use
+# DB 0, the same values as the executor's REDIS_SENTINEL_*. AUTH is the
+# AES-encrypted password (internal guide), decrypted with hcp's AESCipher;
+# one account signs in to Sentinel and to Redis. REDIS_URL is unused.
+REDIS_MODE: sentinel
+REDIS_URL: redis://localhost:6379/0
+REDIS_SENTINEL_HOST: <sentinel-host>
+REDIS_SENTINEL_PORT: 26379
+REDIS_SENTINEL_MASTER_NAME: <master-name>
+REDIS_SENTINEL_USERNAME: <user>
+REDIS_SENTINEL_AUTH: <encrypted-password>
 
 PUBLIC_API_ORIGIN: https://<api-host>
 FRONTEND_ORIGIN: https://<front-host>

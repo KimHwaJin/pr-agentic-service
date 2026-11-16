@@ -8,16 +8,11 @@ import json
 import re
 import secrets
 import time
-from collections.abc import Awaitable
 from dataclasses import asdict, dataclass, replace
-from typing import cast
 
 from redis.asyncio import Redis
 
 _TOKEN = re.compile(r"[A-Za-z0-9_-]{43}")
-_CONSUME = (
-    "local v = redis.call('GET', KEYS[1]) redis.call('DEL', KEYS[1]) return v"
-)
 
 
 @dataclass(frozen=True)
@@ -91,8 +86,7 @@ class AuthStore:
         await self.redis.set(
             self._key("login", sid),
             json.dumps(asdict(session)),
-            # ex, not exat: Redis 6.0 has no EXAT
-            ex=max(1, session.expires_at - int(time.time())),
+            exat=session.expires_at,
         )
 
     async def revoke_session(self, sid: str) -> None:
@@ -106,11 +100,5 @@ class AuthStore:
 
     async def consume_flow(self, token: str) -> AuthFlow | None:
         key = self._lookup_key("flow", token)
-        raw = (
-            await cast(
-                Awaitable[str | None], self.redis.eval(_CONSUME, 1, key)
-            )
-            if key
-            else None
-        )
+        raw = await self.redis.getdel(key) if key else None  # single use
         return AuthFlow(**json.loads(raw)) if raw else None

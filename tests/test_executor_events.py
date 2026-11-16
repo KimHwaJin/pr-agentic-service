@@ -214,14 +214,14 @@ class _Redis:
     async def xack(self, stream, group, message_id):
         self.acked.append(message_id)
 
-    async def xpending_range(self, stream, group, min, max, count):
-        return [
-            {"message_id": m, "time_since_delivered": 120000}
-            for m, _ in self.claimed
-        ]
-
-    async def xclaim(self, stream, group, consumer, idle, ids):
-        return self.claimed
+    async def xautoclaim(
+        self, stream, group, consumer, min_idle_time, start_id, count
+    ):
+        # pages of `count` entries; "0-0" once the pending list is done
+        offset = int(start_id.split("-")[0])
+        page = self.claimed[offset : offset + count]
+        rest = offset + count < len(self.claimed)
+        return [f"{offset + count}-0" if rest else "0-0", page, []]
 
 
 class _Confirming:
@@ -285,3 +285,46 @@ def test_a_failing_entry_does_not_hold_back_the_others():
     consumer = _event_consumer(redis, {"down": 503, "bad": 422})
     asyncio.run(consumer._reclaim())
     assert redis.acked == ["m2"]  # m1 stays pending, retried later
+
+
+def test_reclaim_walks_the_whole_pending_list():
+    # entries that keep failing do not hide the ones behind them
+    import asyncio
+
+    claimed = [(f"m{i}", _wake_fields("down")) for i in range(120)]
+    claimed.append(("last", _wake_fields("bad")))
+    redis = _Redis(claimed=claimed)
+    consumer = _event_consumer(redis, {"down": 503, "bad": 422})
+    asyncio.run(consumer._reclaim())
+    assert redis.acked == ["last"]
+
+
+def test_a_lost_group_is_created_again():
+    # a new or flushed Redis: XREADGROUP answers NOGROUP until the group
+    # exists again
+    import asyncio
+
+    from redis.exceptions import ResponseError
+
+    class Redis(_Redis):
+        def __init__(self):
+            super().__init__()
+            self.groups = 0
+
+        async def xgroup_create(self, stream, group, id, mkstream):
+            assert id == "0" and mkstream
+            self.groups += 1
+
+        async def xautoclaim(self, *args, **kwargs):
+            if self.groups < 2:
+                raise ResponseError("NOGROUP No such key 's'")
+            return ["0-0", [], []]
+
+        async def xreadgroup(self, *args, **kwargs):
+            raise asyncio.CancelledError  # stop the loop once recovered
+
+    redis = Redis()
+    consumer = _event_consumer(redis, {})
+    with pytest.raises(asyncio.CancelledError):
+        asyncio.run(consumer.run_forever())
+    assert redis.groups == 2  # at start, and again after NOGROUP

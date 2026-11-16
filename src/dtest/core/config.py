@@ -155,7 +155,17 @@ class Settings(BaseSettings):
     database_url: str = (
         "postgresql+psycopg://postgres:postgres@localhost:5432/agentic"
     )
+    # standalone connects to REDIS_URL. sentinel asks REDIS_SENTINEL_* for
+    # the current master and uses DB 0 (REDIS_URL unused); AUTH is the
+    # AES-encrypted password of the internal guide (core/redis_client.py).
+    # The names and meanings are the executor's: both use one Redis.
+    redis_mode: Literal["standalone", "sentinel"] = "standalone"
     redis_url: str = "redis://localhost:6379/0"
+    redis_sentinel_host: str = ""
+    redis_sentinel_port: int = Field(26379, ge=1, le=65535)
+    redis_sentinel_master_name: str = ""
+    redis_sentinel_username: str = ""
+    redis_sentinel_auth: str = ""
     redis_namespace: str = "agentic"
     # app-table pool (+ the same overflow); measured peak use is the burst
     # of run creation, idle while turns run (docs/load-design.md)
@@ -467,6 +477,15 @@ class Settings(BaseSettings):
             raise ValueError(
                 "EMBEDDING_PROVIDER=openai needs EMBEDDING_BASE_URL and "
                 "EMBEDDING_MODEL"
+            )
+        if self.redis_mode == "sentinel" and not (
+            self.redis_sentinel_host
+            and self.redis_sentinel_master_name
+            and self.redis_sentinel_auth
+        ):
+            raise ValueError(
+                "REDIS_MODE=sentinel needs REDIS_SENTINEL_HOST, "
+                "REDIS_SENTINEL_MASTER_NAME and REDIS_SENTINEL_AUTH"
             )
         if self.session_max_seconds < self.session_ttl_seconds:
             raise ValueError(
