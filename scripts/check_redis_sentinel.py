@@ -11,9 +11,11 @@
 REDIS / SENTINEL 이 들어간 키를 모두 모은 뒤 아래 이름에서 값을 찾고,
 명령행 옵션이 있으면 그것이 이긴다. 비밀번호는 출력하지 않는다 (길이만).
 
-암호화된 비밀번호는 --decrypt 로 앱이 쓰는 복호화 함수를 지정한다
-("모듈경로:함수이름", 문자열 하나를 받아 평문을 돌려주는 함수).
-평문을 직접 주려면 --password-plain / --sentinel-password-plain.
+앱(core/redis_client.py)과 같은 값을 쓴다: REDIS_SENTINEL_HOST, _PORT,
+_MASTER_NAME, _USERNAME, _AUTH. _AUTH 는 앱처럼 hcp 의 AESCipher 로
+복호화하고, 한 계정으로 Sentinel 과 Redis 에 모두 로그인한다. 다른 복호화
+함수는 --decrypt "모듈경로:함수이름", 평문을 직접 주려면 --password-plain
+(Sentinel 비밀번호가 다르면 --sentinel-password-plain 도).
 
 단계: (0) 설정과 TCP  (1) Sentinel PING, 인증 없이 / 인증 넣고
       (2) SENTINEL MASTERS  (3) get-master-addr-by-name
@@ -148,8 +150,12 @@ def parse_nodes(value: Any, default_port: int) -> list[tuple[str, int]]:
 
 
 def decrypt_with(spec: str, value: str | None) -> str | None:
-    if not spec or not value:
+    if not value or spec == "none":
         return value
+    if not spec:  # the app's way (redis_client.decrypt)
+        from hcp.framework.util.crypto_cipher import AESCipher
+
+        return AESCipher().decrypt_str(value)
     module_name, _, func_name = spec.partition(":")
     func = getattr(importlib.import_module(module_name), func_name)
     return func(value)
@@ -159,7 +165,15 @@ def explain(exc: BaseException) -> str:
     """One line: what this failure usually means."""
     text = f"{type(exc).__name__}: {exc}"
     low = text.lower()
-    if "noauth" in low or "authentication required" in low:
+    if "no master found" in low:
+        if "authenticationerror" in low or "noauth" in low:
+            return "Sentinel 로그인 실패 (비밀번호/계정을 안 보냈거나 틀림)"
+        if " : " in text:
+            return "Sentinel 에 붙지 못함 (오류 문구의 콜론 뒤가 실제 이유)"
+        return "Sentinel 은 답했지만 그 이름의 쓸 수 있는 master 가 없음"
+    if "noauth" in low or "authentication required" in low or (
+        "hello must be called" in low
+    ):
         return "인증 필요: 이 서버는 비밀번호를 요구하는데 보내지 않았음"
     if "wrongpass" in low or "invalid username-password" in low or (
         "invalid password" in low
@@ -183,9 +197,12 @@ def explain(exc: BaseException) -> str:
         return "TLS 불일치: --ssl 을 켜거나 꺼서 다시 시도"
     if "connection closed" in low or "reset by peer" in low:
         return "서버가 끊음: TLS 포트에 평문으로 붙었거나 그 반대일 수 있음"
-    if "no master found" in low:
-        return "Sentinel 중 누구도 쓸 수 있는 master 를 주지 않음 (위 단계 참고)"
     return "위 오류 문구를 플랫폼 담당자에게 전달"
+
+
+def brief(exc: BaseException, limit: int = 300) -> str:
+    text = f"{type(exc).__name__}: {exc}"
+    return text if len(text) <= limit else text[:limit] + " ..."
 
 
 def tcp_check(host: str, port: int, timeout: float) -> str | None:
@@ -225,7 +242,8 @@ def main() -> int:
     parser.add_argument(
         "--decrypt",
         default=os.environ.get("REDIS_CHECK_DECRYPT", ""),
-        help="설정의 비밀번호를 푸는 함수 '모듈:함수' (평문 옵션에는 적용 안 함)",
+        help="설정의 비밀번호를 푸는 함수 '모듈:함수' (기본: hcp AESCipher, "
+        "none 이면 설정값을 평문으로 봄; 평문 옵션에는 적용 안 함)",
     )
     parser.add_argument("--ssl", action="store_true", help="TLS 로 접속")
     parser.add_argument("--timeout", type=float, default=3.0)
@@ -271,7 +289,8 @@ def main() -> int:
             args.decrypt, pick(found, SENTINEL_PASSWORD_KEYS)
         )
     except Exception as exc:  # noqa: BLE001 - report and stop
-        say(f"  복호화 실패 ({args.decrypt}): {type(exc).__name__}: {exc}")
+        say(f"  복호화 실패 ({args.decrypt or 'hcp AESCipher'}): "
+            f"{type(exc).__name__}: {exc}")
         say("  -> --password-plain 으로 평문을 직접 주고 다시 실행")
         return 2
     sentinel_password_guessed = False
@@ -279,6 +298,11 @@ def main() -> int:
         sentinel_password = None
     elif sentinel_password is None and password:
         sentinel_password, sentinel_password_guessed = password, True
+    # one account for Sentinel and Redis, as the app does
+    if password is None and not args.no_sentinel_password:
+        password = sentinel_password
+    username = username or sentinel_username
+    sentinel_username = sentinel_username or username
 
     if not nodes:
         say()
@@ -344,7 +368,7 @@ def main() -> int:
                 auth_works = auth_works or auth
             except Exception as exc:  # noqa: BLE001
                 say(f"  {host}:{node_port} {label}: 실패 -> {explain(exc)} "
-                    f"[{type(exc).__name__}: {exc}]")
+                    f"[{brief(exc)}]")
                 if not auth and "auth" in str(exc).lower():
                     needs_auth = True
     if needs_auth and not sentinel_auth:
@@ -366,7 +390,7 @@ def main() -> int:
             masters = sentinel_client(host, node_port, use_auth).sentinel_masters()
         except Exception as exc:  # noqa: BLE001
             say(f"  {host}:{node_port}: 실패 -> {explain(exc)} "
-                f"[{type(exc).__name__}: {exc}]")
+                f"[{brief(exc)}]")
             continue
         if not masters:
             say(f"  {host}:{node_port}: master 가 하나도 등록되어 있지 않음")
@@ -405,7 +429,7 @@ def main() -> int:
             ).sentinel_get_master_addr_by_name(master)
         except Exception as exc:  # noqa: BLE001
             say(f"  {host}:{node_port}: 실패 -> {explain(exc)} "
-                f"[{type(exc).__name__}: {exc}]")
+                f"[{brief(exc)}]")
             continue
         if not addr:
             say(f"  {host}:{node_port}: 그런 이름의 master 없음 (nil)")
@@ -445,21 +469,18 @@ def main() -> int:
             results[label] = True
         except Exception as exc:  # noqa: BLE001
             say(f"  {label}: 실패 -> {explain(exc)} "
-                f"[{type(exc).__name__}: {exc}]")
+                f"[{brief(exc)}]")
             results[label] = False
     with_kwargs, without_kwargs = (results[label] for label, _ in variants)
-    if with_kwargs and not without_kwargs:
+    if with_kwargs:
         verdicts.append(
-            "앱 코드 문제일 가능성 큼: Sentinel(...) 을 만들 때 "
-            "sentinel_kwargs={'password': ...} 를 넘겨야 함. redis-py 는 "
-            "password= 를 master/replica 에만 쓰고 Sentinel 에는 보내지 않으며, "
-            "Sentinel 인증 실패는 'No master found' 로만 보임"
+            "앱과 같은 방식(sentinel_kwargs 로 Sentinel 에도 로그인)으로 정상 "
+            "접속됨: 앱이 읽는 값(주소, master 이름, 복호화된 비밀번호)이 위 "
+            "0번과 같은지, 파드가 최신 이미지인지 확인"
         )
-    elif with_kwargs and without_kwargs:
-        verdicts.append(
-            "이 스크립트로는 정상 접속됨: 앱이 읽는 값(주소, master 이름, "
-            "복호화된 비밀번호)이 위 0번과 다른지 확인"
-        )
+        if not without_kwargs:
+            say("  (참고: 이 Sentinel 은 로그인이 필요해서 sentinel_kwargs 가 "
+                "없으면 'No master found' 가 남)")
     elif not with_kwargs and master_addr and not any(
         "닿지 않음" in v for v in verdicts
     ):
