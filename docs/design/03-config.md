@@ -20,7 +20,7 @@ config.stg.yml
 config.prd.yml
 ```
 
-`config.yml`에는 `Settings`의 모든 키를 적고, 환경마다 다른 키(`DATABASE_URL`, `REDIS_URL`, `PUBLIC_API_ORIGIN`, `FRONTEND_ORIGIN`, `CORS_ORIGINS`, `COOKIE_SECURE`, `ADMIN_EMPLOYEE_IDS`, `LLM_API_KEY`, `MODELS`, `EXECUTOR_BASE_URL`, `BATCH_BASE_URL`)만 `config.{APP_ENV}.yml`에 둡니다. 이 구분은 `tests/test_config_files.py`가 확인하므로, `Settings`에 필드를 추가하면 둘 중 한 곳에 키를 넣어야 합니다. 상대 경로는 레포 루트 기준으로 풉니다. `RUN_MODE`, `PHOENIX_*`는 `Settings`가 아니라 환경변수로만 읽습니다.
+`config.yml`에는 `Settings`의 모든 키를 적고, 환경마다 다른 키(`DATABASE_URL`, `REDIS_URL`, `REDIS_MODE`, `REDIS_SENTINEL_*`, `PUBLIC_API_ORIGIN`, `FRONTEND_ORIGIN`, `CORS_ORIGINS`, `COOKIE_SECURE`, `ADMIN_EMPLOYEE_IDS`, `LLM_API_KEY`, `MODELS`, `EXECUTOR_BASE_URL`, `BATCH_BASE_URL`)만 `config.{APP_ENV}.yml`에 둡니다. 이 구분은 `tests/test_config_files.py`가 확인하므로, `Settings`에 필드를 추가하면 둘 중 한 곳에 키를 넣어야 합니다. 상대 경로는 레포 루트 기준으로 풉니다. `RUN_MODE`, `PHOENIX_*`는 `Settings`가 아니라 환경변수로만 읽습니다.
 
 `config.example.yml`은 서비스가 읽지 않는 안내용 파일로, `Settings`의 모든 키와 환경변수 전용 값(`APP_ENV`, `PHOENIX_*` 등)을 의미·용도·예시값 주석과 함께 한곳에 모읍니다. 키가 빠짐없이 있는지, 공통값이 `config.yml`과 같은지는 `tests/test_config_files.py`가 확인하므로 `Settings`에 필드를 추가하면 여기에도 설명과 함께 추가합니다.
 

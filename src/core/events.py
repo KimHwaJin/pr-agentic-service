@@ -30,6 +30,7 @@ from sqlalchemy import select
 from core.contracts import events as contracts
 from core.db import Database
 from core.models import BatchReportEvent, RunEvent
+from core.redis_client import listen
 
 log = logging.getLogger(__name__)
 TOKEN_FLUSH_SECONDS = 0.05
@@ -167,7 +168,7 @@ class EventBus:
                     for queues in list(self._subscribers.values()):
                         for queue in list(queues):
                             _mark_lost(queue)
-                async for message in pubsub.listen():
+                async for message in listen(pubsub):
                     if message["type"] != "pmessage":
                         continue
                     for queue in self._subscribers.get(message["channel"], ()):

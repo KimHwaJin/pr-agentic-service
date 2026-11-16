@@ -2,7 +2,14 @@
 # (shared; every other key is there).
 # Fill the <...> values; environment variables (Deployment env:) win.
 DATABASE_URL: postgresql+psycopg://<user>:<password>@<pg-host>:5432/agentic
+REDIS_MODE: standalone
 REDIS_URL: redis://<redis-host>:6379/0
+# REDIS_MODE: sentinel only (unused here)
+REDIS_SENTINEL_HOST: ""
+REDIS_SENTINEL_PORT: 26379
+REDIS_SENTINEL_MASTER_NAME: ""
+REDIS_SENTINEL_USERNAME: ""
+REDIS_SENTINEL_AUTH: ""
 
 PUBLIC_API_ORIGIN: https://<api-host>
 FRONTEND_ORIGIN: https://<front-host>

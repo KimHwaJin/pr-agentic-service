@@ -77,6 +77,12 @@ def test_keys_are_case_insensitive(root):
 PER_ENV_KEYS = {
     "database_url",
     "redis_url",
+    "redis_mode",
+    "redis_sentinel_host",
+    "redis_sentinel_port",
+    "redis_sentinel_master_name",
+    "redis_sentinel_username",
+    "redis_sentinel_auth",
     "public_api_origin",
     "frontend_origin",
     "cors_origins",
