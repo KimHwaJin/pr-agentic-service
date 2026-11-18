@@ -225,6 +225,7 @@ BatchView에서 화면·로직에 쓰는 필드: `user_id`(소유자), `enabled`
 `POST /api/v1/batch/scripts/from-notebook` `{"artifact_id": "<executor NOTEBOOK artifact>", "name"?: "…"}` → 201 ScriptView(pr-batch 응답 그대로).
 
 - 이 서비스의 채팅 세션이 만든 노트북을 `NOTEBOOK` 스크립트로 올립니다. 그 아티팩트를 볼 수 있는 **이 서비스 tenant 사용자**만 됩니다(`X-User-Id`가 이 서비스의 활성 사용자).
+- 스크립트는 **호출자의 tenant**에 등록됩니다(key 호출자는 key의 tenant, 화면 사용자는 이 서비스 tenant). 다른 tenant key로 올린 스크립트는 그 key로 `POST /batch/batches`에 바로 쓸 수 있습니다.
 - 노트북이 아닌 아티팩트는 422입니다.
 - `Idempotency-Key` 헤더가 **필수**입니다(없거나 형식이 틀리면 422 `INVALID_BODY`). 형식과 뜻은 pr-batch의 다른 쓰기와 같고, 그대로 pr-batch의 스크립트 생성에 넘어갑니다. 키는 등록 한 번을 가리키므로, 같은 노트북을 다시 등록할 때(스크립트를 지운 뒤, 또는 다른 이름으로)는 새 키를 씁니다. 새 스크립트가 만들어집니다.
 - 응답의 `ETag`, `Location`과 오류(pr-batch가 응답하지 않으면 504, 연결되지 않으면 502, pr-batch 오류는 이 게이트웨이의 오류 모양)는 중계 경로와 같습니다.

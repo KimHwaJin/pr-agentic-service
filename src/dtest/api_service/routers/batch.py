@@ -79,6 +79,17 @@ def ours(services: Services, user_id: str) -> Identity:
     )
 
 
+def callers(services: Services, request: Request, user_id: str) -> Identity:
+    """``user_id`` in the caller's tenant: a key's own, ours for the
+    browser (after ``current_user``). A script must be in the tenant its
+    batch is registered in, so a key caller's goes where its gateway
+    calls go."""
+    caller = caller_of(request)
+    if caller is None:
+        return ours(services, user_id)
+    return Identity(user_id=user_id, tenant=caller.tenant)
+
+
 # pr-batch's own rule for the header (its api/deps.py ``Key``)
 IdempotencyKey = Annotated[
     str,
@@ -99,6 +110,7 @@ PASSED_BACK = {"etag", "location", "content-type"}
 @router.post("/api/v1/batch/scripts/from-notebook", status_code=201)
 async def notebook_to_batch_script(
     body: BatchScriptFromNotebook,
+    request: Request,
     services: ServicesDep,
     user: UserDep,
     idempotency_key: IdempotencyKey,
@@ -108,7 +120,9 @@ async def notebook_to_batch_script(
     It becomes a pr-batch NOTEBOOK script. The caller's ``Idempotency-Key``
     goes to pr-batch as sent, as on the relayed writes: a key names one
     registration, not the notebook, so registering a notebook again (after
-    deleting its script, or under another name) is a new script.
+    deleting its script, or under another name) is a new script. The
+    script goes to the caller's tenant (a key's own), where that caller
+    then registers its batch.
     """
     artifact = await owned_artifact(services, user, body.artifact_id)
     if artifact["type"] != "NOTEBOOK":
@@ -120,11 +134,12 @@ async def notebook_to_batch_script(
     )
     content = b"".join([c async for c in chunks])
     await response.aclose()
+    who = callers(services, request, user.id)
     try:
         result = await _client(services).post(
             "/api/v1/scripts",
             headers={
-                **batch_headers(services, ours(services, user.id)),
+                **batch_headers(services, who),
                 "Idempotency-Key": idempotency_key,
             },
             data={
@@ -159,14 +174,18 @@ async def notebook_to_batch_script(
     response_class=HTMLResponse,
 )
 async def batch_script_view(
-    script_id: UUID, version_id: UUID, services: ServicesDep, user: UserDep
+    script_id: UUID,
+    version_id: UUID,
+    request: Request,
+    services: ServicesDep,
+    user: UserDep,
 ):
     """A script version's notebook on the artifact landing page.
 
     The page reads the uploaded file through the gateway; pr-batch answers
     only to the script's owner. Cells carry Step N / 건너뜀 marks.
     """
-    headers = batch_headers(services, ours(services, user.id))
+    headers = batch_headers(services, callers(services, request, user.id))
     client = _client(services)
     script, version = (
         await client.get(f"/api/v1/scripts/{script_id}", headers=headers),

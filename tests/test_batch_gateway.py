@@ -3,7 +3,7 @@
 from types import SimpleNamespace
 
 import pytest
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.testclient import TestClient
 
 from src.dtest.api_service.routers import batch
@@ -376,6 +376,43 @@ def test_from_notebook_sends_the_callers_idempotency_key(monkeypatch):
         assert made.headers["etag"] == '"1"'
         assert made.headers["location"] == f"/api/v1/scripts/{ID}"
     assert seen == ["first", "second"]
+
+
+def test_from_notebook_registers_in_the_callers_tenant(monkeypatch):
+    """A key caller's script goes to the key's tenant, where its batch is
+    then registered (pr-batch finds scripts per tenant); the browser's
+    goes to ours."""
+    import httpx
+
+    from api_service.deps import current_user
+    from core.models import User
+
+    seen = []
+
+    def handler(request):
+        seen.append(request.headers["x-tenant-id"])
+        return httpx.Response(201, json={"id": ID})
+
+    client = _notebook_client(monkeypatch, handler)
+    ours = client.app.state.services.settings.executor_tenant_id
+
+    def keyed(request: Request):
+        request.state.api_client = Caller(
+            "c-1", "partner-agent", "partner", "standard"
+        )
+        return User(id="u1")
+
+    def post():
+        return client.post(
+            FROM_NOTEBOOK,
+            json={"artifact_id": "a-1"},
+            headers={"Idempotency-Key": "k"},
+        )
+
+    assert post().status_code == 201
+    client.app.dependency_overrides[current_user] = keyed
+    assert post().status_code == 201
+    assert seen == [ours, "partner"]
 
 
 @pytest.mark.parametrize("headers", [{}, {"Idempotency-Key": "has space"}])
