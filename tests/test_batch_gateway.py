@@ -384,8 +384,8 @@ def test_from_notebook_registers_in_the_callers_tenant(monkeypatch):
     goes to ours."""
     import httpx
 
-    from api_service.deps import current_user
-    from core.models import User
+    from src.dtest.api_service.deps import current_user
+    from src.dtest.core.models import User
 
     seen = []
 
