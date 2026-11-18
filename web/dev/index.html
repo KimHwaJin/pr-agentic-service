@@ -1673,7 +1673,7 @@ function workflowDetail(w) {
           ${call.params.map(p => `<div class="param"><div class="pl"><code>${esc(p.name)}</code>${p.type ? ` <small>${esc(p.type)}</small>` : ''}</div><div>${value(p)}</div>${p.doc ? `<div class="help">${esc(p.doc)}</div>` : ''}</div>`).join('')}
         </div></details>`).join('')}</div></section>`).join('')}</div>
     <div id="wfPreview"></div>
-    <div class="wf-meta">r${w.revision} · ${ago(w.updated_at)} 수정${w.tags.length ? ' · ' + w.tags.map(esc).join(', ') : ''}</div>
+    <div class="wf-meta">r${w.revision} · ${ago(w.updated_at)} 수정 · 즉시 실행 ${w.document.workflow.allow_immediate_execution ? '허용' : '안 함'}${w.tags.length ? ' · ' + w.tags.map(esc).join(', ') : ''}</div>
     <div class="actions">${w.mine ? `<button class="btn" onclick="editWorkflow('${w.id}')">수정</button>` : ''}
       <button class="btn" onclick="cloneWorkflow('${w.id}')">복제</button>
       <button class="btn" onclick="searchPreview('${w.id}')">추천 확인</button>
@@ -2080,6 +2080,8 @@ async function editWorkflow(id) {
     <div class="field"><label>목적 (사용자 요청)</label><input id="weRequest" value="${esc(w.user_request)}"></div>
     <div class="field"><label>추천 질문 (한 줄에 하나, 이런 질문에 이 워크플로우를 추천)</label><textarea id="weQueries" rows="5">${esc(w.user_queries.join('\n'))}</textarea></div>
     <div class="field"><label>태그 (쉼표로 구분)</label><input id="weTags" value="${esc(w.tags.join(', '))}"></div>
+    <div class="field"><label style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="checkbox" id="weImmediate" style="width:auto"${w.document.workflow.allow_immediate_execution ? ' checked' : ''}> 즉시 실행 허용</label>
+      <div class="muted" style="font-size:12px">공개(승격)된 뒤 이 워크플로우 하나만 추천되고 입력값이 모두 채워졌으며 유사도가 충분하면 승인 카드 없이 바로 실행합니다.</div></div>
     <details><summary class="muted" style="cursor:pointer">실행 흐름 (Workflow 1.0 문서 JSON)</summary>
       <textarea id="weDoc" rows="18" class="mono" style="width:100%;font-size:12px;margin-top:8px">${esc(JSON.stringify(w.document, null, 2))}</textarea>
       <div class="actions"><button class="btn" onclick="validateWorkflowDoc()">검증</button></div></details>
@@ -2094,6 +2096,7 @@ function editedDocument() {
   if (!doc || !doc.workflow || typeof doc.workflow !== 'object') throw new Error('실행 흐름 JSON에 workflow 항목이 없습니다.');
   doc.workflow.name = $('weName').value.trim();
   doc.workflow.user_request = $('weRequest').value.trim();
+  doc.workflow.allow_immediate_execution = $('weImmediate').checked;
   return doc;
 }
 async function validateWorkflowDoc() {

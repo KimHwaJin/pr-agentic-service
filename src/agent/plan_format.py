@@ -38,6 +38,7 @@ def to_workflow(
     name: str,
     user_request: str,
     skills: SkillCatalog,
+    allow_immediate_execution: bool = False,
 ) -> tuple[dict, list[str]]:
     """Returns (Workflow 1.0 document, call keys).
 
@@ -80,7 +81,7 @@ def to_workflow(
             "name": name,
             "user_request": user_request,
             "execution_mode": "static",
-            "allow_immediate_execution": False,
+            "allow_immediate_execution": allow_immediate_execution,
             "steps": steps,
         },
     }

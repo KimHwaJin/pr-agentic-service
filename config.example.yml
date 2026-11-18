@@ -364,6 +364,11 @@ PLAN_RECOMMEND_MODE: mixed
 # (임베딩 없이 모델이 고른 검색일 때는 안 함). WORKFLOW_SIMILARITY 이상이어야 함.
 WORKFLOW_AUTO_RUN_SIMILARITY: 0.77
 
+# [공통] 에이전트가 계획으로 만든 워크플로우의 allow_immediate_execution 기본값.
+# 저장된 워크플로우는 작성자가 화면(수정 > 즉시 실행 허용)이나 PATCH /workflows/{id} 로 바꾼다.
+# true 여도 바로 실행되는 것은 승격된 템플릿이 위 유사도 조건을 채울 때뿐이다.
+WORKFLOW_ALLOW_IMMEDIATE_EXECUTION: false
+
 # [공통] 후보 워크플로우를 전체 사용자용 템플릿으로 승격할 수 있는 사람.
 # author = 작성자 본인 | admin = 관리자만
 WORKFLOW_PROMOTION: author

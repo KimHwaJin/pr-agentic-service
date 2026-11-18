@@ -20,6 +20,7 @@ def _settings(**over):
         "plan_candidates": 5,
         "plan_recommend_mode": "mixed",
         "workflow_auto_run_similarity": 0.77,
+        "workflow_allow_immediate_execution": False,
     }
     return SimpleNamespace(**(values | over))
 
