@@ -65,7 +65,7 @@
 | `/api/v1/executor/{path}` (신규, 필수) | executor | 3.5 참고 |
 
 - 호출자의 tenant를 `X-Tenant-Id`로 붙인다. SSO 사용자는 `pr-agentic-service`.
-- pr-batch에는 **모든 호출에** `X-Tenant-Id`를 보낸다(`GET /runtimes` 제외). pr-batch는 스크립트·배치를 (tenant, 사용자)로 찾으므로, 스크립트 등록·배치 등록·이후 조회와 변경이 모두 같은 tenant를 말해야 한다. 빠뜨리면 key의 기본 tenant에서 찾아 404가 될 수 있다. `scripts/from-notebook`, 스크립트 화면도 우리 tenant를 붙인다. `disable-by-owner`만 예외로 `X-Tenant-Id`를 보내지 않는다. 그러면 pr-batch가 우리 key가 쓸 수 있는 모든 tenant(`["*"]`)에서 그 사번의 배치를 끈다.
+- pr-batch에는 **모든 호출에** `X-Tenant-Id`를 보낸다(`GET /runtimes` 제외). pr-batch는 스크립트·배치를 (tenant, 사용자)로 찾으므로, 스크립트 등록·배치 등록·이후 조회와 변경이 모두 같은 tenant를 말해야 한다. 빠뜨리면 key의 기본 tenant에서 찾아 404가 될 수 있다. `scripts/from-notebook`, 스크립트 화면도 호출자의 tenant를 붙인다(SSO 사용자는 우리 tenant, key 호출자는 key의 tenant). 그래야 외부 tenant key가 from-notebook으로 올린 스크립트로 같은 tenant에 배치를 등록할 수 있다. `disable-by-owner`만 예외로 `X-Tenant-Id`를 보내지 않는다. 그러면 pr-batch가 우리 key가 쓸 수 있는 모든 tenant(`["*"]`)에서 그 사번의 배치를 끈다.
 - `X-Project-Id`는 배치 등록 때만 의미가 있다. pr-batch는 project를 바꿀 수 없으므로 우리 화면에서도 배치의 프로젝트 이동은 "새 배치 만들기"로 안내한다.
 
 ### 3.5 executor 게이트웨이 상세 (필수 범위)
