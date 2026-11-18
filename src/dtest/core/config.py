@@ -344,6 +344,9 @@ class Settings(BaseSettings):
     # a template runs without the approval card only when it is the one
     # candidate and its search similarity (embedding search) reaches this
     workflow_auto_run_similarity: float = 0.77
+    # allow_immediate_execution of a workflow the agent writes from a plan
+    # (a saved one is changed by its author: PATCH /workflows/{id})
+    workflow_allow_immediate_execution: bool = False
     # who may promote a candidate workflow to a template for every user:
     # its author, or administrators only (any workflow)
     workflow_promotion: Literal["author", "admin"] = "author"

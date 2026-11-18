@@ -1,4 +1,5 @@
 from src.dtest.agent.tools.analysis import _operation_steps, _segment
+from src.dtest.core.config import Settings
 from src.dtest.core.workflows import spec
 
 
@@ -76,6 +77,18 @@ def test_compact_plan_to_workflow(skills, tools):
         == "conditional"
     )  # from the skill rule
     assert spec.validate(document, skills, tools) == []
+    # WORKFLOW_ALLOW_IMMEDIATE_EXECUTION: off unless the setting says so
+    assert Settings().workflow_allow_immediate_execution is False
+    assert document["workflow"]["allow_immediate_execution"] is False
+    allowed, _ = plan_format.to_workflow(
+        calls,
+        name="t",
+        user_request="r",
+        skills=skills,
+        allow_immediate_execution=True,
+    )
+    assert allowed["workflow"]["allow_immediate_execution"] is True
+    assert spec.validate(allowed, skills, tools) == []
     assert plan_format.input_keys({"0.data_type": "nce"}, keys) == {
         "0.0.data_type": "nce"
     }

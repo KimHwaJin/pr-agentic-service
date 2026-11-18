@@ -365,6 +365,9 @@ async def propose_plans(
                     name=title,
                     user_request=ctx.user_text,
                     skills=skills,
+                    allow_immediate_execution=(
+                        services.settings.workflow_allow_immediate_execution
+                    ),
                 )
         except (plan_format.PlanFormatError, WorkflowError) as exc:
             problems.append(f"후보 {index} ({title}): {exc}")
