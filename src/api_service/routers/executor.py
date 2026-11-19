@@ -6,8 +6,8 @@ for two kinds of caller:
 
 - the browser (SSO): reads, checked here by project membership (admins see
   all, and may name another tenant with a ``tenant_id`` query), and the
-  runtime/maintenance pages for admins (sent with the executor's operator
-  key, ``EXECUTOR_ADMIN_API_KEY``);
+  runtime/maintenance/event Stream pages for admins (sent with the
+  executor's operator key, ``EXECUTOR_ADMIN_API_KEY``);
 - services and agents with one of our keys (``X-Api-Key`` + ``X-User-Id``,
   always): the executor API of their tenant, writes included, made for the
   user of ``X-User-Id``. A standard key reads only that user's executions,
@@ -42,6 +42,7 @@ from api_service.deps import (
 )
 from api_service.errors import ApiError
 from api_service.services.access import (
+    TENANT,
     admin_tenant,
     check_execution,
     executor_unavailable,
@@ -57,6 +58,9 @@ router = APIRouter(prefix="/executor", tags=["executor"])
 
 UUID = r"[0-9a-fA-F-]{36}"
 E = rf"executions/(?P<execution>{UUID})"
+# a tenant's Redis event Stream; the group name goes into the executor path
+# as it is, so nothing that would end the path there
+STREAM = rf"event-streams/{TENANT.pattern}"
 # what the browser may do: list / execution (membership), admin (admins),
 # ops (admins, with the executor's operator key); None = not at all
 Sso = Literal["list", "execution", "admin", "ops"] | None
@@ -95,6 +99,11 @@ _ALLOWED: list[tuple[str, str, Sso, bool]] = [
     ("GET", r"maintenance", "ops", False),
     ("GET", rf"maintenance/runs/{UUID}", "ops", False),
     ("GET", rf"maintenance/runs/{UUID}/targets", "ops", False),
+    # Redis event Streams as Redis holds them: our administrators only
+    ("GET", r"event-streams", "ops", False),
+    ("GET", STREAM, "ops", False),
+    ("GET", rf"{STREAM}/entries", "ops", False),
+    ("GET", rf"{STREAM}/groups/[^/?#]+/pending", "ops", False),
     # register/update (and probe), probe, take a target out of rotation and
     # back, disable, remove
     ("POST", r"runtime-targets", "ops", False),
@@ -138,8 +147,8 @@ def relay_description() -> str:
         "Writes are made for `X-User-Id`:\n\n"
         "| Method | Path |\n| --- | --- |\n"
         f"{rows}\n\n"
-        "Runtime, maintenance, attempts and diagnostics are for our "
-        "administrators' SSO login only (the admin pages)."
+        "Runtime, maintenance, event Streams, attempts and diagnostics "
+        "are for our administrators' SSO login only (the admin pages)."
     )
 
 
