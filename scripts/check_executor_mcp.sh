@@ -20,6 +20,10 @@
 # The same check as one line to paste (replace the key, and the host if the
 # Executor is not local):
 #   curl -sS -X POST http://127.0.0.1:8000/mcp -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' -H 'X-Api-Key: <exe-key>' -H 'X-Tenant-Id: dtest-agent-service' -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
+#
+# Inside the Executor pod there is no curl, and only localhost passes the
+# default MCP_ALLOWED_HOSTS, so run the same check there with Python:
+#   python3 -c "import json,urllib.request as u;r=u.Request('http://127.0.0.1:8000/mcp',data=json.dumps({'jsonrpc':'2.0','id':1,'method':'tools/list'}).encode(),headers={'Content-Type':'application/json','Accept':'application/json, text/event-stream','X-Api-Key':'<exe-key>','X-Tenant-Id':'dtest-agent-service'});print(u.urlopen(r).read().decode())"
 set -u
 
 : "${EXECUTOR_API_KEY:?set EXECUTOR_API_KEY}"
