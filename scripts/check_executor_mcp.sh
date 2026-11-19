@@ -16,6 +16,10 @@
 #
 # With a tool name it also calls that tool with empty arguments, for example
 # execution_list.
+#
+# The same check as one line to paste (replace the key, and the host if the
+# Executor is not local):
+#   curl -sS -X POST http://127.0.0.1:8000/mcp -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' -H 'X-Api-Key: <exe-key>' -H 'X-Tenant-Id: dtest-agent-service' -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
 set -u
 
 : "${EXECUTOR_API_KEY:?set EXECUTOR_API_KEY}"
