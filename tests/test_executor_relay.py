@@ -236,7 +236,13 @@ def test_relay_docs_list_the_key_routes():
     assert "| POST | `/executions` |" in keyed
     assert "| GET | `/executions/{execution_id}/steps/{id}` |" in keyed
     assert "`/executions/{execution_id}/notebook/cells/{n}`" in keyed
-    for internal in ("attempts", "diagnostics", "runtime-", "maintenance"):
+    for internal in (
+        "attempts",
+        "diagnostics",
+        "runtime-",
+        "maintenance",
+        "event-streams",
+    ):
         assert internal not in keyed
 
 
@@ -368,3 +374,84 @@ def test_tenant_query_is_checked_and_admin_only(monkeypatch):
     monkeypatch.setattr(relay, "scope_execution_list", member)
     sent = _admin_read("executions", b"tenant_id=partner-a", role="user")
     assert sent.headers["x-tenant-id"] == "pr-agentic"
+
+
+# --- Redis event Streams (administrators, with the operator key) ------------
+
+STREAMS = [
+    "event-streams",
+    "event-streams/partner-a",
+    "event-streams/partner-a/entries",
+    "event-streams/partner-a/groups/agent-execution-events/pending",
+]
+
+
+def _stream_read(path: str, query: bytes = b"", role: str = "admin"):
+    match = _match("GET", path)
+    assert match is not None
+    sent: list[httpx.Request] = []
+    user = cast(Any, SimpleNamespace(id="a-1", role=role))
+    request = _request("GET", path, {})
+    request.scope["query_string"] = query
+    asyncio.run(
+        relay._for_user(
+            cast(Any, _services(sent, admin_key="exe_ops")),
+            request,
+            path,
+            match,
+            user,
+        )
+    )
+    return sent[0]
+
+
+def test_event_streams_go_to_the_executor_as_the_admin():
+    for path in STREAMS:
+        assert _access("GET", path) == ("ops", False), path
+        sent = _stream_read(path)
+        assert sent.url.path == f"/api/v1/{path}"
+        assert sent.headers["x-api-key"] == "exe_ops"
+        assert sent.headers["x-user-id"] == "a-1"
+        assert "x-tenant-id" not in sent.headers
+    # reads only, and only a well-formed tenant and group
+    for method, path in [
+        ("POST", "event-streams"),
+        ("DELETE", "event-streams/partner-a"),
+        ("GET", "event-streams/Bad_Tenant/entries"),
+        ("GET", "event-streams/partner-a/groups/a/b/pending"),
+        ("GET", "event-streams/partner-a/groups/a?b/pending"),
+        ("GET", "event-streams/partner-a/groups"),
+    ]:
+        assert _match(method, path) is None, path
+
+
+def test_event_stream_queries_go_unchanged():
+    query = {
+        "limit": "20",
+        "before": "1795062650791-0",
+        "execution_id": E,
+        "event_type": "execution.completed",
+    }
+    sent = _stream_read(
+        "event-streams/partner-a/entries",
+        "&".join(f"{k}={v}" for k, v in query.items()).encode(),
+    )
+    assert dict(sent.url.params) == query
+    sent = _stream_read(
+        "event-streams/partner-a/groups/g-1/pending",
+        b"consumer=agent-7d9f&min_idle_ms=60000",
+    )
+    assert dict(sent.url.params) == {
+        "consumer": "agent-7d9f",
+        "min_idle_ms": "60000",
+    }
+
+
+def test_event_streams_are_for_administrators_only():
+    for path in STREAMS:
+        with pytest.raises(HTTPException) as err:
+            _stream_read(path, role="user")
+        assert err.value.status_code == 403
+        # key callers: not a route of theirs (the relay answers 404)
+        route = _match("GET", path)
+        assert route is not None and route[2] is False

@@ -102,6 +102,10 @@
   .lvl.ok { background: #e3f1e7; color: var(--ok); } .lvl.warn { background: #fdf0d9; color: #a15c07; } .lvl.bad { background: #fde8e6; color: var(--bad); }
   .rt-foot { display: flex; align-items: center; gap: 8px; margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--line); font-size: 12px; color: var(--muted); }
   .rt-foot .acts { margin-left: auto; }
+  .es-warn { color: var(--bad); } .es-link { cursor: pointer; text-decoration: underline; }
+  .es-group + .es-group { margin-top: 8px; } .es-group details { margin-top: 2px; font-size: 12px; }
+  .es-mini { border-collapse: collapse; margin: 4px 0; } .es-mini th, .es-mini td { padding: 2px 12px 2px 0; border: 0; background: none; text-align: left; font-weight: 400; }
+  .es-mini th { color: var(--muted); }
   .sys-pre { background: var(--code); padding: 10px 12px; border-radius: 8px; overflow: auto; max-height: 360px; font-size: 12px; margin: 6px 0; }
   .avatar { width: 30px; height: 30px; border-radius: 50%; background: #d9cfc0; display: grid; place-items: center; font-weight: 600; font-size: 13px; color: #5a4a35; }
 
@@ -562,10 +566,11 @@
   <div id="scroll"><div id="log"></div></div>
   <div id="systemView" style="display:none;flex:1;overflow:auto">
     <div class="page">
-      <div class="page-head"><h1>시스템</h1><span class="muted" style="font-size:13px">executor 런타임·점검, 사용자, 외부 호출 API 키 (관리자)</span></div>
+      <div class="page-head"><h1>시스템</h1><span class="muted" style="font-size:13px">executor 런타임·점검·이벤트 스트림, 사용자, 외부 호출 API 키 (관리자)</span></div>
       <div class="systabs">
         <button class="systab on" data-sys="runtimes" onclick="sysTab('runtimes')">런타임</button>
         <button class="systab" data-sys="maintenance" onclick="sysTab('maintenance')">점검</button>
+        <button class="systab" data-sys="eventStreams" onclick="sysTab('eventStreams')">이벤트 스트림</button>
         <button class="systab" data-sys="users" onclick="sysTab('users')">사용자</button>
         <button class="systab" data-sys="apiClients" onclick="sysTab('apiClients')">API 키</button>
         <button class="systab" data-sys="apiTest" onclick="sysTab('apiTest')">API 호출 시험</button>
@@ -845,7 +850,9 @@ const toolText = d => d.label || d.name;
 // codes with a plainer message than the service's own
 const CODE_TEXT = {
   OWNER_DEACTIVATED: '사용자가 비활성화되어 꺼진 배치입니다. 배치를 다시 켠 뒤 실행하세요.',
-  EXECUTOR_ADMIN_KEY_MISSING: 'executor 운영 key(EXECUTOR_ADMIN_API_KEY)가 설정되지 않아 런타임·점검 화면을 쓸 수 없습니다.',
+  EXECUTOR_ADMIN_KEY_MISSING: 'executor 운영 key(EXECUTOR_ADMIN_API_KEY)가 설정되지 않아 런타임·점검·이벤트 스트림 화면을 쓸 수 없습니다.',
+  EVENT_STREAM_NOT_FOUND: 'Redis에 그 Stream(또는 consumer group)이 없습니다.',
+  REDIS_UNAVAILABLE: 'executor가 Redis에 연결할 수 없습니다. 잠시 뒤 다시 시도하세요.',
   TOO_LARGE: '요청이 너무 큽니다(최대 32MB). 이미지 수나 크기를 줄여 주세요.',
 };
 // every error body (ours, the executor's, pr-batch's through the gateway):
@@ -2427,7 +2434,7 @@ function showSystem() {
 function sysTab(name) {
   SYS.tab = name;
   document.querySelectorAll('.systab[data-sys]').forEach(t => t.classList.toggle('on', t.dataset.sys === name));
-  ({ runtimes: renderRuntimes, maintenance: renderMaintenance, users: renderUsers, apiClients: renderApiClients, apiTest: renderApiTest })[name]()
+  ({ runtimes: renderRuntimes, maintenance: renderMaintenance, eventStreams: renderEventStreams, users: renderUsers, apiClients: renderApiClients, apiTest: renderApiTest })[name]()
     .catch(() => { $('sysBody').innerHTML = '<div class="muted">불러오지 못했습니다. 화면 위쪽 오류 메시지를 확인하세요.</div>'; });
 }
 
@@ -2692,6 +2699,114 @@ async function maintenanceAction(action) {
   const body = { idempotency_key: crypto.randomUUID(), ...(action === 'runs' ? { action: 'STOP_ACTIVE_EXECUTIONS' } : {}) };
   await api(`/executor/maintenance/${action}`, { method: 'POST', body });
   renderMaintenance();
+}
+
+/* event streams: the executor's Redis event Streams as Redis holds them.
+   Read when asked, never on a timer: these calls share the Redis pool the executor publishes with. */
+const ES_TYPES = ['execution.started', 'execution.operation_started', 'execution.step_started', 'execution.step_handover_started', 'execution.step_handover_completed', 'execution.step_completed', 'execution.operation_completed', 'execution.completed'];
+// first: the first screen, where a 404 can only be an executor from before this API
+const esApi = (path, first = false) => api(`/executor/event-streams${path}`, { errorText: {
+  403: 'executor 운영 key(EXECUTOR_ADMIN_API_KEY)가 admin key가 아니어서 이벤트 스트림을 볼 수 없습니다. 설정을 확인하세요.',
+  ...(first ? { 404: 'executor가 아직 이벤트 스트림 조회를 지원하지 않습니다. executor 버전을 확인하세요.' } : {}) } });
+// seconds as its two largest units: 7일, 3분 4초
+function esSpan(sec) {
+  if (sec == null) return '-';
+  const out = [];
+  for (const [n, label] of [[86400, '일'], [3600, '시간'], [60, '분'], [1, '초']]) { const v = Math.floor(sec / n); sec -= v * n; if (v) out.push(v + label); }
+  return out.slice(0, 2).join(' ') || '0초';
+}
+const ES_DEAD_MS = 300000;  // a consumer that has not tried to read for this long may be gone
+const esBack = '<button class="btn" onclick="sysTab(\'eventStreams\')">← 스트림 목록</button>';
+async function renderEventStreams() {
+  $('sysBody').innerHTML = '<div class="muted">불러오는 중…</div>';
+  const d = SYS.es = await esApi('', true);
+  // the executor trims on its own schedule: an hour past retention before it is a sign
+  const stale = d.retention_seconds ? Date.now() - (d.retention_seconds + 3600) * 1000 : null;
+  const consumer = c => `<tr><td class="mono">${esc(c.name)}</td><td>${c.pending}</td>
+    <td ${c.idle_ms >= ES_DEAD_MS ? 'class="es-warn" title="오래 읽기를 시도하지 않았습니다. consumer가 죽었을 수 있습니다."' : ''}>${esSpan(c.idle_ms == null ? null : c.idle_ms / 1000)}</td></tr>`;
+  const group = (g, ti, gi) => `<div class="es-group"><span class="mono">${esc(g.name)}</span>
+    <span title="아직 받지 않은 이벤트 수${g.lag == null ? ' (Redis가 계산하지 못한 경우입니다. 오류가 아닙니다)' : ''}">lag ${g.lag == null ? '-' : g.lag > 0 ? `<b class="es-warn">${g.lag}</b>` : 0}</span> ·
+    <span title="받았지만 ACK하지 않은 이벤트 수">pending ${g.pending > 0 ? `<b class="es-warn es-link" onclick="esPending(${ti}, ${gi})">${g.pending}</b> <span class="muted">(${fmtTime(g.oldest_pending?.at) || '-'}부터)</span>` : 0}</span>
+    <details><summary class="muted">consumer ${g.consumers.length}</summary>${g.consumers.length ? `<table class="es-mini"><tr><th>이름</th><th>pending</th><th>idle</th></tr>${g.consumers.map(consumer).join('')}</table>` : ''}</details></div>`;
+  const rows = d.streams.map((s, ti) => s.exists
+    ? `<tr class="click" title="항목 보기" onclick="esEntries(${ti})"><td class="mono">${esc(s.tenant_id)}</td>
+        <td>${s.length} <span class="muted">(누적 ${s.entries_added ?? '-'})</span></td><td>${fmtTime(s.last_entry?.at) || '-'}</td>
+        <td ${stale && s.first_entry && new Date(s.first_entry.at) < stale ? 'class="es-warn" title="보관 기간보다 오래된 항목이 남아 있습니다. 정리가 돌지 않을 수 있습니다."' : ''}>${fmtTime(s.first_entry?.at) || '-'}</td>
+        <td style="cursor:default" onclick="event.stopPropagation()">${s.groups.map((g, gi) => group(g, ti, gi)).join('') || '<span class="es-warn" title="이 tenant의 이벤트를 아무도 읽지 않습니다.">소비자 없음</span>'}</td></tr>`
+    : `<tr><td class="mono muted">${esc(s.tenant_id)}</td><td colspan="4" class="muted">Stream 없음</td></tr>`).join('');
+  $('sysBody').innerHTML = `<div class="toolbar"><span>Redis <span class="mono">${esc(d.connection?.mode || '-')}</span> · <span class="mono">${esc(d.connection?.address || '-')}</span>
+      · 보관 ${esSpan(d.retention_seconds)} · ${d.max_length == null ? '상한 없음' : `상한 약 ${d.max_length}건`}</span>
+      <span class="refresh"><span class="muted">${fmtTime(new Date().toISOString())} 조회 · 자동 갱신 없음</span><button class="ghost" title="지금 새로 고침" onclick="sysTab('eventStreams')">↻</button></span></div>
+    <table class="tbl"><thead><tr><th>tenant</th><th>항목 수</th><th>최근 이벤트</th><th>가장 오래된 항목</th><th>consumer group</th></tr></thead>
+      <tbody>${rows || '<tr><td colspan="5" class="muted">tenant가 없습니다.</td></tr>'}</tbody></table>`;
+}
+/* entries of one Stream, newest first */
+function esEntries(ti) {
+  const s = SYS.es.streams[ti];
+  SYS.esq = { tenant: s.tenant_id, items: [], next: null, filter: {} };
+  $('sysBody').innerHTML = `<div class="toolbar">${esBack}<b class="mono">${esc(s.stream)}</b>
+      <input id="esExec" placeholder="Execution ID" style="width:290px" onkeydown="if (event.key === 'Enter') esLoad(true)">
+      <select id="esType"><option value="">모든 유형</option>${ES_TYPES.map(t => `<option>${t}</option>`).join('')}</select>
+      <button class="btn" onclick="esLoad(true)">조회</button></div>
+    <table class="tbl"><thead><tr><th>시각</th><th>Execution</th><th>순번</th><th>유형</th><th>상태</th><th>원본</th></tr></thead><tbody id="esRows"></tbody></table>
+    <div style="text-align:center;margin:12px" id="esMore"></div>`;
+  esLoad(true);
+}
+async function esLoad(reset) {
+  const q = SYS.esq;
+  // the filter is fixed at 조회: 더 보기 goes on with the same one
+  if (reset) { q.items = []; q.next = null; q.filter = { execution_id: $('esExec').value.trim(), event_type: $('esType').value }; $('esRows').innerHTML = ''; }
+  $('esMore').innerHTML = '<span class="muted">불러오는 중…</span>';
+  let page;
+  try { page = await esApi(`/${q.tenant}/entries?${qs({ limit: 50, before: q.next, ...q.filter })}`); }
+  catch { $('esMore').innerHTML = '<span class="muted">불러오지 못했습니다. 화면 위쪽 오류 메시지를 확인하세요.</span> <button class="btn" onclick="esLoad(false)">다시 시도</button>'; return; }
+  if (q !== SYS.esq || !$('esRows')) return;  // the screen moved on while this was loading
+  const from = q.items.length;
+  q.items.push(...page.items); q.next = page.next_before;
+  $('esRows').insertAdjacentHTML('beforeend', page.items.map((it, i) => `<tr><td style="white-space:nowrap">${fmtTime(it.at) || '-'}</td>
+      <td>${it.execution_id ? `<span class="mono es-link" title="${esc(it.execution_id)} (실행 열기)" onclick="openExecution(SYS.esq.items[${from + i}].execution_id, SYS.esq.tenant)">${esc(String(it.execution_id).slice(0, 8))}</span>` : '<span class="muted">-</span>'}</td>
+      <td>${esc(it.event_sequence ?? '-')}</td><td class="mono">${esc(it.event_type ?? '-')}</td><td>${it.payload?.status ? statusBadge(it.payload.status) : '<span class="muted">-</span>'}</td>
+      <td><button class="ghost" onclick="esRaw(this, ${from + i})">보기</button></td></tr><tr style="display:none"><td colspan="6"></td></tr>`).join(''));
+  // a filtered read looks at 1000 entries a call: an empty page with a cursor is not the end
+  $('esMore').innerHTML = q.next
+    ? `${page.items.length ? '' : '<div class="muted" style="margin-bottom:8px">이 구간에는 맞는 항목이 없습니다. 더 오래된 구간을 이어서 찾을 수 있습니다.</div>'}<button class="btn" onclick="esLoad(false)">더 보기</button>`
+    : `<span class="muted">${q.items.length ? '끝' : '항목이 없습니다.'}</span>`;
+}
+function esRaw(button, i) {
+  const row = button.closest('tr').nextElementSibling, open = row.style.display === 'none';
+  if (open && !row.firstElementChild.innerHTML) row.firstElementChild.innerHTML = pre(SYS.esq.items[i]);
+  row.style.display = open ? '' : 'none';
+}
+/* what a group was given but has not acknowledged, oldest first (no next page: narrow it instead) */
+function esPending(ti, gi) {
+  const s = SYS.es.streams[ti], g = s.groups[gi];
+  SYS.esp = { tenant: s.tenant_id, group: g.name };
+  $('sysBody').innerHTML = `<div class="toolbar">${esBack}<b><span class="mono">${esc(s.tenant_id)}</span> · <span class="mono">${esc(g.name)}</span> pending <span id="espTotal"></span></b>
+      <select id="espConsumer"><option value="">모든 consumer</option>${g.consumers.map(c => `<option>${esc(c.name)}</option>`).join('')}</select>
+      <input id="espIdle" type="number" min="0" placeholder="방치 시간(초) 이상" style="width:160px" onkeydown="if (event.key === 'Enter') esPendLoad()">
+      <button class="btn" onclick="esPendLoad()">조회</button></div>
+    <table class="tbl"><thead><tr><th>들어온 시각</th><th>consumer</th><th>방치 시간</th><th>전달 횟수</th><th>Execution</th><th>유형</th><th>순번</th></tr></thead><tbody id="espRows"></tbody></table>
+    <div class="muted" style="margin:10px 2px;font-size:12px" id="espNote"></div>`;
+  esPendLoad();
+}
+async function esPendLoad() {
+  const p = SYS.esp, idle = Number($('espIdle').value) || 0;
+  $('espRows').innerHTML = '<tr><td colspan="7" class="muted">불러오는 중…</td></tr>';
+  let d;
+  try { d = await esApi(`/${p.tenant}/groups/${encodeURIComponent(p.group)}/pending?${qs({ limit: 100, consumer: $('espConsumer').value, min_idle_ms: idle > 0 ? Math.round(idle * 1000) : '' })}`); }
+  catch { if ($('espRows')) $('espRows').innerHTML = '<tr><td colspan="7" class="muted">불러오지 못했습니다. 화면 위쪽 오류 메시지를 확인하세요.</td></tr>'; return; }
+  if (p !== SYS.esp || !$('espRows')) return;
+  p.items = d.items;
+  $('espTotal').textContent = `${d.total_pending}건`;
+  $('espRows').innerHTML = d.items.map((it, i) => `<tr><td style="white-space:nowrap">${fmtTime(it.at) || '-'}</td><td class="mono">${esc(it.consumer ?? '-')}</td>
+      <td>${esSpan(it.idle_ms == null ? null : it.idle_ms / 1000)}</td>
+      <td>${it.delivery_count >= 2 ? `<b class="es-warn" title="다시 전달되고 있습니다.">${it.delivery_count}</b>` : esc(it.delivery_count ?? '-')}</td>
+      ${it.execution_id == null && it.event_type == null && it.event_sequence == null
+        ? '<td colspan="3" class="muted" title="Stream에서는 이미 지워졌고 group의 pending 목록에만 남은 항목입니다.">정리된 항목</td>'
+        : `<td>${it.execution_id ? `<span class="mono es-link" title="${esc(it.execution_id)} (실행 열기)" onclick="openExecution(SYS.esp.items[${i}].execution_id, SYS.esp.tenant)">${esc(String(it.execution_id).slice(0, 8))}</span>` : '<span class="muted">-</span>'}</td>
+          <td class="mono">${esc(it.event_type ?? '-')}</td><td>${esc(it.event_sequence ?? '-')}</td>`}</tr>`).join('')
+    || '<tr><td colspan="7" class="muted">조건에 맞는 pending 항목이 없습니다.</td></tr>';
+  $('espNote').textContent = d.items.length >= 100 ? '한 번에 100건까지만 보여 줍니다. 더 보려면 consumer나 방치 시간으로 좁히세요.' : '';
 }
 
 /* users: role and deactivation (a deactivated user's batches are turned off at pr-batch) */
