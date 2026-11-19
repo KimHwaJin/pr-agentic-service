@@ -158,7 +158,37 @@ def test_one_template_close_enough_runs_at_once(
     assert result.update["plan"]["source"]["similarity"] == 0.98
 
 
-def test_two_candidates_always_show_the_card(skills, tools, template, asked):
+def test_search_tells_the_model_which_template_runs_at_once(
+    skills, tools, template
+):
+    def said(hits):
+        runtime = _runtime(skills, tools, Workflows({"w1": template}, hits))
+        return _search(runtime).update["messages"][0].content
+
+    assert "즉시 실행 대상" in said([_hit("w1", 0.98, template)])
+    assert "즉시 실행 대상" not in said([_hit("w1", 0.75, template)])
+    assert "즉시 실행 대상" not in said([_hit("w1", None, template)])
+    assert "즉시 실행 대상" not in said(
+        [_hit("w1", 0.98, template), _hit("w2", 0.98, template)]
+    )
+
+
+def test_new_plans_beside_the_template_do_not_hold_it_back(
+    skills, tools, template, asked
+):
+    """PLAN_RECOMMEND_MODE=mixed: the model adds new plans to the template."""
+    wf = Workflows({"w1": template}, [_hit("w1", 0.98, template)])
+    runtime = _runtime(skills, tools, wf)
+    _search(runtime)
+    result = _propose(
+        runtime, [NEW_PLAN, _template_candidate("w1", template, tools)]
+    )
+    assert asked.seen == []
+    assert runtime.events == ["plan_auto_approved", "plan_approved"]
+    assert result.update["plan"]["source"]["workflow_id"] == "w1"
+
+
+def test_two_templates_always_show_the_card(skills, tools, template, asked):
     wf = Workflows(
         {"w1": template, "w2": template},
         [_hit("w1", 0.99, template), _hit("w2", 0.99, template)],

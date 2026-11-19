@@ -112,7 +112,7 @@ WORKFLOW_SIMILARITY: 0.70
 # user rejects them), new plans only when nothing matches
 PLAN_RECOMMEND_MODE: mixed
 # a template runs without the approval card only when it is the only
-# candidate and its embedding search similarity is at least this (never on
+# template among the candidates (new plans beside it do not count) and its embedding search similarity is at least this (never on
 # model-picked search); at least WORKFLOW_SIMILARITY
 WORKFLOW_AUTO_RUN_SIMILARITY: 0.77
 # allow_immediate_execution of a workflow the agent writes from a plan

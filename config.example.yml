@@ -360,7 +360,8 @@ WORKFLOW_SIMILARITY: 0.70
 # internal/gaia 는 mixed 유지 (gaia 브리지가 첫 후보를 자동 승인).
 PLAN_RECOMMEND_MODE: mixed
 
-# [공통] 후보가 템플릿 하나뿐이고 임베딩 유사도가 이 값 이상이면 승인 카드 없이 바로 실행
+# [공통] 후보 중 템플릿이 하나뿐이고(같이 제안된 새 계획은 세지 않음) 임베딩 유사도가 이 값
+# 이상이면 승인 카드 없이 바로 실행
 # (임베딩 없이 모델이 고른 검색일 때는 안 함). WORKFLOW_SIMILARITY 이상이어야 함.
 WORKFLOW_AUTO_RUN_SIMILARITY: 0.77
 
