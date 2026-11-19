@@ -35,8 +35,15 @@ def template(static):
 class Workflows:
     embedder = "stub"  # search by similarity
 
-    def __init__(self, documents: dict[str, dict], hits: list[dict]):
+    def __init__(
+        self,
+        documents: dict[str, dict],
+        hits: list[dict],
+        by_query: dict[str, list[dict]] | None = None,
+    ):
         self.documents, self.hits = documents, hits
+        self.by_query = by_query  # hits per query text, when given
+        self.queries: list[str] = []
 
     async def readable(self, workflow_id, user_id):
         return SimpleNamespace(
@@ -47,6 +54,9 @@ class Workflows:
         )
 
     async def search(self, query, limit, chooser=None):
+        self.queries.append(query)
+        if self.by_query is not None:
+            return self.by_query.get(query, [])[:limit]
         return self.hits[:limit]
 
 
@@ -156,6 +166,30 @@ def test_one_template_close_enough_runs_at_once(
     assert runtime.events == ["plan_auto_approved", "plan_approved"]
     assert result.update["plan"]["source"]["workflow_id"] == "w1"
     assert result.update["plan"]["source"]["similarity"] == 0.98
+
+
+def test_search_also_uses_the_users_own_words(skills, tools, template):
+    """The model rewords the request; the sentence the user typed is
+    searched as well and each template keeps its better similarity."""
+    wf = Workflows(
+        {"w1": template, "w2": template},
+        [],
+        by_query={
+            "NCE 통계": [_hit("w1", 1.0, template)],
+            "NCE 데이터 통계 분석": [
+                _hit("w1", 0.74, template),
+                _hit("w2", 0.72, template),
+            ],
+        },
+    )
+    runtime = _runtime(skills, tools, wf)
+    result = _search(runtime, "NCE 데이터 통계 분석")
+    assert wf.queries == ["NCE 통계", "NCE 데이터 통계 분석"]
+    assert result.update["recommend"]["similarity"] == {"w1": 1.0, "w2": 0.72}
+    # the same text is searched once
+    wf.queries.clear()
+    _search(runtime, "NCE 통계")
+    assert wf.queries == ["NCE 통계"]
 
 
 def test_search_tells_the_model_which_template_runs_at_once(

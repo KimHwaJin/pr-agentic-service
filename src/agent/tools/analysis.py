@@ -244,14 +244,34 @@ async def search_workflows(query: str, runtime: Runtime) -> Command:
     user's request."""
     ctx = runtime.context
     settings, workflows = ctx.services.settings, ctx.services.workflows
-    hits = await workflows.search(
-        query,
-        limit=settings.plan_candidates,
-        # without an embedding model the chat model picks the templates
-        chooser=None
-        if workflows.embedder
-        else chat_model(settings, ctx.model),
-    )
+    # With embeddings the user's own words are searched as well, as written:
+    # the model rewords the request into ``query``, which lowers the
+    # similarity of a template registered under the very sentence the user
+    # typed (the recommendation preview searches that sentence and shows 1.0).
+    # ``query`` still counts, since a follow-up turn ("그걸로 해줘") says
+    # little by itself. Each template keeps its better similarity.
+    queries = [query]
+    original = (ctx.user_text or "").strip()
+    if workflows.embedder and original and original != query.strip():
+        queries.insert(0, original)
+    best: dict[str, dict[str, Any]] = {}
+    for text in queries:
+        for hit in await workflows.search(
+            text,
+            limit=settings.plan_candidates,
+            # without an embedding model the chat model picks the templates
+            chooser=None
+            if workflows.embedder
+            else chat_model(settings, ctx.model),
+        ):
+            kept = best.get(hit["workflow"].id)
+            if kept is None or (hit["similarity"] or 0) > (
+                kept["similarity"] or 0
+            ):
+                best[hit["workflow"].id] = hit
+    hits = sorted(best.values(), key=lambda h: -(h["similarity"] or 0))[
+        : settings.plan_candidates
+    ]
     # the similarity the server measured decides an auto-run later, never
     # a number the model passes on
     found = _recommend(runtime)
