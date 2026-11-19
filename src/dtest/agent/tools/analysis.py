@@ -279,6 +279,22 @@ async def search_workflows(query: str, runtime: Runtime) -> Command:
             f"name={w.name}\n"
             f"  user_request: {w.user_request}\n  calls: {calls}"
         )
+    # one template that may run at once: say so, so that the model does not
+    # spend the turn designing plans nobody will be shown
+    immediate = [
+        h["workflow"].id
+        for h in hits
+        if h["workflow"].document["workflow"]["allow_immediate_execution"]
+        and h["similarity"] is not None
+        and h["similarity"] >= settings.workflow_auto_run_similarity
+    ]
+    if len(hits) == 1 and immediate:
+        lines.append(
+            f"workflow_id={immediate[0]} 은 즉시 실행 대상입니다. 새 계획을 "
+            "설계하지 말고 이 후보 하나만 제안하고, 사용자 요청에 있는 값은 "
+            "inputs에 모두 채우세요. 필요한 입력이 다 채워지면 승인 카드 없이 "
+            "바로 실행됩니다."
+        )
     return _reply(runtime, "\n".join(lines), recommend=recommend)
 
 
@@ -438,11 +454,12 @@ async def propose_plans(
     if not prepared:
         return _reply(runtime, "제안할 계획이 없습니다.")
 
-    if _auto_run(prepared, settings.workflow_auto_run_similarity):
-        first = prepared[0]
+    auto = _auto_run(prepared, settings.workflow_auto_run_similarity)
+    if auto is not None:
+        first = prepared[auto]
         choice: Any = {
             "action": "approve",
-            "index": 0,
+            "index": auto,
             "input_values": first["input_values"],
         }
         await ctx.emit(
@@ -556,20 +573,26 @@ def _plan_key(document: dict[str, Any], values: dict[str, Any]) -> str:
     )
 
 
-def _auto_run(prepared: list[dict[str, Any]], threshold: float) -> bool:
-    """Run without the approval card: one template candidate the template
-    allows to run at once, every required input given, and a search
-    similarity of this run (``source.similarity``, measured by the server;
-    none when the model picked them) at least ``threshold``."""
-    if len(prepared) != 1 or not prepared[0]["source"]:
-        return False
-    first = prepared[0]
-    if not first["document"]["workflow"]["allow_immediate_execution"]:
-        return False
-    if any(s["required"] and s["value"] is None for s in first["input_slots"]):
-        return False
-    similarity = first["source"]["similarity"]
-    return similarity is not None and similarity >= threshold
+def _auto_run(prepared: list[dict[str, Any]], threshold: float) -> int | None:
+    """The candidate to run without the approval card, if any: the one
+    template among the candidates, when it allows running at once, every
+    required input is given, and its search similarity of this run
+    (``source.similarity``, measured by the server; none when the model
+    picked them) is at least ``threshold``. New plans beside it do not hold
+    it back (the model adds them in PLAN_RECOMMEND_MODE=mixed); a second
+    template does, since the user has to choose between them."""
+    templates = [i for i, c in enumerate(prepared) if c["source"]]
+    if len(templates) != 1:
+        return None
+    only = prepared[templates[0]]
+    if not only["document"]["workflow"]["allow_immediate_execution"]:
+        return None
+    if any(s["required"] and s["value"] is None for s in only["input_slots"]):
+        return None
+    similarity = only["source"]["similarity"]
+    if similarity is None or similarity < threshold:
+        return None
+    return templates[0]
 
 
 def _by_call_index(errors: list[str], keys: list[str]) -> list[str]:

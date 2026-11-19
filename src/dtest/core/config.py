@@ -342,7 +342,8 @@ class Settings(BaseSettings):
     # once the user rejects them), new plans alone when nothing matches
     plan_recommend_mode: Literal["mixed", "recommend_first"] = "mixed"
     # a template runs without the approval card only when it is the one
-    # candidate and its search similarity (embedding search) reaches this
+    # template among the candidates (new plans beside it do not count) and
+    # its search similarity (embedding search) reaches this
     workflow_auto_run_similarity: float = 0.77
     # allow_immediate_execution of a workflow the agent writes from a plan
     # (a saved one is changed by its author: PATCH /workflows/{id})
