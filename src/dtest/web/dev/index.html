@@ -2103,7 +2103,7 @@ function editedDocument() {
   if (!doc || !doc.workflow || typeof doc.workflow !== 'object') throw new Error('실행 흐름 JSON에 workflow 항목이 없습니다.');
   doc.workflow.name = $('weName').value.trim();
   doc.workflow.user_request = $('weRequest').value.trim();
-  doc.workflow.allow_immediate_execution = $('weImmediate').checked;
+  const imm = $('weImmediate'); if (imm) doc.workflow.allow_immediate_execution = imm.checked;
   return doc;
 }
 async function validateWorkflowDoc() {
@@ -2146,6 +2146,8 @@ function openWorkflowUpload() {
       <div class="field"><label>목적 (사용자 요청) · 이 워크플로우가 하는 일</label><input id="weRequest" placeholder="문서의 workflow.user_request"></div>
       <div class="field"><label>추천 질문 (필수, 한 줄에 하나) · 사용자가 이렇게 물으면 이 워크플로우를 추천합니다</label><textarea id="weQueries" rows="3" placeholder="예: NCE 표본 뽑아서 기술통계랑 히스토그램 보여줘"></textarea></div>
       <div class="field"><label>태그 (쉼표로 구분)</label><input id="weTags"></div>
+      <div class="field"><label style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="checkbox" id="weImmediate" style="width:auto"> 즉시 실행 허용</label>
+        <div class="muted" style="font-size:12px">공개(승격)된 뒤 이 워크플로우 하나만 추천되고 입력값이 모두 채워졌으며 유사도가 충분하면 승인 카드 없이 바로 실행합니다.</div></div>
       <div class="wf-sec" style="margin-top:6px">실행 흐름 <span class="muted" style="font-weight:400">· 호출 번호 s.t는 tool_output 참조의 step_index.tool_index</span></div>
       <div id="wbCalls"></div>
       <details id="wbJson" open><summary class="muted" style="cursor:pointer;font-size:13px">Workflow 1.0 문서 JSON (직접 수정 가능)</summary>
@@ -2302,6 +2304,7 @@ function fillUpload({ doc, queries, tags }) {
   const w = doc && doc.workflow && typeof doc.workflow === 'object' ? doc.workflow : {};
   $('weDoc').value = JSON.stringify(doc, null, 2);
   if (w.name) $('weName').value = w.name; if (w.user_request) $('weRequest').value = w.user_request;
+  if ($('weImmediate')) $('weImmediate').checked = !!w.allow_immediate_execution;
   renderCalls();
   if (queries.length) $('weQueries').value = queries.join('\n');  // never guessed: recommendation questions are the author's
   if (tags.length) $('weTags').value = tags.join(', ');
