@@ -13,6 +13,9 @@
 | 분석 턴 (1) | 새 세션에 분석 요청을 보내고, 계획 승인과 코드 승인 질문에 스스로 "승인"으로 답하며 끝까지 진행. executor에서 코드가 실제로 실행됨 |
 | executor 실행 (0) | LLM 없이 코드 실행 하나를 executor에 바로 제출(`POST /executor/executions`)하고 끝날 때까지 상태 조회. executor만 따로 재는 용도 |
 | 배치 실행 (0) | LLM 없이 그 사번의 배치 중 이름이 `load-`로 시작하는 것을 "지금 실행"하고 실행이 끝날 때까지 상태 조회. pr-batch와 executor를 재는 용도 |
+| 게이트웨이 조회 (0) | 끝난 실행 하나를 executor 게이트웨이로 조회 한 번(상태 60%, 목록 20%, result·steps·events 20%). 런타임을 쓰지 않음. 사번마다 끝난 실행이 `LOAD_GATEWAY_SEED`개보다 적으면 시작할 때 만들어 둠 |
+| 게이트웨이 제출 (0) | `pass` 한 줄을 제출하고 202를 받으면 바로 취소. 끝나기를 기다리지 않으므로 제출 경로만 잼 |
+| 내 정보만 (0) | `GET /users/me` 한 번. executor를 거치지 않는 우리 서비스만의 기준값 |
 
 executor와 배치가 주 대상이면 아래처럼 비율만 바꿔 돌립니다.
 
@@ -23,6 +26,16 @@ $env:LOAD_READ_WEIGHT=0; $env:LOAD_CHAT_WEIGHT=0; $env:LOAD_ANALYSIS_WEIGHT=0; $
 $env:LOAD_EXECUTOR_CODE="print(1 + 1)"; $env:LOAD_WAIT_MIN_SECONDS=0; $env:LOAD_WAIT_MAX_SECONDS=0; $env:LOAD_POLL_SECONDS=0.5
 # 배치만
 $env:LOAD_READ_WEIGHT=0; $env:LOAD_CHAT_WEIGHT=0; $env:LOAD_ANALYSIS_WEIGHT=0; $env:LOAD_EXECUTOR_WEIGHT=0; $env:LOAD_BATCH_WEIGHT=1
+```
+
+**런타임에 걸리지 않고 게이트웨이 → executor 호출 수용량만 재기**: 아래를 하나씩 따로 계단식으로 돌립니다(다른 비율은 모두 0, 쉬는 시간 0). 외부 테넌트 키로도 됩니다.
+
+```powershell
+$env:LOAD_ME_WEIGHT=1              # S0 기준선: 우리 서비스만
+$env:LOAD_GATEWAY_READ_WEIGHT=1    # S1 조회 전용
+$env:LOAD_GATEWAY_SUBMIT_WEIGHT=1  # S2 제출 전용(제출 후 바로 취소)
+# S3 실사용 혼합: 실행은 동시에 2개까지만, 나머지는 조회로 바뀜
+$env:LOAD_EXECUTOR_WEIGHT=1; $env:LOAD_GATEWAY_READ_WEIGHT=10; $env:LOAD_EXECUTOR_MAX_ACTIVE=2
 ```
 
 턴이 끝나면 만든 세션을 지웁니다. 답할 수 없는 질문(입력 칸이 여러 개인 질문)이 나오거나 제한 시간(기본 900초)을 넘기면 그 run을 취소하고 실패로 셉니다.
@@ -103,6 +116,10 @@ locust -f locust\locustfile.py --host https://<host> --headless --html report.ht
 | `LOAD_QUESTION_ANSWER` | 기본값으로 진행해줘 | 선택지 없는 질문에 보낼 답 |
 | `LOAD_READ_WEIGHT` / `LOAD_CHAT_WEIGHT` / `LOAD_ANALYSIS_WEIGHT` | 6 / 3 / 1 | 조회, 대화, 분석의 비율. 0이면 그 동작을 하지 않음 |
 | `LOAD_EXECUTOR_WEIGHT` / `LOAD_BATCH_WEIGHT` | 0 / 0 | executor 실행, 배치 실행의 비율 |
+| `LOAD_ME_WEIGHT` / `LOAD_GATEWAY_READ_WEIGHT` / `LOAD_GATEWAY_SUBMIT_WEIGHT` | 0 / 0 / 0 | 내 정보만, 게이트웨이 조회, 게이트웨이 제출의 비율 |
+| `LOAD_GATEWAY_SEED` | 5 | 게이트웨이 조회에 쓸, 사번마다 필요한 끝난 실행 수 |
+| `LOAD_SEND_PROJECT` | true | 게이트웨이 호출에 `X-Project-Id`를 붙임. 우리 테넌트 키는 이 헤더가 있으면 프로젝트 권한 확인이 더해짐 |
+| `LOAD_EXECUTOR_MAX_ACTIVE` | 0 | executor 실행을 전체 사용자 합쳐 동시에 몇 개까지 할지(0이면 제한 없음). 다 차면 그 차례는 게이트웨이 조회를 함 |
 | `LOAD_PLAN_INPUTS` | `{}` | 분석 계획의 빈 입력 칸에 넣을 값(JSON). 이름은 파라미터 이름 또는 칸의 키 |
 | `LOAD_EXECUTOR_CODE` | 10초 쉬고 `print(1 + 1)` | executor 실행에 보낼 코드. 실행 하나가 슬롯을 잡는 시간을 이 코드로 정함 |
 | `LOAD_EXECUTOR_PROFILE` | default | executor 런타임 프로필 |

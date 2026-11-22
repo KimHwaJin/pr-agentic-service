@@ -14,6 +14,7 @@ environment, then ``config.yml`` next to this file: see README.md.
 import itertools
 import json
 import os
+import random
 import time
 import uuid
 from pathlib import Path
@@ -84,6 +85,20 @@ CHAT_WEIGHT = int(_env("LOAD_CHAT_WEIGHT", "3"))
 ANALYSIS_WEIGHT = int(_env("LOAD_ANALYSIS_WEIGHT", "1"))
 EXECUTOR_WEIGHT = int(_env("LOAD_EXECUTOR_WEIGHT", "0"))
 BATCH_WEIGHT = int(_env("LOAD_BATCH_WEIGHT", "0"))
+# the executor gateway alone, nothing waits for a runtime: one call of
+# GET /users/me (our service without the executor), one read of a finished
+# execution, one submit cancelled at once
+ME_WEIGHT = int(_env("LOAD_ME_WEIGHT", "0"))
+GATEWAY_READ_WEIGHT = int(_env("LOAD_GATEWAY_READ_WEIGHT", "0"))
+GATEWAY_SUBMIT_WEIGHT = int(_env("LOAD_GATEWAY_SUBMIT_WEIGHT", "0"))
+# finished executions each employee id needs for the gateway reads (made
+# at the start when it has fewer)
+GATEWAY_SEED = int(_env("LOAD_GATEWAY_SEED", "5"))
+# send X-Project-Id on gateway calls (our tenant's key: one more check)
+SEND_PROJECT = _env("LOAD_SEND_PROJECT", "true").lower() == "true"
+# "executor execution" runs at once, all users together (0: no cap). At
+# the cap the task does a gateway read instead, so the runtimes never fill
+EXECUTOR_MAX_ACTIVE = int(_env("LOAD_EXECUTOR_MAX_ACTIVE", "0"))
 # values for the empty inputs of a plan: {"<param name or slot key>": value}
 PLAN_INPUTS = json.loads(_env("LOAD_PLAN_INPUTS", "{}"))
 EXECUTOR_CODE = _env(
@@ -123,6 +138,17 @@ def employee_ids() -> list[str]:
 
 
 IDS = employee_ids()
+# finished executions of each employee id, for the gateway reads
+SEEDS: dict[str, list[str]] = {}
+ACTIVE = {"executions": 0}
+# what one gateway read is, by share
+GATEWAY_READS = (
+    [("", "GET /executor/executions/[id]")] * 12
+    + [(None, "GET /executor/executions")] * 4
+    + [("/result", "GET /executor/executions/[id]/result")] * 2
+    + [("/steps", "GET /executor/executions/[id]/steps")]
+    + [("/events", "GET /executor/executions/[id]/events")]
+)
 NEXT_ID = itertools.cycle(IDS) if IDS else None
 
 
@@ -233,6 +259,66 @@ class ServiceUser(HttpUser):
                 r.failure(f"users/me {r.status_code}: {r.text[:200]}")
                 raise StopUser()
             self.project = r.json()["default_project_id"]
+        self.scope = {"X-Project-Id": self.project} if SEND_PROJECT else {}
+        if GATEWAY_READ_WEIGHT or EXECUTOR_MAX_ACTIVE:
+            self.seed()
+
+    def seed(self):
+        """Finished executions of this employee id to read: the ones it
+        has, and new ones up to ``GATEWAY_SEED``."""
+        if self.employee in SEEDS:
+            return
+        ids = SEEDS[self.employee] = []
+        r = self.client.get(
+            f"{PREFIX}/executor/executions?status=SUCCEEDED"
+            f"&limit={GATEWAY_SEED}",
+            headers=self.scope,
+            name="GET /executor/executions (seed)",
+        )
+        if r.status_code == 200:
+            ids += [i["execution_id"] for i in r.json().get("items", [])]
+        while len(ids) < GATEWAY_SEED:
+            execution, error = self.execute("pass", time.perf_counter())
+            if error:
+                print(f"[locust] {self.employee}: seed execution: {error}")
+                raise StopUser()
+            ids.append(execution)
+
+    # -- the executor gateway alone ---------------------------------------
+    @task(ME_WEIGHT)
+    def me(self):
+        self.client.get(f"{PREFIX}/users/me", name="GET /users/me")
+
+    @task(GATEWAY_READ_WEIGHT)
+    def gateway_read(self):
+        """One read of a finished execution: no runtime behind it."""
+        suffix, name = random.choice(GATEWAY_READS)
+        if suffix is None:
+            url = f"{PREFIX}/executor/executions?limit=20"
+        else:
+            execution = random.choice(SEEDS[self.employee])
+            url = f"{PREFIX}/executor/executions/{execution}{suffix}"
+        self.client.get(url, headers=self.scope, name=name)
+
+    @task(GATEWAY_SUBMIT_WEIGHT)
+    def gateway_submit(self):
+        """A submit taken back at once: the write path, without waiting
+        for a runtime and without leaving a queue."""
+        execution = self.submit("pass")
+        if not execution:
+            return
+        with self.client.post(
+            f"{PREFIX}/executor/executions/{execution}/cancel",
+            json={"idempotency_key": f"load-{uuid.uuid4()}"},
+            headers=self.scope,
+            name="POST /executor/executions/[id]/cancel",
+            catch_response=True,
+        ) as r:
+            # 409: it ended before the cancel
+            if r.status_code in (200, 202, 409):
+                r.success()
+            else:
+                r.failure(f"{r.status_code}: {r.text[:200]}")
 
     # -- light reads -------------------------------------------------------
     @task(READ_WEIGHT)
@@ -256,7 +342,19 @@ class ServiceUser(HttpUser):
     @task(EXECUTOR_WEIGHT)
     def execution(self):
         """One code execution sent straight to the executor."""
+        if EXECUTOR_MAX_ACTIVE and ACTIVE["executions"] >= EXECUTOR_MAX_ACTIVE:
+            return self.gateway_read()
         started = time.perf_counter()
+        ACTIVE["executions"] += 1
+        try:
+            execution, error = self.execute(EXECUTOR_CODE, started)
+        finally:
+            ACTIVE["executions"] -= 1
+        if execution:
+            self.report("executor execution", started, error)
+
+    def submit(self, code: str) -> str | None:
+        """Submits ``code`` as a SINGLE execution: its id, None if refused."""
         body = {
             "idempotency_key": f"load-{uuid.uuid4()}",
             "lifecycle": {"operation_mode": "SINGLE"},
@@ -270,10 +368,7 @@ class ServiceUser(HttpUser):
                             "sequence": 0,
                             "payload": {
                                 "type": "PYTHON_EXECUTE",
-                                "source": {
-                                    "type": "INLINE",
-                                    "content": EXECUTOR_CODE,
-                                },
+                                "source": {"type": "INLINE", "content": code},
                             },
                         }
                     ],
@@ -283,15 +378,22 @@ class ServiceUser(HttpUser):
         with self.client.post(
             f"{PREFIX}/executor/executions",
             json=body,
-            headers={"X-Project-Id": self.project},
+            headers=self.scope,
             name="POST /executor/executions",
             catch_response=True,
         ) as r:
             if r.status_code not in (200, 201, 202):
                 r.failure(f"{r.status_code}: {r.text[:200]}")
-                return
-            data = r.json()
-        execution = data.get("id") or data.get("execution_id")
+                return None
+            return r.json()["execution_id"]
+
+    def execute(
+        self, code: str, started: float
+    ) -> tuple[str | None, str | None]:
+        """Submits ``code`` and follows it to its end: (id, error text)."""
+        execution = self.submit(code)
+        if not execution:
+            return None, "submit refused"
         error = self.wait(
             f"{PREFIX}/executor/executions/{execution}",
             "GET /executor/executions/[id]",
@@ -300,7 +402,7 @@ class ServiceUser(HttpUser):
             started,
             f"{PREFIX}/executor/executions/{execution}/cancel",
         )
-        self.report("executor execution", started, error)
+        return execution, error
 
     @task(BATCH_WEIGHT)
     def batch(self):
@@ -360,9 +462,12 @@ class ServiceUser(HttpUser):
         None."""
         while True:
             if time.perf_counter() - started > RUN_TIMEOUT:
+                key = str(uuid.uuid4())
                 self.client.post(
                     cancel_url,
-                    headers={"Idempotency-Key": str(uuid.uuid4())},
+                    # pr-batch reads the header, the executor the body
+                    headers={"Idempotency-Key": key},
+                    json={"idempotency_key": key},
                     name=name.replace("GET", "POST") + "/cancel",
                 )
                 return f"not finished in {RUN_TIMEOUT:.0f}s"
@@ -371,6 +476,14 @@ class ServiceUser(HttpUser):
             if r.status_code != 200:
                 return f"{name} {r.status_code}"
             state = r.json()
+            # an execution: state.status and state.reason; a batch run:
+            # status
+            nested = state.get("state")
+            if isinstance(nested, dict):
+                state = {
+                    "status": nested.get("status"),
+                    "error": (nested.get("reason") or {}).get("code"),
+                }
             status = state.get("status")
             if status in done:
                 if status == good:
