@@ -235,7 +235,7 @@ SSO로 처음 로그인할 때 만들어집니다. `employee_id`(사번)가 사�
 - `input`: 사용자 메시지와 선택한 옵션.
 - `waiting`: 멈춰 있는 이유. 사용자 확인을 기다리면 그 질문, executor를 기다리면 `execution_id`.
 - `resume`: 멈춘 run을 이어 갈 때 넘겨줄 값(사용자의 답, executor 결과).
-- `lease_owner`, `lease_expires_at`: 어느 Pod가 언제까지 실행 권한을 가졌는지. 만료되면 다른 Pod가 가져갑니다.
+- `lease_owner`, `lease_expires_at`: 어느 인스턴스가 언제까지 실행 권한을 가졌는지. 만료되면 다른 인스턴스가 가져갑니다.
 - `cancel_requested`: 사용자가 취소를 눌렀다는 표시.
 - `recovery_checked_at`: 놓친 executor 이벤트를 마지막으로 확인한 시각.
 
@@ -325,7 +325,7 @@ stateDiagram-v2
     running --> waiting_executor: executor에 코드 제출
     waiting_input --> queued: 사용자가 답함
     waiting_executor --> queued: executor 이벤트 도착
-    running --> queued: lease 만료 또는 Pod 종료
+    running --> queued: lease 만료 또는 인스턴스 종료
     running --> succeeded
     running --> failed
     running --> cancelled
@@ -337,15 +337,15 @@ stateDiagram-v2
     cancelled --> [*]
 ```
 
-| 상태 | 뜻 | Pod 자원 |
+| 상태 | 뜻 | 인스턴스 자원 |
 | --- | --- | --- |
 | `queued` | worker를 기다림 | 쓰지 않음 |
-| `running` | 어느 Pod가 실행 중. `lease_owner`가 그 Pod | 실행 슬롯 1개 |
+| `running` | 어느 인스턴스가 실행 중. `lease_owner`가 그 인스턴스 | 실행 슬롯 1개 |
 | `waiting_input` | 사용자 확인(계획 승인 등)을 기다림 | 쓰지 않음 |
 | `waiting_executor` | executor가 코드를 실행 중 | 쓰지 않음 |
 | `succeeded`, `failed`, `cancelled` | 끝남. `finished_at`이 채워짐 | 쓰지 않음 |
 
-기다리는 상태에서는 며칠이 지나도 Pod 자원을 잡지 않습니다. 실행 중인 Pod가 죽으면 lease가 만료되어(기본 60초) 다른 Pod가 체크포인트에서 이어 갑니다.
+기다리는 상태에서는 며칠이 지나도 인스턴스 자원을 잡지 않습니다. 실행 중인 인스턴스가 죽으면 lease가 만료되어(기본 60초) 다른 인스턴스가 체크포인트에서 이어 갑니다.
 
 ### 6.2 배치 리포트 작업
 

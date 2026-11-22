@@ -11,7 +11,7 @@ flowchart LR
   B[브라우저] -->|SSO 쿠키| API
   X[다른 서비스·에이전트] -->|X-Api-Key| API
   GA[gaia 채팅 화면] -->|workflow dtest.analyst| BR[gaia_bridge]
-  subgraph POD["Pod (프로세스 1개)"]
+  subgraph POD["서비스 인스턴스 (프로세스 1개)"]
     API[api_service]
     BR
     W[worker]
@@ -36,8 +36,8 @@ flowchart LR
 
 - **사용자 턴 하나가 run 하나입니다.** API는 `runs` 테이블에 행을 넣고 바로 응답합니다. 실제 실행은 worker가 그 행을 가져가서 합니다. PostgreSQL 테이블이 작업 큐입니다.
 - **기다리는 동안 자원을 잡지 않습니다.** 사용자 확인이 필요하거나 executor가 코드를 실행하는 동안에는 LangGraph의 `interrupt`로 그래프를 멈추고 상태를 체크포인트에 저장합니다. 답이나 결과가 오면 같은 지점부터 이어 갑니다.
-- **어느 Pod든 이어 갈 수 있습니다.** 실행 권한은 lease(기본 60초)로 잡습니다. Pod가 죽으면 lease가 만료되고 다른 Pod가 체크포인트에서 이어 갑니다.
-- **화면에는 이벤트로 알립니다.** 진행 상황은 Redis 발행/구독으로 각 Pod에 퍼지고, 브라우저는 SSE로 받습니다. 저장이 필요한 이벤트는 `run_events`에도 남겨, 끊겼다 다시 붙으면 이어 받습니다.
+- **어느 인스턴스든 이어 갈 수 있습니다.** 실행 권한은 lease(기본 60초)로 잡습니다. 인스턴스가 죽으면 lease가 만료되고 다른 인스턴스가 체크포인트에서 이어 갑니다.
+- **화면에는 이벤트로 알립니다.** 진행 상황은 Redis 발행/구독으로 각 인스턴스에 퍼지고, 브라우저는 SSE로 받습니다. 저장이 필요한 이벤트는 `run_events`에도 남겨, 끊겼다 다시 붙으면 이어 받습니다.
 
 ## 2. 레포 구조
 
@@ -120,7 +120,7 @@ gaia의 `main()`은 앱의 lifespan을 자기 것으로 바꾸기 때문에 Fast
 | `api` | 켬 | 끔 |
 | `worker` | 끔 | 켬 |
 
-현재 배포는 `all`입니다. worker를 별도 Deployment로 옮길 때 코드 변경 없이 이 값만 바꾸면 됩니다.
+현재 배포는 `all`입니다. worker를 별도 배포 단위로 옮길 때 코드 변경 없이 이 값만 바꾸면 됩니다.
 
 ### 3.3 종료 순서
 
@@ -142,7 +142,7 @@ docker compose up -d --build            # shared-infra(postgres, redis)와 execu
 1. 브라우저가 `GET /api/v1/sessions/{id}/events`로 SSE를 열어 둡니다.
 2. 브라우저가 `POST /api/v1/sessions/{id}/runs`에 메시지를 보냅니다.
 3. `api_service/services/runs.py`의 `create_run`이 세션 행을 잠그고, 진행 중인 run이 없는지 확인한 뒤 `runs`에 `queued` 행을 넣고 사용자 메시지를 `messages`에 저장합니다. `Idempotency-Key`가 있으면 `run_requests`에 기록합니다. Redis로 깨우기 신호를 보냅니다.
-4. 어느 Pod의 `RunScheduler`(`worker/scheduler.py`)가 그 run을 `FOR UPDATE SKIP LOCKED`로 가져가 `running`으로 바꾸고 lease를 잡습니다.
+4. 어느 인스턴스의 `RunScheduler`(`worker/scheduler.py`)가 그 run을 `FOR UPDATE SKIP LOCKED`로 가져가 `running`으로 바꾸고 lease를 잡습니다.
 5. `AgentGraphs.run_turn`(`agent/graph.py`)이 그래프를 실행합니다. 모델이 내는 토큰은 50ms 단위로 묶어 이벤트로 발행합니다.
 6. 그래프가 끝나면 스케줄러가 최종 답변을 `messages`와 `run_events`에 저장하고 run을 `succeeded`로 바꿉니다.
 7. 브라우저는 SSE로 `message_final`을 받습니다.
@@ -297,7 +297,7 @@ executor에 보내는 tool 셀은 "tool 함수 + 호출 + `_agentic_observe(변�
 
 ## 7. `worker`: 백그라운드 작업
 
-`worker/runtime.py`의 `Worker`가 아래 루프를 asyncio 태스크로 띄웁니다. 하나라도 스스로 끝나면 `/api/v1/healthz`가 503이 되어 Pod가 재시작됩니다.
+`worker/runtime.py`의 `Worker`가 아래 루프를 asyncio 태스크로 띄웁니다. 하나라도 스스로 끝나면 `/api/v1/healthz`가 503이 되어 인스턴스가 재시작됩니다.
 
 | 루프 이름 | 클래스 (파일) | 역할 |
 | --- | --- | --- |
@@ -315,7 +315,7 @@ executor에 보내는 tool 셀은 "tool 함수 + 호출 + `_agentic_observe(변�
 
 - **가져가기(`_claim`)**: `queued`이거나 lease가 만료된 `running` run을 오래된 순서로 `FOR UPDATE SKIP LOCKED`로 잡습니다. 사용자당 동시 실행 수(`RUN_USER_CONCURRENCY`)를 넘는 run은 건너뜁니다.
 - **깨우기**: Redis 채널로 신호를 받으면 바로 가져가고, 신호를 놓쳐도 5초(`RUN_POLL_SECONDS`)마다 확인합니다.
-- **lease 갱신(`_heartbeat`)**: lease의 1/3(20초)마다 갱신합니다. 갱신이 lease의 2/3(40초) 동안 실패하면 턴을 스스로 멈춥니다. 다른 Pod가 곧 가져갈 것이므로 두 번 실행되지 않게 하는 것입니다. 갱신하면서 취소 요청도 확인합니다.
+- **lease 갱신(`_heartbeat`)**: lease의 1/3(20초)마다 갱신합니다. 갱신이 lease의 2/3(40초) 동안 실패하면 턴을 스스로 멈춥니다. 다른 인스턴스가 곧 가져갈 것이므로 두 번 실행되지 않게 하는 것입니다. 갱신하면서 취소 요청도 확인합니다.
 - **반복 실패 방지**: 멈춤 없이 연속 `RUN_MAX_ATTEMPTS`(5)번 가져갔는데 결과가 없으면 `failed`로 끝냅니다.
 - **종료(`drain`)**: 새 run을 받지 않고 진행 중인 턴을 기다린 뒤, 남은 run을 `queued`로 돌립니다. 종료는 실패한 시도로 세지 않습니다.
 
@@ -323,7 +323,7 @@ executor에 보내는 tool 셀은 "tool 함수 + 호출 + `_agentic_observe(변�
 
 - executor는 `executor.events.{tenant}` 스트림에 이벤트를 씁니다. 우리는 소비자 그룹으로 읽습니다.
 - Redis에는 접근 제어가 없어 누구나 스트림에 쓸 수 있습니다. 그래서 스트림 내용을 믿지 않고, 이벤트 id로 executor에 다시 조회해 확인한 내용을 씁니다.
-- 처리하다 죽은 Pod가 남긴 이벤트는 `XAUTOCLAIM`으로 다른 Pod가 가져갑니다(Redis 6.2 이상 필요).
+- 처리하다 죽은 인스턴스가 남긴 이벤트는 `XAUTOCLAIM`으로 다른 인스턴스가 가져갑니다(Redis 6.2 이상 필요).
 - 소비자 그룹이 사라지면(Redis가 비워짐) 다음 읽기 때 다시 만듭니다.
 
 ## 8. `core`: 공용 기반
@@ -336,7 +336,7 @@ executor에 보내는 tool 셀은 "tool 함수 + 호출 + `_agentic_observe(변�
 | `db.py` | SQLAlchemy 엔진과 세션, 공통 컬럼, 풀 이름 |
 | `models.py` | 테이블 모델 전부 |
 | `checkpoints.py` | `PooledPostgresSaver`: 체크포인트 저장이 한 줄로 서지 않게 한 saver |
-| `events.py` | `EventBus`: 이벤트 저장과 발행, Pod 내 SSE 분배, run 깨우기 신호 |
+| `events.py` | `EventBus`: 이벤트 저장과 발행, 인스턴스 내 SSE 분배, run 깨우기 신호 |
 | `redis_client.py` | Redis 연결(standalone, sentinel), 시간 제한과 재연결 |
 | `assets.py` | skill, tool, knowledge 파일 읽기와 검증. 5초 간격 변경 확인 |
 | `embeddings.py` | 임베딩 클라이언트 |

@@ -8,7 +8,9 @@
 
 ### 1.1 무엇이 어디에 연결되나
 
-pr-agentic-service는 사내 데이터 분석 Agent의 채팅 API이자 Agent 실행 서비스입니다. Pod 하나가 컨테이너 하나, 프로세스 하나(uvicorn worker 1개)이고, 그 안에서 API와 백그라운드 작업(worker)이 함께 돕니다.
+pr-agentic-service는 사내 데이터 분석 Agent의 채팅 API이자 Agent 실행 서비스입니다. 서비스 인스턴스 하나는 프로세스 하나(uvicorn worker 1개)이고, 그 안에서 API와 백그라운드 작업(worker)이 함께 돕니다. 같은 인스턴스를 여러 개 띄워 부하를 나눕니다. 이 문서에서 "인스턴스"는 그 프로세스 하나를 뜻합니다.
+
+컨테이너 배치, 자동 확장, 앞단 라우팅 같은 실행 인프라는 사내 플랫폼이 맡으므로 이 문서에서 다루지 않습니다. 서비스가 인프라에 기대하는 조건만 1.3절에 적었습니다.
 
 | 연결 대상 | 방향 | 용도 | 끊기면 |
 | --- | --- | --- | --- |
@@ -34,21 +36,23 @@ pr-agentic-service는 사내 데이터 분석 Agent의 채팅 API이자 Agent �
 | stg | `stg` | `config.yml` + `config.stg.yml` | standalone | idp |
 | prd | `prd` | `config.yml` + `config.prd.yml` | sentinel | idp |
 
-확인 필요: 환경별 클러스터, 네임스페이스, 접속 주소, 실제 Pod 수, 연결된 executor·pr-batch·DB·Redis 주소. 사외 검증용으로는 frodo 클러스터의 `mcp-server` 네임스페이스에 배포한 적이 있습니다(2026-11-08, `APP_ENV` 없이 로컬 모드).
+확인 필요: 환경별 접속 주소와, 각 환경이 연결하는 executor·pr-batch·DB·Redis 주소. 사외 검증 환경에는 `APP_ENV` 없이 로컬 모드로 배포한 적이 있습니다(2026-11-08).
 
-### 1.3 Pod 사양 (`deploy/kubernetes/deployment.yml`)
+### 1.3 서비스가 실행 환경에 기대하는 조건
 
-| 항목 | 값 |
+| 항목 | 내용 |
 | --- | --- |
-| 레플리카 | 2 (HPA: CPU 60% 기준, 최소 2, 최대 4) |
-| 자원 | 요청 CPU 0.5, 메모리 1Gi. 한도 CPU 2, 메모리 2Gi |
-| 포트 | 8080 (Service는 80 → 8080) |
-| readiness | `GET /api/admin/appReady` (gaia 제공, 5초 간격) |
-| liveness | `GET /api/v1/healthz` (15초 간격, 4번 실패 시 재시작) |
-| 종료 | preStop `sleep 5`, `terminationGracePeriodSeconds` 60 |
-| 실행 계정 | UID 1000, GID 1000 (executor 이미지와 같아야 공유 저장소를 같이 읽고 씀) |
-| 볼륨 | `executor-shared-pvc`를 `/mnt/data`에 마운트 (RWX) |
-| 실행 명령 | `python app.py` (gaia 템플릿이 uvicorn worker 1개를 띄움) |
+| 실행 명령 | `python app.py`. gaia 템플릿이 uvicorn worker 1개를 띄움. worker 수를 늘리지 않음(4.7절) |
+| 포트 | 8080 (`config.yml`의 `PORT`) |
+| 준비 확인 | `GET /api/admin/appReady` (gaia 제공). 우리 쪽 시작이 끝나야 응답함 |
+| 생존 확인 | `GET /api/v1/healthz`. 백그라운드 루프가 하나라도 죽으면 503. 이때 인스턴스를 재시작해야 함 |
+| 종료 대기 | 종료 신호 뒤 정리에 최대 약 45초(2.7절). 그 전에 강제 종료하지 않아야 함 |
+| 실행 계정 | UID 1000, GID 1000. executor와 같아야 공유 저장소를 같이 읽고 씀 |
+| 공유 저장소 | executor와 같은 저장소를 `/mnt/data`에 마운트 |
+| 요청 크기와 연결 | 요청 본문 32MB까지, SSE 연결은 길게 유지(4.8절) |
+| 자원 | 인스턴스 하나가 CPU 약 1코어를 씀. 배포 예시의 메모리 한도는 2Gi |
+
+배포 예시는 `deploy/kubernetes/deployment.yml`에 있습니다.
 
 ## 2. 배포
 
@@ -59,40 +63,37 @@ pr-agentic-service는 사내 데이터 분석 Agent의 채팅 API이자 Agent �
 - `config.yml`: 모든 환경 공통값. 모든 설정 키가 기본값과 함께 적혀 있습니다.
 - `config.{APP_ENV}.yml`: 환경마다 다른 값만 있습니다. `DATABASE_URL`, `REDIS_*`, `PUBLIC_API_ORIGIN`, `FRONTEND_ORIGIN`, `CORS_ORIGINS`, `COOKIE_SECURE`, `ADMIN_EMPLOYEE_IDS`, `LLM_API_KEY`, `MODELS`, `EXECUTOR_BASE_URL`, `BATCH_BASE_URL`, 서비스 키.
 - `config.example.yml`: 서비스가 읽지 않는 설명용 파일. 모든 키의 의미와 예시가 주석으로 있습니다. 설정 키의 뜻을 찾을 때 이 파일을 봅니다.
-- 네 파일은 모두 이미지에 들어가고(`COPY config*.yml`), Deployment의 `env`에 있는 `APP_ENV` 값이 어느 파일을 쓸지 정합니다.
-- 내부망은 ConfigMap과 Secret을 쓸 수 없어 키 값도 `config.{APP_ENV}.yml`에 적는 것이 사내 가이드입니다. 한 값만 바꿀 때는 Deployment `env`에 같은 이름으로 넣으면 파일보다 우선합니다.
+- 네 파일은 모두 빌드 결과물에 들어가고, 환경변수 `APP_ENV` 값이 어느 파일을 쓸지 정합니다.
+- 내부망은 ConfigMap과 Secret을 쓸 수 없어 키 값도 `config.{APP_ENV}.yml`에 적는 것이 사내 가이드입니다. 한 값만 바꿀 때는 같은 이름의 환경변수로 넣으면 파일보다 우선합니다.
 
-확인 필요: 운영 키 값을 실제로 어디에 두는지(설정 파일, Deployment env, 그 밖의 방법).
+확인 필요: 운영 키 값을 실제로 어디에 두는지(설정 파일, 환경변수).
 
-### 2.2 이미지 빌드
+### 2.2 빌드할 때 지킬 것
 
-```
-docker build --build-arg BASE_IMAGE=<사내 uv + Python 3.11 이미지> --build-arg APP_ENV=prd .
-```
-
-- 내부망 이미지는 Python 3.11입니다. 3.12 전용 문법이 들어가면 빌드는 되지만 실행에서 깨집니다.
+- 내부망은 Python 3.11입니다. 3.12 전용 문법이 들어가면 실행에서 깨집니다.
 - `pyproject.toml`에는 HCP 라이브러리와 gaia 기본 의존성이 들어 있어야 합니다. FastAPI는 0.137 미만으로 묶여 있습니다. 0.137부터는 gaia의 prometheus 계측기가 요청마다 `AttributeError`를 냅니다.
 - `langgraph-checkpoint-postgres`는 3.1.3으로 고정되어 있습니다. 올리면 체크포인트 저장이 한 줄로 서는 문제가 돌아올 수 있고, 그때는 `tests/test_checkpoint_saver.py`가 실패합니다.
+- 의존성을 바꾸면 `uv lock`으로 `uv.lock`을 갱신합니다.
 
 ### 2.3 배포 순서
 
 1. 테스트를 돌립니다. `uv run pytest`
-2. 새 마이그레이션이 있으면 먼저 적용합니다. 운영은 `AUTO_MIGRATE: false`로 두고, 같은 이미지와 같은 설정으로 `python scripts/migrate.py`를 한 번 실행합니다. 실패하면 0이 아닌 코드로 끝나고 기존 Pod는 그대로 서비스합니다.
-3. Pod를 롤아웃합니다.
+2. 새 마이그레이션이 있으면 먼저 적용합니다. 운영은 `AUTO_MIGRATE: false`로 두고, 배포할 버전의 코드와 같은 설정으로 `python scripts/migrate.py`를 한 번 실행합니다. 실패하면 0이 아닌 코드로 끝나고 기존 인스턴스는 그대로 서비스합니다.
+3. 새 버전을 배포합니다.
 4. 기동 로그와 헬스체크를 확인합니다(2.5절).
 
-dev와 stg는 `AUTO_MIGRATE: true`로 두어도 됩니다. 이때는 Pod가 시작하면서 마이그레이션을 실행하고, 여러 Pod가 동시에 떠도 한 Pod만 실행합니다.
+dev와 stg는 `AUTO_MIGRATE: true`로 두어도 됩니다. 이때는 인스턴스가 시작하면서 마이그레이션을 실행하고, 여러 인스턴스가 동시에 떠도 한 인스턴스만 실행합니다.
 
-확인 필요: 실제 배포 파이프라인 도구, 이미지 레지스트리, 내부망 반입 절차.
+배포 도구와 절차 자체는 사내 플랫폼을 따릅니다.
 
 ### 2.4 기동을 거부하는 조건
 
-설정이 잘못되면 Pod가 시작하지 않고 로그에 `ValueError`와 이유를 남깁니다. 일부러 넣은 검사입니다.
+설정이 잘못되면 인스턴스가 시작하지 않고 로그에 `ValueError`와 이유를 남깁니다. 일부러 넣은 검사입니다.
 
 | 조건 | 메시지 요지 |
 | --- | --- |
 | `APP_ENV`가 있는데 `config.{APP_ENV}.yml`이 없음 | `APP_ENV=... needs ...` |
-| k8s Pod인데 `APP_ENV`가 비어 있음 | `APP_ENV is not set for this pod` |
+| 서버 환경인데 `APP_ENV`가 비어 있음 | `APP_ENV is not set for this pod` |
 | dev·stg·prd에서 `SSO_ADAPTER=dev` | `SSO_ADAPTER=dev is only allowed locally` |
 | stg·prd에서 `COOKIE_SECURE`가 false | `COOKIE_SECURE must be true` |
 | dev·stg·prd에서 `EXECUTOR_API_KEY`나 `BATCH_API_KEY`가 비어 있음 | `EXECUTOR_API_KEY and BATCH_API_KEY are required` |
@@ -116,18 +117,17 @@ dev와 stg는 `AUTO_MIGRATE: true`로 두어도 됩니다. 이때는 Pod가 시�
 
 ### 2.6 롤백
 
-이전 이미지로 되돌리면 됩니다. 마이그레이션은 이전 버전 코드가 계속 동작하도록(컬럼과 인덱스 추가만) 작성하므로 스키마는 되돌리지 않습니다.
+이전 버전으로 되돌리면 됩니다. 마이그레이션은 이전 버전 코드가 계속 동작하도록(컬럼과 인덱스 추가만) 작성하므로 스키마는 되돌리지 않습니다.
 
 ### 2.7 종료 동작
 
-Pod가 내려갈 때 순서는 다음과 같고 합계 45~50초입니다. 그래서 `terminationGracePeriodSeconds`는 60입니다.
+인스턴스가 종료 신호를 받으면 아래 순서로 정리하고, 합계 최대 약 45초가 걸립니다.
 
-1. preStop 5초. Service가 이 Pod로 요청을 그만 보낼 시간입니다.
-2. uvicorn이 열린 연결을 최대 20초 기다립니다. SSE 연결이 있으면 끝까지 기다립니다.
-3. worker가 새 run을 받지 않고, 진행 중인 턴과 메모리 작업을 최대 20초 동안 마무리합니다.
-4. 끝나지 않은 run은 lease를 반납해 `queued`로 돌리고, 다른 Pod가 체크포인트에서 이어 갑니다.
+1. uvicorn이 열린 연결을 최대 20초 기다립니다. SSE 연결이 있으면 끝까지 기다립니다.
+2. worker가 새 run을 받지 않고, 진행 중인 턴과 메모리 작업을 최대 20초 동안 마무리합니다.
+3. 끝나지 않은 run은 lease를 반납해 `queued`로 돌리고, 다른 인스턴스가 체크포인트에서 이어 갑니다.
 
-진행 중이던 턴은 잃지 않습니다. 다만 이어 가는 Pod가 마지막 체크포인트 이후의 LLM 호출을 다시 하므로 그만큼 시간이 더 걸립니다.
+진행 중이던 턴은 잃지 않습니다. 다만 이어 가는 인스턴스가 마지막 체크포인트 이후의 LLM 호출을 다시 하므로 그만큼 시간이 더 걸립니다. 정리가 끝나기 전에 강제 종료되어도 lease가 60초 뒤 만료되어 같은 방식으로 이어 갑니다.
 
 ## 3. 일상 운영
 
@@ -191,7 +191,7 @@ python scripts/set_user_role.py --env prd A10054 admin           # 승격 (강�
 
 ### 3.6 skill, tool, 프롬프트 반영
 
-`src/dtest/assets/`의 skill(`.md`), tool(`.py`), knowledge(`.md`)와 `src/dtest/agent/prompts/`는 이미지에 들어 있습니다. 바꾸려면 이미지를 다시 빌드해 배포합니다. 실행 중에는 5초 간격으로 파일 변경을 확인하므로, 볼륨으로 마운트한 환경에서는 파일만 바꿔도 다음 run부터 반영됩니다. 깨진 tool 파일은 그 파일만 건너뛰고 `tool_load_failed` 경고를 남깁니다.
+`src/dtest/assets/`의 skill(`.md`), tool(`.py`), knowledge(`.md`)와 `src/dtest/agent/prompts/`는 코드와 함께 배포됩니다. 바꾸려면 다시 배포합니다. 실행 중에는 5초 간격으로 파일 변경을 확인하므로, 파일을 외부 경로에서 읽게 한 환경(`SKILLS_ROOT` 등)에서는 파일만 바꿔도 다음 run부터 반영됩니다. 깨진 tool 파일은 그 파일만 건너뛰고 `tool_load_failed` 경고를 남깁니다.
 
 ### 3.7 API 문서
 
@@ -215,54 +215,56 @@ python scripts/set_user_role.py --env prd A10054 admin           # 승격 (강�
 
 ### 4.3 두 환경이 같은 DB나 같은 Redis를 가리키면 섞인다
 
-- 문제: run은 PostgreSQL 테이블을 큐로 씁니다. dev와 prd가 같은 데이터베이스를 가리키면 dev Pod의 worker가 prd 사용자의 run을 가져가 dev의 코드와 설정으로 실행합니다. 마이그레이션도 한쪽이 올리면 양쪽 스키마가 바뀝니다. Redis도 같습니다. `REDIS_NAMESPACE`(기본 `agentic`)가 같으면 로그인 세션과 실시간 이벤트가 섞이고, executor 이벤트를 두 환경이 나눠 가져갑니다.
+- 문제: run은 PostgreSQL 테이블을 큐로 씁니다. dev와 prd가 같은 데이터베이스를 가리키면 dev 인스턴스의 worker가 prd 사용자의 run을 가져가 dev의 코드와 설정으로 실행합니다. 마이그레이션도 한쪽이 올리면 양쪽 스키마가 바뀝니다. Redis도 같습니다. `REDIS_NAMESPACE`(기본 `agentic`)가 같으면 로그인 세션과 실시간 이벤트가 섞이고, executor 이벤트를 두 환경이 나눠 가져갑니다.
 - 증상: 한 환경에서 고친 동작이 가끔만 적용됨, 한쪽에서 배포한 뒤 다른 쪽이 컬럼 오류를 냄, 이벤트가 간헐적으로 누락됨.
 - 예방: 환경마다 데이터베이스(`DATABASE_URL`의 DB 이름)를 따로 둡니다. Redis를 같이 써야 한다면 `REDIS_NAMESPACE`와 DB 번호를 환경마다 다르게 두되, 그 환경의 executor도 같은 DB 번호를 써야 합니다(4.1절). PostgreSQL 서버만 같이 쓰는 것은 연결 수만 관리하면 됩니다(4.5절).
 - 확인 필요: 현재 dev와 prd의 DB·Redis가 실제로 어떻게 나뉘어 있는지.
 
-### 4.4 마이그레이션이 실패하면 모든 Pod가 뜨지 못한다
+### 4.4 마이그레이션이 실패하면 모든 인스턴스가 뜨지 못한다
 
-- 문제: `AUTO_MIGRATE: true`이면 Pod가 시작할 때 마이그레이션을 실행합니다. 실패하면 모든 새 Pod가 CrashLoop에 빠집니다. 롤링 업데이트로 옛 Pod가 이미 내려갔다면 서비스가 멈춥니다.
+- 문제: `AUTO_MIGRATE: true`이면 인스턴스가 시작할 때 마이그레이션을 실행합니다. 실패하면 새 인스턴스가 모두 시작에 실패합니다. 교체 배포로 옛 인스턴스가 이미 내려갔다면 서비스가 멈춥니다.
 - 예방: 운영은 `AUTO_MIGRATE: false`로 두고 배포 전에 `python scripts/migrate.py`를 따로 실행합니다(2.3절).
 
 ### 4.5 PostgreSQL 연결 수에는 예산이 있다
 
-- 문제: executor, pr-batch와 같은 PostgreSQL 서버를 씁니다. 서버의 `max_connections`는 100이고 세 서비스가 최대로 늘면 84를 씁니다. 우리 Pod 하나는 최대 14(앱 풀 6 + 그래프 풀 8)입니다.
+- 문제: executor, pr-batch와 같은 PostgreSQL 서버를 씁니다. 서버의 `max_connections`는 100이고 세 서비스가 최대로 늘면 84를 씁니다. 우리 인스턴스 하나는 최대 14(앱 풀 6 + 그래프 풀 8)입니다.
 - 증상: 넘으면 `too many connections` 오류가 세 서비스 모두에서 납니다.
-- 예방: HPA 최대 Pod 수, `DB_POOL_SIZE`, `CHECKPOINT_POOL_SIZE` 중 하나라도 올리기 전에 합계를 다시 계산합니다. 계산식은 `Pod 수 × (DB_POOL_SIZE × 2 + CHECKPOINT_POOL_SIZE)`입니다. 더 필요하면 `max_connections`를 올리거나 PgBouncer(transaction 모드)를 앞에 둡니다.
+- 예방: 인스턴스 수, `DB_POOL_SIZE`, `CHECKPOINT_POOL_SIZE` 중 하나라도 올리기 전에 합계를 다시 계산합니다. 계산식은 `인스턴스 수 × (DB_POOL_SIZE × 2 + CHECKPOINT_POOL_SIZE)`입니다. 더 필요하면 `max_connections`를 올리거나 PgBouncer(transaction 모드)를 앞에 둡니다.
 
-### 4.6 Pod와 DB 사이 장비가 조용한 연결을 끊는다
+### 4.6 인스턴스와 DB 사이 장비가 조용한 연결을 끊는다
 
 - 문제: 방화벽, LB, NAT 같은 장비가 일정 시간 조용한 TCP 연결을 양쪽에 알리지 않고 끊습니다. 풀에 쉬고 있던 연결이 끊기면 다음 턴이 "server closed the connection unexpectedly"로 실패했습니다.
 - 대응(구현됨): 풀이 연결을 빌려줄 때마다 살아 있는지 확인하고, TCP keepalive를 `DB_KEEPALIVE_IDLE_SECONDS`(60초) 간격으로 보냅니다.
 - 예방: 이 값을 그 장비의 idle 제한 시간보다 짧게 둡니다. 새 환경으로 옮기면 한참 쉬었다가 첫 요청이 실패하지 않는지 확인합니다.
 
-### 4.7 Pod당 프로세스는 1개로 둔다
+### 4.7 인스턴스 하나에 uvicorn worker는 1개로 둔다
 
 - 문제: uvicorn worker를 늘리면 백그라운드 루프와 DB 풀이 그 수만큼 곱해집니다. 연결 예산이 깨지고 run 동시 실행 수도 곱해집니다.
-- 예방: 처리량이 필요하면 프로세스가 아니라 Pod 수를 늘립니다. 실행 명령(`python app.py`)과 gaia 템플릿의 worker 수를 바꾸지 않습니다.
+- 예방: 처리량이 필요하면 프로세스 안의 worker가 아니라 인스턴스 수를 늘립니다. 실행 명령(`python app.py`)과 gaia 템플릿의 worker 수를 바꾸지 않습니다.
 
-### 4.8 앞단(Ingress, Istio)의 요청 크기와 SSE 설정
+### 4.8 큰 요청과 긴 연결을 쓰는 서비스다
 
-서비스는 이미지(base64)를 담은 요청을 32MB(`REQUEST_MAX_BYTES`)까지 받고, 실시간 이벤트는 SSE로 길게 열어 둡니다. 앞단이 아래를 만족해야 합니다.
+- 서비스는 이미지(base64)를 담은 요청을 32MB(`REQUEST_MAX_BYTES`)까지 받습니다. 넘으면 우리가 413과 표준 오류 형식(`code`, `message`)으로 답합니다.
+- 실시간 이벤트는 SSE(`GET /api/v1/sessions/{id}/events`)로 길게 열어 둡니다. 15초 동안 이벤트가 없으면 유지 신호를 보냅니다. 응답 헤더로 버퍼링을 끄도록 요청합니다(`X-Accel-Buffering: no`).
+- 서비스 앞의 프록시가 본문 크기를 더 작게 제한하거나, 응답을 모아서 보내거나, 연결을 짧게 끊으면 증상이 서비스 문제처럼 보입니다. 구분하는 방법은 다음과 같습니다.
 
-| 필요한 것 | 이유 | nginx ingress 예 |
-| --- | --- | --- |
-| 요청 본문 32MB 허용 | 기본값(1MB)이면 큰 이미지 요청이 서비스에 닿기 전에 413 | `proxy-body-size: "32m"` |
-| 응답 버퍼링 끔 | 켜져 있으면 이벤트가 모였다가 한꺼번에 도착 | `proxy-buffering: "off"` |
-| 읽기 제한 시간을 길게 | 짧으면 SSE가 주기적으로 끊김 | `proxy-read-timeout: "3600"` |
+| 증상 | 판단 |
+| --- | --- |
+| 413인데 응답 본문이 우리 형식(`code`, `message`)이 아님 | 서비스에 닿기 전에 앞단이 끊은 것 |
+| 이벤트가 한참 뒤 한꺼번에 도착 | 앞단이 응답을 버퍼링 |
+| SSE가 일정한 간격으로 끊김 | 앞단의 연결 시간 제한 |
 
-- SSE는 15초 동안 이벤트가 없으면 유지 신호를 보내므로 idle 제한이 15초보다 길면 조용해서 끊기지는 않습니다. 전체 요청 시간 제한이 걸려 있으면 그 시간마다 끊기고, 브라우저가 마지막 이벤트 id로 다시 붙어 빠진 이벤트를 받습니다. 끊겨도 데이터는 잃지 않지만 화면이 잠깐씩 멈춥니다.
-- 확인 필요: 운영 환경의 Istio VirtualService 설정. 경로(`/api/v1/`, `/view/`, gaia 경로)가 모두 이 서비스로 가는지, 경로별 timeout 값, 요청 크기 제한, 재시도 설정을 확인합니다. 특히 재시도가 POST에 걸려 있으면 같은 요청이 두 번 들어올 수 있습니다. run 생성은 `Idempotency-Key`를 보내면 한 번만 만들어집니다.
+- SSE가 끊겨도 데이터는 잃지 않습니다. 브라우저가 마지막 이벤트 id로 다시 붙어 빠진 이벤트를 `run_events`에서 받습니다. 화면이 잠깐 멈출 뿐입니다.
+- 같은 요청이 두 번 들어올 수 있는 환경(앞단 재시도, 사용자 연타)에 대비해 run 생성은 `Idempotency-Key` 헤더를 보내면 한 번만 만들어집니다.
 
-### 4.9 사용자와 키 변경은 다른 Pod에 조금 늦게 반영된다
+### 4.9 사용자와 키 변경은 다른 인스턴스에 조금 늦게 반영된다
 
-| 변경 | 요청을 받은 Pod | 다른 Pod | 설정 |
+| 변경 | 요청을 받은 인스턴스 | 다른 인스턴스 | 설정 |
 | --- | --- | --- | --- |
 | 사용자 비활성화, 역할 변경 | 즉시 | 최대 30초 | 코드 상수 `USER_CACHE_SECONDS` |
 | API 키 폐기, 재발급 | 즉시 | 최대 60초 | `API_CLIENT_CACHE_SECONDS` |
 
-유출된 키처럼 바로 막아야 하면 폐기한 뒤 60초를 기다리거나 Pod를 재시작합니다.
+유출된 키처럼 바로 막아야 하면 폐기한 뒤 60초를 기다리거나 인스턴스를 재시작합니다.
 
 ### 4.10 임베딩 모델이나 차원을 바꾸면 워크플로우 검색이 비어 보인다
 
@@ -292,19 +294,19 @@ docker compose로 띄운 앱은 레포의 `web`, `assets`, `catalogs` 폴더를 
 
 | # | 구간 | 한계(측정값) | 포화 신호 | 조정 |
 | --- | --- | --- | --- | --- |
-| 1 | 앱 프로세스 CPU (Pod당 1코어) | 읽기 API 초당 약 1,000건, 단순 대화 초당 14~24턴 (로컬, mock LLM) | Pod CPU 100%, 응답 지연 증가 | Pod 수 증가(HPA) |
-| 2 | LLM 게이트웨이 동시 호출 | Pod 수 × (`RUN_CONCURRENCY` 16 + `BATCH_REPORT_CONCURRENCY` 4) | LLM 응답 지연, 429·5xx, run 실패 | 두 설정을 낮춤 |
-| 3 | run 큐 | Pod당 동시 16턴 | `queued` run이 계속 쌓임 | `RUN_CONCURRENCY` 또는 Pod 수 증가 |
+| 1 | 앱 프로세스 CPU (인스턴스당 1코어) | 읽기 API 초당 약 1,000건, 단순 대화 초당 14~24턴 (로컬, mock LLM) | 인스턴스 CPU 100%, 응답 지연 증가 | 인스턴스 수 증가(HPA) |
+| 2 | LLM 게이트웨이 동시 호출 | 인스턴스 수 × (`RUN_CONCURRENCY` 16 + `BATCH_REPORT_CONCURRENCY` 4) | LLM 응답 지연, 429·5xx, run 실패 | 두 설정을 낮춤 |
+| 3 | run 큐 | 인스턴스당 동시 16턴 | `queued` run이 계속 쌓임 | `RUN_CONCURRENCY` 또는 인스턴스 수 증가 |
 | 4 | executor 실행 제출 | 초당 3~7건, 동시 20건부터 응답 수 초 (로컬) | 분석 시작이 느려짐, 제출 시간 초과 | executor 쪽 조치 필요 |
-| 5 | executor 조회 게이트웨이 | 초당 약 310건 (로컬, 우리 앱과 executor 각 1코어 포화) | 조회 지연 | 우리 Pod와 executor 모두 증설 |
-| 6 | DB 앱 풀 | Pod당 6 | 로그에 `QueuePool limit` | `DB_POOL_SIZE` 증가 (4.5절 예산 확인) |
-| 7 | DB 그래프 풀 | Pod당 8, 대기 30초 | 턴이 풀 대기 시간 초과로 실패 | `CHECKPOINT_POOL_SIZE` 증가 (예산 확인) |
-| 8 | 배치 리포트 | Pod당 동시 4건 | `QUEUED` 리포트 작업이 쌓임 | `BATCH_REPORT_CONCURRENCY` 증가 |
+| 5 | executor 조회 게이트웨이 | 초당 약 310건 (로컬, 우리 앱과 executor 각 1코어 포화) | 조회 지연 | 우리 인스턴스와 executor 모두 증설 |
+| 6 | DB 앱 풀 | 인스턴스당 6 | 로그에 `QueuePool limit` | `DB_POOL_SIZE` 증가 (4.5절 예산 확인) |
+| 7 | DB 그래프 풀 | 인스턴스당 8, 대기 30초 | 턴이 풀 대기 시간 초과로 실패 | `CHECKPOINT_POOL_SIZE` 증가 (예산 확인) |
+| 8 | 배치 리포트 | 인스턴스당 동시 4건 | `QUEUED` 리포트 작업이 쌓임 | `BATCH_REPORT_CONCURRENCY` 증가 |
 | 9 | 이벤트 테이블 | 턴당 수십 행 | run_events 크기 증가, 보존 정리 지연 | 보존 기간 단축 |
 
 ### 5.2 앱 프로세스 CPU
 
-Pod 하나는 프로세스 하나, 사실상 CPU 1코어를 씁니다. 로컬에서 LLM을 즉시 응답하는 mock으로 바꿔 서비스 자체 처리량을 잰 값입니다.
+인스턴스 하나는 프로세스 하나, 사실상 CPU 1코어를 씁니다. 로컬에서 LLM을 즉시 응답하는 mock으로 바꿔 서비스 자체 처리량을 잰 값입니다.
 
 | 조건 | 처리량 | 턴 지연 p50 / p95 | 읽기 API |
 | --- | --- | --- | --- |
@@ -313,22 +315,22 @@ Pod 하나는 프로세스 하나, 사실상 CPU 1코어를 씁니다. 로컬에
 | 프로세스 2개, 사용자 100명 | 초당 28.1턴 | 1.10초 / 2.42초 | 초당 1,123건 |
 
 - 단순 대화 한 턴의 CPU 비용은 약 40ms입니다(LLM 대기 제외).
-- 실제 LLM은 호출당 수 초가 걸리므로 운영에서는 CPU보다 LLM 대기가 지배합니다. 사용자 약 200명 규모에는 Pod 2개로 여유가 있다는 것이 설계 판단입니다.
-- HPA는 CPU 기준입니다. LLM 대기 중에는 CPU를 거의 쓰지 않으므로 큐가 밀려도 Pod가 늘지 않습니다. 그래서 최소 2개를 유지하고, 큐 적체는 `RUN_CONCURRENCY`로 흡수합니다.
+- 실제 LLM은 호출당 수 초가 걸리므로 운영에서는 CPU보다 LLM 대기가 지배합니다. 사용자 약 200명 규모에는 인스턴스 2개로 여유가 있다는 것이 설계 판단입니다.
+- LLM 대기 중에는 CPU를 거의 쓰지 않습니다. 그래서 CPU 사용률만 보고 인스턴스를 늘리는 방식으로는 큐가 밀리는 것을 잡지 못합니다. 인스턴스는 최소 2개를 유지하고, 큐 적체는 `RUN_CONCURRENCY`로 흡수하는 것이 설계입니다.
 
 ### 5.3 LLM 게이트웨이
 
 서비스에서 가장 느리고 가장 자주 한계에 닿는 곳입니다.
 
 - 분석 한 턴은 모델을 5~10회 부릅니다. 한 턴의 상한은 40회(`AGENT_MODEL_CALL_LIMIT`)입니다.
-- 동시에 나가는 LLM 요청은 Pod당 최대 `RUN_CONCURRENCY + BATCH_REPORT_CONCURRENCY`(기본 20)입니다. Pod 4개면 80입니다. 게이트웨이의 동시 처리 한도를 넘지 않게 맞춥니다.
+- 동시에 나가는 LLM 요청은 인스턴스당 최대 `RUN_CONCURRENCY + BATCH_REPORT_CONCURRENCY`(기본 20)입니다. 인스턴스 4개면 80입니다. 게이트웨이의 동시 처리 한도를 넘지 않게 맞춥니다.
 - 한 사용자가 동시에 돌릴 수 있는 턴은 4개(`RUN_USER_CONCURRENCY`)입니다. 한 사람이 세션을 여러 개 열어 슬롯을 독차지하지 못하게 합니다.
 - LLM 호출 시간 제한은 120초(`LLM_TIMEOUT_SECONDS`)입니다.
 - 확인 필요: 운영 LLM 게이트웨이의 동시 처리 한도와 모델별 처리량.
 
 ### 5.4 run 큐와 대기
 
-- run은 PostgreSQL 테이블을 큐로 씁니다. 모든 Pod가 같은 큐에서 `FOR UPDATE SKIP LOCKED`로 나눠 가져갑니다.
+- run은 PostgreSQL 테이블을 큐로 씁니다. 모든 인스턴스가 같은 큐에서 `FOR UPDATE SKIP LOCKED`로 나눠 가져갑니다.
 - 사용자 확인이나 executor를 기다리는 run(`waiting_input`, `waiting_executor`)은 슬롯을 반납하므로 며칠 쌓여도 부하가 아닙니다. 부하는 `queued`와 `running`만 봅니다.
 - `queued`가 줄지 않으면 슬롯이 모자란 것입니다. 6.9절의 SQL로 봅니다.
 
@@ -359,7 +361,7 @@ Pod 하나는 프로세스 하나, 사실상 CPU 1코어를 씁니다. 로컬에
 
 - SSE 연결 수와 Redis 연결 수는 무관합니다. 프로세스마다 Redis 패턴 구독 하나로 받아 메모리 큐로 나눠 줍니다. Redis 연결은 프로세스당 고정(약 16개)입니다.
 - 토큰 스트리밍은 run별로 50ms 단위로 묶어 보내고 저장하지 않습니다.
-- 열린 SSE 연결은 Pod 메모리와 파일 핸들을 씁니다. 사용자당 열어 둔 탭 수만큼 생깁니다.
+- 열린 SSE 연결은 인스턴스 메모리와 파일 핸들을 씁니다. 사용자당 열어 둔 탭 수만큼 생깁니다.
 
 ### 5.8 배치가 한꺼번에 끝날 때
 
@@ -374,7 +376,7 @@ Pod 하나는 프로세스 하나, 사실상 CPU 1코어를 씁니다. 로컬에
 | `DB_POOL_SIZE` | 3 | 로그에 `QueuePool limit`이 보일 때 | DB 연결 예산 |
 | `CHECKPOINT_POOL_SIZE` | 8 | 턴이 풀 대기로 실패할 때 | DB 연결 예산 |
 | `BATCH_REPORT_CONCURRENCY` | 4 | 리포트 작업이 밀릴 때 | LLM 동시 한도 |
-| HPA 최대 Pod | 4 | CPU가 계속 높을 때 | DB 연결 예산 (Pod당 14) |
+| 인스턴스 수 | 2~4 | CPU가 계속 높을 때 | DB 연결 예산 (인스턴스당 14) |
 
 ### 5.10 부하 테스트 방법
 
@@ -386,7 +388,7 @@ Pod 하나는 프로세스 하나, 사실상 CPU 1코어를 씁니다. 로컬에
 
 ### 6.1 먼저 보는 순서
 
-1. Pod 상태: 떠 있는지, 재시작 횟수가 늘었는지. 통합테스트 계획에는 내부망에서 kubectl을 쓸 수 없다고 적혀 있습니다. Pod 상태와 로그를 보는 수단(배포 포털 등)은 확인 필요입니다.
+1. 인스턴스 상태: 떠 있는지, 재시작이 반복되는지.
 2. `GET /api/v1/healthz`: `{"status": "down", "stopped": [...]}`이면 백그라운드 루프가 죽은 것입니다. `stopped`에 죽은 루프 이름이 나옵니다.
 3. 앱 로그: 아래 표의 키워드로 찾습니다.
 4. DB: run 상태 분포(6.9절), 연결 수.
@@ -403,12 +405,12 @@ Pod 하나는 프로세스 하나, 사실상 CPU 1코어를 씁니다. 로컬에
 
 | 증상 | 먼저 볼 곳 | 흔한 원인 | 조치 |
 | --- | --- | --- | --- |
-| Pod가 뜨지 않음 (CrashLoop) | 기동 로그의 `ValueError`, `dtest_startup_failed` | 설정 검사 실패(2.4절), 마이그레이션 실패, DB·Redis 접속 불가, Sentinel 복호화 실패 | 메시지에 나온 설정 키를 고침. 마이그레이션이면 이전 이미지로 되돌리고 원인 확인 |
+| 인스턴스가 뜨지 않고 재시작을 반복 | 기동 로그의 `ValueError`, `dtest_startup_failed` | 설정 검사 실패(2.4절), 마이그레이션 실패, DB·Redis 접속 불가, Sentinel 복호화 실패 | 메시지에 나온 설정 키를 고침. 마이그레이션이면 이전 이미지로 되돌리고 원인 확인 |
 | 모든 요청이 401 `Access key is required` | 기동 로그에 `gaia_auth_skipped_on_own_paths`가 있는지 | gaia 접근 키 검사가 우리 경로에 걸림 | gaia 템플릿 버전과 `attach` 호출 위치 확인 |
 | 로그인이 안 됨 | `sso_` 로 시작하는 로그 (6.4절) | SSO 주소, 허용 origin, 쿠키 도메인, Redis | 6.4절 표 |
 | 로그인은 되는데 곧 풀림 | Redis 상태, 세션 설정 | Redis 재시작·장애 전환, `SESSION_TTL_SECONDS`(30분 무활동), `SESSION_MAX_SECONDS`(12시간) | Redis 확인. 정상 만료면 조치 없음 |
 | 메시지를 보냈는데 답이 시작되지 않음 | run 상태 SQL, `run_claim_failed`, `/healthz` | 슬롯 부족(`queued` 적체), 스케줄러 루프 죽음, DB 오류 | 6.5절 |
-| 답이 중간에 멈춤 | 그 run의 `status`, `error`, 로그의 `run_lease_lost`, `run_heartbeat_failed` | Pod 재시작(다른 Pod가 이어 감), LLM 지연, DB 일시 장애 | 6.5절 |
+| 답이 중간에 멈춤 | 그 run의 `status`, `error`, 로그의 `run_lease_lost`, `run_heartbeat_failed` | 인스턴스 재시작(다른 인스턴스가 이어 감), LLM 지연, DB 일시 장애 | 6.5절 |
 | run이 `failed` | `runs.error`, 화면의 오류 ID로 로그 검색 | LLM 장애·한도·컨텍스트 초과, executor 장애, 재시도 5회 초과 | 원인 서비스 확인. 사용자는 다시 보내면 됨 |
 | 분석이 끝나지 않음 (계속 실행 중) | run이 `waiting_executor`인지, `executor_event_*` 로그, executor의 실행 상태 | executor 이벤트 미수신(Redis 불일치), executor에서 실제로 오래 걸림, executor 장애 | 6.6절 |
 | 화면이 실시간으로 갱신되지 않음, 새로 고치면 보임 | 앞단 설정, `event_fanout_reconnect` 로그 | 앞단 버퍼링·시간 제한(4.8절), Redis 구독 끊김 | 앞단 설정 확인. Redis 구독은 자동으로 다시 붙음 |
@@ -420,7 +422,7 @@ Pod 하나는 프로세스 하나, 사실상 CPU 1코어를 씁니다. 로컬에
 | DB 연결 오류 | `QueuePool limit`, `too many connections`, 풀 대기 시간 초과 | 연결 예산 초과, 풀 부족, 중간 장비가 연결을 끊음 | 6.8절 |
 | 배치 리포트가 안 만들어짐 | `batch_report_jobs`의 `state`, `failed_stage`, `error`. 로그의 `batch_report_*` | 노트북 대기 시간 초과(30분), LLM 장애, 배치 소유자 없음(`batch_report_without_owner`) | 놓친 실행은 10분마다 복구 작업이 최근 14일분을 다시 확인해 작업을 만듦 |
 | 워크플로우 추천이 안 나옴 | `workflows.index_state` | 임베딩 게이트웨이 장애(`failed`), 임베딩 미설정(`not_indexed`), 모델·차원 변경 | 4.10절 |
-| `/healthz`가 503 | 응답의 `stopped`, 로그의 `worker_loops_stopped` | 백그라운드 루프가 예외로 끝남 | liveness가 Pod를 재시작함. 반복되면 그 루프의 직전 예외 로그 확인 |
+| `/healthz`가 503 | 응답의 `stopped`, 로그의 `worker_loops_stopped` | 백그라운드 루프가 예외로 끝남 | 실행 환경이 이 응답을 보고 인스턴스를 재시작함. 반복되면 그 루프의 직전 예외 로그 확인 |
 | 프로젝트 메모리가 자동으로 정리되지 않음 | `memory_extraction_state`의 `last_error`, 로그의 `memory_extract_failed` | LLM 장애, `MEMORY_WORKER_ENABLED: false` | 원인 해소 후 자동 재시도 |
 
 ### 6.4 로그인(SSO) 문제
@@ -461,15 +463,15 @@ FROM runs WHERE id = '<run id>';
 
 | 보이는 상태 | 뜻 | 조치 |
 | --- | --- | --- |
-| `queued`가 오래 유지 | 가져갈 슬롯이 없거나 스케줄러가 멈춤 | 전체 분포(6.9절)에서 `running` 수가 Pod 수 × 16에 닿았는지, 같은 사용자의 `running`이 4개인지 확인. `/healthz` 확인 |
-| `running`인데 `lease_expires_at`이 과거 | 실행하던 Pod가 죽음 | 조치 없음. 다른 Pod가 5초 안에 가져가 이어 감 |
+| `queued`가 오래 유지 | 가져갈 슬롯이 없거나 스케줄러가 멈춤 | 전체 분포(6.9절)에서 `running` 수가 인스턴스 수 × 16에 닿았는지, 같은 사용자의 `running`이 4개인지 확인. `/healthz` 확인 |
+| `running`인데 `lease_expires_at`이 과거 | 실행하던 인스턴스가 죽음 | 조치 없음. 다른 인스턴스가 5초 안에 가져가 이어 감 |
 | `running`이 오래 유지되고 lease는 갱신됨 | LLM 응답을 기다리는 중 | LLM 게이트웨이 상태 확인. 턴당 모델 호출 40회, 호출당 120초가 상한 |
 | `waiting_input` | 사용자의 확인을 기다림 | 정상. 화면에 질문이 떠 있음 |
 | `waiting_executor` | executor 실행을 기다림 | 6.6절 |
 | `failed` | `error`에 이유 | 원인 서비스 확인 |
 
-- 한 run은 멈춤 없이 연속 5번(`RUN_MAX_ATTEMPTS`) 가져갔는데도 결과가 없으면 `failed`로 끝납니다. 같은 run이 Pod를 계속 죽이는 것을 막기 위한 것입니다.
-- 실행 권한(lease)은 60초이고 20초마다 갱신합니다. DB 장애로 40초 동안 갱신하지 못하면 그 Pod는 턴을 스스로 멈춥니다(`run_lease_unrenewed`). 두 Pod가 같은 턴을 동시에 돌리지 않기 위해서입니다.
+- 한 run은 멈춤 없이 연속 5번(`RUN_MAX_ATTEMPTS`) 가져갔는데도 결과가 없으면 `failed`로 끝납니다. 같은 run이 인스턴스를 계속 죽이는 것을 막기 위한 것입니다.
+- 실행 권한(lease)은 60초이고 20초마다 갱신합니다. DB 장애로 40초 동안 갱신하지 못하면 그 인스턴스는 턴을 스스로 멈춥니다(`run_lease_unrenewed`). 두 인스턴스가 같은 턴을 동시에 돌리지 않기 위해서입니다.
 - 세션에 진행 중인 run이 남아 새 메시지를 못 보내는 경우 `sessions.active_run_id`와 그 run의 상태를 함께 봅니다.
 
 ### 6.6 분석이 끝나지 않을 때 (executor 대기)
@@ -537,7 +539,7 @@ SELECT status, count(*) FROM runs
 WHERE created_at > now() - interval '1 day'
 GROUP BY 1 ORDER BY 2 DESC;
 
--- 지금 Pod별로 돌고 있는 run
+-- 지금 인스턴스별로 돌고 있는 run
 SELECT lease_owner, count(*) FROM runs
 WHERE status = 'running' AND lease_expires_at > now()
 GROUP BY 1;
@@ -583,7 +585,7 @@ GROUP BY 1, 2 ORDER BY 3 DESC;
 | 키워드 | 뜻 |
 | --- | --- |
 | `dtest_startup_failed` | 기동 실패. 바로 위 예외가 원인 |
-| `worker_loops_stopped loops=...` | 백그라운드 루프가 죽음. `/healthz`가 503이 되고 Pod가 재시작됨 |
+| `worker_loops_stopped loops=...` | 백그라운드 루프가 죽음. `/healthz`가 503이 되고 인스턴스가 재시작됨 |
 | `run_task_crashed` | 턴 실행이 실패 기록도 못 남기고 끝남(대개 DB 장애). lease 만료 뒤 다시 시도됨 |
 | `run_lease_unrenewed` | lease를 40초 동안 갱신하지 못해 턴을 멈춤 |
 | `run_claim_failed` | run 가져오기 실패 |
@@ -602,7 +604,7 @@ GROUP BY 1, 2 ORDER BY 3 DESC;
 | `executor_event_group_lost` | Redis 소비자 그룹이 사라져 다시 만듦 |
 | `executor_event_malformed` | 형식이 틀린 이벤트를 버림 |
 | `missed_event_lookup_failed` | 복구 절차의 executor 조회 실패 |
-| `run_heartbeat_failed`, `run_lease_lost` | lease 갱신 실패, 다른 Pod가 run을 가져감 |
+| `run_heartbeat_failed`, `run_lease_lost` | lease 갱신 실패, 다른 인스턴스가 run을 가져감 |
 | `run_model_replaced` | 목록에서 빠진 모델 대신 기본 모델로 이어 감 |
 | `batch_disable_failed` | pr-batch에 배치 끄기 요청 실패. 재시도함 |
 | `batch_report_lease_lost`, `batch_report_without_owner` | 리포트 작업 권한을 잃음, 배치 소유자를 찾지 못함 |
@@ -635,10 +637,10 @@ GROUP BY 1, 2 ORDER BY 3 DESC;
 
 | 지표 | 보는 방법 | 경보 제안 |
 | --- | --- | --- |
-| Pod 재시작 횟수 | k8s | 10분 안에 2회 이상 |
-| `/api/v1/healthz` | k8s liveness, 외부 점검 | 503 |
-| Pod CPU | k8s | 80% 이상이 10분 지속, HPA가 최대에 도달 |
-| Pod 메모리 | k8s | 한도 2Gi의 85% |
+| 인스턴스 재시작 횟수 | 실행 환경 | 10분 안에 2회 이상 |
+| `/api/v1/healthz` | 주기적 호출 | 503 |
+| 인스턴스 CPU | 실행 환경 | 80% 이상이 10분 지속 |
+| 인스턴스 메모리 | 실행 환경 | 한도의 85% |
 | `queued` run 수 | 6.9절 SQL | 5분 넘게 줄지 않음 |
 | 1시간 내 `failed` run 비율 | 6.9절 SQL | 평소의 2배 |
 | PostgreSQL 연결 수 | `pg_stat_activity` | 서버 전체 85 이상 |
@@ -667,7 +669,7 @@ Agent의 모델 호출, 도구 호출, middleware 단계를 Phoenix로 보냅니
 
 | 주기 | 항목 | 방법 |
 | --- | --- | --- |
-| 매일 | 오류 수준 로그, Pod 재시작 | 로그 도구, k8s |
+| 매일 | 오류 수준 로그, 인스턴스 재시작 | 로그 도구 |
 | 매주 | run 실패 비율, `queued` 적체 여부 | 6.9절 SQL |
 | 매주 | PostgreSQL 연결 수 | `pg_stat_activity` |
 | 매월 | 테이블 크기와 autovacuum | DB 물리 설계서 7장의 SQL |
@@ -718,11 +720,11 @@ Agent의 모델 호출, 도구 호출, middleware 단계를 Phoenix로 보냅니
 | executor | `EXECUTOR_EVENT_RECOVERY_SECONDS` | 120 | 놓친 이벤트 복구 시작 시간 |
 | executor | `STORAGE_ROOT`, `STORAGE_EXECUTOR_PATH`, `EXECUTOR_RESULT_ROOT` | | 공유 저장소 경로 |
 | pr-batch | `BATCH_BASE_URL`, `BATCH_API_KEY` | | pr-batch 주소와 우리 키 |
-| 부하 | `RUN_CONCURRENCY` | 16 | Pod당 동시 턴 |
+| 부하 | `RUN_CONCURRENCY` | 16 | 인스턴스당 동시 턴 |
 | 부하 | `RUN_USER_CONCURRENCY` | 4 | 사용자당 동시 턴 |
 | 부하 | `RUN_LEASE_SECONDS` | 60 | 실행 권한 유지 시간 |
 | 부하 | `RUN_MAX_ATTEMPTS` | 5 | 결과 없이 반복 실행되는 run의 상한 |
-| 부하 | `BATCH_REPORT_CONCURRENCY` | 4 | Pod당 동시 리포트 |
+| 부하 | `BATCH_REPORT_CONCURRENCY` | 4 | 인스턴스당 동시 리포트 |
 | 요청 | `REQUEST_MAX_BYTES` | 33554432 | 요청 본문 한도(32MB) |
 | 요청 | `IMAGE_MAX_BYTES`, `IMAGE_MAX_TOTAL_BYTES` | 10MB, 20MB | 이미지 한 장, 요청 전체 한도 |
 | 보존 | `RUN_EVENT_RETENTION_DAYS` | 30 | 이벤트 보존 |
