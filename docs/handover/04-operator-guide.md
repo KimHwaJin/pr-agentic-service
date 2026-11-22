@@ -2,7 +2,7 @@
 
 기준: internal/gaia 브랜치, 2026-11-22. 경로는 내부망 레포 기준(`src/dtest/...`)입니다.
 
-"확인 필요"라고 적힌 곳은 저장소에 기록이 없어 실제 운영 환경 값을 채워야 하는 자리입니다.
+주소, 계정, 키 같은 환경별 실제 값은 적지 않고 서비스 이름과 설정 키 이름으로 가리킵니다. 실제 값은 `config.{dev,stg,prd}.yml`에 있습니다.
 
 ## 1. 서비스 구성
 
@@ -29,14 +29,22 @@ pr-agentic-service는 사내 데이터 분석 Agent의 채팅 API이자 Agent �
 
 ### 1.2 환경
 
-| 환경 | `APP_ENV` | 설정 파일 | Redis | SSO |
-| --- | --- | --- | --- | --- |
-| 로컬 | 비움 | `config.yml` + 환경변수 | standalone | dev 어댑터(가짜 로그인) 가능 |
-| dev | `dev` | `config.yml` + `config.dev.yml` | standalone | idp |
-| stg | `stg` | `config.yml` + `config.stg.yml` | standalone | idp |
-| prd | `prd` | `config.yml` + `config.prd.yml` | sentinel | idp |
+| 환경 | `APP_ENV` | 설정 파일 | SSO |
+| --- | --- | --- | --- |
+| 로컬 | 비움 | `config.yml` + 환경변수 | dev 어댑터(가짜 로그인) 가능 |
+| dev | `dev` | `config.yml` + `config.dev.yml` | idp |
+| stg | `stg` | `config.yml` + `config.stg.yml` | idp |
+| prd | `prd` | `config.yml` + `config.prd.yml` | idp |
 
-확인 필요: 환경별 접속 주소와, 각 환경이 연결하는 executor·pr-batch·DB·Redis 주소. 사외 검증 환경에는 `APP_ENV` 없이 로컬 모드로 배포한 적이 있습니다(2026-11-08).
+환경별 인프라 현황(2026-11-22 기준)은 다음과 같습니다.
+
+| 자원 | 현황 |
+| --- | --- |
+| PostgreSQL | 사내 서비스형 DB. 마스터 계정 하나를 씀. 연결 한도 150. 현재 dev와 prd가 같은 DB를 쓰고, 곧 분리할 예정(4.3절) |
+| Redis | dev와 prd가 분리되어 있음. 환경에 따라 standalone 방식과 Sentinel 방식이 섞여 있음(1.4절) |
+| 로그 | 키바나에서 조회. 보관 기간은 사내 정책 |
+| 지표 대시보드 | 없음. 상태는 헬스체크, 로그, DB 조회로 확인(7장) |
+| 설정과 키 | `config.{env}.yml`에 적어 깃랩에 올리고 배포(사내 폐쇄망 정책) |
 
 ### 1.3 서비스가 실행 환경에 기대하는 조건
 
@@ -54,6 +62,46 @@ pr-agentic-service는 사내 데이터 분석 Agent의 채팅 API이자 Agent �
 
 배포 예시는 `deploy/kubernetes/deployment.yml`에 있습니다.
 
+### 1.4 Redis 접속 방식
+
+Redis는 환경마다 standalone 또는 Sentinel 구성입니다. 접속 방식은 `REDIS_MODE`로 고르고, 그 환경의 Redis 구성과 반드시 맞아야 합니다. 어느 방식이든 그 환경의 executor가 쓰는 Redis와 같은 서버, 같은 DB 번호여야 합니다(4.1절).
+
+| | standalone | Sentinel |
+| --- | --- | --- |
+| `REDIS_MODE` | `standalone` (기본값) | `sentinel` |
+| 읽는 설정 | `REDIS_URL` | `REDIS_SENTINEL_HOST`, `REDIS_SENTINEL_PORT`, `REDIS_SENTINEL_MASTER_NAME`, `REDIS_SENTINEL_USERNAME`, `REDIS_SENTINEL_AUTH` |
+| 접속 대상 | `REDIS_URL`의 주소. DB 번호는 URL 끝의 숫자 | Sentinel이 알려 주는 현재 마스터. DB 0번 고정 |
+| 비밀번호 | `REDIS_URL` 안에 적음 | `REDIS_SENTINEL_AUTH`에 사내 가이드대로 AES로 암호화한 값을 적음. 사내 `hcp` 라이브러리로 복호화 |
+| 계정 | URL에 적은 계정 | 계정 하나로 Sentinel과 Redis에 모두 로그인 |
+| 쓰지 않는 설정 | `REDIS_SENTINEL_*`는 무시됨 | `REDIS_URL`은 무시됨 |
+| Redis 서버가 재시작되면 | 다시 연결. 로그인 세션이 사라졌으면 사용자가 다시 로그인 | 같음 |
+| Redis 서버가 죽으면 | 살아날 때까지 로그인 확인이 실패해 모든 요청이 실패 | Sentinel이 레플리카를 마스터로 올리면 5~31초 안에 자동 복구(6.10절). 재시작 불필요 |
+| 기동 검사 | 없음 | Sentinel 설정 세 값이 비어 있거나 `hcp` 라이브러리가 없으면 기동 실패 |
+| 접속 확인 | 서비스 기동 로그, `/api/v1/users/me` 호출 | `scripts/check_redis_sentinel.py` |
+
+설정 예시입니다. 값은 자리 표시입니다.
+
+```yaml
+# standalone
+REDIS_MODE: standalone
+REDIS_URL: redis://<계정>:<비밀번호>@<redis 주소>:6379/0
+
+# Sentinel
+REDIS_MODE: sentinel
+REDIS_SENTINEL_HOST: <sentinel 주소>      # 여러 개면 쉼표로
+REDIS_SENTINEL_PORT: 26379
+REDIS_SENTINEL_MASTER_NAME: <마스터 이름>
+REDIS_SENTINEL_USERNAME: <계정>
+REDIS_SENTINEL_AUTH: <AES로 암호화한 비밀번호>
+```
+
+방식을 고를 때 지킬 것은 다음과 같습니다.
+
+- Sentinel 구성의 Redis에 `standalone`으로 붙지 않습니다. 노드 하나를 `REDIS_URL`로 직접 가리키면 처음에는 동작하지만, 그 노드가 마스터가 아니게 되는 순간 모든 명령이 `READONLY` 오류로 실패합니다(4.2절).
+- `REDIS_SENTINEL_*` 값은 그 환경 executor의 같은 이름 설정과 같은 값을 넣습니다.
+- 두 방식 모두 Redis 6.2 이상이어야 합니다(`XAUTOCLAIM` 사용).
+- 환경의 Redis 구성이 바뀌면(standalone에서 Sentinel로) `REDIS_MODE`와 설정을 함께 바꿔 배포합니다. 로그인 세션은 새 Redis에 없으므로 사용자가 다시 로그인합니다.
+
 ## 2. 배포
 
 ### 2.1 설정 읽는 순서
@@ -64,9 +112,8 @@ pr-agentic-service는 사내 데이터 분석 Agent의 채팅 API이자 Agent �
 - `config.{APP_ENV}.yml`: 환경마다 다른 값만 있습니다. `DATABASE_URL`, `REDIS_*`, `PUBLIC_API_ORIGIN`, `FRONTEND_ORIGIN`, `CORS_ORIGINS`, `COOKIE_SECURE`, `ADMIN_EMPLOYEE_IDS`, `LLM_API_KEY`, `MODELS`, `EXECUTOR_BASE_URL`, `BATCH_BASE_URL`, 서비스 키.
 - `config.example.yml`: 서비스가 읽지 않는 설명용 파일. 모든 키의 의미와 예시가 주석으로 있습니다. 설정 키의 뜻을 찾을 때 이 파일을 봅니다.
 - 네 파일은 모두 빌드 결과물에 들어가고, 환경변수 `APP_ENV` 값이 어느 파일을 쓸지 정합니다.
-- 내부망은 ConfigMap과 Secret을 쓸 수 없어 키 값도 `config.{APP_ENV}.yml`에 적는 것이 사내 가이드입니다. 한 값만 바꿀 때는 같은 이름의 환경변수로 넣으면 파일보다 우선합니다.
-
-확인 필요: 운영 키 값을 실제로 어디에 두는지(설정 파일, 환경변수).
+- 사내 폐쇄망 정책에 따라 키 값(`EXECUTOR_API_KEY`, `BATCH_API_KEY`, `LLM_API_KEY`, DB와 Redis 비밀번호)도 `config.{APP_ENV}.yml`에 적어 깃랩에 올리고 배포합니다. 한 값만 바꿀 때는 같은 이름의 환경변수로 넣으면 파일보다 우선합니다.
+- 설정을 바꾸는 것은 곧 배포입니다. 실행 중인 인스턴스는 설정 파일을 다시 읽지 않습니다.
 
 ### 2.2 빌드할 때 지킬 것
 
@@ -213,12 +260,24 @@ python scripts/set_user_role.py --env prd A10054 admin           # 승격 (강�
 - 예방: Sentinel이 있는 환경은 반드시 `REDIS_MODE: sentinel`로 둡니다. 이 모드는 새 연결마다 Sentinel에 현재 마스터를 물으므로 장애 전환 때 재시작이 필요 없습니다.
 - 참고: `REDIS_SENTINEL_AUTH`는 사내 가이드대로 AES로 암호화한 비밀번호이고 `hcp` 라이브러리로 복호화합니다. 접속 확인은 `scripts/check_redis_sentinel.py`로 합니다.
 
-### 4.3 두 환경이 같은 DB나 같은 Redis를 가리키면 섞인다
+### 4.3 dev와 prd가 지금 같은 DB를 쓴다
 
-- 문제: run은 PostgreSQL 테이블을 큐로 씁니다. dev와 prd가 같은 데이터베이스를 가리키면 dev 인스턴스의 worker가 prd 사용자의 run을 가져가 dev의 코드와 설정으로 실행합니다. 마이그레이션도 한쪽이 올리면 양쪽 스키마가 바뀝니다. Redis도 같습니다. `REDIS_NAMESPACE`(기본 `agentic`)가 같으면 로그인 세션과 실시간 이벤트가 섞이고, executor 이벤트를 두 환경이 나눠 가져갑니다.
-- 증상: 한 환경에서 고친 동작이 가끔만 적용됨, 한쪽에서 배포한 뒤 다른 쪽이 컬럼 오류를 냄, 이벤트가 간헐적으로 누락됨.
-- 예방: 환경마다 데이터베이스(`DATABASE_URL`의 DB 이름)를 따로 둡니다. Redis를 같이 써야 한다면 `REDIS_NAMESPACE`와 DB 번호를 환경마다 다르게 두되, 그 환경의 executor도 같은 DB 번호를 써야 합니다(4.1절). PostgreSQL 서버만 같이 쓰는 것은 연결 수만 관리하면 됩니다(4.5절).
-- 확인 필요: 현재 dev와 prd의 DB·Redis가 실제로 어떻게 나뉘어 있는지.
+현재(2026-11-22) dev와 prd가 같은 DB를 쓰고 있고 곧 분리할 예정입니다. Redis는 이미 환경별로 분리되어 있습니다.
+
+- 문제: 코드에는 환경을 구분하는 장치가 없습니다. 같은 데이터베이스(같은 `DATABASE_URL`)를 쓰면 테이블과 데이터를 전부 함께 씁니다. run은 PostgreSQL 테이블을 큐로 쓰므로 어느 환경의 worker든 run을 가져갑니다.
+
+| 함께 쓰는 것 | 생기는 일 |
+| --- | --- |
+| run 큐 | dev 인스턴스가 prd 사용자의 run을 가져가 dev의 코드와 설정(LLM, executor)으로 실행합니다. 진행 이벤트가 dev의 Redis로 나가 prd 화면에는 실시간으로 보이지 않습니다. 반대 방향도 같습니다 |
+| 스키마 | dev에 새 마이그레이션을 배포하면 prd의 스키마도 바뀝니다 |
+| 사용자, 세션, API 키 | 두 환경에서 같은 데이터가 보입니다. 한쪽에서 폐기한 키는 다른 쪽에서도 폐기됩니다 |
+| 배치 리포트, 메모리 정리, 보존 정리 | 어느 환경의 worker든 처리합니다 |
+| 연결 수 | 두 환경의 인스턴스가 같은 한도 150을 나눠 씁니다 |
+
+- 증상: 답이 시작됐는데 화면이 멈춘 것처럼 보이다가 새로 고치면 결과가 있음, dev에서 고친 Agent 동작이 prd에서 가끔 나타남, dev 배포 뒤 prd에서 컬럼 관련 오류.
+- 분리 전까지: dev 인스턴스를 `RUN_MODE: api`로 띄우면 dev는 run을 가져가지 않습니다. 다만 dev에서 만든 run도 prd의 worker가 실행하게 됩니다. dev의 마이그레이션 배포는 prd 배포와 같은 무게로 다룹니다.
+- 분리할 때: 옮기는 환경의 `DATABASE_URL`만 새 DB로 바꾸면 첫 기동 때 테이블이 모두 만들어집니다. 새 DB는 비어 있으므로 관리자 지정과 API 키 발급을 다시 합니다. 절차는 DB 물리 설계서 5.4절에 있습니다.
+- Redis도 같은 원리입니다. 두 환경이 같은 Redis와 같은 `REDIS_NAMESPACE`(기본 `agentic`)를 쓰면 로그인 세션과 이벤트가 섞입니다. 지금은 분리되어 있으므로 해당하지 않지만, Redis를 합치게 되면 `REDIS_NAMESPACE`를 환경마다 다르게 둡니다.
 
 ### 4.4 마이그레이션이 실패하면 모든 인스턴스가 뜨지 못한다
 
@@ -227,9 +286,19 @@ python scripts/set_user_role.py --env prd A10054 admin           # 승격 (강�
 
 ### 4.5 PostgreSQL 연결 수에는 예산이 있다
 
-- 문제: executor, pr-batch와 같은 PostgreSQL 서버를 씁니다. 서버의 `max_connections`는 100이고 세 서비스가 최대로 늘면 84를 씁니다. 우리 인스턴스 하나는 최대 14(앱 풀 6 + 그래프 풀 8)입니다.
-- 증상: 넘으면 `too many connections` 오류가 세 서비스 모두에서 납니다.
-- 예방: 인스턴스 수, `DB_POOL_SIZE`, `CHECKPOINT_POOL_SIZE` 중 하나라도 올리기 전에 합계를 다시 계산합니다. 계산식은 `인스턴스 수 × (DB_POOL_SIZE × 2 + CHECKPOINT_POOL_SIZE)`입니다. 더 필요하면 `max_connections`를 올리거나 PgBouncer(transaction 모드)를 앞에 둡니다.
+- 문제: DB의 연결 한도는 150이고 사내 서비스형 DB라 우리가 올릴 수 없습니다. executor, pr-batch, 그리고 같은 DB를 쓰는 다른 환경의 인스턴스가 이 한도를 나눠 씁니다. 우리 인스턴스 하나는 최대 14(앱 풀 6 + 그래프 풀 8)입니다.
+- 교체 배포(롤링 업데이트) 중에는 옛 인스턴스와 새 인스턴스가 함께 떠 있어 연결이 일시적으로 늘어납니다.
+
+| 우리 인스턴스 수 | 평소 | 하나씩 교체 중 | 한꺼번에 교체 중 |
+| --- | --- | --- | --- |
+| 2 | 28 | 42 | 56 |
+| 3 | 42 | 56 | 84 |
+| 4 | 56 | 70 | 112 |
+
+- 여기에 executor(인스턴스당 16), pr-batch(인스턴스당 6), 같은 DB를 쓰는 다른 환경의 인스턴스를 더한 값이 150 아래여야 합니다. 예를 들어 prd(우리 2, executor 1, pr-batch 1)와 dev(우리 1, executor 1, pr-batch 1)가 같은 서버에 붙으면 평소 86, prd의 우리 서비스를 한꺼번에 교체하는 동안 114입니다. 우리가 4개로 늘어난 상태에서 한꺼번에 교체하면 170으로 한도를 넘습니다.
+- 증상: 넘으면 `too many connections` 오류가 같은 서버를 쓰는 모든 서비스에서 납니다. 새로 뜨는 인스턴스는 DB 연결에 실패해 시작하지 못하므로 배포가 멈춥니다.
+- 예방: 합계에 여유를 20 이상 남깁니다. 인스턴스가 3개 이상이면 하나씩 교체합니다. 인스턴스 수, `DB_POOL_SIZE`, `CHECKPOINT_POOL_SIZE`를 올리기 전에 다시 계산합니다. 계산식은 `인스턴스 수 × (DB_POOL_SIZE × 2 + CHECKPOINT_POOL_SIZE)`입니다.
+- 참고: 표는 모든 풀이 꽉 찬 최악의 경우입니다. 풀은 필요할 때만 연결을 열어 평소 실제 연결 수는 훨씬 적습니다.
 
 ### 4.6 인스턴스와 DB 사이 장비가 조용한 연결을 끊는다
 
@@ -276,9 +345,14 @@ python scripts/set_user_role.py --env prd A10054 admin           # 승격 (강�
 - 문제: 코드 파일과 결과 파일을 executor와 공유 저장소로 주고받습니다. 마운트 경로나 UID가 다르면 파일을 못 읽습니다.
 - 예방: `STORAGE_ROOT`(우리가 쓰는 폴더), `STORAGE_EXECUTOR_PATH`(executor가 보는 상대 경로), `EXECUTOR_RESULT_ROOT`(결과 경로의 기준 루트, 공통 `/mnt/data/dtest`)를 executor 설정과 맞춥니다. 컨테이너는 UID 1000으로 실행합니다.
 
-### 4.12 로그에 키가 찍혀도 가려지지만, 설정 파일은 그렇지 않다
+### 4.12 키는 설정 파일에 있다
 
-로그에서는 `pas_`, `exe_`, `bat_`으로 시작하는 키와 `X-Api-Key` 값이 `***`로 가려집니다. 설정 파일(`config.prd.yml`)에는 키가 그대로 있으므로 레포와 이미지의 접근 권한을 관리합니다.
+사내 폐쇄망 정책에 따라 키와 비밀번호를 `config.{env}.yml`에 적어 깃랩에 올립니다. 그래서 다음을 지킵니다.
+
+- 내부망 깃랩 밖(사외 저장소, 메신저, 문서)으로 `config.{dev,stg,prd}.yml`의 실제 값을 옮기지 않습니다. 사외 저장소의 같은 파일에는 `<...>` 자리 표시만 둡니다.
+- 설정 파일에 `<...>` 자리 표시가 하나라도 남아 있으면 서비스가 기동을 거부합니다. 빠뜨린 키가 있는지 이 검사가 알려 줍니다.
+- 로그에서는 `pas_`, `exe_`, `bat_`으로 시작하는 키와 `X-Api-Key` 값이 `***`로 가려집니다. 키바나에서 로그를 공유해도 키 원문은 나오지 않습니다.
+- 우리가 발급한 API 키(다른 서비스용)는 원문을 저장하지 않습니다. DB에는 SHA-256만 있습니다.
 
 ### 4.13 main과 internal/gaia를 같이 고친다
 
@@ -326,7 +400,6 @@ docker compose로 띄운 앱은 레포의 `web`, `assets`, `catalogs` 폴더를 
 - 동시에 나가는 LLM 요청은 인스턴스당 최대 `RUN_CONCURRENCY + BATCH_REPORT_CONCURRENCY`(기본 20)입니다. 인스턴스 4개면 80입니다. 게이트웨이의 동시 처리 한도를 넘지 않게 맞춥니다.
 - 한 사용자가 동시에 돌릴 수 있는 턴은 4개(`RUN_USER_CONCURRENCY`)입니다. 한 사람이 세션을 여러 개 열어 슬롯을 독차지하지 못하게 합니다.
 - LLM 호출 시간 제한은 120초(`LLM_TIMEOUT_SECONDS`)입니다.
-- 확인 필요: 운영 LLM 게이트웨이의 동시 처리 한도와 모델별 처리량.
 
 ### 5.4 run 큐와 대기
 
@@ -626,29 +699,43 @@ GROUP BY 1, 2 ORDER BY 3 DESC;
 
 ### 7.1 로그
 
+- 로그는 키바나에서 조회합니다. 보관 기간은 사내 정책을 따릅니다.
 - 내부망에서는 gaia와 HCP 라이브러리가 로깅을 맡고 사내 `logger.yml`을 읽습니다. 로그 레벨도 그 파일에서 바꿉니다.
 - 각 줄에 요청 ID가 들어갑니다. 백그라운드 작업의 줄에는 run id나 작업 id가 `키=값` 형태로 들어갑니다.
 - 키 호출은 요청마다 감사 로그가 남습니다.
-- 확인 필요: 운영에서 로그를 조회하는 도구와 보관 기간.
 
-### 7.2 볼 지표와 경보 기준(제안)
+키바나에서 자주 쓰는 검색은 다음과 같습니다.
 
-저장소에는 경보 설정이 없습니다. 아래는 이 문서에서 제안하는 기준입니다.
+| 찾는 것 | 검색어 |
+| --- | --- |
+| 요청 하나의 전체 로그 | 응답 헤더 `X-Request-ID`의 값 |
+| 사용자가 본 오류 | 화면에 나온 8자리 오류 ID |
+| run 하나의 진행 | `run_id=<run id>` |
+| 기동 실패 | `dtest_startup_failed`, `ValueError` |
+| 백그라운드 루프 정지 | `worker_loops_stopped` |
+| executor나 pr-batch 무응답 | `upstream_unreachable` |
+| 로그인 문제 | `sso_` |
+| executor 이벤트 문제 | `executor_event` |
+| DB 연결 문제 | `QueuePool limit`, `too many connections`, `run_claim_failed` |
 
-| 지표 | 보는 방법 | 경보 제안 |
+전체 키워드는 6.11절에 있습니다.
+
+### 7.2 상태를 확인하는 방법
+
+지표 대시보드는 없습니다. 서비스 상태는 아래 세 가지로 확인합니다.
+
+| 확인할 것 | 방법 | 이상 신호 |
 | --- | --- | --- |
-| 인스턴스 재시작 횟수 | 실행 환경 | 10분 안에 2회 이상 |
-| `/api/v1/healthz` | 주기적 호출 | 503 |
-| 인스턴스 CPU | 실행 환경 | 80% 이상이 10분 지속 |
-| 인스턴스 메모리 | 실행 환경 | 한도의 85% |
-| `queued` run 수 | 6.9절 SQL | 5분 넘게 줄지 않음 |
-| 1시간 내 `failed` run 비율 | 6.9절 SQL | 평소의 2배 |
-| PostgreSQL 연결 수 | `pg_stat_activity` | 서버 전체 85 이상 |
-| run_events 가장 오래된 행 | `SELECT min(created_at)` | 35일보다 오래됨(보존 정리 멈춤) |
-| 오류 수준 로그 | 로그 도구 | 6.11절 오류 수준 키워드 발생 |
-| `executor_event_recovered` 빈도 | 로그 도구 | 시간당 여러 건(Redis 불일치 의심) |
+| 서비스가 살아 있는지 | `GET /api/v1/healthz` | 503 (`stopped`에 죽은 루프 이름) |
+| 오류가 나는지 | 키바나에서 6.11절의 오류 수준 키워드 검색 | 키워드가 반복해서 나옴 |
+| 인스턴스가 재시작을 반복하는지 | 키바나에서 기동 로그가 짧은 간격으로 반복되는지 | 10분 안에 2회 이상 |
+| 요청이 밀리는지 | 6.9절 SQL의 run 상태 분포 | `queued`가 5분 넘게 줄지 않음 |
+| 실패가 늘었는지 | 6.9절 SQL의 최근 실패 run | 평소보다 뚜렷이 많음 |
+| DB 연결이 한도에 가까운지 | `pg_stat_activity` (6.8절 SQL) | 서버 전체 130 이상 |
+| 보존 정리가 도는지 | `SELECT min(created_at) FROM run_events` | 35일보다 오래된 행 |
+| executor 이벤트가 제대로 오는지 | 키바나에서 `executor_event_recovered` | 시간당 여러 건(Redis 불일치 의심) |
 
-gaia 템플릿은 prometheus 계측기를 붙이므로 HTTP 요청 지표는 gaia가 제공하는 경로에서 볼 수 있습니다. 확인 필요: 운영의 지표 수집과 대시보드 구성.
+이상 신호의 기준값은 이 문서에서 제안한 값입니다. 운영하면서 조정합니다.
 
 ### 7.3 Phoenix 추적
 
