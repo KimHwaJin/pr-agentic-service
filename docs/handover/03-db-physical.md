@@ -20,7 +20,7 @@
 
 기동 계정에 필요한 권한은 다음과 같습니다.
 
-- 데이터베이스 `agentic`에 대한 테이블 생성, 변경, 인덱스 생성 권한 (마이그레이션을 Pod가 직접 실행하므로)
+- 데이터베이스 `agentic`에 대한 테이블 생성, 변경, 인덱스 생성 권한 (마이그레이션을 인스턴스가 직접 실행하므로)
 - `CREATE EXTENSION IF NOT EXISTS vector` 실행 권한. 권한을 줄 수 없으면 DBA가 확장을 먼저 만들어 둡니다. 이미 있으면 이 문장은 아무 일도 하지 않습니다.
 
 ## 2. 테이블 목록
@@ -135,7 +135,7 @@
 | waiting | jsonb | Y | | 기다리는 대상. executor 대기면 `execution_id` 포함 |
 | error | text | Y | | 실패 사유 |
 | cancel_requested | boolean | N | (앱) false | 취소 요청 여부 |
-| lease_owner | varchar(128) | Y | | 실행 중인 Pod 식별자 |
+| lease_owner | varchar(128) | Y | | 실행 중인 인스턴스 식별자 |
 | lease_expires_at | timestamptz | Y | | 실행 권한 만료 시각 |
 | attempts | integer | N | (앱) 0 | 실행을 가져간 횟수 |
 | finished_at | timestamptz | Y | | 끝난 시각 |
@@ -235,7 +235,7 @@
 | dirty | boolean | N | false | 처리할 대화가 있음 |
 | last_activity_at | timestamptz | N | (앱) | 마지막 대화 시각 |
 | pending_turns | integer | N | 0 | 아직 처리하지 않은 턴 수 |
-| lease_owner | varchar(128) | Y | | 처리 중인 Pod |
+| lease_owner | varchar(128) | Y | | 처리 중인 인스턴스 |
 | lease_expires_at | timestamptz | Y | | 처리 권한 만료 시각. 재시도 대기 시각으로도 사용 |
 | attempts | integer | N | 0 | 시도 횟수 |
 | last_error | text | Y | | 마지막 오류 |
@@ -290,7 +290,7 @@
 | summary | text | Y | | 다음 실행이 읽는 요약 |
 | artifact_id | varchar(36) | Y | | 저장된 executor Artifact |
 | error | text | Y | | 실패 사유 |
-| lease_owner | varchar(128) | Y | | 처리 중인 Pod |
+| lease_owner | varchar(128) | Y | | 처리 중인 인스턴스 |
 | lease_expires_at | timestamptz | Y | | 처리 권한 만료. 노트북 대기 중에는 다음 시도 시각 |
 | collecting_since | timestamptz | Y | | 노트북을 기다리기 시작한 시각 |
 | finished_at | timestamptz | Y | | 끝난 시각 |
@@ -372,9 +372,9 @@
 
 ### 5.1 적용 방식
 
-Pod가 시작할 때 `AUTO_MIGRATE`가 true(기본)이면 아래를 순서대로 한 번 실행합니다(`src/dtest/core/bootstrap.py`의 `migrate`).
+인스턴스가 시작할 때 `AUTO_MIGRATE`가 true(기본)이면 아래를 순서대로 한 번 실행합니다(`src/dtest/core/bootstrap.py`의 `migrate`).
 
-1. `pg_advisory_lock(7340001)`을 잡습니다. 여러 Pod가 동시에 떠도 한 Pod만 진행하고 나머지는 기다립니다.
+1. `pg_advisory_lock(7340001)`을 잡습니다. 여러 인스턴스가 동시에 떠도 한 인스턴스만 진행하고 나머지는 기다립니다.
 2. `CREATE EXTENSION IF NOT EXISTS vector`
 3. Alembic `upgrade head` (앱 테이블)
 4. LangGraph checkpointer와 store의 `setup()` (LangGraph 테이블)
@@ -382,7 +382,7 @@ Pod가 시작할 때 `AUTO_MIGRATE`가 true(기본)이면 아래를 순서대로
 6. 워크플로우 벡터 인덱스 생성
 7. 잠금 해제
 
-`AUTO_MIGRATE`를 false로 두면 Pod는 스키마를 건드리지 않습니다. 이때는 배포 전에 같은 이미지와 같은 설정으로 `python scripts/migrate.py`를 한 번 실행합니다. 실패하면 0이 아닌 코드로 끝납니다.
+`AUTO_MIGRATE`를 false로 두면 인스턴스는 스키마를 건드리지 않습니다. 이때는 배포 전에 배포할 버전의 코드와 같은 설정으로 `python scripts/migrate.py`를 한 번 실행합니다. 실패하면 0이 아닌 코드로 끝납니다.
 
 ### 5.2 이력
 
@@ -406,7 +406,7 @@ UPDATE alembic_version SET version_num = '0001';
 ### 5.3 새 마이그레이션 작성 규칙
 
 - 파일은 `src/dtest/migrations/versions/`에 `NNNN_설명.py`로 만들고 `down_revision`을 직전 번호로 둡니다.
-- 이전 버전 코드가 계속 동작하는 변경만 합니다. 컬럼 추가는 NULL 허용이거나 DB 기본값(`server_default`)을 둡니다. 인덱스는 추가만 합니다. 롤링 업데이트 중에는 새 스키마 위에서 옛 Pod가 돌기 때문입니다.
+- 이전 버전 코드가 계속 동작하는 변경만 합니다. 컬럼 추가는 NULL 허용이거나 DB 기본값(`server_default`)을 둡니다. 인덱스는 추가만 합니다. 배포 중에는 새 스키마 위에서 옛 버전이 잠시 함께 돌기 때문입니다.
 - 컬럼 삭제나 이름 변경은 두 번에 나눕니다. 먼저 코드가 그 컬럼을 쓰지 않게 배포하고, 다음 배포에서 지웁니다.
 - 큰 테이블(run_events)의 인덱스 추가는 테이블 잠금 시간을 확인합니다. Alembic 기본은 `CREATE INDEX`라 쓰기가 잠깁니다.
 - 모델(`models.py`)과 마이그레이션을 같이 고칩니다. 로컬에서 빈 DB에 처음부터 올려 보고, 직전 버전 DB에서도 올려 봅니다.
@@ -414,22 +414,22 @@ UPDATE alembic_version SET version_num = '0001';
 
 ### 5.4 주의
 
-- 마이그레이션이 실패하면 `AUTO_MIGRATE`가 켜진 모든 Pod가 시작에 실패합니다. 롤링 업데이트로 옛 Pod가 이미 내려갔다면 서비스가 멈춥니다. 운영은 `AUTO_MIGRATE: false`와 사전 실행을 권장합니다.
+- 마이그레이션이 실패하면 `AUTO_MIGRATE`가 켜진 모든 인스턴스가 시작에 실패합니다. 교체 배포로 옛 인스턴스가 이미 내려갔다면 서비스가 멈춥니다. 운영은 `AUTO_MIGRATE: false`와 사전 실행을 권장합니다.
 - 두 환경(예: dev와 prd)이 같은 데이터베이스를 가리키면 스키마와 데이터를 함께 씁니다. dev에 새 마이그레이션을 배포하는 순간 prd의 스키마도 바뀌고, 한쪽 worker가 다른 쪽의 run을 가져가 실행합니다. 환경마다 데이터베이스를 따로 두어야 합니다. 서버만 같이 쓰는 것은 연결 수만 관리하면 됩니다(6.2절).
 
 ## 6. 연결 풀
 
 ### 6.1 풀 구성
 
-프로세스(Pod) 하나가 풀 두 개를 가집니다. `pg_stat_activity.application_name`으로 구분됩니다.
+서비스 인스턴스(프로세스) 하나가 풀 두 개를 가집니다. `pg_stat_activity.application_name`으로 구분됩니다.
 
-| 풀 | application_name | 용도 | 크기 설정 | Pod당 최대 |
+| 풀 | application_name | 용도 | 크기 설정 | 인스턴스당 최대 |
 | --- | --- | --- | --- | --- |
 | 앱 풀 | `pr-agentic-app` | 앱 테이블 (SQLAlchemy) | `DB_POOL_SIZE` 3, 같은 수만큼 overflow | 6 |
 | 그래프 풀 | `pr-agentic-graph` | LangGraph 체크포인트와 store (psycopg) | `CHECKPOINT_POOL_SIZE` 8 | 8 |
 
 - 앱 풀은 연결을 빌려줄 때마다 살아 있는지 확인합니다(`pool_pre_ping`).
-- 그래프 풀은 연결을 빌려줄 때마다 확인하고 죽은 연결은 새로 만듭니다. TCP keepalive를 켜서 `DB_KEEPALIVE_IDLE_SECONDS`(60초) 동안 조용하면 10초 간격으로 확인 패킷을 보내고 3번 무응답이면 끊습니다. Pod와 DB 사이 장비(방화벽, LB, NAT)가 조용한 연결을 끊어 "server closed the connection unexpectedly"로 턴이 실패하던 문제 때문에 넣은 것입니다. 이 값은 그 장비의 idle 제한 시간보다 짧아야 합니다.
+- 그래프 풀은 연결을 빌려줄 때마다 확인하고 죽은 연결은 새로 만듭니다. TCP keepalive를 켜서 `DB_KEEPALIVE_IDLE_SECONDS`(60초) 동안 조용하면 10초 간격으로 확인 패킷을 보내고 3번 무응답이면 끊습니다. 인스턴스와 DB 사이 장비(방화벽, LB, NAT)가 조용한 연결을 끊어 "server closed the connection unexpectedly"로 턴이 실패하던 문제 때문에 넣은 것입니다. 이 값은 그 장비의 idle 제한 시간보다 짧아야 합니다.
 - 그래프 풀에서 연결을 `CHECKPOINT_POOL_TIMEOUT_SECONDS`(30초) 안에 얻지 못하면 그 턴이 실패합니다. `CHECKPOINT_POOL_SIZE`는 `RUN_CONCURRENCY`의 절반 이상으로 둡니다.
 - 그래프 풀은 `prepare_threshold 0`(prepared statement 미사용)이라 PgBouncer transaction 모드 뒤에 둘 수 있습니다.
 
@@ -437,19 +437,19 @@ UPDATE alembic_version SET version_num = '0001';
 
 같은 PostgreSQL 서버를 세 서비스가 씁니다. 모든 풀이 꽉 찼을 때의 최대 연결 수입니다.
 
-| 서비스 | Pod당 최대 | 구성 | 평소 Pod | 최대 Pod |
+| 서비스 | 인스턴스당 최대 | 구성 | 평소 인스턴스 | 최대 인스턴스 |
 | --- | --- | --- | --- | --- |
-| pr-agentic-service | 14 | 앱 풀 3 + overflow 3, 그래프 풀 8 | 2 | 4 (HPA) |
+| pr-agentic-service | 14 | 앱 풀 3 + overflow 3, 그래프 풀 8 | 2 | 4 |
 | executor | 16 | 풀 5 + overflow 10, readiness 1 | 1 | 1 |
-| pr-batch | 6 | 풀 2 + overflow 4 | 1 | 2 (HPA) |
+| pr-batch | 6 | 풀 2 + overflow 4 | 1 | 2 |
 
 | 상황 | 합계 |
 | --- | --- |
 | 평소 (2 + 1 + 1) | 50 |
-| 우리 배포 중 (Pod 1개 추가) | 64 |
+| 우리 배포 중 (인스턴스 1개 추가) | 64 |
 | 모두 최대 (4 + 1 + 2) | 84 |
 
-`max_connections` 100에서 superuser 예약 3을 빼면 97이므로 최대일 때 13이 남습니다. 이 여유는 운영 접속과 마이그레이션 실행이 씁니다. Pod 수(HPA max), `DB_POOL_SIZE`, `CHECKPOINT_POOL_SIZE` 중 하나라도 올릴 때는 이 표를 다시 계산합니다. DB 계정에 연결 한도(`CONNECTION LIMIT`)가 걸려 있다면 위 서비스별 최대보다 커야 합니다.
+`max_connections` 100에서 superuser 예약 3을 빼면 97이므로 최대일 때 13이 남습니다. 이 여유는 운영 접속과 마이그레이션 실행이 씁니다. 인스턴스 수, `DB_POOL_SIZE`, `CHECKPOINT_POOL_SIZE` 중 하나라도 올릴 때는 이 표를 다시 계산합니다. DB 계정에 연결 한도(`CONNECTION LIMIT`)가 걸려 있다면 위 서비스별 최대보다 커야 합니다.
 
 현재 연결 수는 아래로 봅니다.
 
@@ -472,7 +472,7 @@ GROUP BY 1, 2 ORDER BY 1, 2;
 | code_sources | 분석 단계 수 | 행은 남고 파일만 7일 뒤 삭제 |
 | workflow_query_vectors | 워크플로우 수정마다 새 벡터. 예전 revision 벡터도 남음 | 없음 |
 
-보존 정리는 worker 안의 `Retention` 루프가 1시간마다 실행하고, 한 번에 5,000행씩 `FOR UPDATE SKIP LOCKED`로 나눠 지웁니다. 여러 Pod가 동시에 돌아도 서로 기다리지 않습니다. 실패하면 로그에 `retention_sweep_failed`가 남고 다음 주기에 다시 시도합니다.
+보존 정리는 worker 안의 `Retention` 루프가 1시간마다 실행하고, 한 번에 5,000행씩 `FOR UPDATE SKIP LOCKED`로 나눠 지웁니다. 여러 인스턴스가 동시에 돌아도 서로 기다리지 않습니다. 실패하면 로그에 `retention_sweep_failed`가 남고 다음 주기에 다시 시도합니다.
 
 삭제만으로는 디스크가 줄지 않습니다. 반환은 PostgreSQL autovacuum이 맡으므로 run_events와 checkpoint 계열 테이블의 autovacuum이 돌고 있는지 확인합니다.
 
@@ -503,4 +503,4 @@ SELECT min(received_at) FROM executor_inbox;
 - 앱 테이블과 LangGraph 테이블(checkpoints 계열, store)은 같은 시점으로 함께 백업하고 함께 복구해야 합니다. 프로젝트 메모리 본문은 store에, 그 이력은 memory_history에 있고, 멈춰 있는 run의 상태는 runs와 checkpoints에 나뉘어 있습니다.
 - executor의 DB와 공유 저장소는 별도 시스템입니다. 우리 DB만 과거 시점으로 되돌리면 그 뒤에 만들어진 executor 실행과 Artifact는 우리 쪽 기록이 없는 상태가 됩니다. 반대로 executor만 되돌리면 우리 run이 가리키는 `execution_id`가 executor에 없어 그 run은 이어 갈 수 없습니다.
 - Redis는 백업 대상이 아닙니다. 비면 사용자가 다시 로그인하고, executor 이벤트 소비자 그룹은 다음 읽기 때 다시 만들어집니다.
-- 복구 뒤에는 `alembic_version`의 값이 배포할 이미지의 마이그레이션 번호 이하인지 확인합니다. 더 높으면 그 이미지는 모르는 스키마 위에서 돌게 됩니다.
+- 복구 뒤에는 `alembic_version`의 값이 배포할 버전의 마이그레이션 번호 이하인지 확인합니다. 더 높으면 그 버전은 모르는 스키마 위에서 돌게 됩니다.
