@@ -33,6 +33,17 @@ LOAD_ANALYSIS_WEIGHT: 0
 LOAD_EXECUTOR_WEIGHT: 1
 LOAD_BATCH_WEIGHT: 0
 
+# 게이트웨이 → executor 호출만(런타임을 기다리지 않음): 하나씩 따로 1로
+# 내 정보만(우리 서비스 기준값) / 끝난 실행 조회 / 제출 후 바로 취소
+LOAD_ME_WEIGHT: 0
+LOAD_GATEWAY_READ_WEIGHT: 0
+LOAD_GATEWAY_SUBMIT_WEIGHT: 0
+# 조회에 쓸 끝난 실행 수(사번마다), X-Project-Id를 붙일지
+LOAD_GATEWAY_SEED: 5
+LOAD_SEND_PROJECT: true
+# executor 실행을 동시에 몇 개까지(0: 제한 없음). 차면 조회로 바뀜
+LOAD_EXECUTOR_MAX_ACTIVE: 0
+
 # --- 속도 ---------------------------------------------------------------
 # 한 사용자가 동작 하나를 끝내고 다음 동작까지 쉬는 시간(초)의 범위
 LOAD_WAIT_MIN_SECONDS: 0
