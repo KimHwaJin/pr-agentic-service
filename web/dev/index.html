@@ -2637,7 +2637,7 @@ async function execKernel(base) {
         <div class="muted" style="margin-top:4px">측정된 단계 시도 ${rec.measured_step_attempt_count ?? 0}건 (재시도 포함)</div></div></div>
     <table class="tbl"><thead><tr><th>#</th><th>skill / tool</th><th>시도</th><th>상태</th><th>피크 메모리</th><th>CPU 시간</th><th>종료</th></tr></thead>
       <tbody>${rows || '<tr><td colspan="7" class="muted">끝난 단계가 없습니다.</td></tr>'}</tbody></table>
-    <div class="muted" style="font-size:12px;margin-top:8px;line-height:1.6">메모리는 커널과 그 자식 프로세스의 RSS 합입니다. 지금 값은 열 때마다 런타임에서 바로 읽고, 단계별 값은 단계가 끝날 때 기록된 것입니다. 측정을 지원하지 않는 Jupyter 이미지에서 돈 단계는 "측정 없음"으로 나옵니다.${events.has_more ? ' 이벤트가 많아 앞쪽 500건의 단계만 표에 나옵니다.' : ''}</div>`;
+    <div class="muted" style="font-size:12px;margin-top:8px;line-height:1.6">메모리는 커널과 그 자식 프로세스의 RSS 합입니다. 지금 값은 열 때마다 런타임에서 바로 읽고, 단계별 값은 단계가 끝날 때 기록된 것입니다. 시간 초과·취소·중단된 단계, 이 기능 배포 전에 끝난 단계, 측정을 지원하지 않는 Jupyter 이미지에서 돈 단계는 "측정 없음"으로 나옵니다. CPU는 사용률이 아니라 쓴 시간(초)입니다.${events.has_more ? ' 이벤트가 많아 앞쪽 500건의 단계만 표에 나옵니다.' : ''}</div>`;
 }
 // a target's kernels, each with the execution that holds it (admins; every tenant's)
 // opts.kernel: the row to mark; opts.back: {exec, tenant} when opened from an execution
