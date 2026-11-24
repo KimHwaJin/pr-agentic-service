@@ -44,13 +44,14 @@ API key로 부를 수 있는 21개입니다. 이 밖의 `/api/v1/executor/…` �
 | 12 | GET | `/api/v1/executor/executions/{execution_id}/events` | - | 200 ExecutionEventPageResponse |
 | 13 | GET | `/api/v1/executor/executions/{execution_id}/artifacts` | - | 200 ExecutionArtifactPageResponse |
 | 14 | POST | `/api/v1/executor/executions/{execution_id}/artifacts` | ExecutionArtifactMaterializeRequest | 201 ExecutionArtifactResponse |
-| 15 | GET | `/api/v1/executor/executions/{execution_id}/notebook` | - | 200 ExecutionNotebookResponse |
-| 16 | GET | `/api/v1/executor/executions/{execution_id}/notebook/cells/{cell_index}` | - | 200 ExecutionNotebookCellResponse |
-| 17 | POST | `/api/v1/executor/executions/{execution_id}/finalize` | ExecutionFinalizeRequest | 202 ExecutionCommandResponse |
-| 18 | POST | `/api/v1/executor/executions/{execution_id}/cancel` | ExecutionCancelRequest | 202 ExecutionCommandResponse |
-| 19 | POST | `/api/v1/executor/executions/{execution_id}/retry` | ExecutionRetryRequest | 202 ExecutionCommandResponse |
-| 20 | GET | `/api/v1/executor/artifacts/{artifact_id}` | - | 200 ExecutionArtifactResponse |
-| 21 | GET | `/api/v1/executor/artifacts/{artifact_id}/content` | - | 200 string (binary) |
+| 15 | GET | `/api/v1/executor/executions/{execution_id}/kernel-usage` | - | 200 ExecutionKernelUsageResponse |
+| 16 | GET | `/api/v1/executor/executions/{execution_id}/notebook` | - | 200 ExecutionNotebookResponse |
+| 17 | GET | `/api/v1/executor/executions/{execution_id}/notebook/cells/{cell_index}` | - | 200 ExecutionNotebookCellResponse |
+| 18 | POST | `/api/v1/executor/executions/{execution_id}/finalize` | ExecutionFinalizeRequest | 202 ExecutionCommandResponse |
+| 19 | POST | `/api/v1/executor/executions/{execution_id}/cancel` | ExecutionCancelRequest | 202 ExecutionCommandResponse |
+| 20 | POST | `/api/v1/executor/executions/{execution_id}/retry` | ExecutionRetryRequest | 202 ExecutionCommandResponse |
+| 21 | GET | `/api/v1/executor/artifacts/{artifact_id}` | - | 200 ExecutionArtifactResponse |
+| 22 | GET | `/api/v1/executor/artifacts/{artifact_id}/content` | - | 200 string (binary) |
 <!-- gen:end summary -->
 
 | 구분 | 경로 (`/api/v1/executor` 뒤) | 하는 일 |
@@ -397,6 +398,7 @@ Get current execution state
 | 위치 | 이름 | 타입 | 필수 | 기본값 | 제약 | 설명 |
 | --- | --- | --- | --- | --- | --- | --- |
 | path | `execution_id` | string (uuid) | O |  |  |  |
+| query | `wait_seconds` | integer |  | `0` | ≥ 0, ≤ 30 | Hold the response while the Execution is working, for at most this many seconds. It answers as soon as the Execution is WAITING_FOR_OPERATION or terminal, and with the current state when the time is up. |
 
 - 응답 `200` (`application/json`): [ExecutionResponse](#schema-executionresponse)
 - 이 경로의 그 밖의 오류: `409`
@@ -537,6 +539,17 @@ Materialize Agent-authored text as a Runtime-owned Artifact
 
 - 요청 본문 (`application/json`): [ExecutionArtifactMaterializeRequest](#schema-executionartifactmaterializerequest)
 - 응답 `201` (`application/json`): [ExecutionArtifactResponse](#schema-executionartifactresponse)
+- 이 경로의 그 밖의 오류: `409`
+
+#### `GET /api/v1/executor/executions/{execution_id}/kernel-usage`
+
+Get the Execution's kernel and its memory and CPU use
+
+| 위치 | 이름 | 타입 | 필수 | 기본값 | 제약 | 설명 |
+| --- | --- | --- | --- | --- | --- | --- |
+| path | `execution_id` | string (uuid) | O |  |  |  |
+
+- 응답 `200` (`application/json`): [ExecutionKernelUsageResponse](#schema-executionkernelusageresponse)
 - 이 경로의 그 밖의 오류: `409`
 
 #### `GET /api/v1/executor/executions/{execution_id}/notebook`
@@ -912,6 +925,21 @@ executor OpenAPI에서 만든 표입니다. 필드 설명은 executor 원문(영
 | --- | --- | --- | --- | --- | --- |
 | `idempotency_key` | string | O |  | 길이 ≥ 1, 길이 ≤ 255 |  |
 | `expected_version` | integer | O |  | ≥ 0 |  |
+
+모르는 필드는 422로 거절합니다.
+
+<a id="schema-executionkernelusageresponse"></a>
+#### ExecutionKernelUsageResponse
+
+| 필드 | 타입 | 필수 | 기본값 | 제약 | 설명 |
+| --- | --- | --- | --- | --- | --- |
+| `execution_id` | string (uuid) | O |  |  |  |
+| `target_id` | string (uuid) \| null | O |  |  |  |
+| `kernel_id` | string \| null | O |  |  |  |
+| `kernel_state` | "RUNNING" \| "NO_KERNEL" \| "NOT_RUNNING" \| "RUNTIME_UNAVAILABLE" | O |  |  |  |
+| `kernel` | [KernelUsageResponse](#schema-kernelusageresponse) \| null | O |  |  |  |
+| `observed_at` | string (date-time) \| null | O |  |  |  |
+| `steps` | [RecordedStepUsageResponse](#schema-recordedstepusageresponse) | O |  |  |  |
 
 모르는 필드는 422로 거절합니다.
 
@@ -1367,6 +1395,21 @@ What ended a MULTI Execution, or any Execution past its lifetime.
 
 모르는 필드는 422로 거절합니다.
 
+<a id="schema-kernelusageresponse"></a>
+#### KernelUsageResponse
+
+A running kernel now: its process and the processes it started.  Memory is resident set size (RSS); pages shared with forked children count once per process. CPU seconds count from the kernel's start.
+
+| 필드 | 타입 | 필수 | 기본값 | 제약 | 설명 |
+| --- | --- | --- | --- | --- | --- |
+| `kernel_id` | string | O |  |  |  |
+| `execution_state` | string \| null | O |  |  |  |
+| `process_count` | integer \| null | O |  |  |  |
+| `memory_bytes` | integer \| null | O |  |  |  |
+| `cpu_seconds` | number \| null | O |  |  |  |
+
+모르는 필드는 422로 거절합니다.
+
 <a id="schema-lifecycle"></a>
 #### Lifecycle
 
@@ -1519,6 +1562,19 @@ What ended a MULTI Execution, or any Execution past its lifetime.
 | --- | --- | --- | --- | --- | --- |
 | `type` | "PYTHON_EXECUTE" | O |  |  |  |
 | `source` | [InlineStepSource](#schema-inlinestepsource) \| [PathStepSource](#schema-pathstepsource) | O |  |  | 구분 필드 `type`. |
+
+모르는 필드는 422로 거절합니다.
+
+<a id="schema-recordedstepusageresponse"></a>
+#### RecordedStepUsageResponse
+
+Measured Step attempts of the Execution, over all its attempts.
+
+| 필드 | 타입 | 필수 | 기본값 | 제약 | 설명 |
+| --- | --- | --- | --- | --- | --- |
+| `peak_memory_bytes` | integer \| null | O |  |  |  |
+| `cpu_seconds` | number \| null | O |  |  |  |
+| `measured_step_attempt_count` | integer | O |  |  |  |
 
 모르는 필드는 422로 거절합니다.
 

@@ -3970,7 +3970,7 @@
           "batch (pr-agentic-service)"
         ],
         "summary": "Notebook To Batch Script",
-        "description": "Registers a session notebook (executor artifact).\n\nIt becomes a pr-batch NOTEBOOK script. The caller's ``Idempotency-Key``\ngoes to pr-batch as sent, as on the relayed writes: a key names one\nregistration, not the notebook, so registering a notebook again (after\ndeleting its script, or under another name) is a new script.",
+        "description": "Registers a session notebook (executor artifact).\n\nIt becomes a pr-batch NOTEBOOK script. The caller's ``Idempotency-Key``\ngoes to pr-batch as sent, as on the relayed writes: a key names one\nregistration, not the notebook, so registering a notebook again (after\ndeleting its script, or under another name) is a new script. The\nscript goes to the caller's tenant (a key's own), where that caller\nthen registers its batch.",
         "security": [
           {
             "X-Api-Key": []

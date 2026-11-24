@@ -209,9 +209,9 @@ Swagger(`/docs`)에서는 Authorize 버튼에 `X-Api-Key`·`X-User-Id`가 있고
 | Method | Path (`/api/v1/executor` 아래) | 권한 |
 | --- | --- | --- |
 | GET | `/executions?project_id=&session_id=&status=&cursor=&limit=` | 내 실행만 (`user_id`는 서버가 로그인 사용자로 고정). `project_id`·`session_id`는 내가 속한 것만 |
-| GET | `/executions/{id}`, `/result`, `/steps`, `/steps/{step_id}`, `/events`, `/artifacts`, `/notebook` | 그 실행의 프로젝트 멤버 (관리자는 전부) |
+| GET | `/executions/{id}`, `/result`, `/steps`, `/steps/{step_id}`, `/events`, `/artifacts`, `/notebook`, `/kernel-usage` | 그 실행의 프로젝트 멤버 (관리자는 전부) |
 | GET | `/executions/{id}/diagnostics`, `/attempts`, `/attempts/{id}`, `/attempts/{id}/steps` | 관리자 |
-| GET | `/runtime-targets`, `/runtime-targets/{id}`, `/runtime-pools`, `/maintenance`, `/maintenance/runs/{id}`, `/maintenance/runs/{id}/targets` | 관리자 |
+| GET | `/runtime-targets`, `/runtime-targets/{id}`, `/runtime-targets/{id}/kernels`, `/runtime-pools`, `/maintenance`, `/maintenance/runs/{id}`, `/maintenance/runs/{id}/targets` | 관리자 |
 | GET | `/event-streams`, `/event-streams/{tenant}`, `/event-streams/{tenant}/entries?limit=&before=&execution_id=&event_type=`, `/event-streams/{tenant}/groups/{group}/pending?limit=&consumer=&min_idle_ms=` | 관리자. executor의 Redis 이벤트 Stream을 Redis에 있는 그대로 조회(읽기 전용). Redis 장애 때는 503 `REDIS_UNAVAILABLE`, Stream·group이 없으면 404 `EVENT_STREAM_NOT_FOUND` |
 | POST | `/runtime-targets` | 관리자. 런타임 등록·수정(바로 probe) |
 | POST | `/runtime-targets/{id}/probe`, `/drain`, `/activate`, `/disable` | 관리자. 다시 점검 / 새 작업 배정 중지(진행 중은 마저) / 배정 복귀 / 사용 중지 |
