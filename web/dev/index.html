@@ -2712,7 +2712,7 @@ function runtimeCard(t) {
     <div class="slots">실행 슬롯 <b style="color:var(--ink)">${used}</b> / ${max || '-'} 사용 중 · 세션 ${cap.active_session_count ?? 0} · <a class="es-link" style="color:var(--accent)" title="이 런타임의 커널과 각 커널을 쓰는 실행, 자원 사용량" onclick="event.stopPropagation();openTargetKernels('${t.target_id}')">커널·실행 보기</a>
       <div class="bar"><span style="width:${max ? Math.max(used / max * 100, used ? 1 : 0) : 0}%"></span></div></div>
     <div class="rt-foot"><span title="${esc(res.source || '')}${res.estimated ? ' (추정)' : ''}">${res.fresh === false ? '⚠ 오래된 측정 · ' : ''}측정 ${fmtTime(res.observed_at || h.last_check_at)}</span>
-      <span class="acts" onclick="event.stopPropagation()">${act('probe', '점검')}${act('drain', '비우기', true)}${act('activate', '활성화')}${act('disable', '사용 중지', true)}${act('purge', '제거', true)}</span></div>
+      <span class="acts" onclick="event.stopPropagation()"><button style="border-color:var(--accent);color:var(--accent)" title="이 런타임의 커널과 각 커널을 쓰는 실행, 자원 사용량" onclick="openTargetKernels('${t.target_id}')">커널</button>${act('probe', '점검')}${act('drain', '비우기', true)}${act('activate', '활성화')}${act('disable', '사용 중지', true)}${act('purge', '제거', true)}</span></div>
     ${h.last_error ? `<div style="color:var(--bad);font-size:12px;margin-top:6px">${esc(h.last_error)}</div>` : ''}
   </div>`;
 }
