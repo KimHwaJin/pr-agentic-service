@@ -2643,7 +2643,8 @@ async function execKernel(base) {
 // opts.kernel: the row to mark; opts.back: {exec, tenant} when opened from an execution
 async function openTargetKernels(id, opts = {}) {
   if (!S.me.permissions?.system) return;
-  SYS.tk = { id, kernel: opts.kernel || null, back: opts.back || null };
+  // opts.notice: what the last delete on this list came to (HTML)
+  SYS.tk = { id, kernel: opts.kernel || null, back: opts.back || null, notice: opts.notice || '' };
   $('execModal').classList.remove('open');
   $('tkTitle').innerHTML = `${SYS.tk.back ? `<button class="ghost" title="이 목록을 연 실행으로" onclick="openExecution(SYS.tk.back.exec, SYS.tk.back.tenant, { tab: 'kernel' })">← 실행 ${esc(SYS.tk.back.exec.slice(0, 8))}</button> ` : ''}런타임 커널`;
   $('tkBody').innerHTML = '<div class="muted">불러오는 중…</div>';
@@ -2673,13 +2674,34 @@ async function openTargetKernels(id, opts = {}) {
     const open = k.execution_id ? `openExecution('${esc(k.execution_id)}', '${esc(k.tenant_id || '')}', { tab: 'kernel', back: { target: '${esc(id)}', kernel: '${esc(k.kernel_id)}' } })` : '';
     return `<tr class="${open ? 'click' : ''} ${k.kernel_id === SYS.tk.kernel ? 'hl' : ''}" ${open ? `onclick="${open}"` : ''}><td>${short(k.kernel_id)}</td><td>${esc(JUPYTER_STATE[k.execution_state] || k.execution_state || '-')}</td><td>${k.process_count ?? '-'}</td>
       <td>${memText(k.memory_bytes)}${k.memory_bytes != null ? useBar(k.memory_bytes, top) : ''}</td><td>${cpuSec(k.cpu_seconds)}</td>
-      <td>${k.execution_id ? `${short(k.execution_id)} <span class="es-link">열기</span>` : '<span style="color:var(--bad)" title="이 커널을 쓰는 실행이 없습니다">남겨진 커널</span>'}</td>
+      <td>${k.execution_id ? `${short(k.execution_id)} <span class="es-link">열기</span>` : `<span style="color:var(--bad)" title="이 커널을 쓰는 실행이 없습니다">남겨진 커널</span> <span class="acts" style="display:inline-flex"><button class="danger" title="실행이 잡고 있지 않고 15분 넘게 쓰이지 않은 커널만 지워집니다" onclick="deleteKernel('${esc(id)}', '${esc(k.kernel_id)}', ${k.memory_bytes ?? 'null'})">삭제</button></span>`}</td>
       <td class="mono">${esc(k.tenant_id || '-')}</td><td>${k.execution_status ? statusBadge(k.execution_status) : '<span class="muted">-</span>'}</td></tr>`;
   }).join('');
-  $('tkBody').innerHTML = `${head}${chain(nodes)}
+  $('tkBody').innerHTML = `${head}${SYS.tk.notice}${chain(nodes)}
     <table class="tbl"><thead><tr><th>커널</th><th>커널 상태</th><th>프로세스</th><th>메모리</th><th>CPU 누적</th><th>Execution</th><th>tenant</th><th>실행 상태</th></tr></thead>
       <tbody>${rows || '<tr><td colspan="8" class="muted">지금 도는 커널이 없습니다.</td></tr>'}</tbody></table>
-    <div class="muted" style="font-size:12px;margin-top:8px;line-height:1.6">${fmtTime(ks.observed_at)}에 런타임에서 읽음 · ${again}<br>행을 누르면 그 커널을 쓰는 실행의 커널·자원으로 갑니다. 메모리는 커널과 자식 프로세스의 RSS 합이고, 막대는 ${cap ? '런타임 전체 메모리' : '가장 큰 커널'} 대비입니다. 실행이 없는 커널은 남겨진 커널입니다.</div>`;
+    <div class="muted" style="font-size:12px;margin-top:8px;line-height:1.6">${fmtTime(ks.observed_at)}에 런타임에서 읽음 · ${again}<br>행을 누르면 그 커널을 쓰는 실행의 커널·자원으로 갑니다. 실행이 쓰는 커널은 여기서 지울 수 없고, 그 실행을 취소하면 정리됩니다. 메모리는 커널과 자식 프로세스의 RSS 합이고, 막대는 ${cap ? '런타임 전체 메모리' : '가장 큰 커널'} 대비입니다. 실행이 없는 커널은 남겨진 커널입니다.</div>`;
+}
+// delete a kernel no execution holds; the executor refuses one that an execution holds or that was active in the last 15 minutes
+async function deleteKernel(target, kernel, memory) {
+  if (!confirm(`남겨진 커널 ${kernel} (메모리 ${memText(memory)})을 삭제합니다.\n커널 안의 변수와 실행 상태가 모두 사라지고 되돌릴 수 없습니다. 진행할까요?`)) return;
+  const again = notice => openTargetKernels(target, { kernel: SYS.tk?.kernel, back: SYS.tk?.back, notice });
+  const box = (cls, html) => `<div class="reason-box ${cls}" style="margin:0 0 12px">${html}</div>`;
+  try {
+    await api(`/executor/runtime-targets/${target}/kernels/${encodeURIComponent(kernel)}`, { method: 'DELETE', quiet: true });
+    again(box('', `<b>커널 <span class="mono">${esc(kernel.slice(0, 8))}</span>을 삭제했습니다.</b>`));
+  } catch (err) {
+    const e = err.api || {}, d = e.details?.[0] || {}, c = d.context || {};
+    let text = esc(e.message || '삭제하지 못했습니다.');
+    if (e.code === 'RUNTIME_KERNEL_DELETE_CONFLICT' && d.type === 'kernel_held')
+      text = `실행이 이 커널을 잡고 있어 지우지 않았습니다. 그 실행을 취소하면 커널이 정리됩니다.${c.execution_id ? ` <a class="es-link" onclick="openExecution('${esc(c.execution_id)}', '', { tab: 'kernel', back: { target: '${esc(target)}', kernel: '${esc(kernel)}' } })">실행 ${esc(String(c.execution_id).slice(0, 8))} 열기</a>` : ''}`;
+    else if (e.code === 'RUNTIME_KERNEL_DELETE_CONFLICT' && d.type === 'kernel_recently_active')
+      text = `최근에 쓰인 커널이라 지우지 않았습니다. ${c.min_idle_seconds != null && c.idle_seconds != null ? `약 ${cpuSec(Math.max(0, c.min_idle_seconds - c.idle_seconds))} 뒤에 다시 시도하세요 (마지막 활동 뒤 ${Math.round(c.min_idle_seconds / 60)}분이 지나야 지울 수 있습니다).` : '잠시 뒤 다시 시도하세요.'}`;
+    else if (e.code === 'RUNTIME_UNAVAILABLE') text = 'Jupyter에 닿지 못해 아무것도 지우지 않았습니다. 잠시 뒤 다시 시도하세요.';
+    else if (e.code === 'RUNTIME_TARGET_NOT_FOUND') text = '등록이 삭제된 런타임입니다.';
+    else if (err.message === '404' || err.message === '405') text = '이 executor는 아직 커널 삭제를 지원하지 않습니다.';
+    again(box('bad', `<b>커널 <span class="mono">${esc(kernel.slice(0, 8))}</span>: ${text}</b> <span class="mono muted">${esc(e.code || '')}</span>`));
+  }
 }
 
 /* runtimes */
