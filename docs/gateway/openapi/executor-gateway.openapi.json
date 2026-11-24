@@ -445,6 +445,20 @@
             }
           },
           {
+            "name": "wait_seconds",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 30,
+              "minimum": 0,
+              "description": "Hold the response while the Execution is working, for at most this many seconds. It answers as soon as the Execution is WAITING_FOR_OPERATION or terminal, and with the current state when the time is up.",
+              "default": 0,
+              "title": "Wait Seconds"
+            },
+            "description": "Hold the response while the Execution is working, for at most this many seconds. It answers as soon as the Execution is WAITING_FOR_OPERATION or terminal, and with the current state when the time is up."
+          },
+          {
             "name": "X-User-Id",
             "in": "header",
             "required": true,
@@ -2421,6 +2435,164 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ExecutionArtifactResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Execution or Artifact not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GatewayError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "State, version, or idempotency conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GatewayError"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Invalid ExecutionSpec",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GatewayError"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "INVALID_IDENTITY: X-User-Id missing or malformed, X-Project-Id/X-Session-Id malformed, user_id query malformed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GatewayError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "LOGIN_REQUIRED (no X-Api-Key) or INVALID_API_KEY (unknown or revoked key)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GatewayError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "FORBIDDEN: unknown or inactive user, or a standard key naming another user in user_id",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GatewayError"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "TOO_LARGE: request body over 32 MB",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GatewayError"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Relayed service not reachable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GatewayError"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "Relayed service did not answer in time",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GatewayError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/executor/executions/{execution_id}/kernel-usage": {
+      "get": {
+        "tags": [
+          "executor"
+        ],
+        "summary": "Get the Execution's kernel and its memory and CPU use",
+        "description": "Live kernel values are read from its Runtime Target now; Step\npeaks were recorded as each Step attempt finished.",
+        "security": [
+          {
+            "X-Api-Key": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "execution_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Execution Id"
+            }
+          },
+          {
+            "name": "X-User-Id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$"
+            },
+            "description": "Who calls (always required, every key kind). The agentic service's tenant: one of its active users (employee id). Another tenant: an employee id (system accounts svc-...). Standard key: reads cover only this user's rows. Master key: reads cover the whole tenant. Writes are made for this user."
+          },
+          {
+            "name": "X-Project-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,254}$"
+            },
+            "description": "Optional project. Our tenant: a project the X-User-Id user is a member of (else 404). Another tenant: its own value, form-checked."
+          },
+          {
+            "name": "X-Session-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,254}$"
+            },
+            "description": "Optional session, needs X-Project-Id. Our tenant: a session of that project the user owns (else 404)."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExecutionKernelUsageResponse"
                 }
               }
             }
@@ -4839,6 +5011,85 @@
         ],
         "title": "ExecutionFinalizeRequest"
       },
+      "ExecutionKernelUsageResponse": {
+        "properties": {
+          "execution_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Execution Id"
+          },
+          "target_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Id"
+          },
+          "kernel_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Kernel Id"
+          },
+          "kernel_state": {
+            "type": "string",
+            "enum": [
+              "RUNNING",
+              "NO_KERNEL",
+              "NOT_RUNNING",
+              "RUNTIME_UNAVAILABLE"
+            ],
+            "title": "Kernel State"
+          },
+          "kernel": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/KernelUsageResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "observed_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Observed At"
+          },
+          "steps": {
+            "$ref": "#/components/schemas/RecordedStepUsageResponse"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "execution_id",
+          "target_id",
+          "kernel_id",
+          "kernel_state",
+          "kernel",
+          "observed_at",
+          "steps"
+        ],
+        "title": "ExecutionKernelUsageResponse"
+      },
       "ExecutionLifecycleInput": {
         "properties": {
           "operation_mode": {
@@ -6377,6 +6628,69 @@
         ],
         "title": "InlineStepSource"
       },
+      "KernelUsageResponse": {
+        "properties": {
+          "kernel_id": {
+            "type": "string",
+            "title": "Kernel Id"
+          },
+          "execution_state": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Execution State"
+          },
+          "process_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Process Count"
+          },
+          "memory_bytes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Memory Bytes"
+          },
+          "cpu_seconds": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cpu Seconds"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "kernel_id",
+          "execution_state",
+          "process_count",
+          "memory_bytes",
+          "cpu_seconds"
+        ],
+        "title": "KernelUsageResponse",
+        "description": "A running kernel now: its process and the processes it started.\n\nMemory is resident set size (RSS); pages shared with forked children\ncount once per process. CPU seconds count from the kernel's start."
+      },
       "Lifecycle": {
         "properties": {
           "started_at": {
@@ -6850,6 +7164,45 @@
           "source"
         ],
         "title": "PythonExecutePayload"
+      },
+      "RecordedStepUsageResponse": {
+        "properties": {
+          "peak_memory_bytes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Peak Memory Bytes"
+          },
+          "cpu_seconds": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cpu Seconds"
+          },
+          "measured_step_attempt_count": {
+            "type": "integer",
+            "title": "Measured Step Attempt Count"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "peak_memory_bytes",
+          "cpu_seconds",
+          "measured_step_attempt_count"
+        ],
+        "title": "RecordedStepUsageResponse",
+        "description": "Measured Step attempts of the Execution, over all its attempts."
       },
       "RecoveryResponse": {
         "properties": {

@@ -78,6 +78,9 @@ _ALLOWED: list[tuple[str, str, Sso, bool]] = [
     ("GET", rf"{E}/operations/{UUID}/steps", "execution", True),
     ("GET", rf"{E}/events", "execution", True),
     ("GET", rf"{E}/artifacts", "execution", True),
+    # the execution's kernel, its memory and CPU now, and what its finished
+    # steps recorded
+    ("GET", rf"{E}/kernel-usage", "execution", True),
     ("GET", rf"{E}/notebook", "execution", True),
     ("GET", rf"{E}/notebook/cells/\d+", "execution", True),
     ("POST", rf"{E}/operations", None, True),
@@ -95,6 +98,9 @@ _ALLOWED: list[tuple[str, str, Sso, bool]] = [
     # runtime and maintenance operations: our administrators only
     ("GET", r"runtime-targets", "ops", False),
     ("GET", rf"runtime-targets/{UUID}", "ops", False),
+    # the kernels running on a target, each with the execution that holds
+    # it: every tenant's, so the operator key only
+    ("GET", rf"runtime-targets/{UUID}/kernels", "ops", False),
     ("GET", r"runtime-pools", "ops", False),
     ("GET", r"maintenance", "ops", False),
     ("GET", rf"maintenance/runs/{UUID}", "ops", False),

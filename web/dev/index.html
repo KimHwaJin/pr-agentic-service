@@ -102,6 +102,18 @@
   .lvl.ok { background: #e3f1e7; color: var(--ok); } .lvl.warn { background: #fdf0d9; color: #a15c07; } .lvl.bad { background: #fde8e6; color: var(--bad); }
   .rt-foot { display: flex; align-items: center; gap: 8px; margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--line); font-size: 12px; color: var(--muted); }
   .rt-foot .acts { margin-left: auto; }
+  /* execution - runtime target - kernel - resource, read from either end */
+  .chain { display: flex; flex-wrap: wrap; align-items: stretch; margin-bottom: 14px; }
+  .chain .node { flex: 1; min-width: 150px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); padding: 10px 12px; font-size: 12.5px; line-height: 1.55; }
+  .chain .node .k { display: block; font-size: 11px; color: var(--muted); }
+  .chain .node b { display: block; font-size: 13.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .chain .node.here { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+  .chain .node.link { cursor: pointer; } .chain .node.link:hover { border-color: var(--accent); background: var(--hover); }
+  .chain .node .go { color: var(--accent); font-size: 12px; }
+  .chain .arrow { align-self: center; color: var(--faint); padding: 0 6px; }
+  .usebar { height: 6px; border-radius: 3px; background: var(--line); overflow: hidden; margin-top: 4px; min-width: 90px; }
+  .usebar span { display: block; height: 100%; border-radius: 3px; background: var(--accent); }
+  .tbl tr.hl td { background: color-mix(in srgb, var(--accent) 14%, transparent); }
   .es-warn { color: var(--bad); } .es-link { cursor: pointer; text-decoration: underline; }
   .es-group + .es-group { margin-top: 8px; } .es-group details { margin-top: 2px; font-size: 12px; }
   .es-mini { border-collapse: collapse; margin: 4px 0; } .es-mini th, .es-mini td { padding: 2px 12px 2px 0; border: 0; background: none; text-align: left; font-weight: 400; }
@@ -662,6 +674,12 @@
     <div class="modal-body" id="execBody"></div>
   </div>
 </div>
+<div class="modal-back" id="tkModal" style="z-index:30" onclick="if (event.target === this) this.classList.remove('open')">
+  <div class="modal" style="width:min(1000px,100%)">
+    <div class="modal-head"><h2 id="tkTitle">런타임 커널</h2><button class="ghost" onclick="$('tkModal').classList.remove('open')">닫기</button></div>
+    <div class="modal-body" id="tkBody"></div>
+  </div>
+</div>
 <div class="modal-back" id="rtModal" onclick="if (event.target === this) this.classList.remove('open')">
   <div class="modal" style="width:min(560px,100%)">
     <div class="modal-head"><h2 id="rtTitle">런타임 추가</h2><button class="ghost" onclick="$('rtModal').classList.remove('open')">닫기</button></div>
@@ -872,7 +890,8 @@ async function api(path, opts = {}) {
     const fields = err.details.map(d => `${(d.location || []).filter(p => p !== 'body').join('.')}: ${d.message || d.type}`).join(', ');
     // opts.errorText: this call's own wording by status (e.g. 409 on delete)
     const text = opts.errorText?.[r.status] || CODE_TEXT[err.code] || err.message;
-    showError(`${text}${err.code ? ` (${err.code})` : ''}${fields ? ` · ${fields}` : ''}`, r.headers.get('x-request-id'));
+    // opts.quiet: the caller shows the failure in its own place
+    if (!opts.quiet) showError(`${text}${err.code ? ` (${err.code})` : ''}${fields ? ` · ${fields}` : ''}`, r.headers.get('x-request-id'));
     throw Object.assign(new Error(r.status), { api: err });
   }
   return data;
@@ -2506,22 +2525,24 @@ async function loadExecutions(more = false) {
 }
 
 const INTERNAL_EXEC_TABS = ['diagnostics', 'attempts'];  // permissions.execution_internals
-const EXEC_TABS = [['overview', '개요'], ['steps', '단계'], ['events', '이벤트'], ['result', '결과'], ['notebook', '노트북'], ['artifacts', '산출물'], ['diagnostics', '진단'], ['attempts', '시도']];
+const EXEC_TABS = [['overview', '개요'], ['kernel', '커널·자원'], ['steps', '단계'], ['events', '이벤트'], ['result', '결과'], ['notebook', '노트북'], ['artifacts', '산출물'], ['diagnostics', '진단'], ['attempts', '시도']];
 // tenant: the executor tenant the execution is in ('' = ours); admins only, others always read ours
-function openExecution(id, tenant = '') {
-  SYS.exec = id; SYS.execTenant = tenant;
-  $('execTitle').innerHTML = `실행 <span class="mono" style="font-size:13px;font-weight:400">${esc(id)}</span>${tenant ? ` <span class="badge">${esc(tenant)}</span>` : ''} <button class="ghost" title="복사" onclick="navigator.clipboard.writeText('${esc(id)}')">복사</button>`;
+// opts.tab: the tab to open on; opts.back: {target, kernel} when opened from a target's kernel list
+function openExecution(id, tenant = '', opts = {}) {
+  SYS.exec = id; SYS.execTenant = tenant; SYS.execBack = opts.back || null;
+  $('tkModal').classList.remove('open');
+  $('execTitle').innerHTML = `${SYS.execBack ? '<button class="ghost" title="이 실행을 연 런타임의 커널 목록으로" onclick="openTargetKernels(SYS.execBack.target, { kernel: SYS.execBack.kernel })">← 런타임 커널</button> ' : ''}실행 <span class="mono" style="font-size:13px;font-weight:400">${esc(id)}</span>${tenant ? ` <span class="badge">${esc(tenant)}</span>` : ''} <button class="ghost" title="복사" onclick="navigator.clipboard.writeText('${esc(id)}')">복사</button>`;
   $('execTabs').innerHTML = EXEC_TABS.filter(([k]) => S.me.permissions?.execution_internals || !INTERNAL_EXEC_TABS.includes(k)).map(([k, label]) => `<button class="systab" data-ex="${k}" onclick="execTab('${k}')">${label}</button>`).join('');
-  $('execModal').classList.add('open'); execTab('overview');
+  $('execModal').classList.add('open'); execTab(opts.tab || 'overview');
 }
 // an artifact's page; tenant: the executor tenant it is in ('' = ours, honoured for admins only)
 const viewUrl = (id, tenant = '') => `/view/artifacts/${id}${tenant ? `?tenant_id=${encodeURIComponent(tenant)}` : ''}`;
-const execApi = path => api(SYS.execTenant ? `${path}${path.includes('?') ? '&' : '?'}tenant_id=${encodeURIComponent(SYS.execTenant)}` : path);
+const execApi = (path, opts) => api(SYS.execTenant ? `${path}${path.includes('?') ? '&' : '?'}tenant_id=${encodeURIComponent(SYS.execTenant)}` : path, opts);
 async function execTab(tab) {
   document.querySelectorAll('.systab[data-ex]').forEach(t => t.classList.toggle('on', t.dataset.ex === tab));
   const body = $('execBody'); body.innerHTML = '<div class="muted">불러오는 중…</div>';
   const base = `/executor/executions/${SYS.exec}`;
-  try { body.innerHTML = await ({ overview: execOverview, steps: execSteps, events: execEvents, result: async b => pre(await execApi(`${b}/result`)), notebook: execNotebook, artifacts: execArtifacts, diagnostics: execDiagnostics, attempts: execAttempts })[tab](base); }
+  try { body.innerHTML = await ({ overview: execOverview, kernel: execKernel, steps: execSteps, events: execEvents, result: async b => pre(await execApi(`${b}/result`)), notebook: execNotebook, artifacts: execArtifacts, diagnostics: execDiagnostics, attempts: execAttempts })[tab](base); }
   catch { body.innerHTML = '<div class="muted">불러오지 못했습니다.</div>'; }
 }
 async function execOverview(base) {
@@ -2530,7 +2551,7 @@ async function execOverview(base) {
   const kv = [['실행 ID', `<span class="mono">${esc(e.execution_id)}</span>`], ['상태', statusBadge(e.state?.status) + reasonDetail(e.state?.reason)], ['방식', `${esc(lc.operation_mode || '')} · ${esc(e.trigger?.type || '')}`],
     ['tenant', `<span class="mono">${esc(e.tenant_id || c.tenant_id || '-')}</span>`], ['요청자 (created_by · created_by_client)', `<span class="mono">${esc(e.created_by || '-')}</span> · <span class="mono">${esc(e.created_by_client || '-')}</span>`],
     ['사용자', `${userLabel(c.user_id)} <span class="mono muted">${esc(c.user_id || '')}</span>`], ['프로젝트', `${esc(projectName(c.project_id) || '')} <span class="mono">${esc(c.project_id || '-')}</span>`], ['세션', `<span class="mono">${esc(c.session_id || '-')}</span>`], ['run (metadata.run_id)', `<span class="mono">${esc((e.metadata || {}).run_id || '-')}</span>`],
-    ['런타임', `${esc(r.type)} / ${esc(r.pool)} / ${esc(r.profile)} · target ${short(r.target_id)}`], ['생성', fmtTime(e.created_at)], ['시작 · 종료', `${fmtTime(lc.started_at)} → ${fmtTime(lc.finished_at)} (${dur(lc.started_at, lc.finished_at)})`],
+    ['런타임', `${esc(r.type)} / ${esc(r.pool)} / ${esc(r.profile)} · target ${short(r.target_id)} · 커널 ${short(r.kernel_id)} <a class="es-link" onclick="execTab('kernel')">커널·자원 보기</a>`], ['생성', fmtTime(e.created_at)], ['시작 · 종료', `${fmtTime(lc.started_at)} → ${fmtTime(lc.finished_at)} (${dur(lc.started_at, lc.finished_at)})`],
     ['재시도 · 복구', `${esc(e.retry?.strategy)} ${e.retry?.count ?? 0}회 · 복구 ${e.recovery?.count ?? 0}회`], ['노트북', `${esc(e.workspace?.notebook_projection?.status || '-')}`]];
   return `<dl class="kv">${kv.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('')}</dl><details><summary class="muted">원본 JSON</summary>${pre(e)}</details>`;
 }
@@ -2571,6 +2592,96 @@ async function execAttempts(base) {
     `<tr><td>${a.attempt_number} ${short(a.attempt_id)}</td><td>${statusBadge(a.state?.status)}</td><td>${fmtTime(a.lifecycle?.started_at)} → ${fmtTime(a.lifecycle?.finished_at)}</td><td>${a.step_count ?? ''}</td><td>${a.state?.reason ? reasonDetail(a.state.reason) : '-'}</td></tr>`).join('')}</tbody></table>`;
 }
 
+/* execution - runtime target - kernel - resource: one chain, read from the execution (커널·자원 tab) or from the target (its kernel list) */
+const KERNEL_STATE = { RUNNING: ['ok', '실행 중'], NO_KERNEL: ['', '커널 없음'], NOT_RUNNING: ['bad', '런타임에 커널 없음'], RUNTIME_UNAVAILABLE: ['bad', '런타임 응답 없음'] };
+const KERNEL_HINT = { NO_KERNEL: '아직 커널을 시작하지 않았거나, 실행이 끝나 커널을 정리했습니다.', NOT_RUNNING: '실행에는 커널이 기록돼 있지만 런타임에는 그 커널이 없습니다.', RUNTIME_UNAVAILABLE: '런타임이 응답하지 않아 지금 값을 읽지 못했습니다.' };
+const JUPYTER_STATE = { busy: '코드 실행 중', idle: '대기', starting: '시작 중' };
+const cpuSec = s => s == null ? '-' : s < 60 ? `${s.toFixed(1)}초` : `${Math.floor(s / 60)}분 ${Math.round(s % 60)}초`;
+const memText = b => b == null ? '-' : b < 1024 ** 2 ? `${Math.round(b / 1024)}KB` : gb(b);
+const useBar = (v, max) => max ? `<div class="usebar" title="${(v / max * 100).toFixed(1)}%"><span style="width:${Math.min(100, Math.max(v / max * 100, v ? 2 : 0))}%"></span></div>` : '';
+const kernelBadge = st => { const [cls, label] = KERNEL_STATE[st] || ['', st || '-']; return `<span class="badge ${cls}">${esc(label)}</span>`; };
+const chain = nodes => `<div class="chain">${nodes.map(n => `<div class="node ${n.here ? 'here' : ''} ${n.go ? 'link' : ''}" ${n.go ? `onclick="${n.go}"` : ''}><span class="k">${n.k}</span>${n.body}${n.go ? `<span class="go">${n.goText} →</span>` : ''}</div>`).join('<span class="arrow">→</span>')}</div>`;
+// a target as the runtime pages know it; admins only (others see its id)
+async function targetInfo(id) {
+  if (!id || !S.me.permissions?.system) return null;
+  return api(`/executor/runtime-targets/${id}`, { quiet: true }).catch(() => null);
+}
+async function execKernel(base) {
+  const none = { items: [] };
+  const [u, e, events, steps] = await Promise.all([execApi(`${base}/kernel-usage`), execApi(base),
+    execApi(`${base}/events?limit=500`, { quiet: true }).catch(() => none), execApi(`${base}/steps?limit=200`, { quiet: true }).catch(() => none)]);
+  const t = await targetInfo(u.target_id);
+  const r = e.runtime || {}, k = u.kernel, rec = u.steps || {}, cap = t?.resources?.memory?.capacity_bytes;
+  const nodes = [
+    { k: 'Execution', here: true, body: `<b class="mono">${esc(String(e.execution_id).slice(0, 8))}</b>${statusBadge(e.state?.status)} <span class="muted">${esc(e.lifecycle?.operation_mode || '')} · ${esc(e.trigger?.type || '')}</span>` },
+    { k: 'Runtime Target', body: u.target_id ? `<b>${t ? esc(t.name) : short(u.target_id)}</b>${t ? statusBadge(t.state?.status) : ''} <span class="muted">${esc(r.pool || '')} · ${esc(r.profile || '')}</span><br>`
+        : '<b class="muted">배정 전</b><span class="muted">아직 런타임이 정해지지 않았습니다.</span>',
+      go: u.target_id && S.me.permissions?.system ? `openTargetKernels('${esc(u.target_id)}', { kernel: '${esc(u.kernel_id || '')}', back: { exec: '${esc(e.execution_id)}', tenant: '${esc(SYS.execTenant || '')}' } })` : '', goText: '이 런타임의 커널 전체' },
+    { k: 'Kernel', body: `<b class="mono" title="${esc(u.kernel_id || '')}">${u.kernel_id ? esc(u.kernel_id.slice(0, 8)) : '-'}</b>${kernelBadge(u.kernel_state)}${k?.execution_state ? ` <span class="muted">${esc(JUPYTER_STATE[k.execution_state] || k.execution_state)}</span>` : ''}` },
+    { k: '자원 (지금)', body: k ? `<b>메모리 ${memText(k.memory_bytes)}</b>CPU 누적 ${cpuSec(k.cpu_seconds)} · 프로세스 ${k.process_count ?? '-'}개${cap && k.memory_bytes != null ? `${useBar(k.memory_bytes, cap)}<span class="muted">런타임 메모리 ${gb(cap)}의 ${(k.memory_bytes / cap * 100).toFixed(1)}%</span>` : ''}`
+        : `<b class="muted">지금 값 없음</b><span class="muted">${esc(KERNEL_HINT[u.kernel_state] || '')}</span>` },
+  ];
+  // per step: execution.step_completed carries the usage of that step attempt
+  const byId = Object.fromEntries(steps.items.map(s => [s.step_id, s]));
+  const done = events.items.filter(v => v.event_type === 'execution.step_completed');
+  const peak = Math.max(0, ...done.map(v => v.payload?.usage?.peak_memory_bytes || 0));
+  const rows = done.map(v => {
+    const p = v.payload || {}, us = p.usage, l = byId[p.step?.id]?.lineage || {};
+    return `<tr><td>${p.step?.sequence ?? ''}</td><td>${l.tool_name ? `${esc(l.skill_name || '')} / <b>${esc(l.tool_name)}</b>` : short(p.step?.id)}</td><td>${p.attempt?.number ?? ''}</td><td>${statusBadge(p.status)}</td>
+      <td>${us?.peak_memory_bytes != null ? `${memText(us.peak_memory_bytes)}${useBar(us.peak_memory_bytes, peak)}` : '<span class="muted">측정 없음</span>'}</td><td>${us?.cpu_seconds != null ? cpuSec(us.cpu_seconds) : '<span class="muted">-</span>'}</td><td style="white-space:nowrap">${fmtTime(v.occurred_at)}</td></tr>`;
+  }).join('');
+  return `${chain(nodes)}
+    <div class="cards"><div class="stat"><b>지금 커널</b>${k ? `메모리 ${memText(k.memory_bytes)} · CPU 누적 ${cpuSec(k.cpu_seconds)} · 프로세스 ${k.process_count ?? '-'}개` : esc(KERNEL_HINT[u.kernel_state] || '값 없음')}
+        <div class="muted" style="margin-top:4px">${u.observed_at ? `${fmtTime(u.observed_at)}에 런타임에서 읽음` : '런타임에서 읽지 않음'} <a class="es-link" onclick="execTab('kernel')">다시 읽기</a></div></div>
+      <div class="stat"><b>끝난 단계의 기록</b>피크 메모리 ${memText(rec.peak_memory_bytes)} · CPU 합계 ${cpuSec(rec.cpu_seconds)}
+        <div class="muted" style="margin-top:4px">측정된 단계 시도 ${rec.measured_step_attempt_count ?? 0}건 (재시도 포함)</div></div></div>
+    <table class="tbl"><thead><tr><th>#</th><th>skill / tool</th><th>시도</th><th>상태</th><th>피크 메모리</th><th>CPU 시간</th><th>종료</th></tr></thead>
+      <tbody>${rows || '<tr><td colspan="7" class="muted">끝난 단계가 없습니다.</td></tr>'}</tbody></table>
+    <div class="muted" style="font-size:12px;margin-top:8px;line-height:1.6">메모리는 커널과 그 자식 프로세스의 RSS 합입니다. 지금 값은 열 때마다 런타임에서 바로 읽고, 단계별 값은 단계가 끝날 때 기록된 것입니다. 시간 초과·취소·중단된 단계, 이 기능 배포 전에 끝난 단계, 측정을 지원하지 않는 Jupyter 이미지에서 돈 단계는 "측정 없음"으로 나옵니다. CPU는 사용률이 아니라 쓴 시간(초)입니다.${events.has_more ? ' 이벤트가 많아 앞쪽 500건의 단계만 표에 나옵니다.' : ''}</div>`;
+}
+// a target's kernels, each with the execution that holds it (admins; every tenant's)
+// opts.kernel: the row to mark; opts.back: {exec, tenant} when opened from an execution
+async function openTargetKernels(id, opts = {}) {
+  if (!S.me.permissions?.system) return;
+  SYS.tk = { id, kernel: opts.kernel || null, back: opts.back || null };
+  $('execModal').classList.remove('open');
+  $('tkTitle').innerHTML = `${SYS.tk.back ? `<button class="ghost" title="이 목록을 연 실행으로" onclick="openExecution(SYS.tk.back.exec, SYS.tk.back.tenant, { tab: 'kernel' })">← 실행 ${esc(SYS.tk.back.exec.slice(0, 8))}</button> ` : ''}런타임 커널`;
+  $('tkBody').innerHTML = '<div class="muted">불러오는 중…</div>';
+  $('tkModal').classList.add('open');
+  const [t, ks] = await Promise.all([api(`/executor/runtime-targets/${id}`, { quiet: true }).catch(() => null),
+    api(`/executor/runtime-targets/${id}/kernels`, { quiet: true }).catch(err => ({ failed: err.api || {} }))]);
+  if (SYS.tk?.id !== id) return;
+  const res = t?.resources || {}, mem = res.memory || {}, capacity = t?.capacity || {};
+  const head = t ? `<div class="toolbar"><b style="font-size:15px">${esc(t.name)}</b><span class="badge">${esc(t.runtime?.pool || '')}</span>${statusBadge(t.state?.status)}
+      <span class="mono muted">${esc(t.runtime?.connection_config?.endpoint || '')} · ${short(t.target_id)}</span></div>` : `<div class="toolbar"><b>target</b> ${short(id)}</div>`;
+  const again = `<a class="es-link" onclick="openTargetKernels('${esc(id)}', { kernel: SYS.tk.kernel, back: SYS.tk.back })">다시 읽기</a>`;
+  if (ks.failed) {
+    const text = ks.failed.code === 'RUNTIME_UNAVAILABLE' ? '런타임이 응답하지 않아 커널을 읽지 못했습니다. 런타임 상태를 점검한 뒤 다시 읽어 보세요.' : ks.failed.code === 'RUNTIME_TARGET_NOT_FOUND' ? '등록이 삭제된 런타임입니다.' : (ks.failed.message || '커널 목록을 불러오지 못했습니다.');
+    $('tkBody').innerHTML = `${head}<div class="reason-box bad"><b>${esc(text)}</b> <span class="mono muted">${esc(ks.failed.code || '')}</span></div><div>${again}</div>`;
+    return;
+  }
+  const items = [...ks.items].sort((a, b) => (b.memory_bytes || 0) - (a.memory_bytes || 0));
+  const total = items.reduce((n, k) => n + (k.memory_bytes || 0), 0), orphans = items.filter(k => !k.execution_id).length;
+  const cap = mem.capacity_bytes, top = cap || Math.max(0, ...items.map(k => k.memory_bytes || 0));
+  const nodes = [
+    { k: 'Runtime Target', here: true, body: `<b>${t ? esc(t.name) : esc(id.slice(0, 8))}</b>${t ? `${statusBadge(t.state?.status)} <span class="muted">${esc(t.runtime?.pool || '')}</span>` : ''}` },
+    { k: 'Kernel', body: `<b>${items.length}개</b>${orphans ? `<span style="color:var(--bad)">남겨진 커널 ${orphans}개</span>` : '<span class="muted">모두 실행에 묶여 있음</span>'}` },
+    { k: 'Execution', body: `<b>${items.length - orphans}건</b><span class="muted">실행 슬롯 ${capacity.active_execution_count ?? '-'} / ${capacity.max_concurrent_executions ?? '-'}</span>` },
+    { k: '자원 (지금)', body: `<b>커널 메모리 합 ${memText(total)}</b>${cap ? `${useBar(total, cap)}<span class="muted">런타임 메모리 ${gb(mem.used_bytes ?? 0)} / ${gb(cap)} 사용 중</span>` : '<span class="muted">런타임 자원 정보 없음</span>'}` },
+  ];
+  const rows = items.map(k => {
+    const open = k.execution_id ? `openExecution('${esc(k.execution_id)}', '${esc(k.tenant_id || '')}', { tab: 'kernel', back: { target: '${esc(id)}', kernel: '${esc(k.kernel_id)}' } })` : '';
+    return `<tr class="${open ? 'click' : ''} ${k.kernel_id === SYS.tk.kernel ? 'hl' : ''}" ${open ? `onclick="${open}"` : ''}><td>${short(k.kernel_id)}</td><td>${esc(JUPYTER_STATE[k.execution_state] || k.execution_state || '-')}</td><td>${k.process_count ?? '-'}</td>
+      <td>${memText(k.memory_bytes)}${k.memory_bytes != null ? useBar(k.memory_bytes, top) : ''}</td><td>${cpuSec(k.cpu_seconds)}</td>
+      <td>${k.execution_id ? `${short(k.execution_id)} <span class="es-link">열기</span>` : '<span style="color:var(--bad)" title="이 커널을 쓰는 실행이 없습니다">남겨진 커널</span>'}</td>
+      <td class="mono">${esc(k.tenant_id || '-')}</td><td>${k.execution_status ? statusBadge(k.execution_status) : '<span class="muted">-</span>'}</td></tr>`;
+  }).join('');
+  $('tkBody').innerHTML = `${head}${chain(nodes)}
+    <table class="tbl"><thead><tr><th>커널</th><th>커널 상태</th><th>프로세스</th><th>메모리</th><th>CPU 누적</th><th>Execution</th><th>tenant</th><th>실행 상태</th></tr></thead>
+      <tbody>${rows || '<tr><td colspan="8" class="muted">지금 도는 커널이 없습니다.</td></tr>'}</tbody></table>
+    <div class="muted" style="font-size:12px;margin-top:8px;line-height:1.6">${fmtTime(ks.observed_at)}에 런타임에서 읽음 · ${again}<br>행을 누르면 그 커널을 쓰는 실행의 커널·자원으로 갑니다. 메모리는 커널과 자식 프로세스의 RSS 합이고, 막대는 ${cap ? '런타임 전체 메모리' : '가장 큰 커널'} 대비입니다. 실행이 없는 커널은 남겨진 커널입니다.</div>`;
+}
+
 /* runtimes */
 const level = u => u >= .85 ? ['bad', '높음'] : u >= .6 ? ['warn', '주의'] : ['ok', '여유'];
 const LEVEL_COLOR = { ok: 'var(--ok)', warn: '#c27a0e', bad: 'var(--bad)' };
@@ -2598,10 +2709,10 @@ function runtimeCard(t) {
         ${ring(mem.utilization, '메모리', `${gb(mem.used_bytes ?? 0)} / ${gb(mem.capacity_bytes ?? 0)}`)}
         <div class="gauge"><div>부하<span class="v"><span class="lvl ${pcls}">${plabel}</span> ${((res.pressure_score || 0) * 100).toFixed(1)}%</span>프로세스 ${res.process_count ?? '-'}개</div></div>
       </div>` : `<div class="muted" style="font-size:13px">자원 정보 없음${res.last_error ? ` · ${esc(res.last_error)}` : ''}</div>`}
-    <div class="slots">실행 슬롯 <b style="color:var(--ink)">${used}</b> / ${max || '-'} 사용 중 · 세션 ${cap.active_session_count ?? 0}
+    <div class="slots">실행 슬롯 <b style="color:var(--ink)">${used}</b> / ${max || '-'} 사용 중 · 세션 ${cap.active_session_count ?? 0} · <a class="es-link" style="color:var(--accent)" title="이 런타임의 커널과 각 커널을 쓰는 실행, 자원 사용량" onclick="event.stopPropagation();openTargetKernels('${t.target_id}')">커널·실행 보기</a>
       <div class="bar"><span style="width:${max ? Math.max(used / max * 100, used ? 1 : 0) : 0}%"></span></div></div>
     <div class="rt-foot"><span title="${esc(res.source || '')}${res.estimated ? ' (추정)' : ''}">${res.fresh === false ? '⚠ 오래된 측정 · ' : ''}측정 ${fmtTime(res.observed_at || h.last_check_at)}</span>
-      <span class="acts" onclick="event.stopPropagation()">${act('probe', '점검')}${act('drain', '비우기', true)}${act('activate', '활성화')}${act('disable', '사용 중지', true)}${act('purge', '제거', true)}</span></div>
+      <span class="acts" onclick="event.stopPropagation()"><button style="border-color:var(--accent);color:var(--accent)" title="이 런타임의 커널과 각 커널을 쓰는 실행, 자원 사용량" onclick="openTargetKernels('${t.target_id}')">커널</button>${act('probe', '점검')}${act('drain', '비우기', true)}${act('activate', '활성화')}${act('disable', '사용 중지', true)}${act('purge', '제거', true)}</span></div>
     ${h.last_error ? `<div style="color:var(--bad);font-size:12px;margin-top:6px">${esc(h.last_error)}</div>` : ''}
   </div>`;
 }

@@ -656,6 +656,15 @@ interface ExecutionFinalizeRequest { // unknown fields → 422
   idempotency_key: string; // 길이 ≥ 1, 길이 ≤ 255
   expected_version: number; // ≥ 0
 }
+interface ExecutionKernelUsageResponse {
+  execution_id: string;
+  target_id: string | null;
+  kernel_id: string | null;
+  kernel_state: "RUNNING" | "NO_KERNEL" | "NOT_RUNNING" | "RUNTIME_UNAVAILABLE";
+  kernel: KernelUsageResponse | null;
+  observed_at: string | null;
+  steps: RecordedStepUsageResponse;
+}
 interface ExecutionLifecycleInput { // unknown fields → 422
   operation_mode: OperationMode;
   operation_wait_timeout_seconds?: number | null; // ≥ 30
@@ -896,6 +905,13 @@ interface InlineStepSource { // unknown fields → 422
   type: "INLINE";
   content: string; // 길이 ≥ 1
 }
+interface KernelUsageResponse {
+  kernel_id: string;
+  execution_state: string | null;
+  process_count: number | null;
+  memory_bytes: number | null;
+  cpu_seconds: number | null;
+}
 interface Lifecycle {
   started_at: string | null;
   finished_at: string | null;
@@ -968,6 +984,11 @@ interface PathStepSource { // unknown fields → 422
 interface PythonExecutePayload { // unknown fields → 422
   type: "PYTHON_EXECUTE";
   source: InlineStepSource | PathStepSource;
+}
+interface RecordedStepUsageResponse {
+  peak_memory_bytes: number | null;
+  cpu_seconds: number | null;
+  measured_step_attempt_count: number;
 }
 interface RecoveryResponse {
   count: number;
