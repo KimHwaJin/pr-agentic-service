@@ -28,6 +28,11 @@ def test_browser_routes():
     route = _match("GET", f"executions/{E}/steps")
     assert route and route[1] == "execution" and route[0]["execution"] == E
     assert _access("GET", f"executions/{E}/attempts") == ("admin", False)
+    assert _access("GET", f"executions/{E}/kernel-usage") == (
+        "execution",
+        True,
+    )
+    assert _access("GET", f"runtime-targets/{E}/kernels") == ("ops", False)
     assert _access("POST", "runtime-targets") == ("ops", False)
     assert _access("POST", f"runtime-targets/{E}/drain") == ("ops", False)
     assert _access("POST", "maintenance/drain") == ("ops", False)
