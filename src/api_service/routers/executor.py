@@ -118,6 +118,14 @@ _ALLOWED: list[tuple[str, str, Sso, bool]] = [
     ("POST", rf"runtime-targets/{UUID}/activate", "ops", False),
     ("POST", rf"runtime-targets/{UUID}/disable", "ops", False),
     ("DELETE", rf"runtime-targets/{UUID}", "ops", False),
+    # a kernel no execution holds (the executor refuses any other); the id
+    # is Jupyter's, kept to plain characters so it cannot leave its path
+    (
+        "DELETE",
+        rf"runtime-targets/{UUID}/kernels/[A-Za-z0-9][A-Za-z0-9_-]{{0,254}}",
+        "ops",
+        False,
+    ),
     # executor-wide admission, and stopping running executions
     ("POST", r"maintenance/drain", "ops", False),
     ("POST", r"maintenance/activate", "ops", False),
