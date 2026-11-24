@@ -37,6 +37,14 @@ def test_browser_routes():
     assert _access("POST", f"runtime-targets/{E}/drain") == ("ops", False)
     assert _access("POST", "maintenance/drain") == ("ops", False)
     assert _access("DELETE", f"runtime-targets/{E}") == ("ops", False)
+    assert _access("DELETE", f"runtime-targets/{E}/kernels/{E}") == (
+        "ops",
+        False,
+    )
+    for kernel in ["..", ".", "a/b", "", "a" * 256]:
+        assert (
+            _match("DELETE", f"runtime-targets/{E}/kernels/{kernel}") is None
+        )
     for method, path in [
         ("GET", f"executions/{E}/../../maintenance"),
         ("GET", "executions/not-a-uuid"),
