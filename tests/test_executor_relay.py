@@ -66,7 +66,12 @@ def test_key_callers_may_write_but_not_operate():
     ]:
         route = _access(method, path)
         assert route is not None and route[1] is True, path
-        assert route[0] is None or method == "GET"  # browser: reads only
+        # browser: reads only, but an administrator's cancel
+        assert (
+            route[0] is None
+            or method == "GET"
+            or (route[0] == "cancel" and path.endswith("/cancel"))
+        )
     for path in [
         f"executions/{E}/diagnostics",
         "runtime-targets",
@@ -468,3 +473,113 @@ def test_event_streams_are_for_administrators_only():
         # key callers: not a route of theirs (the relay answers 404)
         route = _match("GET", path)
         assert route is not None and route[2] is False
+
+
+# --- an administrator's cancel (the browser's one execution write) ----------
+
+
+def _cancel(
+    monkeypatch,
+    query: bytes = b"",
+    role: str = "admin",
+    waiting: str | None = None,
+    cancel_status: int = 202,
+):
+    """(response, executor requests, runs cancelled here)."""
+    sent: list[httpx.Request] = []
+    runs: list[tuple[str, str]] = []
+
+    def handle(request: httpx.Request) -> httpx.Response:
+        sent.append(request)
+        if request.method == "GET":
+            context = {"user_id": "e100", "project_id": "p-1"}
+            return httpx.Response(200, json={"context": context})
+        if cancel_status != 202:
+            error = {"code": "INVALID_STATE_TRANSITION", "message": "over"}
+            return httpx.Response(cancel_status, json={"error": error})
+        return httpx.Response(202, json={"execution_id": E})
+
+    services = _services([])
+    services.executor.http = httpx.AsyncClient(
+        base_url="http://executor/api/v1",
+        transport=httpx.MockTransport(handle),
+    )
+
+    async def waiting_run(services, execution_id):
+        return waiting
+
+    async def request_cancel(services, run_id, reason):
+        assert not [r for r in sent if r.method == "POST"]  # run first
+        runs.append((run_id, reason))
+
+    monkeypatch.setattr(relay, "_waiting_run", waiting_run)
+    monkeypatch.setattr(relay, "request_cancel", request_cancel)
+    path = f"executions/{E}/cancel"
+    match = _match("POST", path)
+    assert match is not None and match[1] == "cancel"
+    request = _request("POST", path, {})
+    request.scope["query_string"] = query
+    user = cast(Any, SimpleNamespace(id="a-1", role=role))
+    response = asyncio.run(
+        relay._for_user(cast(Any, services), request, path, match, user)
+    )
+    return response, sent, runs
+
+
+def test_admin_cancels_an_execution_in_its_owners_name(monkeypatch):
+    response, sent, runs = _cancel(monkeypatch)
+    assert response.status_code == 202
+    assert json.loads(response.body) == {
+        "execution_id": E,
+        "cancelled_run_id": None,
+    }
+    read, cancel = sent
+    assert (read.method, read.url.path) == (
+        "GET",
+        f"/api/v1/executions/{E}",
+    )
+    assert "x-user-id" not in read.headers
+    assert cancel.url.path == f"/api/v1/executions/{E}/cancel"
+    # the executor takes a cancel from the execution's user only
+    assert cancel.headers["x-user-id"] == "e100"
+    assert cancel.headers["x-project-id"] == "p-1"
+    assert cancel.headers["x-tenant-id"] == "pr-agentic"
+    assert cancel.headers["x-api-key"] == "exe_ours"
+    body = json.loads(cancel.content)
+    assert body["idempotency_key"] == f"admin-cancel:{E}"
+    assert "a-1" in body["reason"]  # who asked
+    assert runs == []
+
+
+def test_admin_cancels_in_another_tenant(monkeypatch):
+    _, sent, _ = _cancel(monkeypatch, b"tenant_id=partner-a", waiting="r-1")
+    assert [r.headers["x-tenant-id"] for r in sent] == ["partner-a"] * 2
+    with pytest.raises(HTTPException) as err:
+        _cancel(monkeypatch, b"tenant_id=Bad_Tenant")
+    assert err.value.status_code == 422
+
+
+def test_cancel_stops_the_chat_run_waiting_for_the_execution(monkeypatch):
+    for query in (b"", b"tenant_id=pr-agentic"):
+        response, sent, runs = _cancel(monkeypatch, query, waiting="r-1")
+        assert [r[0] for r in runs] == ["r-1"]
+        assert json.loads(response.body)["cancelled_run_id"] == "r-1"
+        assert len(sent) == 2
+    # another tenant's executions are no runs of ours
+    assert _cancel(monkeypatch, b"tenant_id=partner-a", waiting="r-1")[2] == []
+
+
+def test_cancel_is_for_administrators_only(monkeypatch):
+    with pytest.raises(HTTPException) as err:
+        _cancel(monkeypatch, role="user")
+    assert err.value.status_code == 403
+
+
+def test_cancel_of_an_execution_already_over_is_the_executors_409(
+    monkeypatch,
+):
+    response, _, _ = _cancel(monkeypatch, cancel_status=409)
+    assert response.status_code == 409
+    assert json.loads(response.body)["error"]["code"] == (
+        "INVALID_STATE_TRANSITION"
+    )
