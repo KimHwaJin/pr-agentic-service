@@ -1,0 +1,139 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1500" height="800" viewBox="0 0 1500 800" font-family="'Noto Sans KR','Apple SD Gothic Neo','Malgun Gothic','WenQuanYi Zen Hei',sans-serif" xmlns:c2pa="http://c2pa.org/manifest">
+<defs><marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#333"/></marker></defs>
+<rect width="1500" height="800" fill="#ffffff"/>
+<text x="40" y="38" font-size="18" font-weight="bold">논리 ERD (전체)</text>
+<rect x="60" y="90" width="190" height="50" rx="6" fill="#dae8fc" stroke="#6c8ebf"/>
+<text x="155.0" y="111.1" font-size="12" text-anchor="middle" font-weight="bold">workflow_query_vectors</text>
+<text x="155.0" y="127.3" font-size="10" text-anchor="middle">워크플로우 검색 벡터</text>
+<rect x="300" y="90" width="190" height="50" rx="6" fill="#dae8fc" stroke="#6c8ebf"/>
+<text x="395.0" y="111.1" font-size="12" text-anchor="middle" font-weight="bold">workflows</text>
+<text x="395.0" y="127.3" font-size="10" text-anchor="middle">워크플로우</text>
+<rect x="540" y="90" width="190" height="50" rx="6" fill="#dae8fc" stroke="#6c8ebf"/>
+<text x="635.0" y="111.1" font-size="12" text-anchor="middle" font-weight="bold">users</text>
+<text x="635.0" y="127.3" font-size="10" text-anchor="middle">사용자</text>
+<rect x="780" y="90" width="190" height="50" rx="6" fill="#dae8fc" stroke="#6c8ebf"/>
+<text x="875.0" y="111.1" font-size="12" text-anchor="middle" font-weight="bold">batch_report_jobs</text>
+<text x="875.0" y="127.3" font-size="10" text-anchor="middle">배치 리포트 작업</text>
+<rect x="1020" y="90" width="190" height="50" rx="6" fill="#dae8fc" stroke="#6c8ebf"/>
+<text x="1115.0" y="111.1" font-size="12" text-anchor="middle" font-weight="bold">batch_report_events</text>
+<text x="1115.0" y="127.3" font-size="10" text-anchor="middle">배치 리포트 이벤트</text>
+<rect x="1260" y="90" width="190" height="50" rx="6" fill="#dae8fc" stroke="#6c8ebf"/>
+<text x="1355.0" y="111.1" font-size="12" text-anchor="middle" font-weight="bold">api_clients</text>
+<text x="1355.0" y="127.3" font-size="10" text-anchor="middle">API 클라이언트</text>
+<rect x="60" y="230" width="190" height="50" rx="6" fill="#dae8fc" stroke="#6c8ebf"/>
+<text x="155.0" y="251.1" font-size="12" text-anchor="middle" font-weight="bold">memory_history</text>
+<text x="155.0" y="267.3" font-size="10" text-anchor="middle">메모리 변경 이력</text>
+<rect x="300" y="230" width="190" height="50" rx="6" fill="#dae8fc" stroke="#6c8ebf"/>
+<text x="395.0" y="251.1" font-size="12" text-anchor="middle" font-weight="bold">projects</text>
+<text x="395.0" y="267.3" font-size="10" text-anchor="middle">프로젝트</text>
+<rect x="540" y="230" width="190" height="50" rx="6" fill="#dae8fc" stroke="#6c8ebf"/>
+<text x="635.0" y="251.1" font-size="12" text-anchor="middle" font-weight="bold">project_members</text>
+<text x="635.0" y="267.3" font-size="10" text-anchor="middle">프로젝트 구성원</text>
+<rect x="60" y="330" width="190" height="50" rx="6" fill="#dae8fc" stroke="#6c8ebf"/>
+<text x="155.0" y="351.1" font-size="12" text-anchor="middle" font-weight="bold">memory_extraction_state</text>
+<text x="155.0" y="367.3" font-size="10" text-anchor="middle">메모리 정리 상태</text>
+<rect x="60" y="400" width="190" height="50" rx="6" fill="#dae8fc" stroke="#6c8ebf"/>
+<text x="155.0" y="421.1" font-size="12" text-anchor="middle" font-weight="bold">images</text>
+<text x="155.0" y="437.3" font-size="10" text-anchor="middle">이미지</text>
+<rect x="300" y="400" width="190" height="50" rx="6" fill="#dae8fc" stroke="#6c8ebf"/>
+<text x="395.0" y="421.1" font-size="12" text-anchor="middle" font-weight="bold">sessions</text>
+<text x="395.0" y="437.3" font-size="10" text-anchor="middle">채팅 세션</text>
+<rect x="540" y="400" width="190" height="50" rx="6" fill="#dae8fc" stroke="#6c8ebf"/>
+<text x="635.0" y="421.1" font-size="12" text-anchor="middle" font-weight="bold">gaia_sessions</text>
+<text x="635.0" y="437.3" font-size="10" text-anchor="middle">gaia 세션 대응</text>
+<rect x="60" y="540" width="190" height="50" rx="6" fill="#dae8fc" stroke="#6c8ebf"/>
+<text x="155.0" y="561.1" font-size="12" text-anchor="middle" font-weight="bold">messages</text>
+<text x="155.0" y="577.3" font-size="10" text-anchor="middle">메시지</text>
+<rect x="300" y="540" width="190" height="50" rx="6" fill="#dae8fc" stroke="#6c8ebf"/>
+<text x="395.0" y="561.1" font-size="12" text-anchor="middle" font-weight="bold">runs</text>
+<text x="395.0" y="577.3" font-size="10" text-anchor="middle">실행</text>
+<rect x="540" y="540" width="190" height="50" rx="6" fill="#dae8fc" stroke="#6c8ebf"/>
+<text x="635.0" y="561.1" font-size="12" text-anchor="middle" font-weight="bold">run_requests</text>
+<text x="635.0" y="577.3" font-size="10" text-anchor="middle">실행 요청 키</text>
+<rect x="60" y="680" width="190" height="50" rx="6" fill="#dae8fc" stroke="#6c8ebf"/>
+<text x="155.0" y="701.1" font-size="12" text-anchor="middle" font-weight="bold">run_events</text>
+<text x="155.0" y="717.3" font-size="10" text-anchor="middle">실행 이벤트</text>
+<rect x="300" y="680" width="190" height="50" rx="6" fill="#dae8fc" stroke="#6c8ebf"/>
+<text x="395.0" y="701.1" font-size="12" text-anchor="middle" font-weight="bold">code_sources</text>
+<text x="395.0" y="717.3" font-size="10" text-anchor="middle">코드 파일 기록</text>
+<rect x="540" y="680" width="190" height="50" rx="6" fill="#dae8fc" stroke="#6c8ebf"/>
+<text x="635.0" y="701.1" font-size="12" text-anchor="middle" font-weight="bold">executor_inbox</text>
+<text x="635.0" y="717.3" font-size="10" text-anchor="middle">executor 이벤트 보관함</text>
+<text x="60" y="779.9" font-size="11" text-anchor="start">실선: 외래키(FK) 제약이 있는 관계  /  점선: 제약 없이 값으로만 참조하는 관계  /  두 줄 표시 쪽이 부모(1), 까치발 쪽이 자식(0..N)</text>
+<text x="820" y="297.0" font-size="11" text-anchor="start">영역</text>
+<text x="820" y="311.9" font-size="11" text-anchor="start">사용자와 프로젝트: users, projects, project_members</text>
+<text x="820" y="326.7" font-size="11" text-anchor="start">대화: sessions, messages, images</text>
+<text x="820" y="341.6" font-size="11" text-anchor="start">실행: runs, run_requests, run_events</text>
+<text x="820" y="356.4" font-size="11" text-anchor="start">executor 연동: executor_inbox, code_sources</text>
+<text x="820" y="371.3" font-size="11" text-anchor="start">프로젝트 메모리: memory_history, memory_extraction_state</text>
+<text x="820" y="386.1" font-size="11" text-anchor="start">워크플로우: workflows, workflow_query_vectors</text>
+<text x="820" y="401.0" font-size="11" text-anchor="start">배치 리포트: batch_report_jobs, batch_report_events</text>
+<text x="820" y="415.8" font-size="11" text-anchor="start">서비스 간 인증: api_clients</text>
+<text x="820" y="430.7" font-size="11" text-anchor="start">gaia 연동: gaia_sessions</text>
+<path d="M250.0,115.0 L300.0,115.0" fill="none" stroke="#333333" stroke-width="1.2"/>
+<circle cx="264.0" cy="115.0" r="3.5" fill="#fff" stroke="#333333"/><path d="M260.0,115.0 L250.0,110.0 M260.0,115.0 L250.0,120.0" fill="none" stroke="#333333" stroke-width="1.2"/>
+<path d="M294.0,120.0 L294.0,110.0 M290.0,120.0 L290.0,110.0" fill="none" stroke="#333333" stroke-width="1.2"/>
+<path d="M490.0,115.0 L540.0,115.0" fill="none" stroke="#333333" stroke-width="1.2"/>
+<circle cx="504.0" cy="115.0" r="3.5" fill="#fff" stroke="#333333"/><path d="M500.0,115.0 L490.0,110.0 M500.0,115.0 L490.0,120.0" fill="none" stroke="#333333" stroke-width="1.2"/>
+<path d="M534.0,120.0 L534.0,110.0 M530.0,120.0 L530.0,110.0" fill="none" stroke="#333333" stroke-width="1.2"/>
+<path d="M780.0,115.0 L730.0,115.0" fill="none" stroke="#333333" stroke-width="1.2" stroke-dasharray="5 4"/>
+<circle cx="766.0" cy="115.0" r="3.5" fill="#fff" stroke="#333333"/><path d="M770.0,115.0 L780.0,120.0 M770.0,115.0 L780.0,110.0" fill="none" stroke="#333333" stroke-width="1.2"/>
+<path d="M736.0,110.0 L736.0,120.0 M740.0,110.0 L740.0,120.0" fill="none" stroke="#333333" stroke-width="1.2"/>
+<path d="M1020.0,115.0 L970.0,115.0" fill="none" stroke="#333333" stroke-width="1.2" stroke-dasharray="5 4"/>
+<circle cx="1006.0" cy="115.0" r="3.5" fill="#fff" stroke="#333333"/><path d="M1010.0,115.0 L1020.0,120.0 M1010.0,115.0 L1020.0,110.0" fill="none" stroke="#333333" stroke-width="1.2"/>
+<path d="M976.0,110.0 L976.0,120.0 M980.0,110.0 L980.0,120.0" fill="none" stroke="#333333" stroke-width="1.2"/>
+<path d="M1355.0,90.0 L1355.0,62.0 L635.0,62.0 L635.0,90.0" fill="none" stroke="#333333" stroke-width="1.2" stroke-dasharray="5 4"/>
+<circle cx="1355.0" cy="76.0" r="3.5" fill="#fff" stroke="#333333"/><path d="M1355.0,80.0 L1350.0,90.0 M1355.0,80.0 L1360.0,90.0" fill="none" stroke="#333333" stroke-width="1.2"/>
+<path d="M630.0,84.0 L640.0,84.0 M630.0,80.0 L640.0,80.0" fill="none" stroke="#333333" stroke-width="1.2"/>
+<path d="M395.0,230.0 L395.0,185.0 L578.0,185.0 L578.0,140.0" fill="none" stroke="#333333" stroke-width="1.2"/>
+<circle cx="395.0" cy="216.0" r="3.5" fill="#fff" stroke="#333333"/><path d="M395.0,220.0 L390.0,230.0 M395.0,220.0 L400.0,230.0" fill="none" stroke="#333333" stroke-width="1.2"/>
+<path d="M583.0,146.0 L573.0,146.0 M583.0,150.0 L573.0,150.0" fill="none" stroke="#333333" stroke-width="1.2"/>
+<path d="M635.0,230.0 L635.0,140.0" fill="none" stroke="#333333" stroke-width="1.2"/>
+<circle cx="635.0" cy="216.0" r="3.5" fill="#fff" stroke="#333333"/><path d="M635.0,220.0 L630.0,230.0 M635.0,220.0 L640.0,230.0" fill="none" stroke="#333333" stroke-width="1.2"/>
+<path d="M640.0,146.0 L630.0,146.0 M640.0,150.0 L630.0,150.0" fill="none" stroke="#333333" stroke-width="1.2"/>
+<path d="M540.0,255.0 L490.0,255.0" fill="none" stroke="#333333" stroke-width="1.2"/>
+<circle cx="526.0" cy="255.0" r="3.5" fill="#fff" stroke="#333333"/><path d="M530.0,255.0 L540.0,260.0 M530.0,255.0 L540.0,250.0" fill="none" stroke="#333333" stroke-width="1.2"/>
+<path d="M496.0,250.0 L496.0,260.0 M500.0,250.0 L500.0,260.0" fill="none" stroke="#333333" stroke-width="1.2"/>
+<path d="M250.0,245.0 L300.0,245.0" fill="none" stroke="#333333" stroke-width="1.2" stroke-dasharray="5 4"/>
+<circle cx="264.0" cy="245.0" r="3.5" fill="#fff" stroke="#333333"/><path d="M260.0,245.0 L250.0,240.0 M260.0,245.0 L250.0,250.0" fill="none" stroke="#333333" stroke-width="1.2"/>
+<path d="M294.0,250.0 L294.0,240.0 M290.0,250.0 L290.0,240.0" fill="none" stroke="#333333" stroke-width="1.2"/>
+<path d="M250.0,355.0 L275.0,355.0 L275.0,268.0 L300.0,268.0" fill="none" stroke="#333333" stroke-width="1.2" stroke-dasharray="5 4"/>
+<circle cx="264.0" cy="355.0" r="3.5" fill="#fff" stroke="#333333"/><path d="M256.0,350.0 L256.0,360.0" fill="none" stroke="#333333" stroke-width="1.2"/>
+<path d="M294.0,273.0 L294.0,263.0 M290.0,273.0 L290.0,263.0" fill="none" stroke="#333333" stroke-width="1.2"/>
+<path d="M395.0,400.0 L395.0,280.0" fill="none" stroke="#333333" stroke-width="1.2"/>
+<circle cx="395.0" cy="386.0" r="3.5" fill="#fff" stroke="#333333"/><path d="M395.0,390.0 L390.0,400.0 M395.0,390.0 L400.0,400.0" fill="none" stroke="#333333" stroke-width="1.2"/>
+<path d="M400.0,286.0 L390.0,286.0 M400.0,290.0 L390.0,290.0" fill="none" stroke="#333333" stroke-width="1.2"/>
+<path d="M490.0,412.0 L515.0,412.0 L515.0,200.0 L606.0,200.0 L606.0,140.0" fill="none" stroke="#333333" stroke-width="1.2"/>
+<circle cx="504.0" cy="412.0" r="3.5" fill="#fff" stroke="#333333"/><path d="M500.0,412.0 L490.0,407.0 M500.0,412.0 L490.0,417.0" fill="none" stroke="#333333" stroke-width="1.2"/>
+<path d="M611.0,146.0 L601.0,146.0 M611.0,150.0 L601.0,150.0" fill="none" stroke="#333333" stroke-width="1.2"/>
+<path d="M540.0,436.0 L490.0,436.0" fill="none" stroke="#333333" stroke-width="1.2"/>
+<circle cx="526.0" cy="436.0" r="3.5" fill="#fff" stroke="#333333"/><path d="M530.0,436.0 L540.0,441.0 M530.0,436.0 L540.0,431.0" fill="none" stroke="#333333" stroke-width="1.2"/>
+<path d="M496.0,431.0 L496.0,441.0 M500.0,431.0 L500.0,441.0" fill="none" stroke="#333333" stroke-width="1.2"/>
+<path d="M730.0,425.0 L750.0,425.0 L750.0,170.0 L692.0,170.0 L692.0,140.0" fill="none" stroke="#333333" stroke-width="1.2"/>
+<circle cx="744.0" cy="425.0" r="3.5" fill="#fff" stroke="#333333"/><path d="M740.0,425.0 L730.0,420.0 M740.0,425.0 L730.0,430.0" fill="none" stroke="#333333" stroke-width="1.2"/>
+<path d="M697.0,146.0 L687.0,146.0 M697.0,150.0 L687.0,150.0" fill="none" stroke="#333333" stroke-width="1.2"/>
+<path d="M250.0,415.0 L300.0,415.0" fill="none" stroke="#333333" stroke-width="1.2" stroke-dasharray="5 4"/>
+<circle cx="264.0" cy="415.0" r="3.5" fill="#fff" stroke="#333333"/><path d="M260.0,415.0 L250.0,410.0 M260.0,415.0 L250.0,420.0" fill="none" stroke="#333333" stroke-width="1.2"/>
+<path d="M294.0,420.0 L294.0,410.0 M290.0,420.0 L290.0,410.0" fill="none" stroke="#333333" stroke-width="1.2"/>
+<path d="M155.0,540.0 L155.0,495.0 L275.0,495.0 L275.0,438.0 L300.0,438.0" fill="none" stroke="#333333" stroke-width="1.2"/>
+<circle cx="155.0" cy="526.0" r="3.5" fill="#fff" stroke="#333333"/><path d="M155.0,530.0 L150.0,540.0 M155.0,530.0 L160.0,540.0" fill="none" stroke="#333333" stroke-width="1.2"/>
+<path d="M294.0,443.0 L294.0,433.0 M290.0,443.0 L290.0,433.0" fill="none" stroke="#333333" stroke-width="1.2"/>
+<path d="M395.0,540.0 L395.0,450.0" fill="none" stroke="#333333" stroke-width="1.2"/>
+<circle cx="395.0" cy="526.0" r="3.5" fill="#fff" stroke="#333333"/><path d="M395.0,530.0 L390.0,540.0 M395.0,530.0 L400.0,540.0" fill="none" stroke="#333333" stroke-width="1.2"/>
+<path d="M400.0,456.0 L390.0,456.0 M400.0,460.0 L390.0,460.0" fill="none" stroke="#333333" stroke-width="1.2"/>
+<path d="M635.0,540.0 L635.0,495.0 L440.0,495.0 L440.0,450.0" fill="none" stroke="#333333" stroke-width="1.2" stroke-dasharray="5 4"/>
+<circle cx="635.0" cy="526.0" r="3.5" fill="#fff" stroke="#333333"/><path d="M635.0,530.0 L630.0,540.0 M635.0,530.0 L640.0,540.0" fill="none" stroke="#333333" stroke-width="1.2"/>
+<path d="M445.0,456.0 L435.0,456.0 M445.0,460.0 L435.0,460.0" fill="none" stroke="#333333" stroke-width="1.2"/>
+<path d="M250.0,555.0 L300.0,555.0" fill="none" stroke="#333333" stroke-width="1.2" stroke-dasharray="5 4"/>
+<circle cx="264.0" cy="555.0" r="3.5" fill="#fff" stroke="#333333"/><path d="M260.0,555.0 L250.0,550.0 M260.0,555.0 L250.0,560.0" fill="none" stroke="#333333" stroke-width="1.2"/>
+<path d="M294.0,560.0 L294.0,550.0 M290.0,560.0 L290.0,550.0" fill="none" stroke="#333333" stroke-width="1.2"/>
+<path d="M250.0,705.0 L275.0,705.0 L275.0,578.0 L300.0,578.0" fill="none" stroke="#333333" stroke-width="1.2" stroke-dasharray="5 4"/>
+<circle cx="264.0" cy="705.0" r="3.5" fill="#fff" stroke="#333333"/><path d="M260.0,705.0 L250.0,700.0 M260.0,705.0 L250.0,710.0" fill="none" stroke="#333333" stroke-width="1.2"/>
+<path d="M294.0,583.0 L294.0,573.0 M290.0,583.0 L290.0,573.0" fill="none" stroke="#333333" stroke-width="1.2"/>
+<path d="M395.0,680.0 L395.0,590.0" fill="none" stroke="#333333" stroke-width="1.2" stroke-dasharray="5 4"/>
+<circle cx="395.0" cy="666.0" r="3.5" fill="#fff" stroke="#333333"/><path d="M395.0,670.0 L390.0,680.0 M395.0,670.0 L400.0,680.0" fill="none" stroke="#333333" stroke-width="1.2"/>
+<path d="M400.0,596.0 L390.0,596.0 M400.0,600.0 L390.0,600.0" fill="none" stroke="#333333" stroke-width="1.2"/>
+<path d="M540.0,705.0 L515.0,705.0 L515.0,565.0 L490.0,565.0" fill="none" stroke="#333333" stroke-width="1.2" stroke-dasharray="5 4"/>
+<circle cx="526.0" cy="705.0" r="3.5" fill="#fff" stroke="#333333"/><path d="M530.0,705.0 L540.0,710.0 M530.0,705.0 L540.0,700.0" fill="none" stroke="#333333" stroke-width="1.2"/>
+<path d="M496.0,560.0 L496.0,570.0 M500.0,560.0 L500.0,570.0" fill="none" stroke="#333333" stroke-width="1.2"/>
+<metadata><c2pa:manifest>AAAWgmp1bWIAAAAeanVtZGMycGEAEQAQgAAAqgA4m3EDYzJwYQAAABZcanVtYgAAAEdqdW1kYzJtYQARABCAAACqADibcQN1cm46YzJwYTo4Y2QxODc4NC0wMDg5LTRhNDMtYTFiYS1mZjg0MzkyNzU4OWIAAAADl2p1bWIAAAApanVtZGMyYXMAEQAQgAAAqgA4m3EDYzJwYS5hc3NlcnRpb25zAAAAALxqdW1iAAAARGp1bWRjYm9yABEAEIAAAKoAOJtxE2MycGEuaW5ncmVkaWVudC52MwAAAAAYYzJzaNTR+hqevjtp5VQOocwhs28AAABwY2JvcqNpZGM6Zm9ybWF0bWltYWdlL3N2Zyt4bWxqaW5zdGFuY2VJRHgseG1wOmlpZDo2ZDU3OGY1OC1kMzE4LTQzYTYtODdkNC0wMTI4OTcwNjk0NWRscmVsYXRpb25zaGlwaHBhcmVudE9mAAAB4mp1bWIAAABBanVtZGNib3IAEQAQgAAAqgA4m3ETYzJwYS5hY3Rpb25zLnYyAAAAABhjMnNoAH57nZDZl85xXWtNH1HdigAAAZljYm9yomdhY3Rpb25zgqJmYWN0aW9ua2MycGEub3BlbmVkanBhcmFtZXRlcnOha2luZ3JlZGllbnRzgaJjdXJseC1zZWxmI2p1bWJmPWMycGEuYXNzZXJ0aW9ucy9jMnBhLmluZ3JlZGllbnQudjNkaGFzaFgg9JMHhC41k8Sanvr5gPL/R+AORhBKAHc/54KDdvBXlOOkZmFjdGlvbngdY29tLmFudGhyb3BpYy5jbGF1ZGUucHJvdmlkZWRqcGFyYW1ldGVyc6F4H2NvbS5hbnRocm9waWMub3JpZ2luLWNvbmZpZGVuY2VndW5rbm93bmtkZXNjcmlwdGlvbnhmQ2xhdWRlIHByb3ZpZGVkIHRoaXMgZmlsZSBhdCB0aGUgcmVxdWVzdCBvZiBhIHVzZXIgYW5kIG1heSBoYXZlIGNyZWF0ZWQgb3IgbW9kaWZpZWQgdGhlIGZpbGUgY29udGVudHMubXNvZnR3YXJlQWdlbnShZG5hbWVmQ2xhdWRlcmFsbEFjdGlvbnNJbmNsdWRlZPUAAADIanVtYgAAAEBqdW1kY2JvcgARABCAAACqADibcRNjMnBhLmhhc2guZGF0YQAAAAAYYzJzaDqC7pvX1t+TaKytwrSs+ukAAACAY2JvcqVjYWxnZnNoYTI1NmNwYWRMAAAAAAAAAAAAAAAAZGhhc2hYIB/kQz2jTQKTRnRVWtdjUYKkeBA6MYx7R8NF79cGYxr0ZG5hbWVuanVtYmYgbWFuaWZlc3RqZXhjbHVzaW9uc4GiZXN0YXJ0GT46Zmxlbmd0aBkeBAAAAj5qdW1iAAAAJ2p1bWRjMmNsABEAEIAAAKoAOJtxA2MycGEuY2xhaW0udjIAAAACD2Nib3KlY2FsZ2ZzaGEyNTZpc2lnbmF0dXJleE1zZWxmI2p1bWJmPS9jMnBhL3VybjpjMnBhOjhjZDE4Nzg0LTAwODktNGE0My1hMWJhLWZmODQzOTI3NTg5Yi9jMnBhLnNpZ25hdHVyZWppbnN0YW5jZUlEeCx4bXA6aWlkOjBlYzY5NmVkLTQwNTYtNGY2NC04MzYxLTY5M2QwMDg1ZTI3NXJjcmVhdGVkX2Fzc2VydGlvbnODomN1cmx4LXNlbGYjanVtYmY9YzJwYS5hc3NlcnRpb25zL2MycGEuaW5ncmVkaWVudC52M2RoYXNoWCD0kweELjWTxJqe+vmA8v9H4A5GEEoAdz/ngoN28FeU46JjdXJseCpzZWxmI2p1bWJmPWMycGEuYXNzZXJ0aW9ucy9jMnBhLmFjdGlvbnMudjJkaGFzaFggzR7PJQhK8OPmKYBDfkFGvOagI5bLcao6J0/3/s8lxAOiY3VybHgpc2VsZiNqdW1iZj1jMnBhLmFzc2VydGlvbnMvYzJwYS5oYXNoLmRhdGFkaGFzaFggNP6M0qam6Ov42U8xwXr1jrJ7BEkIyawlc8iZchmsNk90Y2xhaW1fZ2VuZXJhdG9yX2luZm+jZG5hbWVvQW50aHJvcGljIEZpbGVzZ3ZlcnNpb25lMS4wLjBrc3BlY1ZlcnNpb25lMi40LjAAABA4anVtYgAAAChqdW1kYzJjcwARABCAAACqADibcQNjMnBhLnNpZ25hdHVyZQAAABAIY2JvctKEWQISogEmGCFZAgowggIGMIIBjaADAgECAhRA5aAK7sI50L64g/oGQgU9Z1UTADAKBggqhkjOPQQDAzBJMRcwFQYDVQQKEw5BbnRocm9waWMsIFBCQzEuMCwGA1UEAxMlQW50aHJvcGljIENvbnRlbnQgQ3JlZGVudGlhbHMgUm9vdCBDQTAeFw0yNjA4MDcxODQzNTZaFw0yODA4MDYxOTQzNTZaMEQxFzAVBgNVBAoTDkFudGhyb3BpYywgUEJDMSkwJwYDVQQDEyBBbnRocm9waWMgQ2xhdWRlIENvbnRlbnQgU2lnbmluZzBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABJh6CmvLUBgFFNU0vUKlOVtE6djd17L5SuwX0LemFisBM3dkd/3cyjxFA3Qo5S46fX0/ihY0VZ7mfb9KF703t5OjWDBWMA4GA1UdDwEB/wQEAwIHgDAVBgNVHSUEDjAMBgorBgEEAYPoXgIBMAwGA1UdEwEB/wQCMAAwHwYDVR0jBBgwFoAUzlHiBIFOZFsj+OPEz5o+nMHXXMIwCgYIKoZIzj0EAwMDZwAwZAIwMXMdFJ4BetLLVY7ORuE9noqbbAZOZn/aArXyTwFAZfKrPzxF2vPoJNf1+UCdg1XGAjBwX1zd9WGqYkqmL5SFqw1QySjr1zJfpJM9+1rdDwSPLMOPOjKuiXjoU/pUUeG9RwmhY3BhZFkNngAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAPZYQFG6jVrJALY5sKVMCpQz4/ZeL08sercBmsa8L57OhJGQ3cuthzfwdJqiummh7Aqt9VbDBAhhdV3CFTl+682KBQo=</c2pa:manifest></metadata></svg>
