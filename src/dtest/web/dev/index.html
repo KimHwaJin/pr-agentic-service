@@ -2630,7 +2630,9 @@ async function execKernel(base) {
     return `<tr><td>${p.step?.sequence ?? ''}</td><td>${l.tool_name ? `${esc(l.skill_name || '')} / <b>${esc(l.tool_name)}</b>` : short(p.step?.id)}</td><td>${p.attempt?.number ?? ''}</td><td>${statusBadge(p.status)}</td>
       <td>${us?.peak_memory_bytes != null ? `${memText(us.peak_memory_bytes)}${useBar(us.peak_memory_bytes, peak)}` : '<span class="muted">측정 없음</span>'}</td><td>${us?.cpu_seconds != null ? cpuSec(us.cpu_seconds) : '<span class="muted">-</span>'}</td><td style="white-space:nowrap">${fmtTime(v.occurred_at)}</td></tr>`;
   }).join('');
-  return `${chain(nodes)}
+  const notice = SYS.execNotice || ''; SYS.execNotice = '';
+  const cancel = execCancelButton(e.execution_id, SYS.execTenant || '', e.state?.status, k?.memory_bytes, k?.cpu_seconds, 'exec');
+  return `${notice}${chain(nodes)}${cancel ? `<div class="toolbar" style="justify-content:flex-end;margin-top:-4px"><span class="muted" style="font-size:12px">자원을 지나치게 쓰는 실행을 멈춥니다 (관리자).</span>${cancel}</div>` : ''}
     <div class="cards"><div class="stat"><b>지금 커널</b>${k ? `메모리 ${memText(k.memory_bytes)} · CPU 누적 ${cpuSec(k.cpu_seconds)} · 프로세스 ${k.process_count ?? '-'}개` : esc(KERNEL_HINT[u.kernel_state] || '값 없음')}
         <div class="muted" style="margin-top:4px">${u.observed_at ? `${fmtTime(u.observed_at)}에 런타임에서 읽음` : '런타임에서 읽지 않음'} <a class="es-link" onclick="execTab('kernel')">다시 읽기</a></div></div>
       <div class="stat"><b>끝난 단계의 기록</b>피크 메모리 ${memText(rec.peak_memory_bytes)} · CPU 합계 ${cpuSec(rec.cpu_seconds)}
@@ -2674,13 +2676,55 @@ async function openTargetKernels(id, opts = {}) {
     const open = k.execution_id ? `openExecution('${esc(k.execution_id)}', '${esc(k.tenant_id || '')}', { tab: 'kernel', back: { target: '${esc(id)}', kernel: '${esc(k.kernel_id)}' } })` : '';
     return `<tr class="${open ? 'click' : ''} ${k.kernel_id === SYS.tk.kernel ? 'hl' : ''}" ${open ? `onclick="${open}"` : ''}><td>${short(k.kernel_id)}</td><td>${esc(JUPYTER_STATE[k.execution_state] || k.execution_state || '-')}</td><td>${k.process_count ?? '-'}</td>
       <td>${memText(k.memory_bytes)}${k.memory_bytes != null ? useBar(k.memory_bytes, top) : ''}</td><td>${cpuSec(k.cpu_seconds)}</td>
-      <td>${k.execution_id ? `${short(k.execution_id)} <span class="es-link">열기</span>` : `<span style="color:var(--bad)" title="이 커널을 쓰는 실행이 없습니다">남겨진 커널</span> <span class="acts" style="display:inline-flex"><button class="danger" title="실행이 잡고 있지 않고 15분 넘게 쓰이지 않은 커널만 지워집니다" onclick="deleteKernel('${esc(id)}', '${esc(k.kernel_id)}', ${k.memory_bytes ?? 'null'})">삭제</button></span>`}</td>
+      <td>${k.execution_id ? `${short(k.execution_id)} <span class="es-link">열기</span>${execCancelButton(k.execution_id, k.tenant_id || '', k.execution_status, k.memory_bytes, k.cpu_seconds, 'target')}` : `<span style="color:var(--bad)" title="이 커널을 쓰는 실행이 없습니다">남겨진 커널</span> <span class="acts" style="display:inline-flex"><button class="danger" title="실행이 잡고 있지 않고 15분 넘게 쓰이지 않은 커널만 지워집니다" onclick="deleteKernel('${esc(id)}', '${esc(k.kernel_id)}', ${k.memory_bytes ?? 'null'})">삭제</button></span>`}</td>
       <td class="mono">${esc(k.tenant_id || '-')}</td><td>${k.execution_status ? statusBadge(k.execution_status) : '<span class="muted">-</span>'}</td></tr>`;
   }).join('');
   $('tkBody').innerHTML = `${head}${SYS.tk.notice}${chain(nodes)}
     <table class="tbl"><thead><tr><th>커널</th><th>커널 상태</th><th>프로세스</th><th>메모리</th><th>CPU 누적</th><th>Execution</th><th>tenant</th><th>실행 상태</th></tr></thead>
       <tbody>${rows || '<tr><td colspan="8" class="muted">지금 도는 커널이 없습니다.</td></tr>'}</tbody></table>
-    <div class="muted" style="font-size:12px;margin-top:8px;line-height:1.6">${fmtTime(ks.observed_at)}에 런타임에서 읽음 · ${again}<br>행을 누르면 그 커널을 쓰는 실행의 커널·자원으로 갑니다. 실행이 쓰는 커널은 여기서 지울 수 없고, 그 실행을 취소하면 정리됩니다. 메모리는 커널과 자식 프로세스의 RSS 합이고, 막대는 ${cap ? '런타임 전체 메모리' : '가장 큰 커널'} 대비입니다. 실행이 없는 커널은 남겨진 커널입니다.</div>`;
+    <div class="muted" style="font-size:12px;margin-top:8px;line-height:1.6">${fmtTime(ks.observed_at)}에 런타임에서 읽음 · ${again}<br>행을 누르면 그 커널을 쓰는 실행의 커널·자원으로 갑니다. 실행이 쓰는 커널은 여기서 지울 수 없고, 그 행의 "실행 취소"로 실행을 취소하면 정리됩니다. 메모리는 커널과 자식 프로세스의 RSS 합이고, 막대는 ${cap ? '런타임 전체 메모리' : '가장 큰 커널'} 대비입니다. 실행이 없는 커널은 남겨진 커널입니다.</div>`;
+}
+// an administrator stops an execution, whoever's and of whatever tenant: the way to end a job that holds too much of a runtime.
+// from: 'target' (a target's kernel list) | 'exec' (the execution's 커널·자원 tab): where the outcome is shown
+const EXEC_CANCELLABLE = ['QUEUED', 'RUNNING', 'WAITING_FOR_OPERATION', 'FINALIZING'];
+function execCancelButton(id, tenant, status, memory, cpu, from) {
+  if (!S.me.permissions?.system) return '';
+  if (status === 'CANCEL_REQUESTED') return ' <span class="muted">취소 중</span>';
+  if (!EXEC_CANCELLABLE.includes(status)) return '';
+  return ` <span class="acts" style="display:inline-flex"><button class="danger" title="이 실행을 취소하고 커널을 정리합니다" onclick="event.stopPropagation(); cancelExecution('${esc(id)}', '${esc(tenant)}', ${memory ?? 'null'}, ${cpu ?? 'null'}, '${from}')">실행 취소</button></span>`;
+}
+async function cancelExecution(id, tenant, memory, cpu, from) {
+  const q = tenant ? `?tenant_id=${encodeURIComponent(tenant)}` : '';
+  const box = (cls, html) => `<div class="reason-box ${cls}" style="margin:0 0 12px">${html}</div>`;
+  const again = notice => {
+    if (from === 'target' && SYS.tk) return openTargetKernels(SYS.tk.id, { kernel: SYS.tk.kernel, back: SYS.tk.back, notice });
+    SYS.execNotice = notice; execTab('kernel');
+  };
+  const name = `<span class="mono">${esc(id.slice(0, 8))}</span>`;
+  const failed = err => {
+    const e = err.api || {};
+    const text = err.message === '409' ? '이미 끝난 실행이라 취소할 것이 없습니다.' : err.message === '404' ? '실행을 찾지 못했습니다.' : err.message === '403' ? '관리자만 실행을 취소할 수 있습니다.' : esc(e.message || '취소하지 못했습니다.');
+    again(box('bad', `<b>실행 ${name}: ${text}</b> <span class="mono muted">${esc(e.code || '')}</span>`));
+  };
+  // read it again for the confirmation: whose it is, and what it is doing now
+  let e;
+  try { e = await api(`/executor/executions/${id}${q}`, { quiet: true }); } catch (err) { return failed(err); }
+  const c = e.context || {}, trigger = e.trigger?.type || '';
+  await ensureUsers([c.user_id]);
+  const u = S.users[c.user_id];
+  const lines = [`실행 ${id} 을 취소합니다.`, '',
+    `소유자: ${u ? `${u.name} (${u.employee_id})` : c.user_id || '-'}`,
+    `tenant: ${e.tenant_id || c.tenant_id || tenant || '-'}`,
+    `상태: ${e.state?.status || '-'} · ${e.lifecycle?.operation_mode || ''} · ${trigger === 'BATCH' ? '배치' : trigger === 'INTERACTIVE' ? '채팅 분석' : trigger || '-'}`,
+    `지금 사용량: 메모리 ${memText(memory)} · CPU 누적 ${cpuSec(cpu)}`, ''];
+  if (trigger === 'BATCH') lines.push('배치가 만든 실행입니다. 그 배치 실행은 "취소"로 끝납니다.');
+  else if (trigger === 'INTERACTIVE') lines.push('채팅 분석 실행입니다. 이 실행을 기다리는 대화 작업이 있으면 함께 중지됩니다.');
+  lines.push('돌고 있던 코드가 멈추고 커널의 변수가 모두 사라지며 되돌릴 수 없습니다. 진행할까요?');
+  if (!confirm(lines.join('\n'))) return;
+  try {
+    const r = await api(`/executor/executions/${id}/cancel${q}`, { method: 'POST', quiet: true });
+    again(box('', `<b>실행 ${name}에 취소를 요청했습니다.</b> 커널이 정리되면 목록에서 사라집니다.${r.cancelled_run_id ? ' 이 실행을 기다리던 대화 작업도 중지했습니다.' : ''}`));
+  } catch (err) { failed(err); }
 }
 // delete a kernel no execution holds; the executor refuses one that an execution holds or that was active in the last 15 minutes
 async function deleteKernel(target, kernel, memory) {

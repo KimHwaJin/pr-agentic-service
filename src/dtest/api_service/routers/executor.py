@@ -7,7 +7,8 @@ for two kinds of caller:
 - the browser (SSO): reads, checked here by project membership (admins see
   all, and may name another tenant with a ``tenant_id`` query), and the
   runtime/maintenance/event Stream pages for admins (sent with the
-  executor's operator key, ``EXECUTOR_ADMIN_API_KEY``);
+  executor's operator key, ``EXECUTOR_ADMIN_API_KEY``). Its one write on
+  an execution is an admin's cancel, of any tenant (``_cancel``);
 - services and agents with one of our keys (``X-Api-Key`` + ``X-User-Id``,
   always): the executor API of their tenant, writes included, made for the
   user of ``X-User-Id``. A standard key reads only that user's executions,
@@ -25,7 +26,8 @@ from typing import Literal
 
 import httpx
 from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import StreamingResponse
+from fastapi.responses import JSONResponse, StreamingResponse
+from sqlalchemy import select
 
 from src.dtest.api_service.deps import (
     PROJECT_ID,
@@ -49,8 +51,9 @@ from src.dtest.api_service.services.access import (
     scope_execution_list,
 )
 from src.dtest.api_service.services.api_clients import Caller
-from src.dtest.core.executor.client import SYSTEM, Identity
-from src.dtest.core.models import User
+from src.dtest.api_service.services.runs import request_cancel
+from src.dtest.core.executor.client import SYSTEM, ExecutorError, Identity
+from src.dtest.core.models import Run, User
 from src.dtest.core.services import Services
 
 log = logging.getLogger(__name__)
@@ -62,8 +65,9 @@ E = rf"executions/(?P<execution>{UUID})"
 # as it is, so nothing that would end the path there
 STREAM = rf"event-streams/{TENANT.pattern}"
 # what the browser may do: list / execution (membership), admin (admins),
-# ops (admins, with the executor's operator key); None = not at all
-Sso = Literal["list", "execution", "admin", "ops"] | None
+# ops (admins, with the executor's operator key), cancel (admins, made
+# here: ``_cancel``); None = not at all
+Sso = Literal["list", "execution", "admin", "ops", "cancel"] | None
 # (method, path pattern, browser access, open to key callers)
 _ALLOWED: list[tuple[str, str, Sso, bool]] = [
     ("GET", r"executions", "list", True),
@@ -85,7 +89,8 @@ _ALLOWED: list[tuple[str, str, Sso, bool]] = [
     ("GET", rf"{E}/notebook/cells/\d+", "execution", True),
     ("POST", rf"{E}/operations", None, True),
     ("POST", rf"{E}/finalize", None, True),
-    ("POST", rf"{E}/cancel", None, True),
+    # the browser: an administrator stops any execution (``_cancel``)
+    ("POST", rf"{E}/cancel", "cancel", True),
     ("POST", rf"{E}/retry", None, True),
     ("POST", rf"{E}/artifacts", None, True),
     ("GET", rf"artifacts/{UUID}", None, True),
@@ -212,6 +217,8 @@ async def _for_user(
     user: User,
 ):
     match, access, _ = route
+    if access == "cancel":
+        return await _cancel(services, request, match["execution"], user)
     params = {
         k: v for k, v in request.query_params.items() if k not in SCOPE_PARAMS
     }
@@ -247,6 +254,95 @@ async def _for_user(
     return await _forward(
         services, request.method, path, params, body, headers
     )
+
+
+async def _cancel(
+    services: Services, request: Request, execution_id: str, user: User
+) -> JSONResponse:
+    """An administrator stops an execution, whoever's and of whatever
+    tenant (``tenant_id`` query; ours without it): the way to end a job
+    that holds too much of a runtime.
+
+    The executor takes a cancel only from the execution's own user, so it
+    goes in that user's name; who asked is in the reason and in our log.
+    The key and the reason are made here, never the browser's. A chat turn
+    waiting for the execution is cancelled first: woken by a cancelled
+    execution it would read a failure and could run the code again.
+
+    Returns the executor's answer (202) with ``cancelled_run_id``; its
+    errors (404, 409 for an execution already over) go back as they are.
+    """
+    if user.role != "admin":
+        raise HTTPException(403, "Administrator only.")
+    tenant = admin_tenant(request.query_params.get("tenant_id"))
+    executor = services.executor
+    reason = f"관리자({user.id})가 화면에서 취소"
+    run_id = None
+    try:
+        found = await executor.get(execution_id, Identity(tenant=tenant))
+        context = found.get("context") or {}
+        who = Identity(
+            user_id=context.get("user_id"),
+            project_id=context.get("project_id"),
+            session_id=context.get("session_id"),
+            tenant=tenant,
+        )
+        # our tenant: our runs
+        if tenant in (None, services.settings.executor_tenant_id):
+            run_id = await _waiting_run(services, execution_id)
+        if run_id:
+            await request_cancel(services, run_id, reason)
+        result = await executor.cancel(
+            execution_id,
+            who=who,
+            idempotency_key=f"admin-cancel:{execution_id}",
+            reason=reason,
+        )
+    except ExecutorError as exc:
+        log.info(
+            "executor_admin_cancel admin=%s tenant=%s execution_id=%s "
+            "run_id=%s status=%s",
+            user.id,
+            tenant or "",
+            execution_id,
+            run_id or "",
+            exc.status,
+        )
+        body = exc.body
+        if not isinstance(body, dict):
+            body = {"error": {"code": "", "message": str(body)}}
+        return JSONResponse(body, status_code=exc.status)
+    except httpx.TimeoutException:
+        raise ApiError(
+            504, "executor_timeout", "The executor did not answer in time."
+        ) from None
+    except httpx.HTTPError:
+        raise executor_unavailable() from None
+    log.info(
+        "executor_admin_cancel admin=%s tenant=%s execution_id=%s owner=%s "
+        "run_id=%s status=202",
+        user.id,
+        tenant or "",
+        execution_id,
+        who.user_id or "",
+        run_id or "",
+    )
+    return JSONResponse(
+        {**(result or {}), "cancelled_run_id": run_id}, status_code=202
+    )
+
+
+async def _waiting_run(services: Services, execution_id: str) -> str | None:
+    """The chat run that waits for this execution, if one does."""
+    async with services.db.sessions() as db:
+        return await db.scalar(
+            select(Run.id)
+            .where(
+                Run.status == "waiting_executor",
+                Run.waiting["execution_id"].astext == execution_id,
+            )
+            .limit(1)
+        )
 
 
 async def _for_caller(
