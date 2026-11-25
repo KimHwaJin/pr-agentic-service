@@ -216,6 +216,7 @@ Swagger(`/docs`)에서는 Authorize 버튼에 `X-Api-Key`·`X-User-Id`가 있고
 | POST | `/runtime-targets` | 관리자. 런타임 등록·수정(바로 probe) |
 | POST | `/runtime-targets/{id}/probe`, `/drain`, `/activate`, `/disable` | 관리자. 다시 점검 / 새 작업 배정 중지(진행 중은 마저) / 배정 복귀 / 사용 중지 |
 | DELETE | `/runtime-targets/{id}` | 관리자. 사용 중지된 대상 제거(purge). 본문·멱등성 키 없음 |
+| POST | `/executions/{id}/cancel` | 관리자(브라우저 로그인). 누구의, 어느 tenant의 실행이든 취소(다른 tenant는 `?tenant_id=`). 본문은 보내지 않습니다: 멱등성 키와 사유(요청한 관리자 ID 포함)는 서버가 만들고, executor에는 실행 소유자 이름으로 보냅니다. 이 실행을 기다리던 채팅 run이 있으면 먼저 취소합니다. 202 응답은 executor 응답에 `cancelled_run_id`(없으면 null)를 더한 것이고, 이미 끝난 실행은 executor의 409 그대로입니다. key 호출자의 같은 경로는 종전대로 중계입니다 |
 | DELETE | `/runtime-targets/{id}/kernels/{kernel_id}` | 관리자. 어느 실행도 잡고 있지 않은 커널 삭제. 실행이 잡고 있거나 15분 안에 쓰인 커널은 executor가 409로 거절 |
 | POST | `/maintenance/drain`, `/maintenance/activate`, `/maintenance/runs` | 관리자. executor 전체의 새 실행 접수 중지 / 재개 / 진행 중 실행을 멈추는 점검 작업 생성 |
 
