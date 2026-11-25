@@ -1,0 +1,240 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1380" height="1010" viewBox="0 0 1380 1010" font-family="'Noto Sans KR','Apple SD Gothic Neo','Malgun Gothic','WenQuanYi Zen Hei',sans-serif" xmlns:c2pa="http://c2pa.org/manifest">
+<defs><marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#333"/></marker></defs>
+<rect width="1380" height="1010" fill="#ffffff"/>
+<text x="40" y="38" font-size="18" font-weight="bold">논리 ERD (사용자, 대화, 실행, executor 연동, gaia 연동)</text>
+<rect x="60" y="80" width="250" height="246" rx="5" fill="#ffffff" stroke="#6c8ebf"/>
+<path d="M60,122 v-37 a5,5 0 0 1 5,-5 h240 a5,5 0 0 1 5,5 v37 z" fill="#dae8fc" stroke="#6c8ebf"/>
+<text x="185.0" y="97" font-size="12" font-weight="bold" text-anchor="middle">users</text>
+<text x="185.0" y="113" font-size="10" text-anchor="middle">사용자</text>
+<text x="68" y="137" font-size="10" font-weight="bold">PK</text>
+<text x="87.2" y="137" font-size="11">id</text>
+<text x="68" y="155" font-size="10" font-weight="bold">UK</text>
+<text x="87.2" y="155" font-size="11">employee_id</text>
+<text x="68" y="173" font-size="11">name</text>
+<text x="68" y="191" font-size="11">english_name</text>
+<text x="68" y="209" font-size="11">department</text>
+<text x="68" y="227" font-size="11">email</text>
+<text x="68" y="245" font-size="11">role</text>
+<text x="68" y="263" font-size="11">is_active</text>
+<text x="68" y="281" font-size="11">batches_disable_pending</text>
+<text x="68" y="299" font-size="11">created_at</text>
+<text x="68" y="317" font-size="11">updated_at</text>
+<rect x="60" y="370" width="250" height="120" rx="5" fill="#ffffff" stroke="#6c8ebf"/>
+<path d="M60,412 v-37 a5,5 0 0 1 5,-5 h240 a5,5 0 0 1 5,5 v37 z" fill="#dae8fc" stroke="#6c8ebf"/>
+<text x="185.0" y="387" font-size="12" font-weight="bold" text-anchor="middle">project_members</text>
+<text x="185.0" y="403" font-size="10" text-anchor="middle">프로젝트 구성원</text>
+<text x="68" y="427" font-size="10" font-weight="bold">PK,FK</text>
+<text x="104.0" y="427" font-size="11">project_id</text>
+<text x="68" y="445" font-size="10" font-weight="bold">PK,FK</text>
+<text x="104.0" y="445" font-size="11">user_id</text>
+<text x="68" y="463" font-size="11">role</text>
+<text x="68" y="481" font-size="11">created_at</text>
+<rect x="60" y="540" width="250" height="138" rx="5" fill="#ffffff" stroke="#6c8ebf"/>
+<path d="M60,582 v-37 a5,5 0 0 1 5,-5 h240 a5,5 0 0 1 5,5 v37 z" fill="#dae8fc" stroke="#6c8ebf"/>
+<text x="185.0" y="557" font-size="12" font-weight="bold" text-anchor="middle">gaia_sessions</text>
+<text x="185.0" y="573" font-size="10" text-anchor="middle">gaia 세션 대응</text>
+<text x="68" y="597" font-size="10" font-weight="bold">PK,FK</text>
+<text x="104.0" y="597" font-size="11">user_id</text>
+<text x="68" y="615" font-size="10" font-weight="bold">PK</text>
+<text x="87.2" y="615" font-size="11">gaia_session_id</text>
+<text x="68" y="633" font-size="10" font-weight="bold">FK</text>
+<text x="87.2" y="633" font-size="11">session_id</text>
+<text x="68" y="651" font-size="11">created_at</text>
+<text x="68" y="669" font-size="11">updated_at</text>
+<rect x="390" y="80" width="250" height="228" rx="5" fill="#ffffff" stroke="#6c8ebf"/>
+<path d="M390,122 v-37 a5,5 0 0 1 5,-5 h240 a5,5 0 0 1 5,5 v37 z" fill="#dae8fc" stroke="#6c8ebf"/>
+<text x="515.0" y="97" font-size="12" font-weight="bold" text-anchor="middle">projects</text>
+<text x="515.0" y="113" font-size="10" text-anchor="middle">프로젝트</text>
+<text x="398" y="137" font-size="10" font-weight="bold">PK</text>
+<text x="417.2" y="137" font-size="11">id</text>
+<text x="398" y="155" font-size="11">name</text>
+<text x="398" y="173" font-size="11">description</text>
+<text x="398" y="191" font-size="11">system_prompt</text>
+<text x="398" y="209" font-size="11">code_level</text>
+<text x="398" y="227" font-size="11">is_default</text>
+<text x="398" y="245" font-size="10" font-weight="bold">FK</text>
+<text x="417.2" y="245" font-size="11">created_by</text>
+<text x="398" y="263" font-size="11">deleted_at</text>
+<text x="398" y="281" font-size="11">created_at</text>
+<text x="398" y="299" font-size="11">updated_at</text>
+<rect x="390" y="360" width="250" height="228" rx="5" fill="#ffffff" stroke="#6c8ebf"/>
+<path d="M390,402 v-37 a5,5 0 0 1 5,-5 h240 a5,5 0 0 1 5,5 v37 z" fill="#dae8fc" stroke="#6c8ebf"/>
+<text x="515.0" y="377" font-size="12" font-weight="bold" text-anchor="middle">sessions</text>
+<text x="515.0" y="393" font-size="10" text-anchor="middle">채팅 세션</text>
+<text x="398" y="417" font-size="10" font-weight="bold">PK</text>
+<text x="417.2" y="417" font-size="11">id</text>
+<text x="398" y="435" font-size="10" font-weight="bold">FK</text>
+<text x="417.2" y="435" font-size="11">project_id</text>
+<text x="398" y="453" font-size="10" font-weight="bold">FK</text>
+<text x="417.2" y="453" font-size="11">user_id</text>
+<text x="398" y="471" font-size="11">title</text>
+<text x="398" y="489" font-size="11">title_source</text>
+<text x="398" y="507" font-size="11">code_level</text>
+<text x="398" y="525" font-size="11">active_run_id</text>
+<text x="398" y="543" font-size="11">deleted_at</text>
+<text x="398" y="561" font-size="11">created_at</text>
+<text x="398" y="579" font-size="11">updated_at</text>
+<rect x="390" y="640" width="250" height="282" rx="5" fill="#ffffff" stroke="#6c8ebf"/>
+<path d="M390,682 v-37 a5,5 0 0 1 5,-5 h240 a5,5 0 0 1 5,5 v37 z" fill="#dae8fc" stroke="#6c8ebf"/>
+<text x="515.0" y="657" font-size="12" font-weight="bold" text-anchor="middle">images</text>
+<text x="515.0" y="673" font-size="10" text-anchor="middle">이미지</text>
+<text x="398" y="697" font-size="10" font-weight="bold">PK</text>
+<text x="417.2" y="697" font-size="11">id</text>
+<text x="398" y="715" font-size="11">user_id</text>
+<text x="398" y="733" font-size="11">project_id</text>
+<text x="398" y="751" font-size="11">session_id</text>
+<text x="398" y="769" font-size="11">run_id</text>
+<text x="398" y="787" font-size="11">name</text>
+<text x="398" y="805" font-size="11">mime_type</text>
+<text x="398" y="823" font-size="11">size_bytes</text>
+<text x="398" y="841" font-size="11">width</text>
+<text x="398" y="859" font-size="11">height</text>
+<text x="398" y="877" font-size="11">sha256</text>
+<text x="398" y="895" font-size="11">path</text>
+<text x="398" y="913" font-size="11">created_at</text>
+<rect x="720" y="80" width="250" height="174" rx="5" fill="#ffffff" stroke="#6c8ebf"/>
+<path d="M720,122 v-37 a5,5 0 0 1 5,-5 h240 a5,5 0 0 1 5,5 v37 z" fill="#dae8fc" stroke="#6c8ebf"/>
+<text x="845.0" y="97" font-size="12" font-weight="bold" text-anchor="middle">messages</text>
+<text x="845.0" y="113" font-size="10" text-anchor="middle">메시지</text>
+<text x="728" y="137" font-size="10" font-weight="bold">PK</text>
+<text x="747.2" y="137" font-size="11">id</text>
+<text x="728" y="155" font-size="10" font-weight="bold">FK</text>
+<text x="747.2" y="155" font-size="11">session_id</text>
+<text x="728" y="173" font-size="11">run_id</text>
+<text x="728" y="191" font-size="11">role</text>
+<text x="728" y="209" font-size="11">content</text>
+<text x="728" y="227" font-size="11">attachments</text>
+<text x="728" y="245" font-size="11">created_at</text>
+<rect x="720" y="300" width="250" height="372" rx="5" fill="#ffffff" stroke="#6c8ebf"/>
+<path d="M720,342 v-37 a5,5 0 0 1 5,-5 h240 a5,5 0 0 1 5,5 v37 z" fill="#dae8fc" stroke="#6c8ebf"/>
+<text x="845.0" y="317" font-size="12" font-weight="bold" text-anchor="middle">runs</text>
+<text x="845.0" y="333" font-size="10" text-anchor="middle">실행</text>
+<text x="728" y="357" font-size="10" font-weight="bold">PK</text>
+<text x="747.2" y="357" font-size="11">id</text>
+<text x="728" y="375" font-size="10" font-weight="bold">FK</text>
+<text x="747.2" y="375" font-size="11">session_id</text>
+<text x="728" y="393" font-size="11">project_id</text>
+<text x="728" y="411" font-size="11">user_id</text>
+<text x="728" y="429" font-size="11">status</text>
+<text x="728" y="447" font-size="11">model</text>
+<text x="728" y="465" font-size="11">input</text>
+<text x="728" y="483" font-size="11">resume</text>
+<text x="728" y="501" font-size="11">waiting</text>
+<text x="728" y="519" font-size="11">error</text>
+<text x="728" y="537" font-size="11">cancel_requested</text>
+<text x="728" y="555" font-size="11">lease_owner</text>
+<text x="728" y="573" font-size="11">lease_expires_at</text>
+<text x="728" y="591" font-size="11">attempts</text>
+<text x="728" y="609" font-size="11">finished_at</text>
+<text x="728" y="627" font-size="11">recovery_checked_at</text>
+<text x="728" y="645" font-size="11">created_at</text>
+<text x="728" y="663" font-size="11">updated_at</text>
+<rect x="720" y="720" width="250" height="156" rx="5" fill="#ffffff" stroke="#6c8ebf"/>
+<path d="M720,762 v-37 a5,5 0 0 1 5,-5 h240 a5,5 0 0 1 5,5 v37 z" fill="#dae8fc" stroke="#6c8ebf"/>
+<text x="845.0" y="737" font-size="12" font-weight="bold" text-anchor="middle">run_requests</text>
+<text x="845.0" y="753" font-size="10" text-anchor="middle">실행 요청 키</text>
+<text x="728" y="777" font-size="10" font-weight="bold">PK</text>
+<text x="747.2" y="777" font-size="11">session_id</text>
+<text x="728" y="795" font-size="10" font-weight="bold">PK</text>
+<text x="747.2" y="795" font-size="11">key</text>
+<text x="728" y="813" font-size="11">request_hash</text>
+<text x="728" y="831" font-size="11">run_id</text>
+<text x="728" y="849" font-size="11">resumed</text>
+<text x="728" y="867" font-size="11">created_at</text>
+<rect x="1050" y="80" width="250" height="156" rx="5" fill="#ffffff" stroke="#6c8ebf"/>
+<path d="M1050,122 v-37 a5,5 0 0 1 5,-5 h240 a5,5 0 0 1 5,5 v37 z" fill="#dae8fc" stroke="#6c8ebf"/>
+<text x="1175.0" y="97" font-size="12" font-weight="bold" text-anchor="middle">run_events</text>
+<text x="1175.0" y="113" font-size="10" text-anchor="middle">실행 이벤트</text>
+<text x="1058" y="137" font-size="10" font-weight="bold">PK</text>
+<text x="1077.2" y="137" font-size="11">id</text>
+<text x="1058" y="155" font-size="11">session_id</text>
+<text x="1058" y="173" font-size="11">run_id</text>
+<text x="1058" y="191" font-size="11">type</text>
+<text x="1058" y="209" font-size="11">data</text>
+<text x="1058" y="227" font-size="11">created_at</text>
+<rect x="1050" y="290" width="250" height="156" rx="5" fill="#ffffff" stroke="#6c8ebf"/>
+<path d="M1050,332 v-37 a5,5 0 0 1 5,-5 h240 a5,5 0 0 1 5,5 v37 z" fill="#dae8fc" stroke="#6c8ebf"/>
+<text x="1175.0" y="307" font-size="12" font-weight="bold" text-anchor="middle">executor_inbox</text>
+<text x="1175.0" y="323" font-size="10" text-anchor="middle">executor 이벤트 보관함</text>
+<text x="1058" y="347" font-size="10" font-weight="bold">PK</text>
+<text x="1077.2" y="347" font-size="11">event_id</text>
+<text x="1058" y="365" font-size="11">execution_id</text>
+<text x="1058" y="383" font-size="11">event_type</text>
+<text x="1058" y="401" font-size="11">event_sequence</text>
+<text x="1058" y="419" font-size="11">payload</text>
+<text x="1058" y="437" font-size="11">received_at</text>
+<rect x="1050" y="500" width="250" height="444" rx="5" fill="#ffffff" stroke="#6c8ebf"/>
+<path d="M1050,542 v-37 a5,5 0 0 1 5,-5 h240 a5,5 0 0 1 5,5 v37 z" fill="#dae8fc" stroke="#6c8ebf"/>
+<text x="1175.0" y="517" font-size="12" font-weight="bold" text-anchor="middle">code_sources</text>
+<text x="1175.0" y="533" font-size="10" text-anchor="middle">코드 파일 기록</text>
+<text x="1058" y="557" font-size="10" font-weight="bold">PK</text>
+<text x="1077.2" y="557" font-size="11">id</text>
+<text x="1058" y="575" font-size="11">user_id</text>
+<text x="1058" y="593" font-size="11">project_id</text>
+<text x="1058" y="611" font-size="11">session_id</text>
+<text x="1058" y="629" font-size="11">run_id</text>
+<text x="1058" y="647" font-size="11">tool_call_id</text>
+<text x="1058" y="665" font-size="10" font-weight="bold">UK</text>
+<text x="1077.2" y="665" font-size="11">path</text>
+<text x="1058" y="683" font-size="11">sha256</text>
+<text x="1058" y="701" font-size="11">size_bytes</text>
+<text x="1058" y="719" font-size="11">kind</text>
+<text x="1058" y="737" font-size="11">skill</text>
+<text x="1058" y="755" font-size="11">tool</text>
+<text x="1058" y="773" font-size="11">call_key</text>
+<text x="1058" y="791" font-size="11">tool_version</text>
+<text x="1058" y="809" font-size="11">purpose</text>
+<text x="1058" y="827" font-size="11">approved_by</text>
+<text x="1058" y="845" font-size="11">edited</text>
+<text x="1058" y="863" font-size="11">execution_id</text>
+<text x="1058" y="881" font-size="11">operation_id</text>
+<text x="1058" y="899" font-size="11">step_id</text>
+<text x="1058" y="917" font-size="11">created_at</text>
+<text x="1058" y="935" font-size="11">file_deleted_at</text>
+<text x="60" y="989.9" font-size="11" text-anchor="start">실선: 외래키(FK) 제약이 있는 관계  /  점선: 제약 없이 값으로만 참조하는 관계  /  두 줄 표시 쪽이 부모(1), 까치발 쪽이 자식(0..N)</text>
+<path d="M390.0,190.0 L310.0,190.0" fill="none" stroke="#333333" stroke-width="1.2"/>
+<circle cx="376.0" cy="190.0" r="3.5" fill="#fff" stroke="#333333"/><path d="M380.0,190.0 L390.0,195.0 M380.0,190.0 L390.0,185.0" fill="none" stroke="#333333" stroke-width="1.2"/>
+<path d="M316.0,185.0 L316.0,195.0 M320.0,185.0 L320.0,195.0" fill="none" stroke="#333333" stroke-width="1.2"/>
+<path d="M185.0,370.0 L185.0,326.0" fill="none" stroke="#333333" stroke-width="1.2"/>
+<circle cx="185.0" cy="356.0" r="3.5" fill="#fff" stroke="#333333"/><path d="M185.0,360.0 L180.0,370.0 M185.0,360.0 L190.0,370.0" fill="none" stroke="#333333" stroke-width="1.2"/>
+<path d="M190.0,332.0 L180.0,332.0 M190.0,336.0 L180.0,336.0" fill="none" stroke="#333333" stroke-width="1.2"/>
+<path d="M310.0,430.0 L335.0,430.0 L335.0,280.0 L390.0,280.0" fill="none" stroke="#333333" stroke-width="1.2"/>
+<circle cx="324.0" cy="430.0" r="3.5" fill="#fff" stroke="#333333"/><path d="M320.0,430.0 L310.0,425.0 M320.0,430.0 L310.0,435.0" fill="none" stroke="#333333" stroke-width="1.2"/>
+<path d="M384.0,285.0 L384.0,275.0 M380.0,285.0 L380.0,275.0" fill="none" stroke="#333333" stroke-width="1.2"/>
+<path d="M515.0,360.0 L515.0,308.0" fill="none" stroke="#333333" stroke-width="1.2"/>
+<circle cx="515.0" cy="346.0" r="3.5" fill="#fff" stroke="#333333"/><path d="M515.0,350.0 L510.0,360.0 M515.0,350.0 L520.0,360.0" fill="none" stroke="#333333" stroke-width="1.2"/>
+<path d="M520.0,314.0 L510.0,314.0 M520.0,318.0 L510.0,318.0" fill="none" stroke="#333333" stroke-width="1.2"/>
+<path d="M390.0,410.0 L360.0,410.0 L360.0,305.0 L310.0,305.0" fill="none" stroke="#333333" stroke-width="1.2"/>
+<circle cx="376.0" cy="410.0" r="3.5" fill="#fff" stroke="#333333"/><path d="M380.0,410.0 L390.0,415.0 M380.0,410.0 L390.0,405.0" fill="none" stroke="#333333" stroke-width="1.2"/>
+<path d="M316.0,300.0 L316.0,310.0 M320.0,300.0 L320.0,310.0" fill="none" stroke="#333333" stroke-width="1.2"/>
+<path d="M60.0,610.0 L30.0,610.0 L30.0,200.0 L60.0,200.0" fill="none" stroke="#333333" stroke-width="1.2"/>
+<circle cx="46.0" cy="610.0" r="3.5" fill="#fff" stroke="#333333"/><path d="M50.0,610.0 L60.0,615.0 M50.0,610.0 L60.0,605.0" fill="none" stroke="#333333" stroke-width="1.2"/>
+<path d="M54.0,205.0 L54.0,195.0 M50.0,205.0 L50.0,195.0" fill="none" stroke="#333333" stroke-width="1.2"/>
+<path d="M310.0,630.0 L350.0,630.0 L350.0,548.0 L390.0,548.0" fill="none" stroke="#333333" stroke-width="1.2"/>
+<circle cx="324.0" cy="630.0" r="3.5" fill="#fff" stroke="#333333"/><path d="M320.0,630.0 L310.0,625.0 M320.0,630.0 L310.0,635.0" fill="none" stroke="#333333" stroke-width="1.2"/>
+<path d="M384.0,553.0 L384.0,543.0 M380.0,553.0 L380.0,543.0" fill="none" stroke="#333333" stroke-width="1.2"/>
+<path d="M515.0,640.0 L515.0,588.0" fill="none" stroke="#333333" stroke-width="1.2" stroke-dasharray="5 4"/>
+<circle cx="515.0" cy="626.0" r="3.5" fill="#fff" stroke="#333333"/><path d="M515.0,630.0 L510.0,640.0 M515.0,630.0 L520.0,640.0" fill="none" stroke="#333333" stroke-width="1.2"/>
+<path d="M520.0,594.0 L510.0,594.0 M520.0,598.0 L510.0,598.0" fill="none" stroke="#333333" stroke-width="1.2"/>
+<path d="M720.0,170.0 L665.0,170.0 L665.0,410.0 L640.0,410.0" fill="none" stroke="#333333" stroke-width="1.2"/>
+<circle cx="706.0" cy="170.0" r="3.5" fill="#fff" stroke="#333333"/><path d="M710.0,170.0 L720.0,175.0 M710.0,170.0 L720.0,165.0" fill="none" stroke="#333333" stroke-width="1.2"/>
+<path d="M646.0,405.0 L646.0,415.0 M650.0,405.0 L650.0,415.0" fill="none" stroke="#333333" stroke-width="1.2"/>
+<path d="M720.0,390.0 L640.0,390.0" fill="none" stroke="#333333" stroke-width="1.2"/>
+<circle cx="706.0" cy="390.0" r="3.5" fill="#fff" stroke="#333333"/><path d="M710.0,390.0 L720.0,395.0 M710.0,390.0 L720.0,385.0" fill="none" stroke="#333333" stroke-width="1.2"/>
+<path d="M646.0,385.0 L646.0,395.0 M650.0,385.0 L650.0,395.0" fill="none" stroke="#333333" stroke-width="1.2"/>
+<path d="M720.0,800.0 L690.0,800.0 L690.0,558.0 L640.0,558.0" fill="none" stroke="#333333" stroke-width="1.2" stroke-dasharray="5 4"/>
+<circle cx="706.0" cy="800.0" r="3.5" fill="#fff" stroke="#333333"/><path d="M710.0,800.0 L720.0,805.0 M710.0,800.0 L720.0,795.0" fill="none" stroke="#333333" stroke-width="1.2"/>
+<path d="M646.0,553.0 L646.0,563.0 M650.0,553.0 L650.0,563.0" fill="none" stroke="#333333" stroke-width="1.2"/>
+<path d="M845.0,254.0 L845.0,300.0" fill="none" stroke="#333333" stroke-width="1.2" stroke-dasharray="5 4"/>
+<circle cx="845.0" cy="268.0" r="3.5" fill="#fff" stroke="#333333"/><path d="M845.0,264.0 L850.0,254.0 M845.0,264.0 L840.0,254.0" fill="none" stroke="#333333" stroke-width="1.2"/>
+<path d="M840.0,294.0 L850.0,294.0 M840.0,290.0 L850.0,290.0" fill="none" stroke="#333333" stroke-width="1.2"/>
+<path d="M1050.0,160.0 L1010.0,160.0 L1010.0,340.0 L970.0,340.0" fill="none" stroke="#333333" stroke-width="1.2" stroke-dasharray="5 4"/>
+<circle cx="1036.0" cy="160.0" r="3.5" fill="#fff" stroke="#333333"/><path d="M1040.0,160.0 L1050.0,165.0 M1040.0,160.0 L1050.0,155.0" fill="none" stroke="#333333" stroke-width="1.2"/>
+<path d="M976.0,335.0 L976.0,345.0 M980.0,335.0 L980.0,345.0" fill="none" stroke="#333333" stroke-width="1.2"/>
+<path d="M1050.0,370.0 L970.0,370.0" fill="none" stroke="#333333" stroke-width="1.2" stroke-dasharray="5 4"/>
+<circle cx="1036.0" cy="370.0" r="3.5" fill="#fff" stroke="#333333"/><path d="M1040.0,370.0 L1050.0,375.0 M1040.0,370.0 L1050.0,365.0" fill="none" stroke="#333333" stroke-width="1.2"/>
+<path d="M976.0,365.0 L976.0,375.0 M980.0,365.0 L980.0,375.0" fill="none" stroke="#333333" stroke-width="1.2"/>
+<path d="M1050.0,580.0 L970.0,580.0" fill="none" stroke="#333333" stroke-width="1.2" stroke-dasharray="5 4"/>
+<circle cx="1036.0" cy="580.0" r="3.5" fill="#fff" stroke="#333333"/><path d="M1040.0,580.0 L1050.0,585.0 M1040.0,580.0 L1050.0,575.0" fill="none" stroke="#333333" stroke-width="1.2"/>
+<path d="M976.0,575.0 L976.0,585.0 M980.0,575.0 L980.0,585.0" fill="none" stroke="#333333" stroke-width="1.2"/>
+<metadata><c2pa:manifest>AAAWgmp1bWIAAAAeanVtZGMycGEAEQAQgAAAqgA4m3EDYzJwYQAAABZcanVtYgAAAEdqdW1kYzJtYQARABCAAACqADibcQN1cm46YzJwYTo5YTZjMTdiYy03NmE0LTQzM2QtYWQxNC0yNGVmYTQ0NjE5OTgAAAADl2p1bWIAAAApanVtZGMyYXMAEQAQgAAAqgA4m3EDYzJwYS5hc3NlcnRpb25zAAAAALxqdW1iAAAARGp1bWRjYm9yABEAEIAAAKoAOJtxE2MycGEuaW5ncmVkaWVudC52MwAAAAAYYzJzaATMMKPxRhd7sy5sjdO4+6oAAABwY2JvcqNpZGM6Zm9ybWF0bWltYWdlL3N2Zyt4bWxqaW5zdGFuY2VJRHgseG1wOmlpZDoyYjk5ZjNiNy0zODMxLTQ3MzItYTQyNS00ZjE5ODRjOTQ1NDVscmVsYXRpb25zaGlwaHBhcmVudE9mAAAB4mp1bWIAAABBanVtZGNib3IAEQAQgAAAqgA4m3ETYzJwYS5hY3Rpb25zLnYyAAAAABhjMnNoPhRTCcKHfxHXThqVcqnJlAAAAZljYm9yomdhY3Rpb25zgqJmYWN0aW9ua2MycGEub3BlbmVkanBhcmFtZXRlcnOha2luZ3JlZGllbnRzgaJjdXJseC1zZWxmI2p1bWJmPWMycGEuYXNzZXJ0aW9ucy9jMnBhLmluZ3JlZGllbnQudjNkaGFzaFgg+4gLim3noDIDFa+CXTJbqwmm7KGGu/JAadohii6o65+kZmFjdGlvbngdY29tLmFudGhyb3BpYy5jbGF1ZGUucHJvdmlkZWRqcGFyYW1ldGVyc6F4H2NvbS5hbnRocm9waWMub3JpZ2luLWNvbmZpZGVuY2VndW5rbm93bmtkZXNjcmlwdGlvbnhmQ2xhdWRlIHByb3ZpZGVkIHRoaXMgZmlsZSBhdCB0aGUgcmVxdWVzdCBvZiBhIHVzZXIgYW5kIG1heSBoYXZlIGNyZWF0ZWQgb3IgbW9kaWZpZWQgdGhlIGZpbGUgY29udGVudHMubXNvZnR3YXJlQWdlbnShZG5hbWVmQ2xhdWRlcmFsbEFjdGlvbnNJbmNsdWRlZPUAAADIanVtYgAAAEBqdW1kY2JvcgARABCAAACqADibcRNjMnBhLmhhc2guZGF0YQAAAAAYYzJzaIspMDiDDAq5s7CO+Yai2M4AAACAY2JvcqVjYWxnZnNoYTI1NmNwYWRMAAAAAAAAAAAAAAAAZGhhc2hYIBOLRnuyLgc6BH/gZucTnOPKZIfKcjlvWTyrkZMqevr3ZG5hbWVuanVtYmYgbWFuaWZlc3RqZXhjbHVzaW9uc4GiZXN0YXJ0GUrIZmxlbmd0aBkeBAAAAj5qdW1iAAAAJ2p1bWRjMmNsABEAEIAAAKoAOJtxA2MycGEuY2xhaW0udjIAAAACD2Nib3KlY2FsZ2ZzaGEyNTZpc2lnbmF0dXJleE1zZWxmI2p1bWJmPS9jMnBhL3VybjpjMnBhOjlhNmMxN2JjLTc2YTQtNDMzZC1hZDE0LTI0ZWZhNDQ2MTk5OC9jMnBhLnNpZ25hdHVyZWppbnN0YW5jZUlEeCx4bXA6aWlkOjBkNGE2MmM5LWRlOWEtNGFmNi04MTVjLWFhNmFhNDNjN2IzY3JjcmVhdGVkX2Fzc2VydGlvbnODomN1cmx4LXNlbGYjanVtYmY9YzJwYS5hc3NlcnRpb25zL2MycGEuaW5ncmVkaWVudC52M2RoYXNoWCD7iAuKbeegMgMVr4JdMlurCabsoYa78kBp2iGKLqjrn6JjdXJseCpzZWxmI2p1bWJmPWMycGEuYXNzZXJ0aW9ucy9jMnBhLmFjdGlvbnMudjJkaGFzaFggtB/bZsDn1PV3XKICpYciSPJR4jzjVAnT/4YzwLd61s+iY3VybHgpc2VsZiNqdW1iZj1jMnBhLmFzc2VydGlvbnMvYzJwYS5oYXNoLmRhdGFkaGFzaFggA/CxVCcH+Cvcuga8RxE2FpDFD6ApiUvpQBnNC9ua5sJ0Y2xhaW1fZ2VuZXJhdG9yX2luZm+jZG5hbWVvQW50aHJvcGljIEZpbGVzZ3ZlcnNpb25lMS4wLjBrc3BlY1ZlcnNpb25lMi40LjAAABA4anVtYgAAAChqdW1kYzJjcwARABCAAACqADibcQNjMnBhLnNpZ25hdHVyZQAAABAIY2JvctKEWQISogEmGCFZAgowggIGMIIBjaADAgECAhRA5aAK7sI50L64g/oGQgU9Z1UTADAKBggqhkjOPQQDAzBJMRcwFQYDVQQKEw5BbnRocm9waWMsIFBCQzEuMCwGA1UEAxMlQW50aHJvcGljIENvbnRlbnQgQ3JlZGVudGlhbHMgUm9vdCBDQTAeFw0yNjA4MDcxODQzNTZaFw0yODA4MDYxOTQzNTZaMEQxFzAVBgNVBAoTDkFudGhyb3BpYywgUEJDMSkwJwYDVQQDEyBBbnRocm9waWMgQ2xhdWRlIENvbnRlbnQgU2lnbmluZzBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABJh6CmvLUBgFFNU0vUKlOVtE6djd17L5SuwX0LemFisBM3dkd/3cyjxFA3Qo5S46fX0/ihY0VZ7mfb9KF703t5OjWDBWMA4GA1UdDwEB/wQEAwIHgDAVBgNVHSUEDjAMBgorBgEEAYPoXgIBMAwGA1UdEwEB/wQCMAAwHwYDVR0jBBgwFoAUzlHiBIFOZFsj+OPEz5o+nMHXXMIwCgYIKoZIzj0EAwMDZwAwZAIwMXMdFJ4BetLLVY7ORuE9noqbbAZOZn/aArXyTwFAZfKrPzxF2vPoJNf1+UCdg1XGAjBwX1zd9WGqYkqmL5SFqw1QySjr1zJfpJM9+1rdDwSPLMOPOjKuiXjoU/pUUeG9RwmhY3BhZFkNngAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAPZYQFY8TJjO+JuG93tAUU/r3LE8i6T8UbKuYGyXLbIjXyrILd1Rmkkku/D3daIbXKvHrMwS4I3xxJ2qCVVzip3AA6o=</c2pa:manifest></metadata></svg>

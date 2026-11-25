@@ -1,0 +1,120 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1640" height="900" viewBox="0 0 1640 900" font-family="'Noto Sans KR','Apple SD Gothic Neo','Malgun Gothic','WenQuanYi Zen Hei',sans-serif" xmlns:c2pa="http://c2pa.org/manifest">
+<defs><marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#333"/></marker></defs>
+<rect width="1640" height="900" fill="#ffffff"/>
+<text x="40" y="38" font-size="18" font-weight="bold">pr-agentic-service 환경·배포 구성도 (내부망)</text>
+<rect x="40" y="80" width="640" height="440" rx="8" fill="#f4f8fd" stroke="#6c8ebf" stroke-dasharray="6 4"/>
+<text x="52" y="100" font-size="13" text-anchor="start" font-weight="bold">dev 환경</text>
+<rect x="70" y="124" width="580" height="40" rx="6" fill="#f5f5f5" stroke="#666666"/>
+<text x="360.0" y="148.6" font-size="13" text-anchor="middle" font-weight="bold">앞단 라우팅 (사내 플랫폼)</text>
+<rect x="70" y="210" width="260" height="110" rx="6" fill="#dae8fc" stroke="#6c8ebf"/>
+<text x="200.0" y="243.2" font-size="13" text-anchor="middle" font-weight="bold">pr-agentic-service 인스턴스 × N</text>
+<text x="200.0" y="260.8" font-size="11" text-anchor="middle">APP_ENV=dev · config.yml + config.dev.yml</text>
+<text x="200.0" y="278.3" font-size="11" text-anchor="middle">포트 8080 · UID/GID 1000</text>
+<text x="200.0" y="295.9" font-size="11" text-anchor="middle">RUN_MODE=all (API + worker)</text>
+<rect x="390" y="210" width="250" height="46" rx="6" fill="#d5e8d4" stroke="#82b366"/>
+<text x="515.0" y="237.6" font-size="13" text-anchor="middle" font-weight="bold">executor</text>
+<rect x="390" y="274" width="250" height="46" rx="6" fill="#d5e8d4" stroke="#82b366"/>
+<text x="515.0" y="301.6" font-size="13" text-anchor="middle" font-weight="bold">pr-batch</text>
+<path d="M70,390 a130.0,10 0 0 1 260,0 v90 a130.0,10 0 0 1 -260,0 z" fill="#fff2cc" stroke="#d6b656"/>
+<path d="M70,390 a130.0,10 0 0 0 260,0" fill="none" stroke="#d6b656"/>
+<text x="200.0" y="427.0" font-size="13" text-anchor="middle" font-weight="bold">Redis (dev)</text>
+<text x="200.0" y="444.6" font-size="11" text-anchor="middle">standalone 또는 Sentinel (REDIS_MODE)</text>
+<text x="200.0" y="462.1" font-size="11" text-anchor="middle">executor와 같은 서버, 같은 DB 번호</text>
+<path d="M390,390 a125.0,10 0 0 1 250,0 v90 a125.0,10 0 0 1 -250,0 z" fill="#fff2cc" stroke="#d6b656"/>
+<path d="M390,390 a125.0,10 0 0 0 250,0" fill="none" stroke="#d6b656"/>
+<text x="515.0" y="427.0" font-size="13" text-anchor="middle" font-weight="bold">공유 저장소</text>
+<text x="515.0" y="444.6" font-size="11" text-anchor="middle">/mnt/data 로 마운트</text>
+<text x="515.0" y="462.1" font-size="11" text-anchor="middle">executor와 함께 사용</text>
+<rect x="720" y="80" width="640" height="440" rx="8" fill="#f4f8fd" stroke="#6c8ebf" stroke-dasharray="6 4"/>
+<text x="732" y="100" font-size="13" text-anchor="start" font-weight="bold">prd 환경</text>
+<rect x="750" y="124" width="580" height="40" rx="6" fill="#f5f5f5" stroke="#666666"/>
+<text x="1040.0" y="148.6" font-size="13" text-anchor="middle" font-weight="bold">앞단 라우팅 (사내 플랫폼)</text>
+<rect x="750" y="210" width="260" height="110" rx="6" fill="#dae8fc" stroke="#6c8ebf"/>
+<text x="880.0" y="243.2" font-size="13" text-anchor="middle" font-weight="bold">pr-agentic-service 인스턴스 × N</text>
+<text x="880.0" y="260.8" font-size="11" text-anchor="middle">APP_ENV=prd · config.yml + config.prd.yml</text>
+<text x="880.0" y="278.3" font-size="11" text-anchor="middle">포트 8080 · UID/GID 1000</text>
+<text x="880.0" y="295.9" font-size="11" text-anchor="middle">RUN_MODE=all (API + worker)</text>
+<rect x="1070" y="210" width="250" height="46" rx="6" fill="#d5e8d4" stroke="#82b366"/>
+<text x="1195.0" y="237.6" font-size="13" text-anchor="middle" font-weight="bold">executor</text>
+<rect x="1070" y="274" width="250" height="46" rx="6" fill="#d5e8d4" stroke="#82b366"/>
+<text x="1195.0" y="301.6" font-size="13" text-anchor="middle" font-weight="bold">pr-batch</text>
+<path d="M750,390 a130.0,10 0 0 1 260,0 v90 a130.0,10 0 0 1 -260,0 z" fill="#fff2cc" stroke="#d6b656"/>
+<path d="M750,390 a130.0,10 0 0 0 260,0" fill="none" stroke="#d6b656"/>
+<text x="880.0" y="427.0" font-size="13" text-anchor="middle" font-weight="bold">Redis (prd)</text>
+<text x="880.0" y="444.6" font-size="11" text-anchor="middle">standalone 또는 Sentinel (REDIS_MODE)</text>
+<text x="880.0" y="462.1" font-size="11" text-anchor="middle">executor와 같은 서버, 같은 DB 번호</text>
+<path d="M1070,390 a125.0,10 0 0 1 250,0 v90 a125.0,10 0 0 1 -250,0 z" fill="#fff2cc" stroke="#d6b656"/>
+<path d="M1070,390 a125.0,10 0 0 0 250,0" fill="none" stroke="#d6b656"/>
+<text x="1195.0" y="427.0" font-size="13" text-anchor="middle" font-weight="bold">공유 저장소</text>
+<text x="1195.0" y="444.6" font-size="11" text-anchor="middle">/mnt/data 로 마운트</text>
+<text x="1195.0" y="462.1" font-size="11" text-anchor="middle">executor와 함께 사용</text>
+<rect x="40" y="590" width="1320" height="250" rx="8" fill="#fafafa" stroke="#999999" stroke-dasharray="6 4"/>
+<text x="52" y="610" font-size="13" text-anchor="start" font-weight="bold">PostgreSQL 서버 (dev·prd 공용)</text>
+<text x="70" y="815.9" font-size="11" text-anchor="start">사내 서비스형 DB, pgvector 확장 · dev와 prd가 같은 서버를 쓰고 데이터베이스 이름으로 나뉨 · 연결 한도 150을 함께 사용 · prd 서버 분리 예정</text>
+<rect x="70" y="640" width="580" height="150" rx="8" fill="#fafafa" stroke="#999999" stroke-dasharray="6 4"/>
+<text x="82" y="660" font-size="13" text-anchor="start" font-weight="bold">데이터베이스</text>
+<path d="M95,686 a80.0,10 0 0 1 160,0 v70 a80.0,10 0 0 1 -160,0 z" fill="#fff2cc" stroke="#d6b656"/>
+<path d="M95,686 a80.0,10 0 0 0 160,0" fill="none" stroke="#d6b656"/>
+<text x="175.0" y="721.8" font-size="13" text-anchor="middle" font-weight="bold">dtest</text>
+<text x="175.0" y="739.3" font-size="11" text-anchor="middle">pr-agentic-service</text>
+<path d="M280,686 a80.0,10 0 0 1 160,0 v70 a80.0,10 0 0 1 -160,0 z" fill="#d5e8d4" stroke="#82b366"/>
+<path d="M280,686 a80.0,10 0 0 0 160,0" fill="none" stroke="#82b366"/>
+<text x="360.0" y="721.8" font-size="13" text-anchor="middle" font-weight="bold">executor</text>
+<text x="360.0" y="739.3" font-size="11" text-anchor="middle">executor</text>
+<path d="M465,686 a80.0,10 0 0 1 160,0 v70 a80.0,10 0 0 1 -160,0 z" fill="#d5e8d4" stroke="#82b366"/>
+<path d="M465,686 a80.0,10 0 0 0 160,0" fill="none" stroke="#82b366"/>
+<text x="545.0" y="721.8" font-size="13" text-anchor="middle" font-weight="bold">batch</text>
+<text x="545.0" y="739.3" font-size="11" text-anchor="middle">pr-batch</text>
+<rect x="750" y="640" width="580" height="150" rx="8" fill="#fafafa" stroke="#999999" stroke-dasharray="6 4"/>
+<text x="762" y="660" font-size="13" text-anchor="start" font-weight="bold">데이터베이스</text>
+<path d="M775,686 a80.0,10 0 0 1 160,0 v70 a80.0,10 0 0 1 -160,0 z" fill="#fff2cc" stroke="#d6b656"/>
+<path d="M775,686 a80.0,10 0 0 0 160,0" fill="none" stroke="#d6b656"/>
+<text x="855.0" y="721.8" font-size="13" text-anchor="middle" font-weight="bold">dtestprd</text>
+<text x="855.0" y="739.3" font-size="11" text-anchor="middle">pr-agentic-service</text>
+<path d="M960,686 a80.0,10 0 0 1 160,0 v70 a80.0,10 0 0 1 -160,0 z" fill="#d5e8d4" stroke="#82b366"/>
+<path d="M960,686 a80.0,10 0 0 0 160,0" fill="none" stroke="#82b366"/>
+<text x="1040.0" y="721.8" font-size="13" text-anchor="middle" font-weight="bold">executorprd</text>
+<text x="1040.0" y="739.3" font-size="11" text-anchor="middle">executor</text>
+<path d="M1145,686 a80.0,10 0 0 1 160,0 v70 a80.0,10 0 0 1 -160,0 z" fill="#d5e8d4" stroke="#82b366"/>
+<path d="M1145,686 a80.0,10 0 0 0 160,0" fill="none" stroke="#82b366"/>
+<text x="1225.0" y="721.8" font-size="13" text-anchor="middle" font-weight="bold">batchprd</text>
+<text x="1225.0" y="739.3" font-size="11" text-anchor="middle">pr-batch</text>
+<rect x="1400" y="80" width="200" height="440" rx="8" fill="#fafafa" stroke="#999999" stroke-dasharray="6 4"/>
+<text x="1412" y="100" font-size="13" text-anchor="start" font-weight="bold">공통 기반</text>
+<rect x="1420" y="124" width="160" height="56" rx="6" fill="#f5f5f5" stroke="#666666"/>
+<text x="1500.0" y="147.8" font-size="13" text-anchor="middle" font-weight="bold">SSO (IdP)</text>
+<text x="1500.0" y="165.3" font-size="11" text-anchor="middle">로그인 확인</text>
+<rect x="1420" y="200" width="160" height="56" rx="6" fill="#f5f5f5" stroke="#666666"/>
+<text x="1500.0" y="223.8" font-size="13" text-anchor="middle" font-weight="bold">LLM 게이트웨이</text>
+<text x="1500.0" y="241.3" font-size="11" text-anchor="middle">모델 호출</text>
+<rect x="1420" y="276" width="160" height="56" rx="6" fill="#f5f5f5" stroke="#666666"/>
+<text x="1500.0" y="299.8" font-size="13" text-anchor="middle" font-weight="bold">임베딩 게이트웨이</text>
+<text x="1500.0" y="317.3" font-size="11" text-anchor="middle">워크플로우 검색</text>
+<rect x="1420" y="352" width="160" height="56" rx="6" fill="#f5f5f5" stroke="#666666"/>
+<text x="1500.0" y="375.8" font-size="13" text-anchor="middle" font-weight="bold">키바나</text>
+<text x="1500.0" y="393.3" font-size="11" text-anchor="middle">로그 조회</text>
+<rect x="1420" y="428" width="160" height="56" rx="6" fill="#f5f5f5" stroke="#666666"/>
+<text x="1500.0" y="451.8" font-size="13" text-anchor="middle" font-weight="bold">Phoenix</text>
+<text x="1500.0" y="469.3" font-size="11" text-anchor="middle">실행 추적 (선택)</text>
+<text x="1420" y="626.4" font-size="11" text-anchor="start">환경별 주소와 키는</text>
+<text x="1420" y="641.3" font-size="11" text-anchor="start">config.{env}.yml 에 있음</text>
+<text x="40" y="871.9" font-size="11" text-anchor="start">stg 환경도 같은 형태입니다 (APP_ENV=stg, config.stg.yml).</text>
+<path d="M200.0,164.0 L200.0,210.0" fill="none" stroke="#333333" stroke-width="1.2" marker-end="url(#arr)"/>
+<path d="M330.0,233.0 L390.0,233.0" fill="none" stroke="#333333" stroke-width="1.2" marker-end="url(#arr)"/>
+<path d="M330.0,297.0 L390.0,297.0" fill="none" stroke="#333333" stroke-width="1.2" marker-end="url(#arr)"/>
+<path d="M174.0,320.0 L174.0,380.0" fill="none" stroke="#333333" stroke-width="1.2" marker-end="url(#arr)" marker-start="url(#arr)"/>
+<path d="M291.0,320.0 L291.0,348.0 L465.0,348.0 L465.0,380.0" fill="none" stroke="#333333" stroke-width="1.2" marker-end="url(#arr)" marker-start="url(#arr)"/>
+<path d="M640.0,233.0 L660.0,233.0 L660.0,435.0 L640.0,435.0" fill="none" stroke="#333333" stroke-width="1.2" marker-end="url(#arr)" marker-start="url(#arr)"/>
+<path d="M880.0,164.0 L880.0,210.0" fill="none" stroke="#333333" stroke-width="1.2" marker-end="url(#arr)"/>
+<path d="M1010.0,233.0 L1070.0,233.0" fill="none" stroke="#333333" stroke-width="1.2" marker-end="url(#arr)"/>
+<path d="M1010.0,297.0 L1070.0,297.0" fill="none" stroke="#333333" stroke-width="1.2" marker-end="url(#arr)"/>
+<path d="M854.0,320.0 L854.0,380.0" fill="none" stroke="#333333" stroke-width="1.2" marker-end="url(#arr)" marker-start="url(#arr)"/>
+<path d="M971.0,320.0 L971.0,348.0 L1145.0,348.0 L1145.0,380.0" fill="none" stroke="#333333" stroke-width="1.2" marker-end="url(#arr)" marker-start="url(#arr)"/>
+<path d="M1320.0,233.0 L1340.0,233.0 L1340.0,435.0 L1320.0,435.0" fill="none" stroke="#333333" stroke-width="1.2" marker-end="url(#arr)" marker-start="url(#arr)"/>
+<path d="M360.0,520.0 L360.0,640.0" fill="none" stroke="#333333" stroke-width="1.2" marker-end="url(#arr)"/>
+<path d="M1040.0,520.0 L1040.0,640.0" fill="none" stroke="#333333" stroke-width="1.2" marker-end="url(#arr)"/>
+<rect x="230.7" y="548.0" width="258.6" height="16" fill="#ffffff"/>
+<text x="360.0" y="560.0" font-size="11" text-anchor="middle" fill="#222">DATABASE_URL (데이터베이스 이름으로 환경 구분)</text>
+<rect x="910.7" y="548.0" width="258.6" height="16" fill="#ffffff"/>
+<text x="1040.0" y="560.0" font-size="11" text-anchor="middle" fill="#222">DATABASE_URL (데이터베이스 이름으로 환경 구분)</text>
+<metadata><c2pa:manifest>AAAWgmp1bWIAAAAeanVtZGMycGEAEQAQgAAAqgA4m3EDYzJwYQAAABZcanVtYgAAAEdqdW1kYzJtYQARABCAAACqADibcQN1cm46YzJwYTo3YTU0NzA5NC0yNTU1LTQyMTQtODI1OC1hMjVhZDY1NjU5NTUAAAADl2p1bWIAAAApanVtZGMyYXMAEQAQgAAAqgA4m3EDYzJwYS5hc3NlcnRpb25zAAAAALxqdW1iAAAARGp1bWRjYm9yABEAEIAAAKoAOJtxE2MycGEuaW5ncmVkaWVudC52MwAAAAAYYzJzaF4VmCH2a5qbI9XbBr7R5UcAAABwY2JvcqNpZGM6Zm9ybWF0bWltYWdlL3N2Zyt4bWxqaW5zdGFuY2VJRHgseG1wOmlpZDo5YmI0YTk0Yi0xMzFmLTQyMjAtOTE2My1jNjAyMWU0YTJiYjBscmVsYXRpb25zaGlwaHBhcmVudE9mAAAB4mp1bWIAAABBanVtZGNib3IAEQAQgAAAqgA4m3ETYzJwYS5hY3Rpb25zLnYyAAAAABhjMnNo5uKiiX0G4QVJuJ8uhy//IgAAAZljYm9yomdhY3Rpb25zgqJmYWN0aW9ua2MycGEub3BlbmVkanBhcmFtZXRlcnOha2luZ3JlZGllbnRzgaJjdXJseC1zZWxmI2p1bWJmPWMycGEuYXNzZXJ0aW9ucy9jMnBhLmluZ3JlZGllbnQudjNkaGFzaFggFRf1a0FTnJyhblHgDLRfcxWM+D8eJKI+CVnnE4r+ZIikZmFjdGlvbngdY29tLmFudGhyb3BpYy5jbGF1ZGUucHJvdmlkZWRqcGFyYW1ldGVyc6F4H2NvbS5hbnRocm9waWMub3JpZ2luLWNvbmZpZGVuY2VndW5rbm93bmtkZXNjcmlwdGlvbnhmQ2xhdWRlIHByb3ZpZGVkIHRoaXMgZmlsZSBhdCB0aGUgcmVxdWVzdCBvZiBhIHVzZXIgYW5kIG1heSBoYXZlIGNyZWF0ZWQgb3IgbW9kaWZpZWQgdGhlIGZpbGUgY29udGVudHMubXNvZnR3YXJlQWdlbnShZG5hbWVmQ2xhdWRlcmFsbEFjdGlvbnNJbmNsdWRlZPUAAADIanVtYgAAAEBqdW1kY2JvcgARABCAAACqADibcRNjMnBhLmhhc2guZGF0YQAAAAAYYzJzaJfgjnyIEzxVn47yrXmX/XoAAACAY2JvcqVjYWxnZnNoYTI1NmNwYWRMAAAAAAAAAAAAAAAAZGhhc2hYICUJgAfoOoARoCW82ZUqjxRm4J5xYWvCQHhsiouhUi9/ZG5hbWVuanVtYmYgbWFuaWZlc3RqZXhjbHVzaW9uc4GiZXN0YXJ0GTALZmxlbmd0aBkeBAAAAj5qdW1iAAAAJ2p1bWRjMmNsABEAEIAAAKoAOJtxA2MycGEuY2xhaW0udjIAAAACD2Nib3KlY2FsZ2ZzaGEyNTZpc2lnbmF0dXJleE1zZWxmI2p1bWJmPS9jMnBhL3VybjpjMnBhOjdhNTQ3MDk0LTI1NTUtNDIxNC04MjU4LWEyNWFkNjU2NTk1NS9jMnBhLnNpZ25hdHVyZWppbnN0YW5jZUlEeCx4bXA6aWlkOjVkZjA5ZmU1LTdkYjYtNDhlMS04NTAyLTBjMDE0ZjNiNGJlN3JjcmVhdGVkX2Fzc2VydGlvbnODomN1cmx4LXNlbGYjanVtYmY9YzJwYS5hc3NlcnRpb25zL2MycGEuaW5ncmVkaWVudC52M2RoYXNoWCAVF/VrQVOcnKFuUeAMtF9zFYz4Px4koj4JWecTiv5kiKJjdXJseCpzZWxmI2p1bWJmPWMycGEuYXNzZXJ0aW9ucy9jMnBhLmFjdGlvbnMudjJkaGFzaFggzlubDNznuldVV3RxoiadqY6qFjbaY4L8TEivUbf0zHaiY3VybHgpc2VsZiNqdW1iZj1jMnBhLmFzc2VydGlvbnMvYzJwYS5oYXNoLmRhdGFkaGFzaFggh0pNdjkBMMZ9Pn9qQVZx9mwAlrb1XzjaB/rbgJ2Vrfl0Y2xhaW1fZ2VuZXJhdG9yX2luZm+jZG5hbWVvQW50aHJvcGljIEZpbGVzZ3ZlcnNpb25lMS4wLjBrc3BlY1ZlcnNpb25lMi40LjAAABA4anVtYgAAAChqdW1kYzJjcwARABCAAACqADibcQNjMnBhLnNpZ25hdHVyZQAAABAIY2JvctKEWQISogEmGCFZAgowggIGMIIBjaADAgECAhRA5aAK7sI50L64g/oGQgU9Z1UTADAKBggqhkjOPQQDAzBJMRcwFQYDVQQKEw5BbnRocm9waWMsIFBCQzEuMCwGA1UEAxMlQW50aHJvcGljIENvbnRlbnQgQ3JlZGVudGlhbHMgUm9vdCBDQTAeFw0yNjA4MDcxODQzNTZaFw0yODA4MDYxOTQzNTZaMEQxFzAVBgNVBAoTDkFudGhyb3BpYywgUEJDMSkwJwYDVQQDEyBBbnRocm9waWMgQ2xhdWRlIENvbnRlbnQgU2lnbmluZzBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABJh6CmvLUBgFFNU0vUKlOVtE6djd17L5SuwX0LemFisBM3dkd/3cyjxFA3Qo5S46fX0/ihY0VZ7mfb9KF703t5OjWDBWMA4GA1UdDwEB/wQEAwIHgDAVBgNVHSUEDjAMBgorBgEEAYPoXgIBMAwGA1UdEwEB/wQCMAAwHwYDVR0jBBgwFoAUzlHiBIFOZFsj+OPEz5o+nMHXXMIwCgYIKoZIzj0EAwMDZwAwZAIwMXMdFJ4BetLLVY7ORuE9noqbbAZOZn/aArXyTwFAZfKrPzxF2vPoJNf1+UCdg1XGAjBwX1zd9WGqYkqmL5SFqw1QySjr1zJfpJM9+1rdDwSPLMOPOjKuiXjoU/pUUeG9RwmhY3BhZFkNngAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAPZYQK3HjHF4n6c21lZa3oKOR+k1Qsdw/ybjRJHhyPtvKF8vM3I6xI/8KRDN9kE9E0IH/c7dwRfaxqVzTYgeSEtP+m4=</c2pa:manifest></metadata></svg>

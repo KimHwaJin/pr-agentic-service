@@ -1,0 +1,83 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="1010" viewBox="0 0 1400 1010" font-family="'Noto Sans KR','Apple SD Gothic Neo','Malgun Gothic','WenQuanYi Zen Hei',sans-serif" xmlns:c2pa="http://c2pa.org/manifest">
+<defs><marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#333"/></marker></defs>
+<rect width="1400" height="1010" fill="#ffffff"/>
+<text x="40" y="38" font-size="18" font-weight="bold">채팅 Agent Graph 한 바퀴 (middleware 훅 순서)</text>
+<rect x="470" y="70" width="460" height="44" rx="20" fill="#ffe6cc" stroke="#d79b00"/>
+<text x="700.0" y="87.8" font-size="13" text-anchor="middle" font-weight="bold">턴 시작</text>
+<text x="700.0" y="105.3" font-size="11" text-anchor="middle">사용자 메시지 추가, 또는 멈춘 지점에서 재개 (Command resume)</text>
+<rect x="470" y="150" width="460" height="60" rx="6" fill="#dae8fc" stroke="#6c8ebf"/>
+<text x="700.0" y="167.0" font-size="13" text-anchor="middle" font-weight="bold">before_agent</text>
+<text x="700.0" y="184.6" font-size="11" text-anchor="middle">Persona: 프로젝트 메모리 불러오기, nudges·notice 초기화</text>
+<text x="700.0" y="202.1" font-size="11" text-anchor="middle">TurnModelCallLimit: 새 턴이면 호출 수 초기화</text>
+<rect x="470" y="250" width="460" height="60" rx="6" fill="#dae8fc" stroke="#6c8ebf"/>
+<text x="700.0" y="267.0" font-size="13" text-anchor="middle" font-weight="bold">before_model</text>
+<text x="700.0" y="284.6" font-size="11" text-anchor="middle">TurnModelCallLimit: 한 턴 모델 호출 40회 넘었는지 확인</text>
+<text x="700.0" y="302.1" font-size="11" text-anchor="middle">Summarization: 3만 토큰(어림) 넘으면 앞부분 요약</text>
+<rect x="470" y="350" width="460" height="110" rx="6" fill="#dae8fc" stroke="#6c8ebf"/>
+<text x="700.0" y="365.7" font-size="13" text-anchor="middle" font-weight="bold">wrap_model_call</text>
+<text x="700.0" y="383.2" font-size="11" text-anchor="middle">Persona: 담당자(active_agent)의 프롬프트 렌더</text>
+<text x="700.0" y="400.8" font-size="11" text-anchor="middle">+ 프로젝트 지침 + 프로젝트 메모리</text>
+<text x="700.0" y="418.3" font-size="11" text-anchor="middle">담당자의 도구만 남김, 다른 담당자가 읽은 자료는 가림</text>
+<text x="700.0" y="435.9" font-size="11" text-anchor="middle">이미지 참조를 실제 이미지로 바꿈</text>
+<text x="700.0" y="453.4" font-size="11" text-anchor="middle">ToolCallDedup: 응답 안의 중복 도구 호출 정리</text>
+<rect x="470" y="500" width="460" height="44" rx="6" fill="#e1d5e7" stroke="#9673a6"/>
+<text x="700.0" y="517.8" font-size="13" text-anchor="middle" font-weight="bold">model 노드</text>
+<text x="700.0" y="535.3" font-size="11" text-anchor="middle">LLM 게이트웨이 호출 (토큰은 50ms 묶음으로 SSE 전달)</text>
+<rect x="470" y="584" width="460" height="44" rx="6" fill="#dae8fc" stroke="#6c8ebf"/>
+<text x="700.0" y="601.8" font-size="13" text-anchor="middle" font-weight="bold">after_model</text>
+<text x="700.0" y="619.3" font-size="11" text-anchor="middle">Persona: 분석 담당이 도구 없이 글만 냈는지 확인</text>
+<path d="M700.0,668 L780,713.0 L700.0,758 L620,713.0 z" fill="#ffffff" stroke="#999999"/>
+<text x="700.0" y="709.1" font-size="12" text-anchor="middle" font-weight="bold">도구 호출이</text>
+<text x="700.0" y="725.3" font-size="12" text-anchor="middle" font-weight="bold">있는가</text>
+<rect x="470" y="810" width="460" height="44" rx="6" fill="#dae8fc" stroke="#6c8ebf"/>
+<text x="700.0" y="827.8" font-size="13" text-anchor="middle" font-weight="bold">after_agent</text>
+<text x="700.0" y="845.3" font-size="11" text-anchor="middle">Persona: active_agent를 main으로 되돌림</text>
+<rect x="470" y="900" width="460" height="44" rx="20" fill="#ffe6cc" stroke="#d79b00"/>
+<text x="700.0" y="917.8" font-size="13" text-anchor="middle" font-weight="bold">턴 끝</text>
+<text x="700.0" y="935.3" font-size="11" text-anchor="middle">마지막 AI 메시지가 답 (message_final)</text>
+<rect x="1010" y="500" width="340" height="130" rx="6" fill="#e1d5e7" stroke="#9673a6"/>
+<text x="1180.0" y="525.7" font-size="13" text-anchor="middle" font-weight="bold">tools 노드</text>
+<text x="1180.0" y="543.2" font-size="11" text-anchor="middle">JsonArguments: 문자열로 온 JSON 인자 복구</text>
+<text x="1180.0" y="560.8" font-size="11" text-anchor="middle">ToolFailureLimit: 같은 오류 연속 3회면 실행 중단</text>
+<text x="1180.0" y="578.3" font-size="11" text-anchor="middle">도구 실행</text>
+<text x="1180.0" y="595.9" font-size="11" text-anchor="middle">ToolError: 예외를 오류 메시지로 모델에 전달</text>
+<text x="1180.0" y="613.4" font-size="11" text-anchor="middle">Compaction: finish_analysis 때 끝난 분석 결과 정리</text>
+<rect x="1010" y="700" width="340" height="60" rx="20" fill="#f8cecc" stroke="#b85450"/>
+<text x="1180.0" y="717.0" font-size="13" text-anchor="middle" font-weight="bold">그래프 멈춤</text>
+<text x="1180.0" y="734.5" font-size="11" text-anchor="middle">interrupt: 승인 요청, 질문, executor 대기</text>
+<text x="1180.0" y="752.1" font-size="11" text-anchor="middle">상태를 체크포인트에 저장, run은 waiting_*</text>
+<rect x="60" y="668" width="330" height="90" rx="6" fill="#ffffff" stroke="#999999"/>
+<text x="225.0" y="691.2" font-size="13" text-anchor="middle" font-weight="bold">분석 담당이 글만 냄</text>
+<text x="225.0" y="708.8" font-size="11" text-anchor="middle">버리고 다시 시킴 (최대 2번)</text>
+<text x="225.0" y="726.3" font-size="11" text-anchor="middle">그래도 멈추면 대화 담당이 넘겨받아</text>
+<text x="225.0" y="743.9" font-size="11" text-anchor="middle">상황을 설명</text>
+<text x="60" y="983.9" font-size="11" text-anchor="start">파랑: middleware 훅 / 보라: 그래프 노드 / 담당자(main, analyst)는 별도 그래프가 아니라 상태값 active_agent입니다.</text>
+<path d="M700.0,114.0 L700.0,150.0" fill="none" stroke="#333333" stroke-width="1.2" marker-end="url(#arr)"/>
+<path d="M700.0,210.0 L700.0,250.0" fill="none" stroke="#333333" stroke-width="1.2" marker-end="url(#arr)"/>
+<path d="M700.0,310.0 L700.0,350.0" fill="none" stroke="#333333" stroke-width="1.2" marker-end="url(#arr)"/>
+<path d="M700.0,460.0 L700.0,500.0" fill="none" stroke="#333333" stroke-width="1.2" marker-end="url(#arr)"/>
+<path d="M700.0,544.0 L700.0,584.0" fill="none" stroke="#333333" stroke-width="1.2" marker-end="url(#arr)"/>
+<path d="M700.0,628.0 L700.0,668.0" fill="none" stroke="#333333" stroke-width="1.2" marker-end="url(#arr)"/>
+<path d="M700.0,758.0 L700.0,810.0" fill="none" stroke="#333333" stroke-width="1.2" marker-end="url(#arr)"/>
+<path d="M700.0,854.0 L700.0,900.0" fill="none" stroke="#333333" stroke-width="1.2" marker-end="url(#arr)"/>
+<path d="M780.0,713.0 L970.0,713.0 L970.0,600.0 L1010.0,600.0" fill="none" stroke="#333333" stroke-width="1.2" marker-end="url(#arr)"/>
+<path d="M1180.0,500.0 L1180.0,280.0 L930.0,280.0" fill="none" stroke="#333333" stroke-width="1.2" marker-end="url(#arr)"/>
+<path d="M1180.0,630.0 L1180.0,700.0" fill="none" stroke="#333333" stroke-width="1.2" marker-end="url(#arr)" stroke-dasharray="5 4"/>
+<path d="M620.0,713.0 L390.0,713.0" fill="none" stroke="#333333" stroke-width="1.2" marker-end="url(#arr)"/>
+<path d="M225.0,668.0 L225.0,280.0 L470.0,280.0" fill="none" stroke="#333333" stroke-width="1.2" marker-end="url(#arr)"/>
+<path d="M1350.0,730.0 L1375.0,730.0 L1375.0,92.0 L930.0,92.0" fill="none" stroke="#333333" stroke-width="1.2" marker-end="url(#arr)" stroke-dasharray="5 4"/>
+<rect x="641.1" y="776.0" width="117.8" height="16" fill="#ffffff"/>
+<text x="700.0" y="788.0" font-size="11" text-anchor="middle" fill="#222">없음 (대화 담당의 답)</text>
+<rect x="852.6" y="705.0" width="26.2" height="16" fill="#ffffff"/>
+<text x="865.8" y="717.0" font-size="11" text-anchor="middle" fill="#222">있음</text>
+<rect x="1036.9" y="272.0" width="162.2" height="16" fill="#ffffff"/>
+<text x="1118.0" y="284.0" font-size="11" text-anchor="middle" fill="#222">도구 결과를 가지고 다시 모델로</text>
+<rect x="1149.3" y="657.0" width="61.4" height="16" fill="#ffffff"/>
+<text x="1180.0" y="669.0" font-size="11" text-anchor="middle" fill="#222">interrupt</text>
+<rect x="452.3" y="705.0" width="105.4" height="16" fill="#ffffff"/>
+<text x="505.0" y="717.0" font-size="11" text-anchor="middle" fill="#222">분석 담당이 글만 냄</text>
+<rect x="312.0" y="272.0" width="62.8" height="16" fill="#ffffff"/>
+<text x="343.4" y="284.0" font-size="11" text-anchor="middle" fill="#222">다시 모델로</text>
+<rect x="1033.4" y="84.0" width="125.7" height="16" fill="#ffffff"/>
+<text x="1096.2" y="96.0" font-size="11" text-anchor="middle" fill="#222">답이나 결과가 오면 재개</text>
+<metadata><c2pa:manifest>AAAWgmp1bWIAAAAeanVtZGMycGEAEQAQgAAAqgA4m3EDYzJwYQAAABZcanVtYgAAAEdqdW1kYzJtYQARABCAAACqADibcQN1cm46YzJwYTo5MTc5YzQyMi00NzY1LTRjNGYtOTY2OC0zNWY3MzUxZWFiMjIAAAADl2p1bWIAAAApanVtZGMyYXMAEQAQgAAAqgA4m3EDYzJwYS5hc3NlcnRpb25zAAAAALxqdW1iAAAARGp1bWRjYm9yABEAEIAAAKoAOJtxE2MycGEuaW5ncmVkaWVudC52MwAAAAAYYzJzaI8s6aCy+2OqqApK1b7J3iMAAABwY2JvcqNpZGM6Zm9ybWF0bWltYWdlL3N2Zyt4bWxqaW5zdGFuY2VJRHgseG1wOmlpZDowZjhkOWVkYS1hYWJmLTQzY2QtYjc4Mi1kNWYwMzk3OWUwMDRscmVsYXRpb25zaGlwaHBhcmVudE9mAAAB4mp1bWIAAABBanVtZGNib3IAEQAQgAAAqgA4m3ETYzJwYS5hY3Rpb25zLnYyAAAAABhjMnNojpQbyTfEKe1fSppwUw778AAAAZljYm9yomdhY3Rpb25zgqJmYWN0aW9ua2MycGEub3BlbmVkanBhcmFtZXRlcnOha2luZ3JlZGllbnRzgaJjdXJseC1zZWxmI2p1bWJmPWMycGEuYXNzZXJ0aW9ucy9jMnBhLmluZ3JlZGllbnQudjNkaGFzaFggsPdaWvSiAV4HMUWm8OTaUIEEze913/mkbiOnr+HzNL+kZmFjdGlvbngdY29tLmFudGhyb3BpYy5jbGF1ZGUucHJvdmlkZWRqcGFyYW1ldGVyc6F4H2NvbS5hbnRocm9waWMub3JpZ2luLWNvbmZpZGVuY2VndW5rbm93bmtkZXNjcmlwdGlvbnhmQ2xhdWRlIHByb3ZpZGVkIHRoaXMgZmlsZSBhdCB0aGUgcmVxdWVzdCBvZiBhIHVzZXIgYW5kIG1heSBoYXZlIGNyZWF0ZWQgb3IgbW9kaWZpZWQgdGhlIGZpbGUgY29udGVudHMubXNvZnR3YXJlQWdlbnShZG5hbWVmQ2xhdWRlcmFsbEFjdGlvbnNJbmNsdWRlZPUAAADIanVtYgAAAEBqdW1kY2JvcgARABCAAACqADibcRNjMnBhLmhhc2guZGF0YQAAAAAYYzJzaJNjKfyCIZWL2L1ZxfZokFEAAACAY2JvcqVjYWxnZnNoYTI1NmNwYWRMAAAAAAAAAAAAAAAAZGhhc2hYIGWiH0XDbhp/Ogm/x7gY/8bIFgbkhgfvY416Y2sA0abHZG5hbWVuanVtYmYgbWFuaWZlc3RqZXhjbHVzaW9uc4GiZXN0YXJ0GSM9Zmxlbmd0aBkeBAAAAj5qdW1iAAAAJ2p1bWRjMmNsABEAEIAAAKoAOJtxA2MycGEuY2xhaW0udjIAAAACD2Nib3KlY2FsZ2ZzaGEyNTZpc2lnbmF0dXJleE1zZWxmI2p1bWJmPS9jMnBhL3VybjpjMnBhOjkxNzljNDIyLTQ3NjUtNGM0Zi05NjY4LTM1ZjczNTFlYWIyMi9jMnBhLnNpZ25hdHVyZWppbnN0YW5jZUlEeCx4bXA6aWlkOjY1YzVmMWFiLTY2MDItNDU3Zi05NWNjLThjZWRlNTYxMTlkN3JjcmVhdGVkX2Fzc2VydGlvbnODomN1cmx4LXNlbGYjanVtYmY9YzJwYS5hc3NlcnRpb25zL2MycGEuaW5ncmVkaWVudC52M2RoYXNoWCCw91pa9KIBXgcxRabw5NpQgQTN73Xf+aRuI6ev4fM0v6JjdXJseCpzZWxmI2p1bWJmPWMycGEuYXNzZXJ0aW9ucy9jMnBhLmFjdGlvbnMudjJkaGFzaFggvRh9WjXjpFXrUGi6fGPeYyavMJvGacwWznuSu1b7Zc6iY3VybHgpc2VsZiNqdW1iZj1jMnBhLmFzc2VydGlvbnMvYzJwYS5oYXNoLmRhdGFkaGFzaFgg+opxrXa7gKeHqqXGQ4og1HfkzlgDeo4VKNEgqRFh6sN0Y2xhaW1fZ2VuZXJhdG9yX2luZm+jZG5hbWVvQW50aHJvcGljIEZpbGVzZ3ZlcnNpb25lMS4wLjBrc3BlY1ZlcnNpb25lMi40LjAAABA4anVtYgAAAChqdW1kYzJjcwARABCAAACqADibcQNjMnBhLnNpZ25hdHVyZQAAABAIY2JvctKEWQISogEmGCFZAgowggIGMIIBjaADAgECAhRA5aAK7sI50L64g/oGQgU9Z1UTADAKBggqhkjOPQQDAzBJMRcwFQYDVQQKEw5BbnRocm9waWMsIFBCQzEuMCwGA1UEAxMlQW50aHJvcGljIENvbnRlbnQgQ3JlZGVudGlhbHMgUm9vdCBDQTAeFw0yNjA4MDcxODQzNTZaFw0yODA4MDYxOTQzNTZaMEQxFzAVBgNVBAoTDkFudGhyb3BpYywgUEJDMSkwJwYDVQQDEyBBbnRocm9waWMgQ2xhdWRlIENvbnRlbnQgU2lnbmluZzBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABJh6CmvLUBgFFNU0vUKlOVtE6djd17L5SuwX0LemFisBM3dkd/3cyjxFA3Qo5S46fX0/ihY0VZ7mfb9KF703t5OjWDBWMA4GA1UdDwEB/wQEAwIHgDAVBgNVHSUEDjAMBgorBgEEAYPoXgIBMAwGA1UdEwEB/wQCMAAwHwYDVR0jBBgwFoAUzlHiBIFOZFsj+OPEz5o+nMHXXMIwCgYIKoZIzj0EAwMDZwAwZAIwMXMdFJ4BetLLVY7ORuE9noqbbAZOZn/aArXyTwFAZfKrPzxF2vPoJNf1+UCdg1XGAjBwX1zd9WGqYkqmL5SFqw1QySjr1zJfpJM9+1rdDwSPLMOPOjKuiXjoU/pUUeG9RwmhY3BhZFkNngAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAPZYQLmW/moUAhsLQ2DMhZa0mokisMBn1hUKy4hgwbq6Uzf7Btb9iF2TJroWUne8XpgmiW4wwRsAxiisXMnhymTRcfI=</c2pa:manifest></metadata></svg>

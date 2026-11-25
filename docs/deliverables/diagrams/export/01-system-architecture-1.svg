@@ -1,0 +1,138 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1560" height="980" viewBox="0 0 1560 980" font-family="'Noto Sans KR','Apple SD Gothic Neo','Malgun Gothic','WenQuanYi Zen Hei',sans-serif" xmlns:c2pa="http://c2pa.org/manifest">
+<defs><marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#333"/></marker></defs>
+<rect width="1560" height="980" fill="#ffffff"/>
+<text x="40" y="38" font-size="18" font-weight="bold">pr-agentic-service 전체 시스템 구성도 (논리 구성)</text>
+<rect x="300" y="80" width="150" height="60" rx="6" fill="#ffe6cc" stroke="#d79b00"/>
+<text x="375.0" y="105.8" font-size="13" text-anchor="middle" font-weight="bold">브라우저</text>
+<text x="375.0" y="123.3" font-size="11" text-anchor="middle">웹 화면 사용자</text>
+<rect x="470" y="80" width="170" height="60" rx="6" fill="#ffe6cc" stroke="#d79b00"/>
+<text x="555.0" y="105.8" font-size="13" text-anchor="middle" font-weight="bold">다른 서비스·에이전트</text>
+<text x="555.0" y="123.3" font-size="11" text-anchor="middle">API 키 호출자</text>
+<rect x="660" y="80" width="150" height="60" rx="6" fill="#ffe6cc" stroke="#d79b00"/>
+<text x="735.0" y="105.8" font-size="13" text-anchor="middle" font-weight="bold">gaia 채팅 화면</text>
+<text x="735.0" y="123.3" font-size="11" text-anchor="middle">사내 채팅 플랫폼</text>
+<rect x="280" y="230" width="920" height="230" rx="8" fill="#f4f8fd" stroke="#6c8ebf" stroke-dasharray="6 4"/>
+<text x="1188" y="250" font-size="13" text-anchor="end" font-weight="bold">pr-agentic-service 인스턴스 (프로세스 1개, 수평 확장)</text>
+<rect x="320" y="300" width="260" height="120" rx="6" fill="#dae8fc" stroke="#6c8ebf"/>
+<text x="450.0" y="338.2" font-size="13" text-anchor="middle" font-weight="bold">api_service</text>
+<text x="450.0" y="355.8" font-size="11" text-anchor="middle">FastAPI 라우터, 인증</text>
+<text x="450.0" y="373.3" font-size="11" text-anchor="middle">채팅 API, SSE 이벤트</text>
+<text x="450.0" y="390.9" font-size="11" text-anchor="middle">executor·배치 게이트웨이</text>
+<rect x="660" y="300" width="150" height="120" rx="6" fill="#dae8fc" stroke="#6c8ebf"/>
+<text x="735.0" y="347.0" font-size="13" text-anchor="middle" font-weight="bold">gaia_bridge</text>
+<text x="735.0" y="364.6" font-size="11" text-anchor="middle">gaia workflow</text>
+<text x="735.0" y="382.1" font-size="11" text-anchor="middle">dtest.analyst</text>
+<rect x="860" y="300" width="140" height="120" rx="6" fill="#dae8fc" stroke="#6c8ebf"/>
+<text x="930.0" y="338.2" font-size="13" text-anchor="middle" font-weight="bold">worker</text>
+<text x="930.0" y="355.8" font-size="11" text-anchor="middle">RunScheduler</text>
+<text x="930.0" y="373.3" font-size="11" text-anchor="middle">executor 이벤트 수신</text>
+<text x="930.0" y="390.9" font-size="11" text-anchor="middle">메모리, 배치 리포트</text>
+<rect x="1050" y="300" width="130" height="120" rx="6" fill="#dae8fc" stroke="#6c8ebf"/>
+<text x="1115.0" y="338.2" font-size="13" text-anchor="middle" font-weight="bold">agent</text>
+<text x="1115.0" y="355.8" font-size="11" text-anchor="middle">LangGraph 그래프</text>
+<text x="1115.0" y="373.3" font-size="11" text-anchor="middle">middleware, 도구</text>
+<text x="1115.0" y="390.9" font-size="11" text-anchor="middle">skill</text>
+<rect x="40" y="305" width="170" height="50" rx="6" fill="#f5f5f5" stroke="#666666"/>
+<text x="125.0" y="334.6" font-size="13" text-anchor="middle" font-weight="bold">SSO (IdP)</text>
+<rect x="40" y="385" width="170" height="50" rx="6" fill="#d5e8d4" stroke="#82b366"/>
+<text x="125.0" y="405.8" font-size="13" text-anchor="middle" font-weight="bold">pr-batch</text>
+<text x="125.0" y="423.3" font-size="11" text-anchor="middle">배치 등록·스케줄</text>
+<rect x="1300" y="250" width="200" height="56" rx="6" fill="#f5f5f5" stroke="#666666"/>
+<text x="1400.0" y="273.8" font-size="13" text-anchor="middle" font-weight="bold">LLM 게이트웨이</text>
+<text x="1400.0" y="291.3" font-size="11" text-anchor="middle">OpenAI 호환</text>
+<rect x="1300" y="332" width="200" height="56" rx="6" fill="#f5f5f5" stroke="#666666"/>
+<text x="1400.0" y="355.8" font-size="13" text-anchor="middle" font-weight="bold">임베딩 게이트웨이</text>
+<text x="1400.0" y="373.3" font-size="11" text-anchor="middle">워크플로우 검색</text>
+<rect x="1300" y="414" width="200" height="56" rx="6" fill="#f5f5f5" stroke="#666666"/>
+<text x="1400.0" y="437.8" font-size="13" text-anchor="middle" font-weight="bold">Phoenix</text>
+<text x="1400.0" y="455.3" font-size="11" text-anchor="middle">실행 추적 (선택)</text>
+<path d="M400,700 a110.0,10 0 0 1 220,0 v100 a110.0,10 0 0 1 -220,0 z" fill="#fff2cc" stroke="#d6b656"/>
+<path d="M400,700 a110.0,10 0 0 0 220,0" fill="none" stroke="#d6b656"/>
+<text x="510.0" y="733.2" font-size="13" text-anchor="middle" font-weight="bold">PostgreSQL</text>
+<text x="510.0" y="750.8" font-size="11" text-anchor="middle">앱 테이블, run 큐</text>
+<text x="510.0" y="768.3" font-size="11" text-anchor="middle">pgvector (워크플로우 검색)</text>
+<text x="510.0" y="785.9" font-size="11" text-anchor="middle">LangGraph 체크포인트·store</text>
+<path d="M700,700 a100.0,10 0 0 1 200,0 v100 a100.0,10 0 0 1 -200,0 z" fill="#fff2cc" stroke="#d6b656"/>
+<path d="M700,700 a100.0,10 0 0 0 200,0" fill="none" stroke="#d6b656"/>
+<text x="800.0" y="733.2" font-size="13" text-anchor="middle" font-weight="bold">Redis</text>
+<text x="800.0" y="750.8" font-size="11" text-anchor="middle">로그인 세션</text>
+<text x="800.0" y="768.3" font-size="11" text-anchor="middle">이벤트 발행/구독</text>
+<text x="800.0" y="785.9" font-size="11" text-anchor="middle">executor 이벤트 스트림</text>
+<path d="M1020,700 a85.0,10 0 0 1 170,0 v100 a85.0,10 0 0 1 -170,0 z" fill="#fff2cc" stroke="#d6b656"/>
+<path d="M1020,700 a85.0,10 0 0 0 170,0" fill="none" stroke="#d6b656"/>
+<text x="1105.0" y="742.0" font-size="13" text-anchor="middle" font-weight="bold">공유 저장소 (PV)</text>
+<text x="1105.0" y="759.5" font-size="11" text-anchor="middle">분석 코드 파일</text>
+<text x="1105.0" y="777.1" font-size="11" text-anchor="middle">실행 결과 파일</text>
+<rect x="1300" y="705" width="200" height="90" rx="6" fill="#d5e8d4" stroke="#82b366"/>
+<text x="1400.0" y="737.0" font-size="13" text-anchor="middle" font-weight="bold">executor</text>
+<text x="1400.0" y="754.5" font-size="11" text-anchor="middle">분석 코드 실행(커널)</text>
+<text x="1400.0" y="772.1" font-size="11" text-anchor="middle">노트북, 결과물 보관</text>
+<text x="1300" y="83.8" font-size="11" text-anchor="start" font-weight="bold">범례</text>
+<rect x="1300" y="96" width="95" height="26" rx="6" fill="#ffe6cc" stroke="#d79b00"/>
+<text x="1347.5" y="112.8" font-size="11" text-anchor="middle" font-weight="bold">호출자</text>
+<rect x="1405" y="96" width="95" height="26" rx="6" fill="#dae8fc" stroke="#6c8ebf"/>
+<text x="1452.5" y="112.8" font-size="11" text-anchor="middle" font-weight="bold">우리 시스템</text>
+<rect x="1300" y="130" width="95" height="26" rx="6" fill="#d5e8d4" stroke="#82b366"/>
+<text x="1347.5" y="146.8" font-size="11" text-anchor="middle" font-weight="bold">연관 시스템</text>
+<rect x="1405" y="130" width="95" height="26" rx="6" fill="#f5f5f5" stroke="#666666"/>
+<text x="1452.5" y="146.8" font-size="11" text-anchor="middle" font-weight="bold">외부 기반</text>
+<rect x="1300" y="164" width="95" height="26" rx="6" fill="#fff2cc" stroke="#d6b656"/>
+<text x="1347.5" y="180.8" font-size="11" text-anchor="middle" font-weight="bold">저장소</text>
+<path d="M375.0,140.0 L375.0,300.0" fill="none" stroke="#333333" stroke-width="1.2" marker-end="url(#arr)"/>
+<path d="M555.0,140.0 L555.0,300.0" fill="none" stroke="#333333" stroke-width="1.2" marker-end="url(#arr)"/>
+<path d="M735.0,140.0 L735.0,300.0" fill="none" stroke="#333333" stroke-width="1.2" marker-end="url(#arr)"/>
+<path d="M660.0,360.0 L580.0,360.0" fill="none" stroke="#333333" stroke-width="1.2" marker-end="url(#arr)"/>
+<path d="M1000.0,360.0 L1050.0,360.0" fill="none" stroke="#333333" stroke-width="1.2" marker-end="url(#arr)"/>
+<path d="M320.0,330.0 L210.0,330.0" fill="none" stroke="#333333" stroke-width="1.2" marker-end="url(#arr)"/>
+<path d="M320.0,410.0 L210.0,410.0" fill="none" stroke="#333333" stroke-width="1.2" marker-end="url(#arr)"/>
+<path d="M1180.0,324.0 L1240.0,324.0 L1240.0,278.0 L1300.0,278.0" fill="none" stroke="#333333" stroke-width="1.2" marker-end="url(#arr)"/>
+<path d="M1180.0,360.0 L1300.0,360.0" fill="none" stroke="#333333" stroke-width="1.2" marker-end="url(#arr)"/>
+<path d="M1180.0,396.0 L1240.0,396.0 L1240.0,442.0 L1300.0,442.0" fill="none" stroke="#333333" stroke-width="1.2" marker-end="url(#arr)" stroke-dasharray="5 4"/>
+<path d="M510.0,420.0 L510.0,690.0" fill="none" stroke="#333333" stroke-width="1.2" marker-end="url(#arr)" marker-start="url(#arr)"/>
+<path d="M560.0,420.0 L560.0,560.0 L740.0,560.0 L740.0,690.0" fill="none" stroke="#333333" stroke-width="1.2" marker-end="url(#arr)" marker-start="url(#arr)"/>
+<path d="M880.0,420.0 L880.0,640.0 L590.0,640.0 L590.0,690.0" fill="none" stroke="#333333" stroke-width="1.2" marker-end="url(#arr)" marker-start="url(#arr)"/>
+<path d="M890.0,420.0 L890.0,690.0" fill="none" stroke="#333333" stroke-width="1.2" marker-end="url(#arr)" marker-start="url(#arr)"/>
+<path d="M1105.0,420.0 L1105.0,690.0" fill="none" stroke="#333333" stroke-width="1.2" marker-end="url(#arr)" marker-start="url(#arr)"/>
+<path d="M1160.0,420.0 L1160.0,600.0 L1400.0,600.0 L1400.0,705.0" fill="none" stroke="#333333" stroke-width="1.2" marker-end="url(#arr)"/>
+<path d="M1300.0,750.0 L1190.0,750.0" fill="none" stroke="#333333" stroke-width="1.2" marker-end="url(#arr)" marker-start="url(#arr)"/>
+<path d="M1360.0,795.0 L1360.0,850.0 L800.0,850.0 L800.0,810.0" fill="none" stroke="#333333" stroke-width="1.2" marker-end="url(#arr)"/>
+<path d="M340.0,420.0 L340.0,890.0 L1440.0,890.0 L1440.0,795.0" fill="none" stroke="#333333" stroke-width="1.2" marker-end="url(#arr)"/>
+<path d="M125.0,435.0 L125.0,930.0 L1480.0,930.0 L1480.0,795.0" fill="none" stroke="#333333" stroke-width="1.2" marker-end="url(#arr)"/>
+<rect x="341.2" y="189.0" width="67.6" height="30" fill="#ffffff"/>
+<text x="375.0" y="201.0" font-size="11" text-anchor="middle" fill="#222">HTTPS, SSE</text>
+<text x="375.0" y="215.0" font-size="11" text-anchor="middle" fill="#222">(SSO 쿠키)</text>
+<rect x="524.3" y="196.0" width="61.4" height="16" fill="#ffffff"/>
+<text x="555.0" y="208.0" font-size="11" text-anchor="middle" fill="#222">X-Api-Key</text>
+<rect x="694.2" y="196.0" width="81.7" height="16" fill="#ffffff"/>
+<text x="735.0" y="208.0" font-size="11" text-anchor="middle" fill="#222">workflow 호출</text>
+<rect x="594.6" y="352.0" width="50.9" height="16" fill="#ffffff"/>
+<text x="620.0" y="364.0" font-size="11" text-anchor="middle" fill="#222">run 생성</text>
+<rect x="1003.7" y="352.0" width="42.5" height="16" fill="#ffffff"/>
+<text x="1025.0" y="364.0" font-size="11" text-anchor="middle" fill="#222">턴 실행</text>
+<rect x="233.6" y="322.0" width="62.8" height="16" fill="#ffffff"/>
+<text x="265.0" y="334.0" font-size="11" text-anchor="middle" fill="#222">로그인 확인</text>
+<rect x="238.7" y="402.0" width="52.6" height="16" fill="#ffffff"/>
+<text x="265.0" y="414.0" font-size="11" text-anchor="middle" fill="#222">배치 중계</text>
+<rect x="1240.5" y="270.0" width="52.6" height="16" fill="#ffffff"/>
+<text x="1266.8" y="282.0" font-size="11" text-anchor="middle" fill="#222">모델 호출</text>
+<rect x="483.7" y="499.5" width="52.6" height="30" fill="#ffffff"/>
+<text x="510.0" y="511.5" font-size="11" text-anchor="middle" fill="#222">앱 데이터</text>
+<text x="510.0" y="525.5" font-size="11" text-anchor="middle" fill="#222">run 등록</text>
+<rect x="561.3" y="552.0" width="95.3" height="16" fill="#ffffff"/>
+<text x="609.0" y="564.0" font-size="11" text-anchor="middle" fill="#222">세션, 이벤트 구독</text>
+<rect x="731.8" y="632.0" width="120.4" height="16" fill="#ffffff"/>
+<text x="792.0" y="644.0" font-size="11" text-anchor="middle" fill="#222">run 가져가기 (lease)</text>
+<rect x="858.6" y="518.4" width="62.8" height="30" fill="#ffffff"/>
+<text x="890.0" y="530.4" font-size="11" text-anchor="middle" fill="#222">이벤트 발행</text>
+<text x="890.0" y="544.4" font-size="11" text-anchor="middle" fill="#222">스트림 수신</text>
+<rect x="1065.5" y="574.0" width="79.0" height="16" fill="#ffffff"/>
+<text x="1105.0" y="586.0" font-size="11" text-anchor="middle" fill="#222">코드·결과 파일</text>
+<rect x="1216.0" y="592.0" width="105.4" height="16" fill="#ffffff"/>
+<text x="1268.8" y="604.0" font-size="11" text-anchor="middle" fill="#222">분석 코드 실행 제출</text>
+<rect x="1037.9" y="842.0" width="99.3" height="16" fill="#ffffff"/>
+<text x="1087.5" y="854.0" font-size="11" text-anchor="middle" fill="#222">완료 이벤트 스트림</text>
+<rect x="613.3" y="882.0" width="178.5" height="16" fill="#ffffff"/>
+<text x="702.5" y="894.0" font-size="11" text-anchor="middle" fill="#222">게이트웨이 중계, 결과물·커널 조회</text>
+<rect x="583.0" y="922.0" width="79.0" height="16" fill="#ffffff"/>
+<text x="622.5" y="934.0" font-size="11" text-anchor="middle" fill="#222">배치 실행 제출</text>
+<metadata><c2pa:manifest>AAAWgmp1bWIAAAAeanVtZGMycGEAEQAQgAAAqgA4m3EDYzJwYQAAABZcanVtYgAAAEdqdW1kYzJtYQARABCAAACqADibcQN1cm46YzJwYTpiYTMyNDQ4My01NjA1LTRiNTUtODE0My1lNmIzY2Q3Y2RjYWQAAAADl2p1bWIAAAApanVtZGMyYXMAEQAQgAAAqgA4m3EDYzJwYS5hc3NlcnRpb25zAAAAALxqdW1iAAAARGp1bWRjYm9yABEAEIAAAKoAOJtxE2MycGEuaW5ncmVkaWVudC52MwAAAAAYYzJzaCQGM2cuDteF+NoS7WnwvB4AAABwY2JvcqNpZGM6Zm9ybWF0bWltYWdlL3N2Zyt4bWxqaW5zdGFuY2VJRHgseG1wOmlpZDo3OTg0ODJkYS1kMGE1LTRlMjAtOTYxMS1iZmQ1Yzg4MGUxYWFscmVsYXRpb25zaGlwaHBhcmVudE9mAAAB4mp1bWIAAABBanVtZGNib3IAEQAQgAAAqgA4m3ETYzJwYS5hY3Rpb25zLnYyAAAAABhjMnNoHBvPh8wUgmZ/OAZehkg5BQAAAZljYm9yomdhY3Rpb25zgqJmYWN0aW9ua2MycGEub3BlbmVkanBhcmFtZXRlcnOha2luZ3JlZGllbnRzgaJjdXJseC1zZWxmI2p1bWJmPWMycGEuYXNzZXJ0aW9ucy9jMnBhLmluZ3JlZGllbnQudjNkaGFzaFggT9Kow1RBMJGbrxyBUUrTEHo4z3/hjSHmy6w9wQedM92kZmFjdGlvbngdY29tLmFudGhyb3BpYy5jbGF1ZGUucHJvdmlkZWRqcGFyYW1ldGVyc6F4H2NvbS5hbnRocm9waWMub3JpZ2luLWNvbmZpZGVuY2VndW5rbm93bmtkZXNjcmlwdGlvbnhmQ2xhdWRlIHByb3ZpZGVkIHRoaXMgZmlsZSBhdCB0aGUgcmVxdWVzdCBvZiBhIHVzZXIgYW5kIG1heSBoYXZlIGNyZWF0ZWQgb3IgbW9kaWZpZWQgdGhlIGZpbGUgY29udGVudHMubXNvZnR3YXJlQWdlbnShZG5hbWVmQ2xhdWRlcmFsbEFjdGlvbnNJbmNsdWRlZPUAAADIanVtYgAAAEBqdW1kY2JvcgARABCAAACqADibcRNjMnBhLmhhc2guZGF0YQAAAAAYYzJzaCpDaalkfZ9NMi5sJoifetYAAACAY2JvcqVjYWxnZnNoYTI1NmNwYWRMAAAAAAAAAAAAAAAAZGhhc2hYIDOraUx9PW4SPjAD9juvuV4zFYTCeM9gyMRSxmvPuALIZG5hbWVuanVtYmYgbWFuaWZlc3RqZXhjbHVzaW9uc4GiZXN0YXJ0GTTVZmxlbmd0aBkeBAAAAj5qdW1iAAAAJ2p1bWRjMmNsABEAEIAAAKoAOJtxA2MycGEuY2xhaW0udjIAAAACD2Nib3KlY2FsZ2ZzaGEyNTZpc2lnbmF0dXJleE1zZWxmI2p1bWJmPS9jMnBhL3VybjpjMnBhOmJhMzI0NDgzLTU2MDUtNGI1NS04MTQzLWU2YjNjZDdjZGNhZC9jMnBhLnNpZ25hdHVyZWppbnN0YW5jZUlEeCx4bXA6aWlkOmI5MGU4MmFkLTNjNWItNDk2NC1iZjRmLTY4YWQ4OWVlODNmZnJjcmVhdGVkX2Fzc2VydGlvbnODomN1cmx4LXNlbGYjanVtYmY9YzJwYS5hc3NlcnRpb25zL2MycGEuaW5ncmVkaWVudC52M2RoYXNoWCBP0qjDVEEwkZuvHIFRStMQejjPf+GNIebLrD3BB50z3aJjdXJseCpzZWxmI2p1bWJmPWMycGEuYXNzZXJ0aW9ucy9jMnBhLmFjdGlvbnMudjJkaGFzaFggnm16pfBMnpn0AzmJKYLm5qdvhKp0YPNvBi+y4c3stSiiY3VybHgpc2VsZiNqdW1iZj1jMnBhLmFzc2VydGlvbnMvYzJwYS5oYXNoLmRhdGFkaGFzaFggIkyME5+4gC6PsoGhFbHx7KorlW6Z1uQk0OBLMsowXll0Y2xhaW1fZ2VuZXJhdG9yX2luZm+jZG5hbWVvQW50aHJvcGljIEZpbGVzZ3ZlcnNpb25lMS4wLjBrc3BlY1ZlcnNpb25lMi40LjAAABA4anVtYgAAAChqdW1kYzJjcwARABCAAACqADibcQNjMnBhLnNpZ25hdHVyZQAAABAIY2JvctKEWQISogEmGCFZAgowggIGMIIBjaADAgECAhRA5aAK7sI50L64g/oGQgU9Z1UTADAKBggqhkjOPQQDAzBJMRcwFQYDVQQKEw5BbnRocm9waWMsIFBCQzEuMCwGA1UEAxMlQW50aHJvcGljIENvbnRlbnQgQ3JlZGVudGlhbHMgUm9vdCBDQTAeFw0yNjA4MDcxODQzNTZaFw0yODA4MDYxOTQzNTZaMEQxFzAVBgNVBAoTDkFudGhyb3BpYywgUEJDMSkwJwYDVQQDEyBBbnRocm9waWMgQ2xhdWRlIENvbnRlbnQgU2lnbmluZzBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABJh6CmvLUBgFFNU0vUKlOVtE6djd17L5SuwX0LemFisBM3dkd/3cyjxFA3Qo5S46fX0/ihY0VZ7mfb9KF703t5OjWDBWMA4GA1UdDwEB/wQEAwIHgDAVBgNVHSUEDjAMBgorBgEEAYPoXgIBMAwGA1UdEwEB/wQCMAAwHwYDVR0jBBgwFoAUzlHiBIFOZFsj+OPEz5o+nMHXXMIwCgYIKoZIzj0EAwMDZwAwZAIwMXMdFJ4BetLLVY7ORuE9noqbbAZOZn/aArXyTwFAZfKrPzxF2vPoJNf1+UCdg1XGAjBwX1zd9WGqYkqmL5SFqw1QySjr1zJfpJM9+1rdDwSPLMOPOjKuiXjoU/pUUeG9RwmhY3BhZFkNngAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAPZYQIH7z/w2d61vt/dfTGmJznfW6hM2srHQYzTf38IvvHlMOqJYGhm043xZRfbzMARIDNFFzvtZY1WomO9KKwAPhfg=</c2pa:manifest></metadata></svg>
