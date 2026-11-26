@@ -1,0 +1,92 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1500" height="910" viewBox="0 0 1500 910" font-family="'Noto Sans KR','Apple SD Gothic Neo','Malgun Gothic','WenQuanYi Zen Hei',sans-serif">
+<defs><marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#333"/></marker></defs>
+<rect width="1500" height="910" fill="#ffffff"/>
+<text x="40" y="38" font-size="18" font-weight="bold">인터페이스 흐름도</text>
+<rect x="40" y="130" width="200" height="60" rx="6" fill="#ffe6cc" stroke="#d79b00"/>
+<text x="140.0" y="164.6" font-size="13" text-anchor="middle" font-weight="bold">웹 브라우저</text>
+<rect x="40" y="220" width="200" height="60" rx="6" fill="#ffe6cc" stroke="#d79b00"/>
+<text x="140.0" y="254.6" font-size="13" text-anchor="middle" font-weight="bold">다른 서비스, 에이전트</text>
+<rect x="40" y="310" width="200" height="60" rx="6" fill="#ffe6cc" stroke="#d79b00"/>
+<text x="140.0" y="344.6" font-size="13" text-anchor="middle" font-weight="bold">gaia 채팅 화면</text>
+<rect x="420" y="80" width="400" height="620" rx="8" fill="#f4f8fd" stroke="#6c8ebf" stroke-dasharray="6 4"/>
+<text x="432" y="100" font-size="13" text-anchor="start" font-weight="bold">pr-agentic-service</text>
+<rect x="450" y="130" width="340" height="150" rx="6" fill="#dae8fc" stroke="#6c8ebf"/>
+<text x="620.0" y="193.0" font-size="12" text-anchor="middle" font-weight="bold">api_service</text>
+<text x="620.0" y="209.2" font-size="10" text-anchor="middle">채팅 API, SSE, 인증</text>
+<text x="620.0" y="225.4" font-size="10" text-anchor="middle">executor·배치 게이트웨이</text>
+<rect x="450" y="310" width="340" height="60" rx="6" fill="#dae8fc" stroke="#6c8ebf"/>
+<text x="620.0" y="336.1" font-size="12" text-anchor="middle" font-weight="bold">gaia_bridge</text>
+<text x="620.0" y="352.3" font-size="10" text-anchor="middle">gaia 메시지를 run으로 실행</text>
+<rect x="450" y="400" width="340" height="90" rx="6" fill="#dae8fc" stroke="#6c8ebf"/>
+<text x="620.0" y="433.0" font-size="12" text-anchor="middle" font-weight="bold">worker</text>
+<text x="620.0" y="449.2" font-size="10" text-anchor="middle">run 스케줄러, executor 이벤트 수신</text>
+<text x="620.0" y="465.4" font-size="10" text-anchor="middle">배치 리포트, 메모리, 정리</text>
+<rect x="450" y="520" width="340" height="70" rx="6" fill="#dae8fc" stroke="#6c8ebf"/>
+<text x="620.0" y="551.1" font-size="12" text-anchor="middle" font-weight="bold">agent</text>
+<text x="620.0" y="567.3" font-size="10" text-anchor="middle">LangGraph Agent, tool, skill</text>
+<rect x="450" y="620" width="340" height="56" rx="6" fill="#dae8fc" stroke="#6c8ebf"/>
+<text x="620.0" y="644.1" font-size="12" text-anchor="middle" font-weight="bold">core</text>
+<text x="620.0" y="660.3" font-size="10" text-anchor="middle">DB, Redis, executor·임베딩 클라이언트</text>
+<rect x="1040" y="110" width="220" height="54" rx="6" fill="#f5f5f5" stroke="#666666"/>
+<text x="1150.0" y="141.6" font-size="13" text-anchor="middle" font-weight="bold">SSO (IdP)</text>
+<rect x="1040" y="200" width="220" height="54" rx="6" fill="#f5f5f5" stroke="#666666"/>
+<text x="1150.0" y="231.6" font-size="13" text-anchor="middle" font-weight="bold">LLM 게이트웨이</text>
+<rect x="1040" y="290" width="220" height="54" rx="6" fill="#f5f5f5" stroke="#666666"/>
+<text x="1150.0" y="321.6" font-size="13" text-anchor="middle" font-weight="bold">임베딩 게이트웨이</text>
+<rect x="1040" y="380" width="220" height="54" rx="6" fill="#d5e8d4" stroke="#82b366"/>
+<text x="1150.0" y="411.6" font-size="13" text-anchor="middle" font-weight="bold">executor</text>
+<rect x="1040" y="470" width="220" height="54" rx="6" fill="#d5e8d4" stroke="#82b366"/>
+<text x="1150.0" y="501.6" font-size="13" text-anchor="middle" font-weight="bold">pr-batch</text>
+<rect x="1040" y="560" width="220" height="54" rx="6" fill="#f5f5f5" stroke="#666666"/>
+<text x="1150.0" y="591.5" font-size="13" text-anchor="middle" font-weight="bold">Phoenix</text>
+<path d="M420,780 a80.0,10 0 0 1 160,0 v50 a80.0,10 0 0 1 -160,0 z" fill="#fff2cc" stroke="#d6b656"/>
+<path d="M420,780 a80.0,10 0 0 0 160,0" fill="none" stroke="#d6b656"/>
+<text x="500.0" y="814.5" font-size="13" text-anchor="middle" font-weight="bold">PostgreSQL</text>
+<path d="M600,780 a80.0,10 0 0 1 160,0 v50 a80.0,10 0 0 1 -160,0 z" fill="#fff2cc" stroke="#d6b656"/>
+<path d="M600,780 a80.0,10 0 0 0 160,0" fill="none" stroke="#d6b656"/>
+<text x="680.0" y="814.5" font-size="13" text-anchor="middle" font-weight="bold">Redis</text>
+<path d="M1040,780 a110.0,10 0 0 1 220,0 v50 a110.0,10 0 0 1 -220,0 z" fill="#fff2cc" stroke="#d6b656"/>
+<path d="M1040,780 a110.0,10 0 0 0 220,0" fill="none" stroke="#d6b656"/>
+<text x="1150.0" y="814.5" font-size="13" text-anchor="middle" font-weight="bold">공유 저장소 (PV)</text>
+<text x="40" y="898.9" font-size="11" text-anchor="start">실선은 요청 방향입니다. 양쪽 화살표는 읽기와 쓰기를 모두 합니다. 점선은 executor가 쓰고 우리가 읽는 이벤트입니다.</text>
+<path d="M820.0,137.0 L1040.0,137.0" fill="none" stroke="#333333" stroke-width="1.2" marker-end="url(#arr)"/>
+<path d="M820.0,227.0 L1040.0,227.0" fill="none" stroke="#333333" stroke-width="1.2" marker-end="url(#arr)"/>
+<path d="M820.0,317.0 L1040.0,317.0" fill="none" stroke="#333333" stroke-width="1.2" marker-end="url(#arr)"/>
+<path d="M820.0,407.0 L1040.0,407.0" fill="none" stroke="#333333" stroke-width="1.2" marker-end="url(#arr)"/>
+<path d="M820.0,497.0 L1040.0,497.0" fill="none" stroke="#333333" stroke-width="1.2" marker-end="url(#arr)"/>
+<path d="M820.0,587.0 L1040.0,587.0" fill="none" stroke="#333333" stroke-width="1.2" marker-end="url(#arr)"/>
+<path d="M240.0,160.0 L450.0,160.0" fill="none" stroke="#333333" stroke-width="1.2" marker-end="url(#arr)" marker-start="url(#arr)"/>
+<path d="M240.0,250.0 L450.0,250.0" fill="none" stroke="#333333" stroke-width="1.2" marker-end="url(#arr)"/>
+<path d="M240.0,340.0 L450.0,340.0" fill="none" stroke="#333333" stroke-width="1.2" marker-end="url(#arr)"/>
+<path d="M500.0,700.0 L500.0,770.0" fill="none" stroke="#333333" stroke-width="1.2" marker-end="url(#arr)" marker-start="url(#arr)"/>
+<path d="M680.0,700.0 L680.0,770.0" fill="none" stroke="#333333" stroke-width="1.2" marker-end="url(#arr)" marker-start="url(#arr)"/>
+<path d="M790.0,700.0 L790.0,805.0 L1040.0,805.0" fill="none" stroke="#333333" stroke-width="1.2" marker-end="url(#arr)" marker-start="url(#arr)"/>
+<path d="M1260.0,420.5 L1330.0,420.5 L1330.0,805.0 L1260.0,805.0" fill="none" stroke="#333333" stroke-width="1.2" marker-end="url(#arr)" marker-start="url(#arr)"/>
+<path d="M1260.0,396.2 L1390.0,396.2 L1390.0,870.0 L680.0,870.0 L680.0,840.0" fill="none" stroke="#333333" stroke-width="1.2" marker-end="url(#arr)" stroke-dasharray="5 4"/>
+<rect x="896.2" y="129.0" width="67.6" height="16" fill="#ffffff"/>
+<text x="930.0" y="141.0" font-size="11" text-anchor="middle" fill="#222">IF-05 HTTP</text>
+<rect x="896.2" y="219.0" width="67.6" height="16" fill="#ffffff"/>
+<text x="930.0" y="231.0" font-size="11" text-anchor="middle" fill="#222">IF-06 HTTP</text>
+<rect x="896.2" y="309.0" width="67.6" height="16" fill="#ffffff"/>
+<text x="930.0" y="321.0" font-size="11" text-anchor="middle" fill="#222">IF-07 HTTP</text>
+<rect x="896.2" y="399.0" width="67.6" height="16" fill="#ffffff"/>
+<text x="930.0" y="411.0" font-size="11" text-anchor="middle" fill="#222">IF-08 REST</text>
+<rect x="896.2" y="489.0" width="67.6" height="16" fill="#ffffff"/>
+<text x="930.0" y="501.0" font-size="11" text-anchor="middle" fill="#222">IF-09 REST</text>
+<rect x="898.4" y="579.0" width="63.2" height="16" fill="#ffffff"/>
+<text x="930.0" y="591.0" font-size="11" text-anchor="middle" fill="#222">IF-10 추적</text>
+<rect x="277.3" y="152.0" width="135.4" height="16" fill="#ffffff"/>
+<text x="345.0" y="164.0" font-size="11" text-anchor="middle" fill="#222">IF-01 REST, IF-02 SSE</text>
+<rect x="284.6" y="242.0" width="120.8" height="16" fill="#ffffff"/>
+<text x="345.0" y="254.0" font-size="11" text-anchor="middle" fill="#222">IF-04 REST (API 키)</text>
+<rect x="298.9" y="332.0" width="92.2" height="16" fill="#ffffff"/>
+<text x="345.0" y="344.0" font-size="11" text-anchor="middle" fill="#222">IF-03 workflow</text>
+<rect x="469.3" y="727.0" width="61.4" height="16" fill="#ffffff"/>
+<text x="500.0" y="739.0" font-size="11" text-anchor="middle" fill="#222">IF-11 SQL</text>
+<rect x="661.6" y="727.0" width="36.8" height="16" fill="#ffffff"/>
+<text x="680.0" y="739.0" font-size="11" text-anchor="middle" fill="#222">IF-12</text>
+<rect x="866.4" y="797.0" width="63.2" height="16" fill="#ffffff"/>
+<text x="898.0" y="809.0" font-size="11" text-anchor="middle" fill="#222">IF-14 파일</text>
+<rect x="893.2" y="862.0" width="185.5" height="16" fill="#ffffff"/>
+<text x="986.0" y="874.0" font-size="11" text-anchor="middle" fill="#222">IF-13 실행 이벤트 (Redis 스트림)</text>
+</svg>
