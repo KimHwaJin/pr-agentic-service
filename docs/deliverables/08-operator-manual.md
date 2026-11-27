@@ -891,9 +891,10 @@ Agent의 모델 호출, 도구 호출, middleware 단계를 Phoenix로 보냅니
 | 남는 것 | 사용자, 프로젝트, 대화, 워크플로우, 메모리, API 키 모두 | 없음. 사용자는 로그인할 때 새로 생김 |
 | 서비스 중단 | 덤프와 복원이 끝날 때까지 (데이터 양에 따라) | 재배포하는 동안만 |
 | 다시 할 일 | 없음 | 관리자 지정, API 키 재발급과 전달 |
+| executor, batch | 같이 데이터를 가져가야 함 | 같이 새로 시작해야 함 |
 | 되돌리기 | 옮긴 직후에만 쉬움 | 옛 DB가 그대로라 언제든 쉬움 |
 
-어느 방법이든 executor와 batch도 같은 작업 시간에 같은 방법으로 옮기는 것을 권장합니다. 아래 "executor, batch와의 관계" 표를 참고합니다. 작업 시간은 사용자에게 미리 공지합니다.
+우리와 executor, batch는 같은 작업 시간에 같은 방법으로 옮겨야 합니다. 서로의 ID를 저장하고 있기 때문입니다. 아래 "executor, batch와 엮인 데이터"를 참고합니다. 작업 시간은 사용자에게 미리 공지합니다.
 
 #### 준비 (A, B 공통)
 
@@ -906,8 +907,8 @@ Agent의 모델 호출, 도구 호출, middleware 단계를 Phoenix로 보냅니
 
 #### 방법 A: 데이터를 가져갈 때
 
-1. 공지한 시간에 시스템 화면의 점검 탭에서 executor의 새 실행 접수를 중지합니다(10.5절).
-2. 진행 중인 run이 끝나기를 기다립니다. 아래 SQL에서 `running`이 0이 되면 됩니다. 기다리지 못하고 내려도 run은 `queued`로 돌아가 옮긴 뒤 이어 가지만, 그만큼 LLM 호출을 다시 합니다.
+1. 공지한 시간에 시스템 화면의 점검 탭에서 executor의 새 실행 접수를 중지합니다(10.5절). batch가 보내는 실행도 이것으로 막힙니다. batch 담당은 예약 실행을 일시 중지합니다.
+2. 진행 중인 run과 executor 실행이 끝나기를 기다립니다. 아래 SQL에서 `running`이 0이 되고, 점검 탭의 "종료 가능"이 "안전"이면 됩니다. 기다리지 못하고 내려도 run은 `queued`로 돌아가 옮긴 뒤 이어 가지만, 그만큼 LLM 호출을 다시 합니다.
 
 ```sql
 SELECT status, count(*) FROM runs
@@ -920,7 +921,7 @@ WHERE status IN ('queued', 'running') GROUP BY 1;
 SELECT count(*) FROM pg_stat_activity WHERE datname = 'dtestprd';
 ```
 
-4. 옛 서버의 `dtestprd`를 통째로 덤프해 새 서버에 복원합니다. 앱 테이블과 LangGraph 테이블(checkpoints 계열, store 계열)은 반드시 같은 시점의 덤프로 함께 옮깁니다. DB 서비스에 이전 기능이 있으면 그것을 써도 됩니다.
+4. 옛 서버의 `dtestprd`를 통째로 덤프해 새 서버에 복원합니다. executor와 batch의 `executorprd`, `batchprd`도 같은 멈춘 시점에 덤프해야 서로의 ID와 이벤트 순번이 맞습니다. 앱 테이블과 LangGraph 테이블(checkpoints 계열, store 계열)은 반드시 같은 시점의 덤프로 함께 옮깁니다. DB 서비스에 이전 기능이 있으면 그것을 써도 됩니다.
 
 ```
 pg_dump  -Fc --no-owner --no-acl -d <옛 서버의 dtestprd> -f dtestprd.dump
@@ -944,7 +945,7 @@ SELECT extname FROM pg_extension WHERE extname = 'vector';
 SELECT current_database(), inet_server_addr();
 ```
 
-8. executor의 새 실행 접수를 재개합니다.
+8. executor와 batch가 새 서버로 뜬 것을 확인한 뒤 executor 접수를 재개하고, batch 담당은 예약 실행을 재개합니다.
 9. 옛 서버의 `dtestprd`는 바로 지우지 않고 일정 기간 보관합니다. 그동안 그 데이터베이스에 연결이 생기지 않는지(3번 SQL) 가끔 확인하고, 문제가 없으면 지웁니다.
 
 #### 방법 B: 처음부터 시작할 때
@@ -958,7 +959,7 @@ SELECT employee_id FROM users WHERE role = 'admin' AND is_active;
 SELECT name, tenant, kind FROM api_clients WHERE status = 'active' ORDER BY tenant, name;
 ```
 
-2. 시스템 화면의 점검 탭에서 executor의 새 실행 접수를 중지하고(10.5절), 진행 중인 run이 끝나기를 기다립니다. 방법 A 2번의 SQL에서 `running`이 0이 되면 됩니다.
+2. 시스템 화면의 점검 탭에서 executor의 새 실행 접수를 중지하고(10.5절), batch 담당은 예약 실행을 일시 중지합니다. 진행 중인 run이 끝나기를 기다립니다. 방법 A 2번의 SQL에서 `running`이 0이 되고 "종료 가능"이 "안전"이면 됩니다.
 3. 옛 서버의 `dtestprd`를 덤프해 보관합니다(권장). 나중에 옛 기록을 찾아야 할 때 씁니다. 명령은 방법 A 4번의 `pg_dump`와 같습니다.
 4. `config.prd.yml`의 `DATABASE_URL`을 새 서버 주소로 바꾸고, `ADMIN_EMPLOYEE_IDS`에 1번에서 뽑은 관리자 사번이 있는지 확인합니다. 비어 있으면 아무도 관리자가 되지 않습니다. master에 머지한 뒤 stg, prd로 `--ff-only` 머지해 배포합니다(2.3절).
 5. 인스턴스가 뜨면 배포 후 확인(2.5절)을 하고, 새 서버의 빈 데이터베이스에 붙었는지 확인합니다. `alembic_version`은 배포한 이미지의 최신 마이그레이션과 같아야 합니다.
@@ -977,7 +978,7 @@ SELECT employee_id FROM users WHERE role = 'admin';
 ```
 
 7. API 키를 1번 목록의 이름, tenant, 종류(`kind`)대로 다시 발급해 각 서비스에 전달합니다(3.3절). 옛 키는 새 서버에서 거부됩니다.
-8. executor의 새 실행 접수를 재개합니다.
+8. executor와 batch가 새로 뜬 것을 확인한 뒤 executor 접수를 재개하고, batch 담당은 예약 실행을 재개합니다. batch도 비어 있으므로 사용자가 배치를 다시 등록합니다.
 9. 옛 서버의 `dtestprd`와 `STORAGE_ROOT` 아래의 옛 파일(사용자가 보낸 이미지, 실행 코드)은 보관 기간이 지나면 정리합니다. 새 데이터베이스는 옛 파일을 가리키지 않습니다.
 
 방법 B에서 처음 상태로 돌아가는 것은 아래와 같습니다.
@@ -987,17 +988,34 @@ SELECT employee_id FROM users WHERE role = 'admin';
 - API 키를 모두 다시 발급해야 합니다. 키 원문은 저장하지 않으므로 옛 키를 살릴 방법은 없습니다.
 - API 키로 `X-User-Id`를 넣어 부르는 서비스는 그 사용자가 한 번 로그인해야 통과합니다. executor, batch 게이트웨이는 예외입니다.
 - 프로젝트, 대화, 워크플로우, 프로젝트 메모리, 배치 리포트 기록이 사라집니다. gaia_bridge로 이어 가던 대화도 새 대화로 시작합니다.
+- executor와 batch도 새로 시작해야 합니다. 그쪽에 남은 배치는 옛 사용자 ID에 묶여 있어 새로 로그인한 사용자에게 보이지 않습니다.
 
-#### executor, batch와의 관계
+#### executor, batch와 엮인 데이터
 
-우리 DB에 남은 `execution_id`, `batch_id`는 그 환경의 executor와 batch에 있는 데이터를 가리킵니다.
+우리는 executor와 batch의 DB에 직접 붙지 않습니다. API(`EXECUTOR_BASE_URL`, `BATCH_BASE_URL`)와 Redis 이벤트로만 주고받으므로, 그쪽 DB 서버가 바뀌어도 우리 설정은 그대로입니다. 대신 서로의 ID를 저장하고 있어 데이터는 엮여 있습니다.
+
+| 어디에 | 저장된 것 | 가리키는 것 | 짝이 맞지 않으면 |
+| --- | --- | --- | --- |
+| 우리 DB | `runs.waiting`의 `execution_id`, `executor_inbox`의 이벤트 ID와 순번 | executor의 실행과 이벤트 | 기다리던 run이 이어 가지 못함 |
+| 우리 DB | `code_sources.execution_id`, 메시지의 결과물과 노트북 링크 | executor의 실행과 결과물 | 화면의 결과물, 노트북 링크가 깨짐 |
+| 우리 DB | `batch_report_jobs`의 `execution_id`, `batch_id`, `artifact_id`, 배치 요약 | executor 실행, batch의 배치 | 리포트 원본이 깨지고, 다음 리포트가 이전 요약을 읽지 못함 |
+| executor, batch DB | 실행 context와 배치 등록의 `user_id`, `project_id` | 우리의 `users.id`, `projects.id` | 사용자에게 자기 배치가 보이지 않고, 예약 배치 리포트가 없는 사용자 앞으로 만들어짐 |
+
+`users.id`는 로그인할 때 새로 만드는 무작위 ID입니다. 사번이 같아도 DB를 새로 시작하면 다른 ID가 됩니다. 그래서 세 서비스의 방법을 맞춰야 합니다.
 
 | 우리 DB | executor, batch DB | 결과 |
 | --- | --- | --- |
-| A. 가져감 | 가져감 | 문제없음 |
-| B. 새로 시작 | 가져감 | 문제없음. 우리 쪽 기록만 없음 |
+| A. 가져감 | 가져감 | 문제없음. 세 DB를 같은 멈춘 시점에 덤프해야 함 |
 | B. 새로 시작 | 새로 시작 | 문제없음. 모두 처음부터 |
-| A. 가져감 | 새로 시작 | 피해야 함. 기다리던 run이 이어 가지 못하고, 결과물과 노트북 링크가 깨짐. 배치 리포트도 원래 배치를 찾지 못함 |
+| A. 가져감 | 새로 시작 | 피해야 함. 기다리던 run이 이어 가지 못하고 결과물, 노트북 링크가 깨짐. 배치 리포트도 원래 배치를 찾지 못함 |
+| B. 새로 시작 | 가져감 | 피해야 함. 기존 배치가 옛 사용자 ID에 묶여 보이지 않음. 리포트 복구 루프가 최근 14일(`BATCH_REPORT_RECOVERY_LOOKBACK_DAYS`)의 배치 실행 리포트를 한꺼번에 다시 만들어 LLM 호출이 몰림 |
+
+executor나 batch만 다른 날 옮길 때는 우리 서비스를 내리지 않아도 됩니다.
+
+- 접수를 멈춘 동안 새 분석은 받지 않고, 결과물과 배치 화면은 잠시 오류가 납니다.
+- 그동안 기다리던 run과 배치 리포트는 우리 복구 루프가 다시 시도합니다(이벤트 120초, 배치 리포트 600초 간격). 그쪽이 데이터를 가져갔다면 따로 할 일은 없습니다.
+- batch가 접수 중지 중에 거부된 예약 실행을 어떻게 처리하는지는 batch 담당에게 확인합니다.
+- Redis는 이미 환경별로 나뉘어 있어 이 작업과 관계없습니다. `EXECUTOR_BASE_URL`, `BATCH_BASE_URL`이 바뀔 때만 우리 설정을 고칩니다.
 
 #### 나눈 뒤 할 일
 
