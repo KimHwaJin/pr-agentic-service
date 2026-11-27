@@ -130,18 +130,18 @@ function note(s, text, y = 6.35) {
   s.addText("pr-agentic-service 운영자 메뉴얼", { placeholder: "title" });
   s.addText([
     { text: "사내 데이터 분석 Agent 서비스", options: { breakLine: true } },
-    { text: "기준: internal/gaia 브랜치, 2026-11-26 · 초안 v0.1", options: {} },
+    { text: "기준: master 브랜치, 2026-11-27 · 초안 v0.2", options: {} },
   ], { placeholder: "body" });
 
   let t = slide("개정 이력");
   table(t, ["버전", "일자", "내용", "작성", "검토"], [
     ["0.1", "2026-11-26", "초안 작성", "", ""],
-    ["", "", "", "", ""],
+    ["0.2", "2026-11-27", "브랜치 기준을 master, stg, prd로 변경. 5.2 패치방법과 마이그레이션 설명 갱신", "", ""],
     ["", "", "", "", ""],
   ], [1.2, 1.8, 6.33, 1.5, 1.5], { boldFirst: false });
   bullets(t, [
     "주소, 계정, 키 같은 환경별 실제 값은 적지 않고 서비스 이름과 설정 키 이름으로 가리킵니다. 실제 값은 config.{dev,stg,prd}.yml에 있습니다.",
-    "경로는 내부망 레포 기준(src/dtest/...)입니다.",
+    "소스 경로는 src/dtest/ 아래입니다. 기준 브랜치는 master(dev 배포), stg, prd입니다.",
     "4.3 담당자 연락처, 3.5와 3.8의 사내 플랫폼 관련 칸은 비워 두었습니다.",
   ], { y: 3.4, h: 2 });
 
@@ -366,7 +366,7 @@ section("3. 서비스 관리", ["3.1 인터페이스 흐름도 · 3.2 서버 디
     ["DB", "DB_POOL_SIZE", "3", "앱 풀 크기(같은 수만큼 overflow)"],
     ["DB", "CHECKPOINT_POOL_SIZE", "8", "그래프 풀 크기"],
     ["DB", "DB_KEEPALIVE_IDLE_SECONDS", "60", "TCP keepalive 시작 시간"],
-    ["DB", "AUTO_MIGRATE", "true", "기동 시 마이그레이션 실행. 운영은 false"],
+    ["DB", "AUTO_MIGRATE", "true", "기동 시 마이그레이션 자동 실행"],
     ["Redis", "REDIS_MODE", "standalone", "standalone, sentinel"],
     ["Redis", "REDIS_URL / REDIS_SENTINEL_*", "", "접속 정보"],
     ["인증", "SSO_ADAPTER", "idp", "idp, dev(로컬 전용)"],
@@ -793,7 +793,7 @@ section("4. 장애처리", ["4.1 장애처리 절차", "4.2 장애 유형별 조
     ["Redis는 executor와 같은 서버, 같은 DB 번호", "다르면 오류 없이 이벤트가 오지 않아 모든 분석이 단계마다 2분씩 느려짐. executor_event_recovered가 계속 찍힘", "REDIS_URL 또는 REDIS_SENTINEL_*을 executor 설정과 똑같이 맞춤"],
     ["Sentinel 노드를 REDIS_URL로 직접 가리키지 않음", "장애 전환으로 그 노드가 레플리카가 되면 READONLY 오류로 멈춤", "Sentinel 환경은 반드시 REDIS_MODE: sentinel"],
     ["dev와 prd가 같은 DB 서버를 씀", "연결 한도 150과 서버 자원을 함께 씀. DATABASE_URL의 데이터베이스 이름을 잘못 적으면 오류 없이 다른 환경에 붙음", "설정의 데이터베이스 이름 확인. 직접 접속하면 SELECT current_database()로 먼저 확인"],
-    ["마이그레이션 실패 시 모든 인스턴스가 뜨지 못함", "AUTO_MIGRATE: true이면 기동 때 실행. 교체 배포 중 실패하면 서비스가 멈춤", "운영은 AUTO_MIGRATE: false로 두고 배포 전에 scripts/migrate.py를 따로 실행"],
+    ["마이그레이션 실패 시 모든 인스턴스가 뜨지 못함", "AUTO_MIGRATE: true(기본)라서 기동 때 자동 실행. 실패하면 새 인스턴스가 뜨지 못하고, 옛 인스턴스가 이미 내려갔다면 서비스가 멈춤", "dev, stg에서 먼저 적용된 것만 prd로 올림. 하나씩 교체. 실패하면 이전 버전으로 되돌림"],
     ["PostgreSQL 연결 수에는 예산이 있음", "인스턴스 하나가 최대 14. 넘으면 같은 서버의 모든 서비스에서 too many connections", "합계에 여유 20 이상. 인스턴스 3개 이상이면 하나씩 교체. 올리기 전에 다시 계산"],
     ["중간 장비가 조용한 연결을 끊음", "쉬던 연결이 끊겨 다음 턴이 server closed the connection으로 실패", "DB_KEEPALIVE_IDLE_SECONDS를 장비의 idle 제한보다 짧게"],
     ["인스턴스 하나에 uvicorn worker는 1개", "늘리면 백그라운드 루프와 DB 풀이 곱해져 연결 예산이 깨짐", "처리량이 필요하면 인스턴스 수를 늘림"],
@@ -802,8 +802,7 @@ section("4. 장애처리", ["4.1 장애처리 절차", "4.2 장애 유형별 조
     ["임베딩 모델이나 차원 변경", "기존 벡터가 검색에서 빠져 워크플로우 추천이 비어 보임", "바꾼 뒤 POST /api/v1/workflows/{id}/reindex로 다시 색인"],
     ["공유 저장소의 경로와 계정", "마운트 경로나 UID가 다르면 파일을 못 읽음", "STORAGE_ROOT, STORAGE_EXECUTOR_PATH, EXECUTOR_RESULT_ROOT를 executor와 맞춤. UID 1000"],
     ["키는 설정 파일에 있음", "config.{env}.yml에 키와 비밀번호가 들어 있음", "내부망 깃랩 밖으로 실제 값을 옮기지 않음"],
-    ["main과 internal/gaia를 같이 고침", "한쪽에만 마이그레이션 번호를 쓰면 충돌", "모든 변경을 두 브랜치에 함께 반영 (5.2)"],
-    ["로컬에서 브랜치를 바꾸면 컨테이너가 깨질 수 있음", "두 브랜치의 web, assets 위치가 달라 마운트가 비고 /dev/가 404", "브랜치를 바꾼 뒤 컨테이너를 다시 만듦"],
+    ["브랜치는 master, stg, prd 순서로 올림", "stg나 prd에 직접 커밋하면 merge --ff-only가 실패하고 환경마다 코드가 달라짐", "작업은 feature 브랜치에서 하고 master에 머지. stg와 prd는 ff-only로만 받음 (5.2)"],
   ];
   [cautions.slice(0, 7), cautions.slice(7)].forEach((p, i) => {
     s = slide(`4.4 운영 시 주의사항 (${i + 1}/2)`);
@@ -836,7 +835,7 @@ section("5. 유지보수 가이드", ["5.1 개발자 개발 환경 setting 정�
     ["executor", "executor 레포의 compose 스택. 공유 폴더를 함께 마운트"],
     ["LLM", "LLM 게이트웨이 또는 scripts/mock_llm.py"],
     ["pr-batch (선택)", "배치 화면을 볼 때만 필요"],
-    ["레포와 브랜치", "main(사외 구조)과 internal/gaia(내부망 구조, src/dtest/). 내부망 작업은 internal/gaia"],
+    ["브랜치", "master(dev 배포), stg, prd. 작업은 master에서 feature 브랜치를 따서 진행"],
   ], [2.4, 9.93]);
   bullets(s, [
     "로컬 설정은 APP_ENV를 비운 채 공통 config.yml 위에 환경변수(.env 또는 docker-compose.yml의 environment)가 덮습니다.",
@@ -874,21 +873,44 @@ section("5. 유지보수 가이드", ["5.1 개발자 개발 환경 setting 정�
   ], [3.6, 8.73], { y: 3.75, mono: [1], fontSize: 12 });
   note(s, "src/dtest/assets/와 src/dtest/agent/prompts/는 compose에서 마운트되어 있어 수정하면 재빌드 없이 다음 요청부터 반영됩니다.", 6.45);
 
-  s = slide("5.2 패치방법 (App Server): 절차");
+  s = slide("5.2 패치방법 (App Server): 브랜치와 절차");
+  table(s, ["브랜치", "배포 환경", "받는 방법"], [
+    ["feature/...", "없음 (작업용)", "master에서 따서 작업"],
+    ["master", "dev", "feature 브랜치를 머지"],
+    ["stg", "stg", "git merge --ff-only master"],
+    ["prd", "prd", "git merge --ff-only stg"],
+  ], [2.6, 3.0, 6.73]);
   steps(s, [
-    ["두 브랜치 반영", "변경을 main과 internal/gaia에 함께 반영"],
-    ["테스트", "uv run pytest"],
-    ["마이그레이션", "새 마이그레이션이 있으면 배포할 버전의 코드로 python scripts/migrate.py 를 한 번 실행"],
-    ["배포", "사내 플랫폼 절차로 새 버전 배포. 인스턴스 3개 이상이면 하나씩 교체"],
+    ["feature 작업", "master에서 feature 브랜치를 따서 작업. uv run pytest"],
+    ["master 머지", "master에 머지하면 dev에 배포. dev에서 확인 (3.6)"],
+    ["stg 반영", "stg에서 git merge --ff-only master. stg 배포와 확인"],
+    ["prd 반영", "prd에서 git merge --ff-only stg. prd 배포"],
     ["확인", "배포 후 확인 5단계 (3.6)"],
-  ], { h: 1.9, fontSize: 12 });
+  ], { y: 3.35, h: 1.6, fontSize: 12 });
   bullets(s, [
-    "운영은 AUTO_MIGRATE: false로 둡니다. migrate.py가 실패하면 0이 아닌 코드로 끝나고 기존 인스턴스는 그대로 서비스합니다.",
-    "dev와 stg는 AUTO_MIGRATE: true로 두어도 됩니다. 여러 인스턴스가 동시에 떠도 한 인스턴스만 실행합니다.",
-    "배포 중에는 옛 인스턴스가 종료 정리(최대 45초)를 마치고 내려가며, 진행 중이던 턴은 새 인스턴스가 이어 갑니다.",
+    "stg와 prd에는 직접 커밋하지 않습니다. 직접 커밋이 있으면 --ff-only 머지가 실패합니다.",
+    "세 브랜치의 코드는 같고, 환경 차이는 APP_ENV가 고르는 config.{APP_ENV}.yml뿐입니다.",
+  ], { y: 5.15, h: 0.8, fontSize: 12.5 });
+  table(s, ["사내 플랫폼 배포 절차 (작성 필요)", "내용"], [["빌드와 배포 도구, 승인 절차", ""]], [4.0, 8.33], { y: 6.0, boldFirst: false });
+
+  s = slide("5.2 패치방법 (App Server): 마이그레이션과 롤백");
+  const pw = (CW - 0.3) / 2;
+  card(s, MX, Y0, pw, 2.5, "마이그레이션은 자동 실행", [
+    { text: "AUTO_MIGRATE: true(기본값, 세 환경 공통)라서 새 버전의 인스턴스가 시작하면서 마이그레이션을 실행합니다.", options: { breakLine: true } },
+    { text: "여러 인스턴스가 동시에 떠도 잠금을 잡은 한 인스턴스만 실행합니다.", options: { breakLine: true } },
+    { text: "새 마이그레이션은 dev, stg를 거치며 먼저 적용되므로 prd에는 확인된 것만 올라갑니다.", options: {} },
+  ], { fontSize: 13 });
+  card(s, MX + pw + 0.3, Y0, pw, 2.5, "실패했을 때", [
+    { text: "마이그레이션이 실패하면 새 인스턴스가 뜨지 못합니다. 기동 로그의 dtest_startup_failed와 바로 위 예외를 봅니다.", options: { breakLine: true } },
+    { text: "하나씩 교체하면 옛 인스턴스가 남아 서비스를 계속합니다.", options: { breakLine: true } },
+    { text: "이전 버전으로 되돌린 뒤 원인을 고쳐 다시 올립니다.", options: {} },
+  ], { fontSize: 13 });
+  bullets(s, [
     "롤백은 이전 버전으로 되돌리면 됩니다. 마이그레이션은 이전 버전 코드가 계속 동작하도록(컬럼과 인덱스 추가만) 작성하므로 스키마는 되돌리지 않습니다.",
-  ], { y: 3.45, h: 2.3, fontSize: 12.5 });
-  table(s, ["사내 플랫폼 배포 절차 (작성 필요)", "내용"], [["빌드와 배포 도구, 승인 절차", ""]], [4.0, 8.33], { y: 5.95, boldFirst: false });
+    "배포 중에는 옛 인스턴스가 종료 정리(최대 45초)를 마치고 내려가며, 진행 중이던 턴은 새 인스턴스가 이어 갑니다.",
+    "마이그레이션을 배포와 따로 실행하고 싶으면 AUTO_MIGRATE: false로 두고 배포할 버전의 코드로 python scripts/migrate.py를 실행합니다.",
+    "새 마이그레이션 번호는 master 기준으로 하나씩 늘립니다. feature 브랜치를 머지하기 전에 master의 최신 번호와 겹치지 않는지 확인합니다.",
+  ], { y: 4.05, h: 2.5, fontSize: 13 });
 
   s = slide("5.2 패치방법 (App Server): 빌드와 변경 유형별 방법");
   table(s, ["변경 유형", "방법"], [
@@ -902,8 +924,7 @@ section("5. 유지보수 가이드", ["5.1 개발자 개발 환경 setting 정�
   bullets(s, [
     "내부망은 Python 3.11입니다. 3.12 전용 문법이 들어가면 실행에서 깨집니다.",
     "FastAPI는 0.137 미만, langgraph-checkpoint-postgres는 3.1.3으로 고정되어 있습니다. 올리기 전에 tests/test_checkpoint_saver.py를 확인합니다.",
-    "main에서 새 파일을 만들면 internal/gaia에서는 src/dtest/ 아래로 옮기고 import를 src.dtest.로 고칩니다. 빠진 곳은 tests/test_entry.py가 알려 줍니다.",
-    "마이그레이션 번호는 두 브랜치에서 같아야 합니다.",
+    "코드는 src/dtest/ 아래에 두고 import는 src.dtest.로 씁니다.",
   ], { y: 4.55, h: 2.0, fontSize: 12.5 });
 
   s = slide("부록 A. 자주 쓰는 SQL");

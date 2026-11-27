@@ -54,7 +54,7 @@ ws.title = "표지"
 title(ws, "Table 정의서", 2)
 info = [("시스템", "pr-agentic-service (사내 데이터 분석 Agent 서비스)"),
         ("문서", "Table 정의서 (RDB 테이블, Vector 저장소)"),
-        ("기준", "internal/gaia 브랜치, 마이그레이션 0008"),
+        ("기준", "master 브랜치, 마이그레이션 0008"),
         ("작성일", "2026-11-25"),
         ("DBMS", "PostgreSQL, vector 확장(pgvector) 필요. 스키마 public"),
         ("데이터베이스", "dev: dtest / prd: dtestprd (DATABASE_URL의 마지막 부분)"),
