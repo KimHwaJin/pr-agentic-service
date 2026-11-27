@@ -98,15 +98,83 @@ t = re.sub(r"이 테이블들은 LangGraph 라이브러리가 만들고 관리�
            "이 테이블들은 LangGraph 라이브러리가 만들고 관리합니다. 구조를 직접 바꾸지 않습니다. 모든 속성은 9.20~9.26절에 있습니다.", t)
 t = t.replace("| 프로젝트 메모리 | store | namespace에 프로젝트 id | 주제 목록과 주제별 본문 |",
               "| store | store | prefix = 이름공간 | `project_memory.{project_id}` 프로젝트 메모리 본문, `tool_effects.{run_id}` 도구의 executor 요청 결과, `batch_memory.{batch_id}` 배치 리포트 요약 |")
-LG_REL = [
-    "| sessions | checkpoints | 1:N | 없음 | `checkpoints.thread_id` = `sessions.id` |",
-    "| checkpoints | checkpoint_blobs | 1:N | 없음 | 같은 `thread_id`, `checkpoint_ns`와 체크포인트의 채널 버전 |",
-    "| checkpoints | checkpoint_writes | 1:N | 없음 | 같은 `thread_id`, `checkpoint_ns`, `checkpoint_id` |",
-    "| projects, runs, 배치 | store | 1:N | 없음 | `prefix`가 `project_memory.{project_id}`, `tool_effects.{run_id}`, `batch_memory.{batch_id}` |",
+REL = [
+    # 부모, 자식, 관계, 조인 조건, FK 제약, 비고
+    ("users", "projects", "1:N", "projects.created_by = users.id", "있음", "프로젝트를 만든 사용자"),
+    ("projects", "project_members", "1:N", "project_members.project_id = projects.id", "있음", "users와 projects의 N:M 연결 테이블. 현재는 프로젝트당 owner 1명"),
+    ("users", "project_members", "1:N", "project_members.user_id = users.id", "있음", ""),
+    ("projects", "sessions", "1:N", "sessions.project_id = projects.id", "있음", ""),
+    ("users", "sessions", "1:N", "sessions.user_id = users.id", "있음", ""),
+    ("sessions", "messages", "1:N", "messages.session_id = sessions.id", "있음", ""),
+    ("sessions", "runs", "1:N", "runs.session_id = sessions.id", "있음", ""),
+    ("runs", "sessions", "1:0..1", "sessions.active_run_id = runs.id", "없음", "지금 진행 중인 run. 세션당 1개, 없으면 NULL"),
+    ("projects", "runs", "1:N", "runs.project_id = projects.id", "없음", "조회용 사본. runs.session_id로 찾은 세션의 project_id와 같음"),
+    ("users", "runs", "1:N", "runs.user_id = users.id", "없음", "조회용 사본"),
+    ("runs", "messages", "1:N", "messages.run_id = runs.id", "없음", "한 턴의 사용자 메시지와 답변. 비어 있을 수 있음"),
+    ("runs", "run_events", "1:N", "run_events.run_id = runs.id", "없음", ""),
+    ("sessions", "run_events", "1:N", "run_events.session_id = sessions.id", "없음", ""),
+    ("sessions", "run_requests", "1:N", "run_requests.session_id = sessions.id", "없음", "기본키 (session_id, key)의 앞부분"),
+    ("runs", "run_requests", "1:N", "run_requests.run_id = runs.id", "없음", "그 요청 키로 처음 만든 run"),
+    ("runs", "executor_inbox", "1:N", "runs.waiting->>'execution_id' = executor_inbox.execution_id", "없음", "executor를 기다리는 run만. runs.waiting은 jsonb"),
+    ("runs", "code_sources", "1:N", "code_sources.run_id = runs.id", "없음", ""),
+    ("sessions", "code_sources", "1:N", "code_sources.session_id = sessions.id", "없음", ""),
+    ("projects", "code_sources", "1:N", "code_sources.project_id = projects.id", "없음", ""),
+    ("users", "code_sources", "1:N", "code_sources.user_id = users.id", "없음", "코드를 만든 사용자"),
+    ("users", "code_sources", "1:N", "code_sources.approved_by = users.id", "없음", "승인한 사용자. 승인 전에는 NULL"),
+    ("sessions", "images", "1:N", "images.session_id = sessions.id", "없음", ""),
+    ("projects", "images", "1:N", "images.project_id = projects.id", "없음", ""),
+    ("users", "images", "1:N", "images.user_id = users.id", "없음", ""),
+    ("runs", "images", "1:N", "images.run_id = runs.id", "없음", "이미지를 처음 쓴 run. 비어 있을 수 있음"),
+    ("projects", "memory_history", "1:N", "memory_history.project_id = projects.id", "없음", ""),
+    ("sessions", "memory_history", "1:N", "memory_history.session_id = sessions.id", "없음", "Agent가 바꾼 경우만"),
+    ("runs", "memory_history", "1:N", "memory_history.run_id = runs.id", "없음", "Agent가 바꾼 경우만"),
+    ("users", "memory_history", "1:N", "memory_history.actor_id = users.id (actor_type = 'user')", "없음", "actor_type이 agent이면 actor_id는 run id"),
+    ("projects", "memory_extraction_state", "1:1", "memory_extraction_state.project_id = projects.id", "없음", "기본키가 project_id"),
+    ("messages", "memory_extraction_state", "1:N", "memory_extraction_state.processed_until_id = messages.id", "없음", "정리를 마친 마지막 메시지. 처음에는 빈 문자열"),
+    ("users", "workflows", "1:N", "workflows.author_id = users.id", "있음", ""),
+    ("runs", "workflows", "1:N", "workflows.source_run_id = runs.id", "없음", "워크플로우를 만든 대화의 run"),
+    ("workflows", "workflows", "1:N", "workflows.source_workflow_id = workflows.id", "없음", "복사해 온 원본 워크플로우"),
+    ("workflows", "workflow_query_vectors", "1:N", "workflow_query_vectors.workflow_id = workflows.id", "있음", ""),
+    ("users", "batch_report_jobs", "1:N", "batch_report_jobs.owner_id = users.id", "없음", "배치를 만든 사용자. 그 사용자만 리포트를 봄"),
+    ("batch_report_jobs", "batch_report_events", "1:N", "batch_report_events.job_id = batch_report_jobs.id", "없음", ""),
+    ("users", "gaia_sessions", "1:N", "gaia_sessions.user_id = users.id", "있음", ""),
+    ("sessions", "gaia_sessions", "1:N", "gaia_sessions.session_id = sessions.id", "있음", ""),
+    ("users", "api_clients", "1:N", "api_clients.created_by = users.id", "없음", "키를 발급한 관리자"),
+    ("sessions", "checkpoints", "1:N", "checkpoints.thread_id = sessions.id", "없음", "LangGraph 테이블"),
+    ("checkpoints", "checkpoints", "1:N", "checkpoints.parent_checkpoint_id = checkpoints.checkpoint_id (같은 thread_id, checkpoint_ns)", "없음", "바로 앞 체크포인트"),
+    ("checkpoints", "checkpoint_blobs", "1:N", "checkpoint_blobs.(thread_id, checkpoint_ns) = checkpoints.(thread_id, checkpoint_ns), channel과 version은 checkpoints.checkpoint의 channel_versions 값", "없음", "같은 버전의 값은 여러 체크포인트가 함께 참조"),
+    ("checkpoints", "checkpoint_writes", "1:N", "checkpoint_writes.(thread_id, checkpoint_ns, checkpoint_id) = checkpoints.(thread_id, checkpoint_ns, checkpoint_id)", "없음", ""),
+    ("projects", "store", "1:N", "store.prefix = CONCAT('project_memory.', projects.id)", "없음", "프로젝트 메모리 본문"),
+    ("runs", "store", "1:N", "store.prefix = CONCAT('tool_effects.', runs.id)", "없음", "도구 실행 결과"),
+    ("batch_report_jobs", "store", "1:N", "store.prefix = CONCAT('batch_memory.', batch_report_jobs.batch_id)", "없음", "배치 리포트 요약. batch_id는 batch 서비스의 배치 id"),
 ]
-if LG_REL[0] not in t:
-    anchor = "| users | api_clients | 1:N | 없음 | `created_by` = 발급한 관리자의 `users.id` |"
-    t = t.replace(anchor, anchor + "\n" + "\n".join(LG_REL))
+EXT_REF = [
+    # 컬럼, 가리키는 것
+    ("executor_inbox.execution_id, code_sources.execution_id, batch_report_jobs.execution_id, runs.waiting->>'execution_id'", "executor의 실행 id"),
+    ("executor_inbox.event_id, executor_inbox.event_sequence", "executor가 보낸 이벤트 id와 실행 안 순번"),
+    ("code_sources.operation_id, code_sources.step_id", "executor의 작업(operation)과 단계(step) id"),
+    ("batch_report_jobs.artifact_id", "executor에 저장된 리포트 Artifact id"),
+    ("batch_report_jobs.batch_id, batch_report_jobs.batch_run_id", "batch 서비스의 배치 id와 배치 실행 id"),
+    ("gaia_sessions.gaia_session_id", "gaia 채팅 화면의 세션 id"),
+    ("code_sources.tool_call_id", "Agent 대화 안의 도구 호출 id (체크포인트의 메시지에 있음)"),
+    ("api_clients.tenant", "executor tenant 이름"),
+]
+
+
+def rel_section(num):
+    out = [f"## {num}. 관계와 카디널리티", "",
+           "테이블 사이의 모든 참조를 한 줄에 하나씩 적었습니다. 조인 조건은 그대로 SQL에 쓸 수 있는 형태입니다. "
+           "FK 제약이 없음인 관계는 DB가 값을 검사하지 않으므로, 부모 행이 지워졌거나 값이 비어 있을 수 있습니다(LEFT JOIN 권장).", "",
+           "| 부모 | 자식 | 관계 | 조인 조건 | FK 제약 | 비고 |", "| --- | --- | --- | --- | --- | --- |"]
+    out += [f"| {p} | {c} | {r} | `{j}` | {fk} | {esc(note)} |" for p, c, r, j, fk, note in REL]
+    out += ["", f"### {num}.1 DB 밖을 가리키는 식별자", "",
+            "아래 컬럼은 우리 DB의 다른 테이블이 아니라 다른 시스템의 값을 담습니다. 우리 DB 안에서는 조인 대상이 없습니다.", "",
+            "| 컬럼 | 가리키는 것 |", "| --- | --- |"]
+    out += [f"| `{c}` | {w} |" for c, w in EXT_REF]
+    return "\n".join(out) + "\n"
+
+
+t = replace_section(t, "## 5. 관계와 카디널리티", rel_section(5))
 t = replace_section(t, "## 9. 엔티티별 속성", logical_section(9))
 open(p, "w", encoding="utf-8").write(t)
 

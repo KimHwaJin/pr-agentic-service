@@ -210,8 +210,8 @@ function tableList(title) {
 if (KIND === "logical") {
   cover("gaia-api-service 논리 ERD", `엔티티 ${TB.length}개, 속성 ${NCOL}개 (마이그레이션 0008까지 반영)`);
   history([["0.1", "2026-11-25", "초안 작성 (Markdown)", "", ""],
-           ["0.2", "2026-11-27", "PPT 작성. 모든 속성을 한글 속성명과 함께 표시. LangGraph, Alembic 테이블 추가", "", ""]]);
-  section("1. 개요", ["1.1 데이터 저장소와 공통 규칙", "1.2 데이터 영역", "1.3 ERD", "1.4 관계와 카디널리티"]);
+           ["0.2", "2026-11-27", "PPT 작성. 모든 속성을 한글 속성명과 함께 표시. LangGraph, Alembic 테이블 추가. 관계마다 조인 조건 표시", "", ""]]);
+  section("1. 개요", ["1.1 데이터 저장소와 공통 규칙", "1.2 데이터 영역", "1.3 ERD", "1.4 관계와 카디널리티", "1.5 DB 밖을 가리키는 식별자"]);
   let s = slide("1.1 데이터 저장소와 공통 규칙");
   table(s, DATA.overview[0], DATA.overview.slice(1), [3.0, 4.6, 4.73], { fontSize: 11.5 });
   bullets(s, [
@@ -229,7 +229,14 @@ if (KIND === "logical") {
   ]), [2.4, 4.6, 5.33], { fontSize: 12 });
   erdImages("04-erd-logical", ["1.3 ERD: 전체", "1.3 ERD: 사용자, 대화, 실행, executor 연동, gaia 연동",
     "1.3 ERD: 워크플로우, 배치 리포트, 프로젝트 메모리, 서비스 간 인증", "1.3 ERD: LangGraph 체크포인트와 store, 마이그레이션 버전"]);
-  pagedTable("1.4 관계와 카디널리티", DATA.rels[0], DATA.rels.slice(1), [2.3, 2.3, 0.9, 1.6, 5.23], { fontSize: 10.5 });
+  pagedTable("1.4 관계와 카디널리티", DATA.rels[0], DATA.rels.slice(1), [1.55, 1.85, 0.65, 4.75, 0.75, 2.78], {
+    fontSize: 10, mono: [3], firstY: Y0 + 0.45,
+    onFirst: (s) => lead(s, "테이블 사이의 모든 참조입니다. FK 제약이 없음인 관계는 DB가 값을 검사하지 않으므로 LEFT JOIN을 권장합니다.", Y0, 0.4),
+  });
+  pagedTable("1.5 DB 밖을 가리키는 식별자", DATA.extref[0], DATA.extref.slice(1), [6.5, 5.83], {
+    fontSize: 11, mono: [0], firstY: Y0 + 0.45,
+    onFirst: (s) => lead(s, "아래 컬럼은 다른 시스템(executor, batch, gaia)의 값을 담습니다. 우리 DB 안에서는 조인 대상이 없습니다.", Y0, 0.4),
+  });
   section("2. 엔티티별 속성", [`엔티티 ${TB.length}개의 모든 속성`, "키: PK 기본키, FK 외래키 제약, UK 유일 제약", "필수: 값이 반드시 있어야 하는 속성"]);
   TB.forEach((t, i) => {
     const rows = t.cols.map((c, j) => [String(j + 1), c.ko, c.name, c.key, c.null === "N" ? "필수" : "선택", c.desc]);
