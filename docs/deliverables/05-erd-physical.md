@@ -3,7 +3,7 @@
 | 항목 | 내용 |
 | --- | --- |
 | 시스템 | pr-agentic-service (사내 데이터 분석 Agent 서비스) |
-| 기준 | internal/gaia 브랜치, 마이그레이션 0008, 2026-11-25 |
+| 기준 | master 브랜치, 마이그레이션 0008, 2026-11-27 |
 | 그림 원본 | `diagrams/05-erd-physical.drawio` (페이지 2장) |
 | 모델 정의 | `src/dtest/core/models.py`, `src/dtest/gaia_bridge/models.py` |
 
@@ -14,7 +14,7 @@
 | 항목 | 값 |
 | --- | --- |
 | DBMS | PostgreSQL (로컬 검증은 16). `vector` 확장(pgvector)이 필요합니다 |
-| 데이터베이스 이름 | dev는 `dtest`, prd는 `dtestprd` (`DATABASE_URL`의 마지막 부분). 사외 로컬은 `agentic` |
+| 데이터베이스 이름 | dev는 `dtest`, prd는 `dtestprd` (`DATABASE_URL`의 마지막 부분). 로컬 개발 환경은 `agentic` |
 | 스키마 | `public` |
 | 접속 설정 | `DATABASE_URL` (`postgresql+psycopg://사용자:비밀번호@호스트:5432/데이터베이스이름`) |
 | 드라이버 | psycopg 3. 앱 테이블은 SQLAlchemy 비동기, LangGraph는 psycopg 풀 |
@@ -141,7 +141,7 @@ dev와 prd의 DB 사용 현황(2026-11-22 기준)은 다음과 같습니다.
 | 0007 | api_clients에 `batches_disable_pending` 컬럼 |
 | 0008 | api_clients에 `kind` 컬럼 (기본값 `standard`) |
 
-0004의 내력: gaia_sessions는 원래 internal/gaia에서 0002번이었습니다. main의 0002, 0003과 번호가 겹쳐 0004로 옮겼습니다. 예전 0002(gaia_sessions)로 올린 DB가 남아 있다면 테이블은 있지만 지금의 0002, 0003이 빠진 상태입니다. 그런 DB는 아래를 실행한 뒤 다시 올리면 기존 테이블은 그대로 두고 나머지가 적용됩니다.
+0004의 내력: gaia_sessions는 처음에 0002번으로 만들었다가 다른 마이그레이션과 번호가 겹쳐 0004로 옮겼습니다. 예전 0002(gaia_sessions)로 올린 DB가 남아 있다면 테이블은 있지만 지금의 0002, 0003이 빠진 상태입니다. 그런 DB는 아래를 실행한 뒤 다시 올리면 기존 테이블은 그대로 두고 나머지가 적용됩니다.
 
 ```sql
 UPDATE alembic_version SET version_num = '0001';
@@ -154,7 +154,7 @@ UPDATE alembic_version SET version_num = '0001';
 - 컬럼 삭제나 이름 변경은 두 번에 나눕니다. 먼저 코드가 그 컬럼을 쓰지 않게 배포하고, 다음 배포에서 지웁니다.
 - 큰 테이블(run_events)의 인덱스 추가는 테이블 잠금 시간을 확인합니다. Alembic 기본은 `CREATE INDEX`라 쓰기가 잠깁니다.
 - 모델(`models.py`)과 마이그레이션을 같이 고칩니다. 로컬에서 빈 DB에 처음부터 올려 보고, 직전 버전 DB에서도 올려 봅니다.
-- main과 internal/gaia 양쪽에 같은 번호로 들어가야 합니다. 한쪽에만 번호를 쓰면 0004와 같은 충돌이 다시 생깁니다.
+- 번호는 master 기준으로 하나씩 늘립니다. feature 브랜치를 master에 머지하기 전에 master의 최신 번호와 겹치지 않는지 확인합니다. stg와 prd에는 master의 것이 그대로 올라갑니다.
 
 ### 5.4 주의
 

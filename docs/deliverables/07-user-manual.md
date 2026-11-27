@@ -4,7 +4,7 @@
 | --- | --- |
 | 시스템 | pr-agentic-service (사내 데이터 분석 Agent 서비스) |
 | 대상 | 웹 화면에서 데이터 분석을 요청하는 사용자 |
-| 기준 | internal/gaia 브랜치, 2026-11-25. 화면은 서비스가 제공하는 웹 화면(Analysis Agent) 기준 |
+| 기준 | master 브랜치, 2026-11-27. 화면은 서비스가 제공하는 웹 화면(Analysis Agent) 기준 |
 | 그림 원본 | `diagrams/07-user-flow.drawio` |
 
 접속 주소는 환경마다 다르므로 이 문서에 적지 않습니다. 운영 담당자에게 받은 주소로 접속합니다.

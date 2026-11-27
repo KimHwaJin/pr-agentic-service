@@ -3,11 +3,11 @@
 | 항목 | 내용 |
 | --- | --- |
 | 시스템 | pr-agentic-service (사내 데이터 분석 Agent 서비스) |
-| 기준 | internal/gaia 브랜치, 2026-11-25 |
+| 기준 | master 브랜치, 2026-11-27 |
 | 그림 원본 | `diagrams/02-agent-workflow.drawio`, `diagrams/03-agent-graph.drawio` (페이지 6장) |
 | 관련 문서 | `02-program-list.xlsx` (프로그램 목록). 이 문서의 AW, G 번호는 그 목록의 ID입니다 |
 
-소스 경로는 내부망 레포 기준이고 `src/dtest/` 아래입니다.
+소스 경로는 `src/dtest/` 아래입니다.
 
 ## 1. 개요
 

@@ -3,7 +3,7 @@
 | 항목 | 내용 |
 | --- | --- |
 | 시스템 | pr-agentic-service (사내 데이터 분석 Agent 서비스) |
-| 기준 | internal/gaia 브랜치, 2026-11-25 |
+| 기준 | master 브랜치, 2026-11-27 |
 | 그림 원본 | `diagrams/01-system-architecture.drawio` (페이지 2장) |
 
 주소, 계정, 키 같은 환경별 실제 값은 적지 않고 설정 키 이름으로 가리킵니다. 실제 값은 `config.{dev,stg,prd}.yml`에 있습니다.
