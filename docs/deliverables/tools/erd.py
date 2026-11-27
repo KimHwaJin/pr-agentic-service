@@ -1,8 +1,8 @@
 import sys
 from dg import Page, write
-from schema import load
+from names import full_schema
 
-S = load(sys.argv[1])
+S = full_schema(sys.argv[1])
 T = S["tables"]
 W = 250
 X = [60, 390, 720, 1050]
@@ -14,14 +14,12 @@ def rows(name, types, only=None):
     for c in T[name]["cols"]:
         if only and c["name"] not in only:
             continue
-        out.append((c["key"], c["name"], c["type"] if types else ""))
+        out.append((c["key"], c["name"], c["type"]) if types else (c["key"], c["ko"], ""))
     return out
 
 
 def tbl(p, name, col, y, types, only=None, kind="ours"):
     r = rows(name, types, only)
-    if only:
-        r.append(("", "… (1페이지 참조)", ""))
     return p.table(name, name, r, X[col], y, W, sub=T[name]["ko"], kind=kind)
 
 
@@ -85,12 +83,12 @@ def page_a(types, title):
 
 
 def page_b(types, title):
-    p = Page("워크플로우·배치·메모리·인증", 1400, 880, title)
-    y = tbl(p, "users", 0, 90, types, only=("id", "employee_id"), kind="infra")
+    p = Page("워크플로우·배치·메모리·인증", 1400, 1000, title)
+    y = tbl(p, "users", 0, 90, types, kind="infra")
     tbl(p, "api_clients", 0, y + 60, types)
     y = tbl(p, "workflows", 1, 90, types); tbl(p, "workflow_query_vectors", 1, y + 52, types)
     y = tbl(p, "batch_report_jobs", 2, 90, types); tbl(p, "batch_report_events", 2, y + 52, types)
-    y = tbl(p, "projects", 3, 90, types, only=("id", "name"), kind="infra")
+    y = tbl(p, "projects", 3, 90, types, kind="infra")
     y = tbl(p, "memory_history", 3, y + 56, types)
     tbl(p, "memory_extraction_state", 3, y + 54, types)
     n = p.nodes
@@ -110,6 +108,32 @@ def page_b(types, title):
     link(p, "memory_extraction_state", "projects", [(R(3), ym), (1340, ym), (1340, 135), (R(3), 135)],
          dashed=True, er="one")
     p.text("note", NOTE + "   회색: 다른 페이지의 테이블", 60, p.h - 34, 1300, 20)
+    return p
+
+
+def page_c(types, title):
+    p = Page("LangGraph·Alembic", 1400, 640, title)
+    p.table("sessions", "sessions", [("PK", "id" if types else "세션 ID", "varchar(36)" if types else "")],
+            X[0], 90, W, sub="채팅 세션 (1페이지)", kind="infra")
+    y = tbl(p, "checkpoints", 1, 90, types)
+    tbl(p, "checkpoint_migrations", 1, y + 50, types)
+    y = tbl(p, "checkpoint_blobs", 2, 90, types)
+    tbl(p, "checkpoint_writes", 2, y + 50, types)
+    y = tbl(p, "store", 3, 90, types)
+    y = tbl(p, "store_migrations", 3, y + 40, types)
+    tbl(p, "alembic_version", 3, y + 30, types)
+    n = p.nodes
+    Y = lambda k: n[k]["y"]
+    B = lambda k: n[k]["y"] + n[k]["h"]
+    R = lambda c: X[c] + W
+    link(p, "checkpoints", "sessions", [(X[1], 140), (R(0), 140)], dashed=True)
+    link(p, "checkpoint_blobs", "checkpoints", [(X[2], 140), (R(1), 140)], dashed=True)
+    yw = Y("checkpoint_writes") + 60
+    link(p, "checkpoint_writes", "checkpoints", [(X[2], yw), (690, yw), (690, 200), (R(1), 200)], dashed=True)
+    p.text("note", "점선: 제약 없이 값으로 참조. checkpoints.thread_id = sessions.id. checkpoint_blobs는 thread_id, checkpoint_ns와 "
+           "checkpoints.checkpoint의 채널 버전으로, checkpoint_writes는 checkpoint_id까지 같은 값으로 찾습니다.\n"
+           "store는 prefix에 project_memory.{project_id}, tool_effects.{run_id}, batch_memory.{batch_id}를 담아 값으로만 참조합니다. "
+           "*_migrations와 alembic_version은 스키마 버전 기록이라 다른 테이블과 관계가 없습니다.", 60, p.h - 70, 1300, 50)
     return p
 
 
@@ -160,8 +184,10 @@ def overview():
 
 out = sys.argv[2]
 write([overview(), page_a(False, "논리 ERD (사용자, 대화, 실행, executor 연동, gaia 연동)"),
-       page_b(False, "논리 ERD (워크플로우, 배치 리포트, 프로젝트 메모리, 서비스 간 인증)")],
+       page_b(False, "논리 ERD (워크플로우, 배치 리포트, 프로젝트 메모리, 서비스 간 인증)"),
+       page_c(False, "논리 ERD (LangGraph 체크포인트와 store, 마이그레이션 버전)")],
       "04-erd-logical", out)
 write([page_a(True, "물리 ERD (사용자, 대화, 실행, executor 연동, gaia 연동)"),
-       page_b(True, "물리 ERD (워크플로우, 배치 리포트, 프로젝트 메모리, 서비스 간 인증)")],
+       page_b(True, "물리 ERD (워크플로우, 배치 리포트, 프로젝트 메모리, 서비스 간 인증)"),
+       page_c(True, "물리 ERD (LangGraph 체크포인트와 store, 마이그레이션 버전)")],
       "05-erd-physical", out)
