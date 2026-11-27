@@ -161,10 +161,10 @@ EXT_REF = [
 ]
 
 
-def rel_section(num):
-    out = [f"## {num}. 관계와 카디널리티", "",
+def rel_section(num, title="관계와 카디널리티", note=""):
+    out = [f"## {num}. {title}", "",
            "테이블 사이의 모든 참조를 한 줄에 하나씩 적었습니다. 조인 조건은 그대로 SQL에 쓸 수 있는 형태입니다. "
-           "FK 제약이 없음인 관계는 DB가 값을 검사하지 않으므로, 부모 행이 지워졌거나 값이 비어 있을 수 있습니다(LEFT JOIN 권장).", "",
+           "FK 제약이 없음인 관계는 DB가 값을 검사하지 않으므로, 부모 행이 지워졌거나 값이 비어 있을 수 있습니다(LEFT JOIN 권장)." + note, "",
            "| 부모 | 자식 | 관계 | 조인 조건 | FK 제약 | 비고 |", "| --- | --- | --- | --- | --- | --- |"]
     out += [f"| {p} | {c} | {r} | `{j}` | {fk} | {esc(note)} |" for p, c, r, j, fk, note in REL]
     out += ["", f"### {num}.1 DB 밖을 가리키는 식별자", "",
@@ -174,25 +174,53 @@ def rel_section(num):
     return "\n".join(out) + "\n"
 
 
+def build_ref():
+    """(table, column) -> what the column points at, for the 참조 column of 05."""
+    ref = {}
+    for p, c, r, j, fk, note in REL:
+        m = re.fullmatch(r"([a-z_]+)\.([a-z_]+) = ([a-z_]+\.[a-z_]+)", j)
+        if m:
+            ref[(m.group(1), m.group(2))] = m.group(3) + (" (FK)" if fk == "있음" else " (값만)")
+    ref.update({
+        ("runs", "waiting"): "executor_inbox.execution_id (값만, waiting->>'execution_id')",
+        ("memory_history", "actor_id"): "users.id 또는 runs.id (값만, actor_type에 따라)",
+        ("checkpoints", "parent_checkpoint_id"): "checkpoints.checkpoint_id (값만)",
+        ("checkpoint_blobs", "thread_id"): "sessions.id (값만)",
+        ("checkpoint_writes", "thread_id"): "sessions.id (값만)",
+        ("checkpoint_writes", "checkpoint_id"): "checkpoints.checkpoint_id (값만)",
+        ("store", "prefix"): "접두어 + projects.id, runs.id, batch_id (값만)",
+    })
+    for cols, what in EXT_REF:
+        for c in cols.split(", "):
+            if "->>" in c:
+                continue
+            tb, col = c.split(".")
+            ref.setdefault((tb, col), "DB 밖: " + what)
+    return ref
+
+
+REF = build_ref()
+for _n in ALL:
+    for _c in T[_n]["cols"]:
+        _c["ref"] = REF.get((_n, _c["name"])) or ((_c["fk"] + " (FK)") if _c["fk"] else "")
+
+
 t = replace_section(t, "## 5. 관계와 카디널리티", rel_section(5))
 t = replace_section(t, "## 9. 엔티티별 속성", logical_section(9))
-open(p, "w", encoding="utf-8").write(t)
+open(p, "w", encoding="utf-8").write(t.rstrip() + "\n")
 
 # ---------------------------------------------------------------- 05 physical
 def physical_section(num):
     out = [f"## {num}. 테이블별 컬럼", "",
            "모든 테이블의 모든 컬럼입니다. NULL이 N이면 NOT NULL, 기본값의 (앱)은 DB가 아니라 애플리케이션이 넣는 값입니다. "
+           "참조의 (FK)는 외래키 제약이 있는 것, (값만)은 제약 없이 값으로만 가리키는 것, DB 밖은 다른 시스템의 값입니다. 조인 조건은 7절에 있습니다. "
            "설명까지 담은 정의는 `06-table-definition.md`에 있습니다.", ""]
     for i, n in enumerate(ALL, 1):
         t = T[n]
         out += [f"### {num}.{i} {n} ({t['ko']})", "", f"기본키 {t['pk']}. 행 증가: {t['growth']}. 자동 정리: {t['cleanup']}.", "",
                 "| No | 컬럼 | 데이터 타입 | NULL | 키 | 기본값 | 참조 |", "| --- | --- | --- | --- | --- | --- | --- |"]
         for j, c in enumerate(t["cols"], 1):
-            ref = c["fk"] or ""
-            if not ref:
-                m = re.search(r"\(([a-z_]+\.[a-z_]+) 값", c["desc"]) or re.search(r"우리 ([a-z_]+\.[a-z_]+) 값", c["desc"])
-                ref = (m.group(1) + " (값만)") if m else ""
-            out.append(f"| {j} | `{c['name']}` | {c['type']} | {c['null']} | {c['key']} | {esc(c['default'])} | {ref} |")
+            out.append(f"| {j} | `{c['name']}` | {c['type']} | {c['null']} | {c['key']} | {esc(c['default'])} | {esc(c['ref'])} |")
         out.append("")
     return "\n".join(out)
 
@@ -224,7 +252,12 @@ table += [f"| {x['table']} | {x['name']} | {esc(x['cols'])} | {esc(x['use'])} |"
 lines[i:j] = table
 t = "\n".join(lines)
 t = replace_section(t, "## 6. 테이블별 컬럼", physical_section(6))
-open(p, "w", encoding="utf-8").write(t)
+t = replace_section(t, "## 7. 참조 관계와 조인 조건", rel_section(7, "참조 관계와 조인 조건",
+                    " FK 제약은 모두 ON DELETE 지정이 없어(NO ACTION) 부모 행을 지우기 전에 자식 행을 먼저 지워야 합니다. "
+                    "다만 프로젝트, 세션, 워크플로우는 실제로 지우지 않고 deleted_at만 적습니다."))
+t = t.replace("모든 테이블의 모든 컬럼은 6절에 있습니다. 컬럼 설명까지",
+              "모든 테이블의 모든 컬럼은 6절, 테이블 사이의 모든 참조와 조인 조건은 7절에 있습니다. 컬럼 설명까지")
+open(p, "w", encoding="utf-8").write(t.rstrip() + "\n")
 
 # ---------------------------------------------------------------- 06 table definition
 out = ["# Table 정의서", "",

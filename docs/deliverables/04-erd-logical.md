@@ -735,4 +735,3 @@ LangGraph store 테이블의 스키마 버전 기록입니다. 기동 때 store.
 | 5 | 수정 시각 | `updated_at` |  | 선택 | 행을 마지막으로 바꾼 시각 |
 | 6 | 만료 시각 | `expires_at` |  | 선택 | 만료 시각. 이 서비스는 TTL을 쓰지 않아 비어 있음 |
 | 7 | TTL(분) | `ttl_minutes` |  | 선택 | TTL(분). 이 서비스는 쓰지 않음 |
-
