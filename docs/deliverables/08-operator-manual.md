@@ -2,7 +2,7 @@
 
 | 항목 | 내용 |
 | --- | --- |
-| 시스템 | pr-agentic-service (사내 데이터 분석 Agent 서비스) |
+| 시스템 | gaia-api-service (사내 데이터 분석 Agent 서비스) |
 | 대상 | 시스템을 운영하는 담당자 |
 | 소스 경로 | `src/dtest/` 아래 |
 | 그림 원본 | `diagrams/08-ops-flow.drawio` |
@@ -26,7 +26,7 @@
 
 ### 1.1 무엇이 어디에 연결되나
 
-pr-agentic-service는 사내 데이터 분석 Agent의 채팅 API이자 Agent 실행 서비스입니다. 서비스 인스턴스 하나는 프로세스 하나(uvicorn worker 1개)이고, 그 안에서 API와 백그라운드 작업(worker)이 함께 돕니다. 같은 인스턴스를 여러 개 띄워 부하를 나눕니다. 이 문서에서 "인스턴스"는 그 프로세스 하나를 뜻합니다.
+gaia-api-service는 사내 데이터 분석 Agent의 채팅 API이자 Agent 실행 서비스입니다. 서비스 인스턴스 하나는 프로세스 하나(uvicorn worker 1개)이고, 그 안에서 API와 백그라운드 작업(worker)이 함께 돕니다. 같은 인스턴스를 여러 개 띄워 부하를 나눕니다. 이 문서에서 "인스턴스"는 그 프로세스 하나를 뜻합니다.
 
 컨테이너 배치, 자동 확장, 앞단 라우팅 같은 실행 인프라는 사내 플랫폼이 맡으므로 이 문서에서 다루지 않습니다. 서비스가 인프라에 기대하는 조건만 1.3절에 적었습니다.
 
@@ -41,7 +41,7 @@ pr-agentic-service는 사내 데이터 분석 Agent의 채팅 API이자 Agent �
 | LLM 게이트웨이 | 나감 | 모델 호출 | run이 `failed`로 끝남. 그 외 화면은 정상 |
 | 임베딩 게이트웨이 | 나감 | 워크플로우 검색 | 워크플로우 추천만 안 됨 |
 | executor | 나감 | 분석 코드 실행, 노트북, 결과물 | 분석 요청 실패, 결과물 조회 502. 일반 대화는 정상 |
-| pr-batch | 나감 | 배치 등록과 조회 중계 | 배치 화면만 502 |
+| batch | 나감 | 배치 등록과 조회 중계 | 배치 화면만 502 |
 | 공유 저장소(PV) | 마운트 | executor와 코드·결과 파일 주고받기 | 분석 코드 제출과 결과 읽기 실패 |
 | Phoenix | 나감 | 실행 추적(선택) | 영향 없음 |
 
@@ -217,11 +217,11 @@ python scripts/set_user_role.py --env prd A10054 admin           # 승격 (강�
 
 ### 3.2 사용자 비활성화
 
-관리자 화면에서 비활성화하면 그 사용자의 진행 중인 턴과 executor 커널이 바로 취소되고, 그 사용자의 배치는 pr-batch에서 꺼집니다. pr-batch가 응답하지 않으면 성공할 때까지 worker가 다시 시도합니다(`batch_disable_failed` 경고).
+관리자 화면에서 비활성화하면 그 사용자의 진행 중인 턴과 executor 커널이 바로 취소되고, 그 사용자의 배치는 batch에서 꺼집니다. batch가 응답하지 않으면 성공할 때까지 worker가 다시 시도합니다(`batch_disable_failed` 경고).
 
 ### 3.3 API 키
 
-다른 서비스와 에이전트는 우리가 발급한 `X-Api-Key`와 `X-User-Id` 헤더로 호출합니다. executor와 pr-batch는 우리 서비스를 거쳐서만 부를 수 있습니다(`/api/v1/executor/...`, `/api/v1/batch/...`).
+다른 서비스와 에이전트는 우리가 발급한 `X-Api-Key`와 `X-User-Id` 헤더로 호출합니다. executor와 batch는 우리 서비스를 거쳐서만 부를 수 있습니다(`/api/v1/executor/...`, `/api/v1/batch/...`).
 
 | 구분 | 값 | 뜻 |
 | --- | --- | --- |
@@ -243,13 +243,13 @@ python scripts/set_user_role.py --env prd A10054 admin           # 승격 (강�
 - 키 원문은 발급 응답에서 한 번만 보입니다. DB에는 SHA-256만 남아 다시 보여 줄 수 없습니다. 잃어버리면 재발급합니다.
 - 마스터키는 `description`에 용도와 담당자를 적고, 분기마다 목록을 보고 쓰지 않는 키를 폐기합니다. `last_used_at`으로 마지막 사용 시각을 봅니다.
 - 다른 tenant에 키를 줄 때는 `X-User-Id`로 SSO 사번을 보내기로 약속받습니다. 시스템 호출은 `svc-`로 시작하는 값을 씁니다. 사번 형식이 정해지면 `EMPLOYEE_ID_PATTERN`에 넣어 강제합니다.
-- 새 tenant를 위해 executor나 pr-batch 설정을 바꿀 필요는 없습니다. 두 서비스는 우리 키에 모든 tenant를 허용합니다.
+- 새 tenant를 위해 executor나 batch 설정을 바꿀 필요는 없습니다. 두 서비스는 우리 키에 모든 tenant를 허용합니다.
 
 ### 3.4 우리가 쓰는 키 교체 (`EXECUTOR_API_KEY`, `BATCH_API_KEY`)
 
-이 두 키는 executor와 pr-batch에서 모든 tenant로 행세할 수 있는 키입니다. 교체는 끊김이 없도록 아래 순서로 합니다.
+이 두 키는 executor와 batch에서 모든 tenant로 행세할 수 있는 키입니다. 교체는 끊김이 없도록 아래 순서로 합니다.
 
-1. 상대 서비스(executor 또는 pr-batch)의 `key_sha256` 목록에 새 키의 해시를 추가해 배포합니다.
+1. 상대 서비스(executor 또는 batch)의 `key_sha256` 목록에 새 키의 해시를 추가해 배포합니다.
 2. 우리 설정의 키를 새 값으로 바꿔 배포합니다.
 3. 상대 서비스에서 옛 해시를 지웁니다.
 
@@ -302,7 +302,7 @@ python scripts/set_user_role.py --env prd A10054 admin           # 승격 (강�
 
 ### 4.5 PostgreSQL 연결 수에는 예산이 있다
 
-- 문제: DB의 연결 한도는 150이고 사내 서비스형 DB라 우리가 올릴 수 없습니다. 한도는 서버 단위라서 dev와 prd의 pr-agentic-service, executor, pr-batch가 모두 이 한도를 나눠 씁니다. 우리 인스턴스 하나는 최대 14(앱 풀 6 + 그래프 풀 8)입니다.
+- 문제: DB의 연결 한도는 150이고 사내 서비스형 DB라 우리가 올릴 수 없습니다. 한도는 서버 단위라서 dev와 prd의 gaia-api-service, executor, batch가 모두 이 한도를 나눠 씁니다. 우리 인스턴스 하나는 최대 14(앱 풀 6 + 그래프 풀 8)입니다.
 - 교체 배포(롤링 업데이트) 중에는 옛 인스턴스와 새 인스턴스가 함께 떠 있어 연결이 일시적으로 늘어납니다.
 
 | 우리 인스턴스 수 | 평소 | 하나씩 교체 중 | 한꺼번에 교체 중 |
@@ -311,7 +311,7 @@ python scripts/set_user_role.py --env prd A10054 admin           # 승격 (강�
 | 3 | 42 | 56 | 84 |
 | 4 | 56 | 70 | 112 |
 
-- 여기에 executor(인스턴스당 16), pr-batch(인스턴스당 6), dev와 prd를 모두 더한 값이 150 아래여야 합니다. 예를 들어 prd(우리 2, executor 1, pr-batch 1)와 dev(우리 1, executor 1, pr-batch 1)이면 평소 86, prd의 우리 서비스를 한꺼번에 교체하는 동안 114입니다. 우리가 4개로 늘어난 상태에서 한꺼번에 교체하면 170으로 한도를 넘습니다.
+- 여기에 executor(인스턴스당 16), batch(인스턴스당 6), dev와 prd를 모두 더한 값이 150 아래여야 합니다. 예를 들어 prd(우리 2, executor 1, batch 1)와 dev(우리 1, executor 1, batch 1)이면 평소 86, prd의 우리 서비스를 한꺼번에 교체하는 동안 114입니다. 우리가 4개로 늘어난 상태에서 한꺼번에 교체하면 170으로 한도를 넘습니다.
 - 증상: 넘으면 `too many connections` 오류가 같은 서버를 쓰는 모든 서비스에서 납니다. 새로 뜨는 인스턴스는 DB 연결에 실패해 시작하지 못하므로 배포가 멈춥니다.
 - 예방: 합계에 여유를 20 이상 남깁니다. 인스턴스가 3개 이상이면 하나씩 교체합니다. 인스턴스 수, `DB_POOL_SIZE`, `CHECKPOINT_POOL_SIZE`를 올리기 전에 다시 계산합니다. 계산식은 `인스턴스 수 × (DB_POOL_SIZE × 2 + CHECKPOINT_POOL_SIZE)`입니다.
 - 참고: 표는 모든 풀이 꽉 찬 최악의 경우입니다. 풀은 필요할 때만 연결을 열어 평소 실제 연결 수는 훨씬 적습니다.
@@ -481,7 +481,7 @@ python scripts/set_user_role.py --env prd A10054 admin           # 승격 (강�
 2. `GET /api/v1/healthz`: `{"status": "down", "stopped": [...]}`이면 백그라운드 루프가 죽은 것입니다. `stopped`에 죽은 루프 이름이 나옵니다.
 3. 앱 로그: 아래 표의 키워드로 찾습니다.
 4. DB: run 상태 분포(6.9절), 연결 수.
-5. 연결된 서비스: executor, pr-batch, LLM 게이트웨이, Redis가 살아 있는지.
+5. 연결된 서비스: executor, batch, LLM 게이트웨이, Redis가 살아 있는지.
 
 아래 그림은 이 순서와 단계별로 넘어갈 곳을 한 장으로 그린 것입니다. 원본은 `diagrams/08-ops-flow.drawio`입니다.
 
@@ -509,7 +509,7 @@ python scripts/set_user_role.py --env prd A10054 admin           # 승격 (강�
 | 화면이 실시간으로 갱신되지 않음, 새로 고치면 보임 | 앞단 설정, `event_fanout_reconnect` 로그 | 앞단 버퍼링·시간 제한(4.8절), Redis 구독 끊김 | 앞단 설정 확인. Redis 구독은 자동으로 다시 붙음 |
 | 413 | 요청 크기 | 32MB 초과, 또는 앞단이 먼저 끊음(응답 형식이 우리 것이 아니면 앞단) | 앞단 본문 크기 제한 확인 |
 | 429 | 로그인 경로인지 | SSO 로그인 요청이 분당 30회(`SSO_RATE_LIMIT_PER_MINUTE`) 초과 | 반복 로그인 원인 확인. `Retry-After` 뒤 재시도 |
-| 502 `bad_gateway` | 로그의 `upstream_unreachable path=...` | executor 또는 pr-batch가 응답하지 않음 | 경로로 어느 서비스인지 보고 그 서비스 확인 |
+| 502 `bad_gateway` | 로그의 `upstream_unreachable path=...` | executor 또는 batch가 응답하지 않음 | 경로로 어느 서비스인지 보고 그 서비스 확인 |
 | 503 (시스템 화면) | `EXECUTOR_ADMIN_API_KEY` 설정 | 운영 키가 비어 있음 | 키 설정 |
 | 키 호출이 401·403 | 감사 로그, 키 상태 | 키 폐기·재발급, `X-User-Id` 누락(400), 일반키로 다른 사용자 조회(403) | 키 목록에서 상태 확인. 6.7절 |
 | DB 연결 오류 | `QueuePool limit`, `too many connections`, 풀 대기 시간 초과 | 연결 예산 초과, 풀 부족, 중간 장비가 연결을 끊음 | 6.8절 |
@@ -596,9 +596,9 @@ ORDER BY event_sequence;
 | 401 | 키가 없거나, 틀렸거나, 폐기됨 |
 | 400 | `X-User-Id` 헤더가 없음. 2026-11-08부터 게이트웨이의 모든 호출에 필수 |
 | 403 `FORBIDDEN` | 일반키로 `X-User-Id`와 다른 사용자의 것을 조회함. tenant 전체 조회가 필요하면 마스터키 |
-| 502 | executor 또는 pr-batch가 응답하지 않음 |
+| 502 | executor 또는 batch가 응답하지 않음 |
 
-우리가 executor나 pr-batch를 부를 때 401이 나면 우리 `EXECUTOR_API_KEY` 또는 `BATCH_API_KEY`가 상대 서비스에 등록된 해시와 맞지 않는 것입니다. 상대 서비스 설정에는 키 원문이 아니라 SHA-256 해시를 넣고, 우리 설정에는 원문을 넣습니다. 반대로 넣는 실수가 통합테스트에서 있었습니다.
+우리가 executor나 batch를 부를 때 401이 나면 우리 `EXECUTOR_API_KEY` 또는 `BATCH_API_KEY`가 상대 서비스에 등록된 해시와 맞지 않는 것입니다. 상대 서비스 설정에는 키 원문이 아니라 SHA-256 해시를 넣고, 우리 설정에는 원문을 넣습니다. 반대로 넣는 실수가 통합테스트에서 있었습니다.
 
 ### 6.8 DB 문제
 
@@ -692,14 +692,14 @@ GROUP BY 1, 2 ORDER BY 3 DESC;
 
 | 키워드 | 뜻 |
 | --- | --- |
-| `upstream_unreachable path=...` | executor 또는 pr-batch가 응답하지 않아 502를 돌려줌 |
+| `upstream_unreachable path=...` | executor 또는 batch가 응답하지 않아 502를 돌려줌 |
 | `executor_event_recovered` | 이벤트를 스트림으로 못 받아 복구 절차로 받음. 자주 보이면 Redis 설정 문제 |
 | `executor_event_group_lost` | Redis 소비자 그룹이 사라져 다시 만듦 |
 | `executor_event_malformed` | 형식이 틀린 이벤트를 버림 |
 | `missed_event_lookup_failed` | 복구 절차의 executor 조회 실패 |
 | `run_heartbeat_failed`, `run_lease_lost` | lease 갱신 실패, 다른 인스턴스가 run을 가져감 |
 | `run_model_replaced` | 목록에서 빠진 모델 대신 기본 모델로 이어 감 |
-| `batch_disable_failed` | pr-batch에 배치 끄기 요청 실패. 재시도함 |
+| `batch_disable_failed` | batch에 배치 끄기 요청 실패. 재시도함 |
 | `batch_report_lease_lost`, `batch_report_without_owner` | 리포트 작업 권한을 잃음, 배치 소유자를 찾지 못함 |
 | `tool_load_failed` | 깨진 tool 파일을 건너뜀 |
 | `sso_...` | 로그인 관련(6.4절) |
@@ -733,7 +733,7 @@ GROUP BY 1, 2 ORDER BY 3 DESC;
 | run 하나의 진행 | `run_id=<run id>` |
 | 기동 실패 | `dtest_startup_failed`, `ValueError` |
 | 백그라운드 루프 정지 | `worker_loops_stopped` |
-| executor나 pr-batch 무응답 | `upstream_unreachable` |
+| executor나 batch 무응답 | `upstream_unreachable` |
 | 로그인 문제 | `sso_` |
 | executor 이벤트 문제 | `executor_event` |
 | DB 연결 문제 | `QueuePool limit`, `too many connections`, `run_claim_failed` |
@@ -826,7 +826,7 @@ Agent의 모델 호출, 도구 호출, middleware 단계를 Phoenix로 보냅니
 | executor | `EXECUTOR_OPERATION_WAIT_SECONDS` | 1800 | 실행 단계 대기 한도 |
 | executor | `EXECUTOR_EVENT_RECOVERY_SECONDS` | 120 | 놓친 이벤트 복구 시작 시간 |
 | executor | `STORAGE_ROOT`, `STORAGE_EXECUTOR_PATH`, `EXECUTOR_RESULT_ROOT` | | 공유 저장소 경로 |
-| pr-batch | `BATCH_BASE_URL`, `BATCH_API_KEY` | | pr-batch 주소와 우리 키 |
+| batch | `BATCH_BASE_URL`, `BATCH_API_KEY` | | batch 주소와 우리 키 |
 | 부하 | `RUN_CONCURRENCY` | 16 | 인스턴스당 동시 턴 |
 | 부하 | `RUN_USER_CONCURRENCY` | 4 | 사용자당 동시 턴 |
 | 부하 | `RUN_LEASE_SECONDS` | 60 | 실행 권한 유지 시간 |
@@ -959,10 +959,10 @@ tenant 행을 누르면 항목을 최신순으로 볼 수 있고, 실행 ID를 �
 
 사용자 목록에서 역할(관리자, 일반)과 활성 상태를 바꿉니다. 규칙은 3.1절, 3.2절과 같습니다.
 
-- 비활성화하면 로그인과 API 호출이 막히고, 진행 중인 대화와 코드 실행이 취소되며, 그 사람의 배치가 pr-batch에서 꺼집니다.
+- 비활성화하면 로그인과 API 호출이 막히고, 진행 중인 대화와 코드 실행이 취소되며, 그 사람의 배치가 batch에서 꺼집니다.
 - 다시 활성화해도 배치는 자동으로 켜지지 않습니다. 사용자가 직접 다시 켭니다.
-- pr-batch가 응답하지 않으면 배치 끄기를 5분 간격으로 다시 시도하고, 그동안 목록에 대기 표시가 붙습니다.
-- 사용자별 배치 목록(pr-batch 기준)을 읽기 전용으로 볼 수 있습니다.
+- batch가 응답하지 않으면 배치 끄기를 5분 간격으로 다시 시도하고, 그동안 목록에 대기 표시가 붙습니다.
+- 사용자별 배치 목록(batch 기준)을 읽기 전용으로 볼 수 있습니다.
 
 ### 10.8 API 키
 

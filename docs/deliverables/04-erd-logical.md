@@ -2,7 +2,7 @@
 
 | 항목 | 내용 |
 | --- | --- |
-| 시스템 | pr-agentic-service (사내 데이터 분석 Agent 서비스) |
+| 시스템 | gaia-api-service (사내 데이터 분석 Agent 서비스) |
 | 기준 | 마이그레이션 0008 |
 | 그림 원본 | `diagrams/04-erd-logical.drawio` (페이지 3장) |
 | 모델 정의 | `src/dtest/core/models.py`, `src/dtest/gaia_bridge/models.py` |
@@ -63,7 +63,7 @@
 ### 4.1 사용자와 프로젝트
 
 **users (사용자)**
-SSO로 처음 로그인할 때 만들어집니다. `employee_id`(사번)가 사람을 구분하는 값이고 중복될 수 없습니다. `role`은 `user` 또는 `admin`입니다. `is_active`가 거짓이면 로그인과 API 호출이 모두 막히고, 진행 중이던 run과 executor 커널이 취소됩니다. `batches_disable_pending`은 비활성화된 사용자의 배치를 pr-batch에서 아직 끄지 못했다는 표시이고, worker가 성공할 때까지 다시 시도합니다.
+SSO로 처음 로그인할 때 만들어집니다. `employee_id`(사번)가 사람을 구분하는 값이고 중복될 수 없습니다. `role`은 `user` 또는 `admin`입니다. `is_active`가 거짓이면 로그인과 API 호출이 모두 막히고, 진행 중이던 run과 executor 커널이 취소됩니다. `batches_disable_pending`은 비활성화된 사용자의 배치를 batch에서 아직 끄지 못했다는 표시이고, worker가 성공할 때까지 다시 시도합니다.
 
 **projects (프로젝트)**
 대화를 묶는 단위입니다. `system_prompt`는 그 프로젝트의 모든 대화에 들어가는 지시문, `code_level`은 코드 생성 수준의 기본값입니다. 사용자마다 첫 로그인 때 기본 프로젝트(`is_default`)가 하나 만들어집니다.
@@ -129,7 +129,7 @@ Agent가 executor로 보낸 코드 파일 하나하나의 기록입니다. 어�
 ### 4.7 배치 리포트
 
 **batch_report_jobs (배치 리포트 작업)**
-pr-batch의 배치 실행이 성공하면 그 결과를 분석해 리포트를 쓰는 작업입니다. 실행 한 건에 작업 하나이고 `idempotency_key`(`batch-report:{execution_id}`)로 중복을 막습니다. `owner_id`는 배치를 만든 사용자이고 그 사용자만 리포트를 봅니다. `markdown`은 리포트 본문, `summary`는 같은 배치의 다음 실행이 비교용으로 읽는 요약입니다.
+batch의 배치 실행이 성공하면 그 결과를 분석해 리포트를 쓰는 작업입니다. 실행 한 건에 작업 하나이고 `idempotency_key`(`batch-report:{execution_id}`)로 중복을 막습니다. `owner_id`는 배치를 만든 사용자이고 그 사용자만 리포트를 봅니다. `markdown`은 리포트 본문, `summary`는 같은 배치의 다음 실행이 비교용으로 읽는 요약입니다.
 
 **batch_report_events (배치 리포트 이벤트)**
 리포트 작업의 진행 이벤트입니다. 채팅 이벤트와 같은 형식이라 화면이 같은 컴포넌트로 그립니다.
@@ -137,7 +137,7 @@ pr-batch의 배치 실행이 성공하면 그 결과를 분석해 리포트를 �
 ### 4.8 서비스 간 인증
 
 **api_clients (API 클라이언트)**
-다른 서비스와 에이전트에 발급한 API 키입니다. 키 원문은 저장하지 않고 SHA-256(`key_sha256`)과 앞부분(`key_prefix`)만 남깁니다. `tenant`는 이 키로 만든 실행과 배치가 속할 executor tenant입니다. `kind`가 `standard`이면 `X-User-Id` 사용자의 것만 조회하고, `master`이면 tenant 전체를 조회합니다. `batches_disable_pending`은 tenant의 키가 모두 폐기된 뒤 pr-batch에서 그 tenant의 배치를 아직 끄지 못했다는 표시입니다.
+다른 서비스와 에이전트에 발급한 API 키입니다. 키 원문은 저장하지 않고 SHA-256(`key_sha256`)과 앞부분(`key_prefix`)만 남깁니다. `tenant`는 이 키로 만든 실행과 배치가 속할 executor tenant입니다. `kind`가 `standard`이면 `X-User-Id` 사용자의 것만 조회하고, `master`이면 tenant 전체를 조회합니다. `batches_disable_pending`은 tenant의 키가 모두 폐기된 뒤 batch에서 그 tenant의 배치를 아직 끄지 못했다는 표시입니다.
 
 ### 4.9 gaia 연동
 
@@ -250,7 +250,7 @@ gaia 채팅 화면의 세션 하나가 우리 세션 하나에 대응합니다. 
 | --- | --- | --- |
 | 실행, 단계, 결과, 노트북, 리포트 Artifact | executor의 DB와 저장소 | `runs.waiting.execution_id`, `code_sources.execution_id`, `batch_report_jobs.execution_id`, `batch_report_jobs.artifact_id` |
 | 코드 파일, 첨부 이미지 | 공유 저장소(`STORAGE_ROOT`) | `code_sources.path`, `images.path` |
-| 배치 정의와 배치 실행 | pr-batch의 DB | `batch_report_jobs.batch_id`, `batch_run_id` |
+| 배치 정의와 배치 실행 | batch의 DB | `batch_report_jobs.batch_id`, `batch_run_id` |
 
 ## 8. 삭제와 보존 규칙
 

@@ -2,7 +2,7 @@
 
 | 항목 | 내용 |
 | --- | --- |
-| 시스템 | pr-agentic-service (사내 데이터 분석 Agent 서비스) |
+| 시스템 | gaia-api-service (사내 데이터 분석 Agent 서비스) |
 | 기준 | 마이그레이션 0008 |
 | 그림 원본 | `diagrams/05-erd-physical.drawio` (페이지 2장) |
 | 모델 정의 | `src/dtest/core/models.py`, `src/dtest/gaia_bridge/models.py` |
@@ -19,7 +19,7 @@
 | 접속 설정 | `DATABASE_URL` (`postgresql+psycopg://사용자:비밀번호@호스트:5432/데이터베이스이름`) |
 | 드라이버 | psycopg 3. 앱 테이블은 SQLAlchemy 비동기, LangGraph는 psycopg 풀 |
 | 문자 집합, 시간대 | UTF-8, 모든 시각 컬럼은 `timestamptz`이고 UTC로 저장 |
-| 같은 서버를 쓰는 서비스 | executor, pr-batch (각자 자기 데이터베이스) |
+| 같은 서버를 쓰는 서비스 | executor, batch (각자 자기 데이터베이스) |
 | 같은 서버의 데이터베이스 | dev: `dtest`, `executor`, `batch`. prd: `dtestprd`, `executorprd`, `batchprd` |
 | 서버 연결 한도 | `max_connections` 150 |
 | 계정 | 마스터 계정 하나를 서비스와 운영자가 함께 씀 |
@@ -168,6 +168,6 @@ UPDATE alembic_version SET version_num = '0001';
 2. 기존 데이터를 가져갈지 정합니다.
    - 가져가지 않으면: `config.prd.yml`의 `DATABASE_URL`만 새 서버로 바꿉니다. 첫 기동 때 `AUTO_MIGRATE`(또는 `python scripts/migrate.py`)가 테이블을 모두 만듭니다. 데이터가 비어 있으므로 사용자는 첫 로그인 때 새로 만들어지고, 관리자는 `ADMIN_EMPLOYEE_IDS`로 다시 지정되며, API 키는 다시 발급합니다.
    - 가져가면: 서비스를 내린 상태에서 데이터베이스 전체를 옮깁니다. 앱 테이블과 LangGraph 테이블(checkpoints 계열, store)을 같은 시점으로 함께 옮겨야 합니다. 옮긴 뒤 `alembic_version` 값이 그대로인지 확인합니다.
-3. executor와 pr-batch의 prd 데이터베이스도 함께 옮기는지 확인합니다. 우리 DB의 `execution_id`는 그 환경의 executor에 있는 실행을 가리켜야 하므로, 우리만 빈 DB로 시작하고 executor는 기존 데이터를 유지해도 문제는 없지만, 반대로 우리 데이터는 유지하고 executor가 빈 DB로 시작하면 기다리던 run과 결과물 링크가 깨집니다.
+3. executor와 batch의 prd 데이터베이스도 함께 옮기는지 확인합니다. 우리 DB의 `execution_id`는 그 환경의 executor에 있는 실행을 가리켜야 하므로, 우리만 빈 DB로 시작하고 executor는 기존 데이터를 유지해도 문제는 없지만, 반대로 우리 데이터는 유지하고 executor가 빈 DB로 시작하면 기다리던 run과 결과물 링크가 깨집니다.
 4. 분리 뒤에는 연결 한도를 서버별로 다시 계산합니다.
 

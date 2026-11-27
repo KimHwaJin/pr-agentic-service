@@ -2,7 +2,7 @@
 
 | 항목 | 내용 |
 | --- | --- |
-| 시스템 | pr-agentic-service (사내 데이터 분석 Agent 서비스) |
+| 시스템 | gaia-api-service (사내 데이터 분석 Agent 서비스) |
 | 대상 | 웹 화면에서 데이터 분석을 요청하는 사용자 |
 | 화면 | 서비스가 제공하는 웹 화면(Analysis Agent) |
 | 그림 원본 | `diagrams/07-user-flow.drawio` |

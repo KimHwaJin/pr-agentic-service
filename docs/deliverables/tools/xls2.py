@@ -40,7 +40,7 @@ def sheet(wb, name, ttl, heads, rows, widths, first=False):
 A = "src/dtest/agent/"
 wb = Workbook()
 sheet(wb, "표지", "프로그램 목록 (Agent workflow)", ["항목", "내용"], [
-    ("시스템", "pr-agentic-service (사내 데이터 분석 Agent 서비스)"),
+    ("시스템", "gaia-api-service (사내 데이터 분석 Agent 서비스)"),
     ("문서", "프로그램 목록 (Agent workflow)"),
     ("목록 단위", "Agent workflow: LLM을 호출해 한 가지 일을 끝내는 처리 단위. ID는 AW-01부터 부여"),
     ("구성 요소", "workflow가 쓰는 그래프, middleware, Agent 도구, 프롬프트, skill·tool 자산, worker 루프를 시트별로 정리"),
@@ -64,7 +64,7 @@ sheet(wb, "Agent workflow 목록", "Agent workflow 목록",
      "끝난 실행의 단계별 코드, 관측값, 출력(근거), 리포트 초점(focus)",
      "리포트 Markdown (executor Artifact로 저장)", "AW-02의 도구 안에서 실행",
      "G-02 / prompts/reporter.md", A + "report_agent.py, reporter.py, tools/batch.py", "없음"),
-    ("AW-04", "배치 리포트 작성", "Agent 그래프 (리포트 Agent)", "pr-batch가 시작한 배치 실행이 성공(executor 이벤트)",
+    ("AW-04", "배치 리포트 작성", "Agent 그래프 (리포트 Agent)", "batch가 시작한 배치 실행이 성공(executor 이벤트)",
      "배치 실행의 단계별 근거, 같은 배치의 이전 실행 요약(최대 5건)",
      "리포트 Markdown, 다음 실행이 읽을 요약 (batch_report_jobs, executor Artifact)",
      "BatchReportWorker (batch_report_jobs 큐)", "G-02 / prompts/batch_analyst.md",

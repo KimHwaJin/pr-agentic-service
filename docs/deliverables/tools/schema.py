@@ -26,7 +26,7 @@ def cells(line):
 
 
 def load(path):
-    text = open(path, encoding="utf-8").read()
+    text = open(path, encoding="utf-8").read().replace("pr-agentic-service", "gaia-api-service").replace("pr-batch", "batch")
     tables, order = {}, []
     # table list
     sec2 = text.split("## 2. 테이블 목록")[1].split("## 3.")[0]
