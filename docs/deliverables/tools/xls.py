@@ -7,7 +7,7 @@ from schema import load
 H = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "handover") + os.sep
 S = load(H + "03-db-physical.md")
 T = S["tables"]
-logical = open(H + "02-db-logical.md", encoding="utf-8").read()
+logical = open(H + "02-db-logical.md", encoding="utf-8").read().replace("pr-agentic-service", "gaia-api-service").replace("pr-batch", "batch")
 DESC = {}
 for m in re.finditer(r"\*\*([a-z_]+) \(([^)]+)\)\*\*\n(.+)", logical):
     DESC[m.group(1)] = m.group(3).replace("`", "").strip()
@@ -52,7 +52,7 @@ wb = Workbook()
 ws = wb.active
 ws.title = "표지"
 title(ws, "Table 정의서", 2)
-info = [("시스템", "pr-agentic-service (사내 데이터 분석 Agent 서비스)"),
+info = [("시스템", "gaia-api-service (사내 데이터 분석 Agent 서비스)"),
         ("문서", "Table 정의서 (RDB 테이블, Vector 저장소)"),
         ("기준", "마이그레이션 0008"),
         ("DBMS", "PostgreSQL, vector 확장(pgvector) 필요. 스키마 public"),

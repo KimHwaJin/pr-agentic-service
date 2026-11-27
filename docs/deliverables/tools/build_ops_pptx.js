@@ -18,10 +18,10 @@ const THEME = {
 const pres = new pptxgen();
 pres.layout = "LAYOUT_WIDE"; // 13.33 x 7.5
 pres.theme = { headFontFace: THEME.headFontFace, bodyFontFace: THEME.bodyFontFace };
-pres.title = "pr-agentic-service 운영자 메뉴얼";
+pres.title = "gaia-api-service 운영자 메뉴얼";
 const C = pres.SchemeColor;
 const W = 13.33, MX = 0.5, CW = W - 2 * MX;
-const FOOT = "pr-agentic-service 운영자 메뉴얼";
+const FOOT = "gaia-api-service 운영자 메뉴얼";
 
 pres.defineSlideMaster({
   title: "COVER", background: { color: THEME.colors.dk2 },
@@ -127,7 +127,7 @@ function note(s, text, y = 6.35) {
   pres.addSection({ title: "표지" });
   SEC = "표지";
   const s = pres.addSlide({ masterName: "COVER", sectionTitle: SEC });
-  s.addText("pr-agentic-service 운영자 메뉴얼", { placeholder: "title" });
+  s.addText("gaia-api-service 운영자 메뉴얼", { placeholder: "title" });
   s.addText([
     { text: "사내 데이터 분석 Agent 서비스", options: { breakLine: true } },
     { text: "초안 v0.2", options: {} },
@@ -167,19 +167,19 @@ section("1. 개요", ["1.1 문서 개요", "1.2 서비스 개요"]);
 {
   let s = slide("1.1 문서 개요");
   const w = (CW - 0.3 * 2) / 3;
-  card(s, MX, Y0, w, 2.4, "목적", "pr-agentic-service를 운영하는 담당자가 서비스 구성, 일상 점검, 장애 대응, 패치 방법을 이 문서만으로 수행할 수 있게 합니다.");
+  card(s, MX, Y0, w, 2.4, "목적", "gaia-api-service를 운영하는 담당자가 서비스 구성, 일상 점검, 장애 대응, 패치 방법을 이 문서만으로 수행할 수 있게 합니다.");
   card(s, MX + w + 0.3, Y0, w, 2.4, "대상", "서비스 운영 담당자, 장애 1차 대응자, 유지보수 개발자.\n웹 화면 사용법은 사용자 메뉴얼을 봅니다.");
-  card(s, MX + 2 * (w + 0.3), Y0, w, 2.4, "범위", "pr-agentic-service 자체의 운영.\n컨테이너 배치, 자동 확장, 앞단 라우팅 같은 실행 인프라는 사내 플랫폼이 맡으므로 서비스가 기대하는 조건만 적습니다.");
+  card(s, MX + 2 * (w + 0.3), Y0, w, 2.4, "범위", "gaia-api-service 자체의 운영.\n컨테이너 배치, 자동 확장, 앞단 라우팅 같은 실행 인프라는 사내 플랫폼이 맡으므로 서비스가 기대하는 조건만 적습니다.");
   table(s, ["용어", "뜻"], [
     ["인스턴스", "서비스 프로세스 하나(uvicorn worker 1개). 그 안에서 API와 백그라운드 작업(worker)이 함께 동작"],
     ["run", "사용자 메시지 하나를 Agent가 처리하는 작업 단위. queued, running, waiting_input, waiting_executor, succeeded, failed, cancelled"],
     ["executor", "분석 코드를 Jupyter 런타임에서 실행하는 연관 서비스"],
-    ["tenant", "executor와 pr-batch가 호출자를 구분하는 단위. 우리 서비스는 EXECUTOR_TENANT_ID"],
+    ["tenant", "executor와 batch가 호출자를 구분하는 단위. 우리 서비스는 EXECUTOR_TENANT_ID"],
     ["lease", "인스턴스가 run을 실행할 권한. 60초이고 20초마다 갱신"],
   ], [2.0, 10.33], { y: 3.95 });
 
   s = slide("1.2 서비스 개요");
-  lead(s, "pr-agentic-service는 사내 데이터 분석 Agent의 채팅 API이자 Agent 실행 서비스입니다. 사용자가 보낸 메시지를 Agent가 처리하고, 분석 코드는 직접 실행하지 않고 executor에 보내 실행합니다.", Y0, 0.8);
+  lead(s, "gaia-api-service는 사내 데이터 분석 Agent의 채팅 API이자 Agent 실행 서비스입니다. 사용자가 보낸 메시지를 Agent가 처리하고, 분석 코드는 직접 실행하지 않고 executor에 보내 실행합니다.", Y0, 0.8);
   table(s, ["환경", "APP_ENV", "설정 파일", "SSO"], [
     ["로컬", "비움", "config.yml + 환경변수", "dev 어댑터(가짜 로그인) 가능"],
     ["dev", "dev", "config.yml + config.dev.yml", "idp"],
@@ -253,7 +253,7 @@ section("3. 서비스 관리", ["3.1 인터페이스 흐름도 · 3.2 서버 디
   bullets(s, [
     "모든 응답에 X-Request-ID 헤더가 붙습니다. 같은 값이 로그와 executor로 보내는 호출에 남습니다.",
     "요청 본문은 32MB(REQUEST_MAX_BYTES)까지 받습니다. 넘으면 413으로 답합니다.",
-    "executor와 pr-batch는 우리 서비스를 거쳐서만 부를 수 있습니다.",
+    "executor와 batch는 우리 서비스를 거쳐서만 부를 수 있습니다.",
   ], { y: 4.6, h: 1.8, fontSize: 13 });
 
   s = slide("3.1 인터페이스 목록 (나가는 호출)");
@@ -262,7 +262,7 @@ section("3. 서비스 관리", ["3.1 인터페이스 흐름도 · 3.2 서버 디
     ["IF-06", "LLM 게이트웨이", "HTTP (OpenAI 호환)", "모델 호출", "run이 failed로 끝남. 그 외 화면은 정상"],
     ["IF-07", "임베딩 게이트웨이", "HTTP", "워크플로우 검색", "워크플로우 추천만 안 됨"],
     ["IF-08", "executor", "REST (EXECUTOR_API_KEY)", "분석 코드 실행, 노트북, 결과물", "분석 요청 실패, 결과물 조회 502. 일반 대화는 정상"],
-    ["IF-09", "pr-batch", "REST (BATCH_API_KEY)", "배치 등록과 조회 중계", "배치 화면만 502"],
+    ["IF-09", "batch", "REST (BATCH_API_KEY)", "배치 등록과 조회 중계", "배치 화면만 502"],
     ["IF-10", "Phoenix", "추적 전송 (선택)", "Agent 실행 추적", "영향 없음"],
     ["IF-11", "PostgreSQL", "SQL", "앱 데이터, run 큐, 체크포인트, 벡터", "모든 요청 실패. run 실행 중단"],
     ["IF-12", "Redis", "명령, pub/sub", "로그인 세션, 실시간 이벤트 전달", "로그인 확인 실패로 모든 요청 실패"],
@@ -315,7 +315,7 @@ section("3. 서비스 관리", ["3.1 인터페이스 흐름도 · 3.2 서버 디
 
   s = slide("3.3 서비스 목록: 프로세스와 주요 경로");
   table(s, ["항목", "내용"], [
-    ["서비스 이름", "pr-agentic-service (컨테이너 이미지 하나, 인스턴스 N개)"],
+    ["서비스 이름", "gaia-api-service (컨테이너 이미지 하나, 인스턴스 N개)"],
     ["실행 명령", "python app.py. gaia 템플릿이 uvicorn worker 1개를 띄움"],
     ["포트", "8080 (config.yml의 PORT)"],
     ["실행 방식", "RUN_MODE=all (API + worker). api, worker로 나눠 띄울 수도 있음"],
@@ -385,7 +385,7 @@ section("3. 서비스 관리", ["3.1 인터페이스 흐름도 · 3.2 서버 디
     ["executor", "EXECUTOR_TENANT_ID", "dtest-agent-service", "우리 tenant"],
     ["executor", "EXECUTOR_OPERATION_WAIT_SECONDS", "1800", "실행 단계 대기 한도"],
     ["executor", "STORAGE_ROOT, STORAGE_EXECUTOR_PATH, EXECUTOR_RESULT_ROOT", "", "공유 저장소 경로"],
-    ["pr-batch", "BATCH_BASE_URL, BATCH_API_KEY", "", "pr-batch 주소와 우리 키"],
+    ["batch", "BATCH_BASE_URL, BATCH_API_KEY", "", "batch 주소와 우리 키"],
     ["부하", "RUN_CONCURRENCY / RUN_USER_CONCURRENCY", "16 / 4", "인스턴스당, 사용자당 동시 턴"],
     ["부하", "RUN_LEASE_SECONDS / RUN_MAX_ATTEMPTS", "60 / 5", "실행 권한 유지 시간, 반복 실행 상한"],
     ["부하", "BATCH_REPORT_CONCURRENCY", "4", "인스턴스당 동시 리포트"],
@@ -500,7 +500,7 @@ section("3. 서비스 관리", ["3.1 인터페이스 흐름도 · 3.2 서버 디
     ["run 하나의 진행", "run_id=<run id>"],
     ["기동 실패", "dtest_startup_failed, ValueError"],
     ["백그라운드 루프 정지", "worker_loops_stopped"],
-    ["executor나 pr-batch 무응답", "upstream_unreachable"],
+    ["executor나 batch 무응답", "upstream_unreachable"],
     ["로그인 문제", "sso_"],
     ["executor 이벤트 문제", "executor_event"],
     ["DB 연결 문제", "QueuePool limit, too many connections, run_claim_failed"],
@@ -522,14 +522,14 @@ section("3. 서비스 관리", ["3.1 인터페이스 흐름도 · 3.2 서버 디
 
   s = slide("3.7 로그 확인: 경고 수준 키워드 (반복되면 볼 것)");
   table(s, ["키워드", "뜻"], [
-    ["upstream_unreachable path=...", "executor 또는 pr-batch가 응답하지 않아 502를 돌려줌"],
+    ["upstream_unreachable path=...", "executor 또는 batch가 응답하지 않아 502를 돌려줌"],
     ["executor_event_recovered", "이벤트를 스트림으로 못 받아 복구 절차로 받음. 자주 보이면 Redis 설정 문제"],
     ["executor_event_group_lost", "Redis 소비자 그룹이 사라져 다시 만듦"],
     ["executor_event_malformed", "형식이 틀린 이벤트를 버림"],
     ["missed_event_lookup_failed", "복구 절차의 executor 조회 실패"],
     ["run_heartbeat_failed, run_lease_lost", "lease 갱신 실패, 다른 인스턴스가 run을 가져감"],
     ["run_model_replaced", "목록에서 빠진 모델 대신 기본 모델로 이어 감"],
-    ["batch_disable_failed", "pr-batch에 배치 끄기 요청 실패. 재시도함"],
+    ["batch_disable_failed", "batch에 배치 끄기 요청 실패. 재시도함"],
     ["tool_load_failed", "깨진 tool 파일을 건너뜀"],
     ["sso_...", "로그인 관련 (4.2)"],
     ["admin_employee_ids_empty", "관리자 사번 설정이 비어 있음"],
@@ -587,8 +587,8 @@ section("3. 서비스 관리", ["3.1 인터페이스 흐름도 · 3.2 서버 디
   ]);
   card(s, MX + w2 + 0.3, Y0, w2, 2.6, "사용자 비활성화", [
     { text: "비활성화하면 로그인과 API 호출이 막히고, 진행 중인 턴과 executor 커널이 바로 취소됩니다.", options: { breakLine: true } },
-    { text: "그 사용자의 배치는 pr-batch에서 꺼집니다. 다시 활성화해도 자동으로 켜지지 않습니다.", options: { breakLine: true } },
-    { text: "pr-batch가 응답하지 않으면 성공할 때까지 다시 시도합니다(batch_disable_failed 경고).", options: {} },
+    { text: "그 사용자의 배치는 batch에서 꺼집니다. 다시 활성화해도 자동으로 켜지지 않습니다.", options: { breakLine: true } },
+    { text: "batch가 응답하지 않으면 성공할 때까지 다시 시도합니다(batch_disable_failed 경고).", options: {} },
   ]);
   code(s, [
     "python scripts/set_user_role.py --env prd --list                  # 관리자 목록",
@@ -689,7 +689,7 @@ section("4. 장애처리", ["4.1 장애처리 절차", "4.2 장애 유형별 조
     ["화면이 실시간으로 갱신되지 않음", "앞단 설정, event_fanout_reconnect 로그", "앞단 버퍼링·시간 제한, Redis 구독 끊김", "앞단 설정 확인. Redis 구독은 자동으로 다시 붙음"],
     ["413", "요청 크기", "32MB 초과, 또는 앞단이 먼저 끊음", "응답 형식이 우리 것이 아니면 앞단 본문 크기 제한 확인"],
     ["429", "로그인 경로인지", "SSO 로그인 요청이 분당 30회 초과", "반복 로그인 원인 확인. Retry-After 뒤 재시도"],
-    ["502 bad_gateway", "로그의 upstream_unreachable path=...", "executor 또는 pr-batch가 응답하지 않음", "경로로 어느 서비스인지 보고 그 서비스 확인"],
+    ["502 bad_gateway", "로그의 upstream_unreachable path=...", "executor 또는 batch가 응답하지 않음", "경로로 어느 서비스인지 보고 그 서비스 확인"],
     ["503 (시스템 화면)", "EXECUTOR_ADMIN_API_KEY 설정", "운영 키가 비어 있음", "키 설정"],
     ["키 호출이 401·403", "감사 로그, 키 상태", "키 폐기·재발급, X-User-Id 누락(400), 일반키로 다른 사용자 조회(403)", "키 목록에서 상태 확인"],
     ["DB 연결 오류", "QueuePool limit, too many connections", "연결 예산 초과, 풀 부족, 중간 장비가 연결을 끊음", "DB 문제 표"],
@@ -767,20 +767,20 @@ section("4. 장애처리", ["4.1 장애처리 절차", "4.2 장애 유형별 조
     ["401", "키가 없거나, 틀렸거나, 폐기됨"],
     ["400", "X-User-Id 헤더가 없음. 게이트웨이의 모든 호출에 필수"],
     ["403 FORBIDDEN", "일반키로 X-User-Id와 다른 사용자의 것을 조회함. tenant 전체 조회가 필요하면 마스터키"],
-    ["502", "executor 또는 pr-batch가 응답하지 않음"],
+    ["502", "executor 또는 batch가 응답하지 않음"],
   ], [2.4, 9.93]);
   bullets(s, [
-    "우리가 executor나 pr-batch를 부를 때 401이 나면 우리 EXECUTOR_API_KEY 또는 BATCH_API_KEY가 상대 서비스에 등록된 해시와 맞지 않는 것입니다.",
+    "우리가 executor나 batch를 부를 때 401이 나면 우리 EXECUTOR_API_KEY 또는 BATCH_API_KEY가 상대 서비스에 등록된 해시와 맞지 않는 것입니다.",
     "상대 서비스 설정에는 키 원문이 아니라 SHA-256 해시를 넣고, 우리 설정에는 원문을 넣습니다. 반대로 넣는 실수가 통합테스트에서 있었습니다.",
     "키를 새로 발급했거나 폐기한 뒤에는 시스템 화면의 API 호출 시험 탭으로 기대한 상태 코드가 나오는지 확인합니다.",
   ], { y: 3.6, h: 2.6, fontSize: 13 });
 
   s = slide("4.3 담당자 연락처");
   table(s, ["구분", "담당 업무", "소속", "이름", "연락처", "비고"], [
-    ["pr-agentic-service", "서비스 운영, 장애 1차 대응", "", "", "", ""],
-    ["pr-agentic-service", "개발, 패치", "", "", "", ""],
+    ["gaia-api-service", "서비스 운영, 장애 1차 대응", "", "", "", ""],
+    ["gaia-api-service", "개발, 패치", "", "", "", ""],
     ["executor", "분석 코드 실행, 런타임", "", "", "", ""],
-    ["pr-batch", "배치 실행", "", "", "", ""],
+    ["batch", "배치 실행", "", "", "", ""],
     ["사내 플랫폼", "컨테이너, 배포, 앞단 라우팅", "", "", "", ""],
     ["PostgreSQL", "서비스형 DB", "", "", "", ""],
     ["Redis", "", "", "", "", ""],
@@ -817,8 +817,8 @@ section("4. 장애처리", ["4.1 장애처리 절차", "4.2 장애 유형별 조
     ["4", "56", "70", "112"],
   ], [3.2, 3.0, 3.0, 3.13], { y: 1.8 });
   bullets(s, [
-    "여기에 executor(인스턴스당 16), pr-batch(인스턴스당 6), dev와 prd를 모두 더한 값이 150 아래여야 합니다.",
-    "예: prd(우리 2, executor 1, pr-batch 1)와 dev(우리 1, executor 1, pr-batch 1)이면 평소 86, prd의 우리 서비스를 한꺼번에 교체하는 동안 114입니다.",
+    "여기에 executor(인스턴스당 16), batch(인스턴스당 6), dev와 prd를 모두 더한 값이 150 아래여야 합니다.",
+    "예: prd(우리 2, executor 1, batch 1)와 dev(우리 1, executor 1, batch 1)이면 평소 86, prd의 우리 서비스를 한꺼번에 교체하는 동안 114입니다.",
     "우리가 4개로 늘어난 상태에서 한꺼번에 교체하면 170으로 한도를 넘습니다.",
     "표는 모든 풀이 꽉 찬 최악의 경우입니다. 평소 실제 연결 수는 훨씬 적습니다.",
   ], { y: 3.75, h: 2.7, fontSize: 13 });
@@ -834,7 +834,7 @@ section("5. 유지보수 가이드", ["5.1 개발자 개발 환경 setting 정�
     ["Redis", "6.2 이상"],
     ["executor", "executor 레포의 compose 스택. 공유 폴더를 함께 마운트"],
     ["LLM", "LLM 게이트웨이 또는 scripts/mock_llm.py"],
-    ["pr-batch (선택)", "배치 화면을 볼 때만 필요"],
+    ["batch (선택)", "배치 화면을 볼 때만 필요"],
     ["브랜치", "master(dev 배포), stg, prd. 작업은 master에서 feature 브랜치를 따서 진행"],
   ], [2.4, 9.93]);
   bullets(s, [

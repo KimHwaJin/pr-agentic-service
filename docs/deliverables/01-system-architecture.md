@@ -2,14 +2,14 @@
 
 | 항목 | 내용 |
 | --- | --- |
-| 시스템 | pr-agentic-service (사내 데이터 분석 Agent 서비스) |
+| 시스템 | gaia-api-service (사내 데이터 분석 Agent 서비스) |
 | 그림 원본 | `diagrams/01-system-architecture.drawio` (페이지 2장) |
 
 주소, 계정, 키 같은 환경별 실제 값은 적지 않고 설정 키 이름으로 가리킵니다. 실제 값은 `config.{dev,stg,prd}.yml`에 있습니다.
 
 ## 1. 개요
 
-pr-agentic-service는 사용자, 프로젝트, 세션 계층을 가진 채팅 서비스입니다. 세션 안에서 사용자가 보낸 메시지를 데이터 분석 Agent가 처리합니다. Agent는 LangGraph와 LangChain으로 만들었고, 분석 코드는 직접 실행하지 않고 executor에 보내 실행합니다.
+gaia-api-service는 사용자, 프로젝트, 세션 계층을 가진 채팅 서비스입니다. 세션 안에서 사용자가 보낸 메시지를 데이터 분석 Agent가 처리합니다. Agent는 LangGraph와 LangChain으로 만들었고, 분석 코드는 직접 실행하지 않고 executor에 보내 실행합니다.
 
 서비스 인스턴스 하나는 프로세스 하나이고, 그 안에서 API와 백그라운드 작업(worker)이 함께 돕니다. 같은 인스턴스를 여러 개 띄워 부하를 나눕니다.
 
@@ -29,7 +29,7 @@ pr-agentic-service는 사용자, 프로젝트, 세션 계층을 가진 채팅 �
 | 우리 시스템 | worker | run 스케줄러, executor 이벤트 수신, 메모리 추출, 배치 리포트, 정리 작업 |
 | 우리 시스템 | agent | LangGraph 그래프, middleware, 도구, 프롬프트, skill |
 | 연관 시스템 | executor | 분석 코드 실행(커널), 노트북과 결과물 보관 |
-| 연관 시스템 | pr-batch | 배치 등록과 스케줄. 배치 실행은 executor에 직접 제출 |
+| 연관 시스템 | batch | 배치 등록과 스케줄. 배치 실행은 executor에 직접 제출 |
 | 외부 기반 | SSO (IdP) | 로그인 확인 |
 | 외부 기반 | LLM 게이트웨이 | OpenAI 호환 모델 호출 |
 | 외부 기반 | 임베딩 게이트웨이 | 워크플로우 검색용 임베딩 |
@@ -54,10 +54,10 @@ pr-agentic-service는 사용자, 프로젝트, 세션 계층을 가진 채팅 �
 | agent | 임베딩 게이트웨이 | 워크플로우 검색 | 워크플로우 추천만 안 됨 |
 | agent | executor | 분석 코드 실행 제출 | 분석 요청 실패. 일반 대화는 정상 |
 | api_service | executor | 게이트웨이 중계, 결과물과 커널 조회 | 결과물 조회 502 |
-| api_service | pr-batch | 배치 등록과 조회 중계 | 배치 화면만 502 |
+| api_service | batch | 배치 등록과 조회 중계 | 배치 화면만 502 |
 | agent, executor | 공유 저장소 | 코드 파일 쓰기, 결과 파일 읽기 | 분석 코드 제출과 결과 읽기 실패 |
 | executor | Redis | 실행 완료 이벤트 스트림 | |
-| pr-batch | executor | 배치 실행 제출 | |
+| batch | executor | 배치 실행 제출 | |
 | agent | Phoenix | 실행 추적 (선택) | 영향 없음 |
 
 ### 2.3 동작 원리
@@ -85,7 +85,7 @@ pr-agentic-service는 사용자, 프로젝트, 세션 계층을 가진 채팅 �
 | 자원 | 구성 |
 | --- | --- |
 | 서비스 인스턴스 | 프로세스 1개(uvicorn worker 1개). 포트 8080. `RUN_MODE=all`로 API와 worker를 함께 실행. 실행 계정 UID 1000, GID 1000 |
-| PostgreSQL | 사내 서비스형 DB. `vector` 확장 필요. dev와 prd가 같은 서버를 쓰고 데이터베이스 이름으로 나뉨(dev `dtest`, prd `dtestprd`). 같은 서버에 executor와 pr-batch의 데이터베이스도 있음. 연결 한도 150을 함께 사용. prd 서버 분리 예정 |
+| PostgreSQL | 사내 서비스형 DB. `vector` 확장 필요. dev와 prd가 같은 서버를 쓰고 데이터베이스 이름으로 나뉨(dev `dtest`, prd `dtestprd`). 같은 서버에 executor와 batch의 데이터베이스도 있음. 연결 한도 150을 함께 사용. prd 서버 분리 예정 |
 | Redis | dev와 prd가 분리되어 있음. `REDIS_MODE`로 standalone과 Sentinel 중 선택. 그 환경의 executor와 같은 서버, 같은 DB 번호여야 함 |
 | 공유 저장소 | executor와 같은 저장소를 `/mnt/data`에 마운트 |
 | 앞단 라우팅, 컨테이너 배치, 자동 확장 | 사내 플랫폼이 담당 |

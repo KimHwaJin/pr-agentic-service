@@ -342,7 +342,7 @@ def write(pages: list[Page], stem: str, outdir: str):
     os.makedirs(os.path.join(outdir, "export"), exist_ok=True)
     body = "\n".join(p.drawio(f"p{i + 1}") for i, p in enumerate(pages))
     with open(os.path.join(outdir, stem + ".drawio"), "w", encoding="utf-8") as f:
-        f.write('<mxfile host="app.diagrams.net" agent="pr-agentic-service docs" '
+        f.write('<mxfile host="app.diagrams.net" agent="gaia-api-service docs" '
                 f'version="24.7.17">\n{body}\n</mxfile>\n')
     for i, p in enumerate(pages):
         base = os.path.join(outdir, "export", f"{stem}-{i + 1}")

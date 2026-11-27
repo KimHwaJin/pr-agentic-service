@@ -12,7 +12,7 @@ steps = [
     ("s2", "2. GET /api/v1/healthz", "status 가 ok 인가"),
     ("s3", "3. 앱 로그", "오류 ID, X-Request-ID,\n로그 키워드로 검색"),
     ("s4", "4. DB", "run 상태 분포, 연결 수"),
-    ("s5", "5. 연결된 서비스", "executor, pr-batch,\nLLM 게이트웨이, Redis"),
+    ("s5", "5. 연결된 서비스", "executor, batch,\nLLM 게이트웨이, Redis"),
 ]
 acts = [
     ("a1", "기동 로그 확인", "ValueError, dtest_startup_failed\n설정 검사, 마이그레이션, DB·Redis 접속\n(운영자 메뉴얼 2.4, 4.4절)", "warn"),

@@ -2,13 +2,13 @@ import sys
 from dg import Page, write
 
 # ---------------- page 1: 논리 구성도
-p = Page("논리 구성도", 1560, 980, "pr-agentic-service 전체 시스템 구성도 (논리 구성)")
+p = Page("논리 구성도", 1560, 980, "gaia-api-service 전체 시스템 구성도 (논리 구성)")
 
 p.node("browser", "브라우저", 300, 80, 150, 60, "caller", sub="웹 화면 사용자")
 p.node("svc", "다른 서비스·에이전트", 470, 80, 170, 60, "caller", sub="API 키 호출자")
 p.node("gaia", "gaia 채팅 화면", 660, 80, 150, 60, "caller", sub="사내 채팅 플랫폼")
 
-p.group("inst", "pr-agentic-service 인스턴스 (프로세스 1개, 수평 확장)",
+p.group("inst", "gaia-api-service 인스턴스 (프로세스 1개, 수평 확장)",
         280, 230, 920, 230, align="right")
 p.node("api", "api_service", 320, 300, 260, 120, "ours",
        sub="FastAPI 라우터, 인증\n채팅 API, SSE 이벤트\nexecutor·배치 게이트웨이")
@@ -19,7 +19,7 @@ p.node("worker", "worker", 860, 300, 140, 120, "ours",
 p.node("agent", "agent", 1050, 300, 130, 120, "ours",
        sub="LangGraph 그래프\nmiddleware, 도구\nskill")
 p.node("sso", "SSO (IdP)", 40, 305, 170, 50, "infra")
-p.node("batch", "pr-batch", 40, 385, 170, 50, "related", sub="배치 등록·스케줄")
+p.node("batch", "batch", 40, 385, 170, 50, "related", sub="배치 등록·스케줄")
 
 p.node("llm", "LLM 게이트웨이", 1300, 250, 200, 56, "infra", sub="OpenAI 호환")
 p.node("emb", "임베딩 게이트웨이", 1300, 332, 200, 56, "infra", sub="워크플로우 검색")
@@ -75,18 +75,18 @@ for i, (k, name) in enumerate([("caller", "호출자"), ("ours", "우리 시스�
     p.node(f"lg{i}", name, 1300 + col * 105, 96 + row * 34, 95, 26, k, size=11)
 
 # ---------------- page 2: 환경·배포 구성
-q = Page("환경·배포 구성도", 1640, 900, "pr-agentic-service 환경·배포 구성도 (내부망)")
+q = Page("환경·배포 구성도", 1640, 900, "gaia-api-service 환경·배포 구성도 (내부망)")
 
 
 def env(prefix, name, x, cfg):
     y = 80
     q.group(prefix, f"{name} 환경", x, y, 640, 440)
     q.node(prefix + "rt", "앞단 라우팅 (사내 플랫폼)", x + 30, y + 44, 580, 40, "infra")
-    q.node(prefix + "inst", "pr-agentic-service 인스턴스 × N", x + 30, y + 130, 260, 110, "ours",
+    q.node(prefix + "inst", "gaia-api-service 인스턴스 × N", x + 30, y + 130, 260, 110, "ours",
            sub=f"APP_ENV={cfg} · config.yml + config.{cfg}.yml\n포트 8080 · UID/GID 1000\n"
                "RUN_MODE=all (API + worker)")
     q.node(prefix + "ex", "executor", x + 350, y + 130, 250, 46, "related")
-    q.node(prefix + "bt", "pr-batch", x + 350, y + 194, 250, 46, "related")
+    q.node(prefix + "bt", "batch", x + 350, y + 194, 250, 46, "related")
     q.node(prefix + "rd", f"Redis ({name})", x + 30, y + 300, 260, 110, "store", shape="cyl",
            sub="standalone 또는 Sentinel (REDIS_MODE)\nexecutor와 같은 서버, 같은 DB 번호")
     q.node(prefix + "pv", "공유 저장소", x + 350, y + 300, 250, 110, "store", shape="cyl",
@@ -113,7 +113,7 @@ for prefix, x, names in (("d", 40, ("dtest", "executor", "batch")),
     for i, nm in enumerate(names):
         q.node(f"{prefix}db{i}", nm, x + 55 + i * 185, 676, 160, 90,
                "store" if i == 0 else "related", shape="cyl",
-               sub=("pr-agentic-service" if i == 0 else ("executor" if i == 1 else "pr-batch")))
+               sub=("gaia-api-service" if i == 0 else ("executor" if i == 1 else "batch")))
     q.edge(prefix, prefix + "dbs", "DATABASE_URL (데이터베이스 이름으로 환경 구분)",
            ex=("b", 0.5), en=("t", 0.5), t=0.3)
 
