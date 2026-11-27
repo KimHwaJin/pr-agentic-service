@@ -19,7 +19,7 @@
 | 6 | 장애 대응 |
 | 7 | 모니터링과 로그 |
 | 8 | 정기 점검 |
-| 9 | 부록 (설정 키, 운영 스크립트, 백그라운드 루프) |
+| 9 | 부록 (설정 키, 운영 스크립트, 백그라운드 루프, DB 서버 분리) |
 | 10 | 관리자 화면 (시스템 탭) |
 
 ## 1. 서비스 구성
@@ -58,7 +58,7 @@ gaia-api-service는 사내 데이터 분석 Agent의 채팅 API이자 Agent 실�
 
 | 자원 | 현황 |
 | --- | --- |
-| PostgreSQL | 사내 서비스형 DB. 마스터 계정 하나를 씀. 연결 한도 150. dev와 prd가 같은 서버를 쓰고 데이터베이스 이름으로 나뉨(dev `dtest`, prd `dtestprd`). 곧 서버를 분리할 예정(4.3절) |
+| PostgreSQL | 사내 서비스형 DB. 마스터 계정 하나를 씀. 연결 한도 150. dev와 prd가 같은 서버를 쓰고 데이터베이스 이름으로 나뉨(dev `dtest`, prd `dtestprd`). 곧 서버를 분리할 예정(9.4절) |
 | Redis | dev와 prd가 분리되어 있음. 환경에 따라 standalone 방식과 Sentinel 방식이 섞여 있음(1.4절) |
 | 로그 | 키바나에서 조회. 보관 기간은 사내 정책 |
 | 지표 대시보드 | 없음. 상태는 헬스체크, 로그, DB 조회로 확인(7장) |
@@ -291,7 +291,7 @@ python scripts/set_user_role.py --env prd A10054 admin           # 승격 (강�
 - 함께 쓰는 것은 연결 한도 150과 서버 자원입니다. dev에서 부하 테스트를 하거나 dev 인스턴스를 늘리면 prd가 쓸 연결이 줄어듭니다(4.5절). dev의 무거운 쿼리도 같은 서버의 CPU와 디스크를 씁니다.
 - 주의할 것은 설정 실수입니다. 환경의 구분이 `DATABASE_URL` 끝의 데이터베이스 이름뿐이고 주소와 계정이 같아서, dev 설정에 `dtestprd`를 적으면 오류 없이 prd 데이터에 붙습니다. 코드에는 환경을 구분하는 장치가 없으므로, 그렇게 되면 dev의 worker가 prd 사용자의 run을 가져가 dev 코드로 실행하고 dev의 마이그레이션이 prd 스키마를 바꿉니다. `DATABASE_URL`을 고칠 때는 데이터베이스 이름을 다시 확인합니다.
 - 운영자가 DB에 직접 붙어 작업할 때도 같습니다. 마스터 계정 하나로 여섯 데이터베이스에 모두 들어갈 수 있으므로 어느 데이터베이스에 붙었는지 먼저 확인합니다(`SELECT current_database();`).
-- 서버를 분리할 때 할 일은 인수인계 문서의 DB 물리 설계서(`docs/handover/03-db-physical.md`) 5.4절에 있습니다.
+- 서버를 분리할 때 할 일은 9.4절에 있습니다.
 - Redis도 같은 원리입니다. 두 환경이 같은 Redis와 같은 `REDIS_NAMESPACE`(기본 `agentic`)를 쓰면 로그인 세션과 이벤트가 섞입니다. 지금은 분리되어 있어 해당하지 않습니다.
 
 ### 4.4 마이그레이션이 실패하면 모든 인스턴스가 뜨지 못한다
@@ -872,6 +872,102 @@ Agent의 모델 호출, 도구 호출, middleware 단계를 Phoenix로 보냅니
 | `batch-disable-retry` | 비활성 사용자·폐기 tenant의 배치 끄기 재시도 | 주기적 |
 | `executor-cancel-retry` | executor 실행 취소 재시도 | 주기적 |
 | `memory-worker` | 프로젝트 메모리 정리 | 대화가 3분 조용하거나 5턴 쌓이면 |
+
+### 9.4 공용 DB 서버를 dev와 prd로 나눌 때
+
+지금은 dev와 prd가 DB 서버 하나를 같이 쓰고 데이터베이스 이름으로만 나뉩니다. 아래는 prd를 새 서버로 옮기는 경우의 절차입니다. dev를 옮기는 경우도 이름만 바꾸면 같습니다.
+
+| | 지금 | 나눈 뒤 |
+| --- | --- | --- |
+| 서버 | 하나 (연결 한도 150을 함께 씀) | dev 서버, prd 서버 |
+| dev 서버의 데이터베이스 | `dtest`, `executor`, `batch` | 같음 |
+| prd 서버의 데이터베이스 | `dtestprd`, `executorprd`, `batchprd` (dev와 같은 서버) | 같은 이름으로 새 서버에 |
+| 바꾸는 설정 | | `config.prd.yml`의 `DATABASE_URL` (executor, batch도 각자의 prd 설정) |
+
+#### 먼저 정할 것
+
+| 정할 것 | 선택지 |
+| --- | --- |
+| 기존 prd 데이터를 가져갈지 | 가져감(권장): 사용자, 프로젝트, 대화, 워크플로우, 메모리, API 키가 그대로 남음. 가져가지 않음: 빈 DB로 시작 |
+| executor와 batch도 같이 옮기는지 | 같은 작업 시간에 함께 옮기는 것을 권장. 아래 "executor, batch와의 관계" 표 참고 |
+| 작업 시간 | 데이터를 가져가면 옮기는 동안 서비스를 내려야 함. 사용자에게 미리 공지 |
+
+#### 준비
+
+1. 새 서버에 데이터베이스(`dtestprd`)를 만듭니다.
+2. `vector` 확장을 쓸 수 있는지 확인합니다. 계정에 `CREATE EXTENSION` 권한이 없으면 DBA에게 `CREATE EXTENSION IF NOT EXISTS vector`를 먼저 요청합니다.
+3. 서비스 계정에 테이블 생성, 변경, 인덱스 생성 권한이 있는지 확인합니다. 인스턴스가 기동 때 마이그레이션을 직접 실행하기 때문입니다.
+4. 앱서버에서 새 서버의 5432 포트로 접속되는지, 중간 장비의 idle 연결 제한 시간이 얼마인지 확인합니다. `DB_KEEPALIVE_IDLE_SECONDS`(60초)가 그보다 짧아야 합니다(4.6절).
+5. 새 서버의 `max_connections`를 확인하고 prd만으로 연결 예산을 다시 계산합니다(4.5절).
+6. executor, batch 담당과 작업 시간과 이전 범위를 맞춥니다.
+
+#### 절차: 데이터를 가져갈 때
+
+1. 공지한 시간에 시스템 화면의 점검 탭에서 executor의 새 실행 접수를 중지합니다(10.5절).
+2. 진행 중인 run이 끝나기를 기다립니다. 아래 SQL에서 `running`이 0이 되면 됩니다. 기다리지 못하고 내려도 run은 `queued`로 돌아가 옮긴 뒤 이어 가지만, 그만큼 LLM 호출을 다시 합니다.
+
+```sql
+SELECT status, count(*) FROM runs
+WHERE status IN ('queued', 'running') GROUP BY 1;
+```
+
+3. prd의 gaia-api-service 인스턴스를 모두 내립니다. 옛 DB에 붙은 연결이 없는지 확인합니다.
+
+```sql
+SELECT count(*) FROM pg_stat_activity WHERE datname = 'dtestprd';
+```
+
+4. 옛 서버의 `dtestprd`를 통째로 덤프해 새 서버에 복원합니다. 앱 테이블과 LangGraph 테이블(checkpoints 계열, store 계열)은 반드시 같은 시점의 덤프로 함께 옮깁니다. DB 서비스에 이전 기능이 있으면 그것을 써도 됩니다.
+
+```
+pg_dump  -Fc --no-owner --no-acl -d <옛 서버의 dtestprd> -f dtestprd.dump
+pg_restore --no-owner --no-acl -d <새 서버의 dtestprd> dtestprd.dump
+```
+
+5. 새 서버에서 옮겨진 내용을 확인합니다.
+
+```sql
+SELECT version_num FROM alembic_version;          -- 옛 서버와 같은 값
+SELECT count(*) FROM users;                         -- 옛 서버와 같은 값
+SELECT count(*) FROM runs;
+SELECT count(*) FROM workflow_query_vectors;
+SELECT extname FROM pg_extension WHERE extname = 'vector';
+```
+
+6. `config.prd.yml`의 `DATABASE_URL`을 새 서버 주소로 바꿉니다. 데이터베이스 이름이 `dtestprd`인지 다시 봅니다. master에 머지한 뒤 stg, prd로 `--ff-only` 머지해 배포합니다(2.3절).
+7. 인스턴스가 뜨면 배포 후 확인(2.5절)을 하고, 아래로 실제로 새 서버에 붙었는지 확인합니다. 워크플로우 벡터 인덱스(`ix_wqv_hnsw_1024`)가 없으면 기동 때 다시 만듭니다.
+
+```sql
+SELECT current_database(), inet_server_addr();
+```
+
+8. executor의 새 실행 접수를 재개합니다.
+9. 옛 서버의 `dtestprd`는 바로 지우지 않고 일정 기간 보관합니다. 그동안 그 데이터베이스에 연결이 생기지 않는지(3번 SQL) 가끔 확인하고, 문제가 없으면 지웁니다.
+
+#### 데이터를 가져가지 않을 때
+
+`config.prd.yml`의 `DATABASE_URL`만 새 서버로 바꿔 배포합니다. 첫 기동 때 마이그레이션이 테이블을 모두 만듭니다. 대신 아래가 처음 상태로 돌아갑니다.
+
+- 사용자는 첫 로그인 때 새로 만들어집니다. 관리자는 `ADMIN_EMPLOYEE_IDS`에 있는 사번만 다시 관리자가 됩니다.
+- API 키를 모두 다시 발급해야 합니다. 키를 받아 간 다른 서비스에 새 키를 전달합니다.
+- 프로젝트, 대화, 워크플로우, 프로젝트 메모리, 배치 리포트 기록이 사라집니다.
+
+#### executor, batch와의 관계
+
+우리 DB에 남은 `execution_id`, `batch_id`는 그 환경의 executor와 batch에 있는 데이터를 가리킵니다.
+
+| 우리 DB | executor, batch DB | 결과 |
+| --- | --- | --- |
+| 가져감 | 가져감 | 문제없음 |
+| 새로 시작 | 가져감 | 문제없음. 우리 쪽 기록만 없음 |
+| 가져감 | 새로 시작 | 기다리던 run이 이어 가지 못하고, 결과물과 노트북 링크가 깨짐. 배치 리포트도 원래 배치를 찾지 못함 |
+
+#### 나눈 뒤 할 일
+
+- 연결 예산을 서버별로 다시 계산합니다. 예를 들어 prd 서버에 우리 2, executor 1, batch 1이면 평소 50, 우리 서비스를 한꺼번에 교체하는 동안 78입니다.
+- 새 서버의 백업 주기와 보관 기간을 DB 서비스 쪽에 확인합니다.
+- 이 문서의 1.2절 현황표와 4.3절(dev와 prd가 같은 DB 서버를 쓴다)을 고칩니다.
+- 되돌려야 하면 `DATABASE_URL`을 옛 서버로 되돌려 배포합니다. 단, 옮긴 뒤 새 서버에 쓰인 데이터는 옛 서버에 없으므로 옮긴 직후에만 쓸 수 있는 방법입니다.
 
 ## 10. 관리자 화면 (시스템 탭)
 

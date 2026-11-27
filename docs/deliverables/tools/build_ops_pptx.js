@@ -109,7 +109,7 @@ function steps(s, items, o = {}) {
     const x = MX + i * (w + gap);
     s.addShape(pres.ShapeType.roundRect, { x, y, w, h, rectRadius: 0.08, fill: { color: C.background2 }, line: { color: THEME.colors.accent6, width: 0.75 }, objectName: "step" });
     s.addShape(pres.ShapeType.ellipse, { x: x + 0.15, y: y + 0.15, w: 0.42, h: 0.42, fill: { color: C.accent1 }, line: { color: C.accent1 }, objectName: "step no bg" });
-    s.addText(String(i + 1), { x: x + 0.15, y: y + 0.15, w: 0.42, h: 0.42, fontSize: 13, bold: true, color: C.background1, align: "center", valign: "middle", margin: 0, isTextBox: true, objectName: "step no" });
+    s.addText(String(i + 1 + (o.start || 0)), { x: x + 0.15, y: y + 0.15, w: 0.42, h: 0.42, fontSize: 13, bold: true, color: C.background1, align: "center", valign: "middle", margin: 0, isTextBox: true, objectName: "step no" });
     s.addText(t, { x: x + 0.65, y: y + 0.13, w: w - 0.75, h: 0.46, fontSize: 13, bold: true, color: C.text2, margin: 0, valign: "middle", isTextBox: true, objectName: "step title" });
     s.addText(d, { x: x + 0.15, y: y + 0.68, w: w - 0.3, h: h - 0.78, fontSize: o.fontSize || 12, color: C.text1, margin: 0, valign: "top", isTextBox: true, objectName: "step body" });
   });
@@ -130,13 +130,14 @@ function note(s, text, y = 6.35) {
   s.addText("gaia-api-service 운영자 메뉴얼", { placeholder: "title" });
   s.addText([
     { text: "사내 데이터 분석 Agent 서비스", options: { breakLine: true } },
-    { text: "초안 v0.2", options: {} },
+    { text: "초안 v0.3", options: {} },
   ], { placeholder: "body" });
 
   let t = slide("개정 이력");
   table(t, ["버전", "일자", "내용", "작성", "검토"], [
     ["0.1", "2026-11-26", "초안 작성", "", ""],
     ["0.2", "2026-11-27", "브랜치 기준을 master, stg, prd로 변경. 5.2 패치방법과 마이그레이션 설명 갱신", "", ""],
+    ["0.3", "2026-11-27", "서비스 이름 변경(gaia-api-service, batch), 포트 5000, 부록 C DB 서버 분리 추가", "", ""],
     ["", "", "", "", ""],
   ], [1.2, 1.8, 6.33, 1.5, 1.5], { boldFirst: false });
   bullets(t, [
@@ -151,7 +152,7 @@ function note(s, text, y = 6.35) {
     ["2. 시스템 구성 정보", ["2.1 S/W 구성도", "2.2 Application 구성도"]],
     ["3. 서비스 관리", ["3.1 인터페이스 흐름도", "3.2 서버 디렉토리 구조", "3.3 서비스 목록", "3.4 서비스 환경설정값 정보", "3.5 서비스 시작/종료 방법", "3.6 서비스 정상 여부 점검", "3.7 로그 확인", "3.8 관제 정보", "3.9 운영 업무", "3.10 관리자 화면"]],
     ["4. 장애처리", ["4.1 장애처리 절차", "4.2 장애 유형별 조치", "4.3 담당자 연락처", "4.4 운영 시 주의사항"]],
-    ["5. 유지보수 가이드", ["5.1 개발 환경 setting 정보", "5.2 패치방법 (App Server)", "부록 A. 자주 쓰는 SQL", "부록 B. 운영 스크립트"]],
+    ["5. 유지보수 가이드", ["5.1 개발 환경 setting 정보", "5.2 패치방법 (App Server)", "부록 A. 자주 쓰는 SQL", "부록 B. 운영 스크립트", "부록 C. DB 서버 분리"]],
   ];
   const cw = (CW - 0.2 * 4) / 5;
   toc.forEach(([h, items], i) => {
@@ -187,7 +188,7 @@ section("1. 개요", ["1.1 문서 개요", "1.2 서비스 개요"]);
     ["prd", "prd", "config.yml + config.prd.yml", "idp"],
   ], [1.4, 1.4, 3.3, 3.0], { y: 2.2, x: MX });
   table(s, ["자원", "현황 (2026-11-22 기준)"], [
-    ["PostgreSQL", "사내 서비스형 DB. 연결 한도 150. dev와 prd가 같은 서버를 쓰고 데이터베이스 이름으로 나뉨. 서버 분리 예정"],
+    ["PostgreSQL", "사내 서비스형 DB. 연결 한도 150. dev와 prd가 같은 서버를 쓰고 데이터베이스 이름으로 나뉨. 서버 분리 예정 (부록 C)"],
     ["Redis", "dev와 prd 분리. 환경에 따라 standalone 또는 Sentinel"],
     ["로그", "키바나에서 조회. 보관 기간은 사내 정책"],
     ["지표 대시보드", "없음. 헬스체크, 로그, DB 조회로 확인"],
@@ -792,7 +793,7 @@ section("4. 장애처리", ["4.1 장애처리 절차", "4.2 장애 유형별 조
   const cautions = [
     ["Redis는 executor와 같은 서버, 같은 DB 번호", "다르면 오류 없이 이벤트가 오지 않아 모든 분석이 단계마다 2분씩 느려짐. executor_event_recovered가 계속 찍힘", "REDIS_URL 또는 REDIS_SENTINEL_*을 executor 설정과 똑같이 맞춤"],
     ["Sentinel 노드를 REDIS_URL로 직접 가리키지 않음", "장애 전환으로 그 노드가 레플리카가 되면 READONLY 오류로 멈춤", "Sentinel 환경은 반드시 REDIS_MODE: sentinel"],
-    ["dev와 prd가 같은 DB 서버를 씀", "연결 한도 150과 서버 자원을 함께 씀. DATABASE_URL의 데이터베이스 이름을 잘못 적으면 오류 없이 다른 환경에 붙음", "설정의 데이터베이스 이름 확인. 직접 접속하면 SELECT current_database()로 먼저 확인"],
+    ["dev와 prd가 같은 DB 서버를 씀", "연결 한도 150과 서버 자원을 함께 씀. DATABASE_URL의 데이터베이스 이름을 잘못 적으면 오류 없이 다른 환경에 붙음", "설정의 데이터베이스 이름 확인. 직접 접속하면 SELECT current_database()로 먼저 확인 (분리 절차는 부록 C)"],
     ["마이그레이션 실패 시 모든 인스턴스가 뜨지 못함", "AUTO_MIGRATE: true(기본)라서 기동 때 자동 실행. 실패하면 새 인스턴스가 뜨지 못하고, 옛 인스턴스가 이미 내려갔다면 서비스가 멈춤", "dev, stg에서 먼저 적용된 것만 prd로 올림. 하나씩 교체. 실패하면 이전 버전으로 되돌림"],
     ["PostgreSQL 연결 수에는 예산이 있음", "인스턴스 하나가 최대 14. 넘으면 같은 서버의 모든 서비스에서 too many connections", "합계에 여유 20 이상. 인스턴스 3개 이상이면 하나씩 교체. 올리기 전에 다시 계산"],
     ["중간 장비가 조용한 연결을 끊음", "쉬던 연결이 끊겨 다음 턴이 server closed the connection으로 실패", "DB_KEEPALIVE_IDLE_SECONDS를 장비의 idle 제한보다 짧게"],
@@ -825,7 +826,7 @@ section("4. 장애처리", ["4.1 장애처리 절차", "4.2 장애 유형별 조
 }
 
 // ================= 5. 유지보수 가이드
-section("5. 유지보수 가이드", ["5.1 개발자 개발 환경 setting 정보", "5.2 패치방법 (App Server)", "부록 A. 자주 쓰는 SQL · 부록 B. 운영 스크립트"]);
+section("5. 유지보수 가이드", ["5.1 개발자 개발 환경 setting 정보", "5.2 패치방법 (App Server)", "부록 A. 자주 쓰는 SQL · 부록 B. 운영 스크립트 · 부록 C. DB 서버 분리"]);
 {
   let s = slide("5.1 개발 환경 setting: 필요한 것");
   table(s, ["항목", "내용"], [
@@ -992,6 +993,102 @@ section("5. 유지보수 가이드", ["5.1 개발자 개발 환경 setting 정�
     ["run_local_https.ps1, run_app_tls.py, make_local_cert.py", "개발 PC에서 https로 띄워 SSO 확인"],
   ], [5.4, 6.93], { mono: [0], fontSize: 12 });
   note(s, "스크립트는 이미지에 들어가지 않으므로 배포할 버전의 레포에서 같은 설정으로 실행합니다.", 6.45);
+
+  // ---------- 부록 C
+  s = slide("부록 C. 공용 DB 서버를 dev와 prd로 나눌 때");
+  lead(s, "지금은 dev와 prd가 DB 서버 하나를 같이 쓰고 데이터베이스 이름으로만 나뉩니다. 아래는 prd를 새 서버로 옮기는 경우입니다. dev를 옮겨도 이름만 바꾸면 같습니다.", Y0, 0.75);
+  table(s, ["", "지금", "나눈 뒤"], [
+    ["서버", "하나 (연결 한도 150을 함께 씀)", "dev 서버, prd 서버"],
+    ["dev 서버의 데이터베이스", "dtest, executor, batch", "같음"],
+    ["prd 서버의 데이터베이스", "dtestprd, executorprd, batchprd (dev와 같은 서버)", "같은 이름으로 새 서버에"],
+    ["바꾸는 설정", "", "config.prd.yml의 DATABASE_URL (executor, batch도 각자의 prd 설정)"],
+  ], [2.8, 4.6, 4.93], { y: 2.1 });
+  table(s, ["먼저 정할 것", "선택지"], [
+    ["기존 prd 데이터를 가져갈지", "가져감(권장): 사용자, 프로젝트, 대화, 워크플로우, 메모리, API 키가 남음 / 가져가지 않음: 빈 DB로 시작"],
+    ["executor, batch도 같이 옮기는지", "같은 작업 시간에 함께 옮기는 것을 권장 (부록 C 마지막 장의 관계 표)"],
+    ["작업 시간", "데이터를 가져가면 옮기는 동안 서비스를 내려야 함. 사용자에게 미리 공지"],
+  ], [3.4, 8.93], { y: 4.4 });
+
+  s = slide("부록 C. DB 서버 분리: 준비");
+  steps(s, [
+    ["데이터베이스", "새 서버에 dtestprd를 만듦"],
+    ["vector 확장", "CREATE EXTENSION 권한이 없으면 DBA에게 CREATE EXTENSION IF NOT EXISTS vector를 먼저 요청"],
+    ["계정 권한", "테이블 생성, 변경, 인덱스 생성 권한. 기동 때 마이그레이션을 직접 실행하므로 필요"],
+  ], { h: 1.75, fontSize: 12 });
+  steps(s, [
+    ["네트워크", "앱서버에서 새 서버 5432 포트 접속 확인. 중간 장비 idle 제한보다 DB_KEEPALIVE_IDLE_SECONDS(60)가 짧아야 함"],
+    ["연결 예산", "새 서버의 max_connections를 확인하고 prd만으로 다시 계산 (4.4)"],
+    ["일정 맞추기", "executor, batch 담당과 작업 시간과 이전 범위를 맞춤"],
+  ], { y: 3.25, h: 1.75, fontSize: 12, start: 3 });
+  note(s, "번호 순서대로 할 필요는 없습니다. 작업 시간 전에 모두 끝나 있어야 합니다.", 5.35);
+
+  s = slide("부록 C. DB 서버 분리: 절차 (데이터를 가져갈 때)");
+  table(s, ["순서", "할 일", "확인"], [
+    ["1", "시스템 화면 점검 탭에서 executor의 새 실행 접수 중지 (3.10)", ""],
+    ["2", "진행 중인 run이 끝나기를 기다림", "running이 0 (SQL 1)"],
+    ["3", "prd의 gaia-api-service 인스턴스를 모두 내림", "옛 서버 dtestprd 연결 0 (SQL 2)"],
+    ["4", "옛 서버 dtestprd를 통째로 덤프해 새 서버에 복원. 앱 테이블과 LangGraph 테이블은 같은 시점으로", "DB 서비스의 이전 기능이 있으면 그것을 써도 됨"],
+    ["5", "새 서버에서 옮겨진 내용 확인", "alembic_version, 행 수, vector 확장 (SQL 3)"],
+    ["6", "config.prd.yml의 DATABASE_URL을 새 서버로 바꿈. master에 머지 뒤 stg, prd로 --ff-only 머지해 배포 (5.2)", "데이터베이스 이름이 dtestprd인지 다시 확인"],
+    ["7", "배포 후 확인 5단계 (3.6)", "새 서버에 붙었는지 (SQL 4)"],
+    ["8", "executor의 새 실행 접수 재개", ""],
+    ["9", "옛 서버의 dtestprd는 일정 기간 보관 후 삭제", "그동안 연결이 생기지 않는지 (SQL 2)"],
+  ], [0.8, 7.0, 4.53], { fontSize: 12, boldFirst: false });
+  note(s, "2번에서 기다리지 못하고 내려도 run은 queued로 돌아가 옮긴 뒤 이어 갑니다. 다만 그만큼 LLM 호출을 다시 합니다.", 6.35);
+
+  s = slide("부록 C. DB 서버 분리: 명령과 확인 SQL");
+  const cw2 = (CW - 0.3) / 2;
+  code(s, [
+    "-- SQL 1. 진행 중인 run",
+    "SELECT status, count(*) FROM runs",
+    "WHERE status IN ('queued', 'running')",
+    "GROUP BY 1;",
+    "",
+    "-- SQL 2. 옛 서버에 남은 연결",
+    "SELECT count(*) FROM pg_stat_activity",
+    "WHERE datname = 'dtestprd';",
+    "",
+    "-- 덤프와 복원 (4번)",
+    "pg_dump -Fc --no-owner --no-acl \\",
+    "  -d <옛 서버의 dtestprd> -f dtestprd.dump",
+    "pg_restore --no-owner --no-acl \\",
+    "  -d <새 서버의 dtestprd> dtestprd.dump",
+  ].join("\n"), { w: cw2, h: 5.3, fontSize: 12 });
+  code(s, [
+    "-- SQL 3. 새 서버에서 확인 (옛 서버와 비교)",
+    "SELECT version_num FROM alembic_version;",
+    "SELECT count(*) FROM users;",
+    "SELECT count(*) FROM runs;",
+    "SELECT count(*) FROM workflow_query_vectors;",
+    "SELECT extname FROM pg_extension",
+    "WHERE extname = 'vector';",
+    "",
+    "-- SQL 4. 인스턴스가 새 서버에 붙었는지",
+    "SELECT current_database(),",
+    "       inet_server_addr();",
+  ].join("\n"), { x: MX + cw2 + 0.3, w: cw2, h: 5.3, fontSize: 12 });
+  note(s, "워크플로우 벡터 인덱스(ix_wqv_hnsw_1024)가 없으면 인스턴스가 기동할 때 다시 만듭니다.", 6.65);
+
+  s = slide("부록 C. DB 서버 분리: 데이터를 가져가지 않을 때와 연관 서비스");
+  lead(s, "데이터를 가져가지 않으면 config.prd.yml의 DATABASE_URL만 새 서버로 바꿔 배포합니다. 첫 기동 때 마이그레이션이 테이블을 모두 만듭니다. 대신 아래가 처음 상태로 돌아갑니다.", Y0, 0.75);
+  bullets(s, [
+    "사용자는 첫 로그인 때 새로 만들어집니다. 관리자는 ADMIN_EMPLOYEE_IDS에 있는 사번만 다시 관리자가 됩니다.",
+    "API 키를 모두 다시 발급해야 합니다. 키를 받아 간 다른 서비스에 새 키를 전달합니다.",
+    "프로젝트, 대화, 워크플로우, 프로젝트 메모리, 배치 리포트 기록이 사라집니다.",
+  ], { y: 2.05, h: 1.5, fontSize: 13 });
+  table(s, ["우리 DB", "executor, batch DB", "결과"], [
+    ["가져감", "가져감", "문제없음"],
+    ["새로 시작", "가져감", "문제없음. 우리 쪽 기록만 없음"],
+    ["가져감", "새로 시작", "기다리던 run이 이어 가지 못하고 결과물, 노트북 링크가 깨짐. 배치 리포트도 원래 배치를 찾지 못함"],
+  ], [2.2, 2.6, 7.53], { y: 3.75 });
+  note(s, "우리 DB의 execution_id, batch_id는 그 환경의 executor와 batch에 있는 데이터를 가리키기 때문입니다.", 5.6);
+
+  s = slide("부록 C. DB 서버 분리: 나눈 뒤 할 일");
+  const qw = (CW - 0.3) / 2;
+  card(s, MX, Y0, qw, 2.4, "연결 예산 다시 계산", "서버별로 따로 계산합니다. 예: prd 서버에 우리 2, executor 1, batch 1이면 평소 50, 우리 서비스를 한꺼번에 교체하는 동안 78입니다.", { fontSize: 13 });
+  card(s, MX + qw + 0.3, Y0, qw, 2.4, "백업 정책 확인", "새 서버의 백업 주기와 보관 기간을 DB 서비스 쪽에 확인합니다. 앱 테이블과 LangGraph 테이블은 같은 시점으로 함께 복구해야 합니다.", { fontSize: 13 });
+  card(s, MX, Y0 + 2.7, qw, 2.4, "문서 고치기", "1.2 서비스 개요의 자원 현황과 4.4 주의사항의 \"dev와 prd가 같은 DB 서버를 씀\" 항목을 고칩니다.", { fontSize: 13 });
+  card(s, MX + qw + 0.3, Y0 + 2.7, qw, 2.4, "되돌릴 때", "DATABASE_URL을 옛 서버로 되돌려 배포합니다. 옮긴 뒤 새 서버에 쓰인 데이터는 옛 서버에 없으므로 옮긴 직후에만 쓸 수 있는 방법입니다.", { fontSize: 13, titleColor: C.accent4 });
 }
 
 (async () => {
