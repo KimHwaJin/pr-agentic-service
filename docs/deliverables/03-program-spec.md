@@ -20,9 +20,9 @@ Agent는 LangGraph와 LangChain으로 구현했습니다. deepagents의 방식�
 | AW-02 | 데이터 분석 | G-01 채팅 Agent Graph (담당자 analyst) | AW-01이 `start_analysis` 호출 |
 | AW-03 | 분석 리포트 작성 | G-02 리포트 Agent Graph | AW-02가 `write_report` 호출 |
 | AW-04 | 배치 리포트 작성 | G-02 리포트 Agent Graph | 배치 실행 성공 이벤트 |
-| AW-05 | 프로젝트 메모리 추출 | 없음 (LLM 1회 호출) | 대화가 180초 조용하거나 5턴 누적 |
+| AW-05 | 프로젝트 메모리 추출 | 없음 (LLM 1회 호출) | 대화가 `MEMORY_WORKER_QUIET_SECONDS`(180초) 조용하거나 `MEMORY_WORKER_MAX_TURNS`(5턴) 누적 |
 | AW-06 | 세션 제목 생성 | 없음 (LLM 1회 호출) | 세션의 첫 답변 완료 |
-| AW-07 | 대화 요약 | G-01의 middleware | 대화 이력이 3만 토큰(어림) 초과 |
+| AW-07 | 대화 요약 | G-01의 middleware | 대화 이력이 `AGENT_SUMMARY_TRIGGER_TOKENS`(3만 토큰, 어림) 초과 |
 | AW-08 | 워크플로우 추천 검색 | 없음 (임베딩 검색 또는 LLM 1회 호출) | AW-02가 `search_workflows` 호출 |
 | AW-09 | gaia 연동 workflow | G-03 gaia 연동 graph | gaia 채팅 메시지 |
 
@@ -90,9 +90,9 @@ middleware는 아래 순서로 붙습니다.
 | 3 | `ToolCallDedupMiddleware` | wrap_model_call | 한 응답 안의 같은 도구 호출은 한 번만 실행. 여러 `propose_plans` 호출은 하나로 합침 |
 | 4 | `ToolFailureLimitMiddleware` | wrap_tool_call | 같은 도구가 같은 오류로 연속 3회(`AGENT_TOOL_FAILURE_LIMIT`), 어떤 도구든 연속 5회(`AGENT_TOOL_FAILURE_ANY_LIMIT`) 실패하면 더 실행하지 않고 사용자에게 설명하게 함 |
 | 5 | `ToolErrorMiddleware` | wrap_tool_call | 도구 예외를 모델에게 메시지로 돌려줌. 문구는 `agent/tool_errors.py` |
-| 6 | `TurnModelCallLimitMiddleware` | before_agent, before_model, after_model | 한 턴의 모델 호출을 40회로 제한. 멈췄다 이어져도 누적 |
+| 6 | `TurnModelCallLimitMiddleware` | before_agent, before_model, after_model | 한 턴의 모델 호출을 `AGENT_MODEL_CALL_LIMIT`(40회)로 제한. 멈췄다 이어져도 누적 |
 | 7 | 끝난 분석 정리 (`ToolResultCompactionMiddleware`) | wrap_tool_call | `finish_analysis` 때 그 분석의 긴 도구 결과를 규칙대로 줄임 (`AGENT_COMPACT_FINISHED_ANALYSIS`) |
-| 8 | `ReportingSummarizationMiddleware` | before_model | 대화가 3만 토큰(어림)을 넘으면 앞부분을 요약 (AW-07) |
+| 8 | `ReportingSummarizationMiddleware` | before_model | 대화가 `AGENT_SUMMARY_TRIGGER_TOKENS`(3만 토큰, 어림)을 넘으면 앞부분을 요약 (AW-07) |
 
 ### 2.4 담당자
 
@@ -125,7 +125,7 @@ middleware는 아래 순서로 붙습니다.
 - 도구 안에서 `interrupt(payload)`를 부르면 LangGraph가 그 시점의 상태를 체크포인트에 저장하고 그래프를 끝냅니다. 스케줄러가 종류를 보고 run 상태를 바꾼 뒤 lease를 놓습니다.
 - 이어 갈 때 LangGraph는 멈췄던 도구를 처음부터 다시 실행하고, `interrupt()`가 이번에는 받은 값을 돌려줍니다.
 - 도구가 다시 실행돼도 executor에 두 번 보내지 않습니다. 도구 호출별 결과를 store에 기록하고, 모든 executor 요청에 `run_id:tool_call_id`로 만든 멱등 키를 쓰며, 코드 파일도 같은 경로에 한 번만 씁니다.
-- 인스턴스가 죽으면 lease(기본 60초)가 만료되고 다른 인스턴스가 체크포인트에서 이어 갑니다.
+- 인스턴스가 죽으면 lease(`RUN_LEASE_SECONDS`, 기본 60초)가 만료되고 다른 인스턴스가 체크포인트에서 이어 갑니다.
 
 ![run 상태 전이](diagrams/export/03-agent-graph-4.png)
 

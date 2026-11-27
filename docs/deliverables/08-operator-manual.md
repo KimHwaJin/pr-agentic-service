@@ -75,7 +75,7 @@ gaia-api-service는 사내 데이터 분석 Agent의 채팅 API이자 Agent 실�
 | 종료 대기 | 종료 신호 뒤 정리에 최대 약 45초(2.7절). 그 전에 강제 종료하지 않아야 함 |
 | 실행 계정 | UID 1000, GID 1000. executor와 같아야 공유 저장소를 같이 읽고 씀 |
 | 공유 저장소 | executor와 같은 저장소를 `/mnt/data`에 마운트 |
-| 요청 크기와 연결 | 요청 본문 32MB까지, SSE 연결은 길게 유지(4.8절) |
+| 요청 크기와 연결 | 요청 본문 `REQUEST_MAX_BYTES`(32MB)까지, SSE 연결은 길게 유지(4.8절) |
 | 자원 | 인스턴스 하나가 CPU 약 1코어를 씀. 배포 예시의 메모리 한도는 2Gi |
 
 배포 예시는 `deploy/kubernetes/deployment.yml`에 있습니다.
@@ -132,6 +132,36 @@ REDIS_SENTINEL_AUTH: <AES로 암호화한 비밀번호>
 - 네 파일은 모두 빌드 결과물에 들어가고, 환경변수 `APP_ENV` 값이 어느 파일을 쓸지 정합니다.
 - 사내 폐쇄망 정책에 따라 키 값(`EXECUTOR_API_KEY`, `BATCH_API_KEY`, `LLM_API_KEY`, DB와 Redis 비밀번호)도 `config.{APP_ENV}.yml`에 적어 깃랩에 올리고 배포합니다. 한 값만 바꿀 때는 같은 이름의 환경변수로 넣으면 파일보다 우선합니다.
 - 설정을 바꾸는 것은 곧 배포입니다. 실행 중인 인스턴스는 설정 파일을 다시 읽지 않습니다.
+
+#### 이 문서의 숫자 읽는 법
+
+이 문서의 숫자는 세 종류입니다. 운영 중에 바꿀 수 있는지가 달라서 표기를 나눴습니다.
+
+| 종류 | 표기 | 예 | 바꾸는 방법 |
+| --- | --- | --- | --- |
+| config 키로 정해지는 값 | `키 이름`(값). 값은 `config.yml` 값 | `SESSION_TTL_SECONDS`(30분), `RUN_CONCURRENCY`(16) | `config.{APP_ENV}.yml`이나 같은 이름의 환경변수로 덮어쓰고 배포 |
+| 코드에 고정된 값 | 값(코드 고정) | 사용자 캐시 30초, 놓친 이벤트 확인 60초, 보존 정리 1시간, 종료 정리 20초 | 코드를 고쳐 패치(2.3절) |
+| 다른 서비스나 인프라가 정하는 값 | 값(누구 설정) | DB `max_connections` 150, executor 풀 16, batch 풀 6, 커널 삭제 보호 15분 | 그 서비스 담당이나 플랫폼 배포 설정 |
+
+환경 파일이 `config.yml` 값을 덮어쓰는 키는 아래뿐입니다. 주소, 계정, 키 말고 시간, 개수, 한도 같은 숫자 값은 지금 세 환경 모두 `config.yml` 값을 그대로 씁니다. 한 환경만 값을 바꾸면 이 표에 추가합니다.
+
+| 키 | dev | stg | prd |
+| --- | --- | --- | --- |
+| `REDIS_MODE` | standalone | standalone | sentinel |
+| `COOKIE_SECURE` | false | true | true |
+| `WEB_CONSOLE_ENABLED` | (없음, 환경으로 판단) | (없음, 환경으로 판단) | true |
+| `SERVICE_ID`, `ADMIN_EMPLOYEE_IDS`, `MODELS` | 환경마다 | 환경마다 | 환경마다 |
+
+한도에 걸릴 때 자주 조정하는 키는 아래와 같습니다.
+
+| 키 | 알아 둘 점 |
+| --- | --- |
+| `SESSION_TTL_SECONDS`, `SESSION_MAX_SECONDS` | 바꾸면 이미 로그인한 사용자에게도 다음 요청부터 적용됨 |
+| `REQUEST_MAX_BYTES` | 올릴 때 앞단의 본문 크기 제한도 같이 올림. 이미지는 `IMAGE_MAX_BYTES`(10MB), `IMAGE_MAX_TOTAL_BYTES`(20MB)가 따로 있음 |
+| `SSO_RATE_LIMIT_PER_MINUTE` | 클라이언트 주소별, 인스턴스별로 1분 동안 셈. 0이면 끔. 여러 사용자가 같은 주소로 보이면 함께 셈 |
+| `RUN_MAX_ATTEMPTS` | 늘리면 실패한 턴을 더 오래 다시 시도하고, 그만큼 LLM 호출도 늘어남 |
+| `RUN_LEASE_SECONDS` | 늘리면 죽은 인스턴스의 run을 이어 받기까지 더 걸리고, 줄이면 짧은 DB 장애에도 턴이 쉽게 멈춤 |
+| `BATCH_REPORT_COLLECT_TIMEOUT_SECONDS` | 노트북이 늦게 끝나는 배치가 많으면 늘림 |
 
 ### 2.2 빌드할 때 지킬 것
 
@@ -193,11 +223,11 @@ REDIS_SENTINEL_AUTH: <AES로 암호화한 비밀번호>
 
 인스턴스가 종료 신호를 받으면 아래 순서로 정리하고, 합계 최대 약 45초가 걸립니다.
 
-1. uvicorn이 열린 연결을 최대 20초 기다립니다. SSE 연결이 있으면 끝까지 기다립니다.
-2. worker가 새 run을 받지 않고, 진행 중인 턴과 메모리 작업을 최대 20초 동안 마무리합니다.
+1. uvicorn이 열린 연결을 최대 20초 기다립니다(실행 명령의 `--timeout-graceful-shutdown`). SSE 연결이 있으면 끝까지 기다립니다.
+2. worker가 새 run을 받지 않고, 진행 중인 턴과 메모리 작업을 최대 20초(코드 고정) 동안 마무리합니다.
 3. 끝나지 않은 run은 lease를 반납해 `queued`로 돌리고, 다른 인스턴스가 체크포인트에서 이어 갑니다.
 
-진행 중이던 턴은 잃지 않습니다. 다만 이어 가는 인스턴스가 마지막 체크포인트 이후의 LLM 호출을 다시 하므로 그만큼 시간이 더 걸립니다. 정리가 끝나기 전에 강제 종료되어도 lease가 60초 뒤 만료되어 같은 방식으로 이어 갑니다.
+진행 중이던 턴은 잃지 않습니다. 다만 이어 가는 인스턴스가 마지막 체크포인트 이후의 LLM 호출을 다시 하므로 그만큼 시간이 더 걸립니다. 정리가 끝나기 전에 강제 종료되어도 lease가 `RUN_LEASE_SECONDS`(60초) 뒤 만료되어 같은 방식으로 이어 갑니다. 배포 예시(`deploy/kubernetes/deployment.yml`)는 `terminationGracePeriodSeconds` 60초, `preStop` 5초 대기이고, 실제 값은 플랫폼 배포 설정을 따릅니다.
 
 ## 3. 일상 운영
 
@@ -274,7 +304,7 @@ python scripts/set_user_role.py --env prd A10054 admin           # 승격 (강�
 ### 4.1 Redis는 executor와 같은 서버, 같은 DB 번호여야 한다
 
 - 문제: executor는 실행 이벤트를 Redis 스트림(`executor.events.{tenant}`)에 씁니다. 우리가 다른 Redis나 다른 DB 번호를 보면 이벤트가 하나도 오지 않습니다.
-- 증상: 오류가 전혀 없습니다. 분석이 executor에서는 끝났는데 화면은 계속 실행 중으로 보이고, 2분 뒤에야 복구 절차가 결과를 가져와 진행됩니다. 모든 분석이 단계마다 2분씩 느려집니다. 로그에 `executor_event_recovered`가 계속 찍힙니다.
+- 증상: 오류가 전혀 없습니다. 분석이 executor에서는 끝났는데 화면은 계속 실행 중으로 보이고, `EXECUTOR_EVENT_RECOVERY_SECONDS`(2분) 뒤에야 복구 절차가 결과를 가져와 진행됩니다. 모든 분석이 단계마다 그만큼 느려집니다. 로그에 `executor_event_recovered`가 계속 찍힙니다.
 - 예방: `REDIS_URL`(또는 `REDIS_SENTINEL_*`)을 executor의 같은 이름 설정과 똑같이 맞춥니다. Sentinel 모드는 DB 0번을 씁니다.
 
 ### 4.2 Sentinel 구성의 노드를 `REDIS_URL`로 직접 가리키지 않는다
@@ -302,7 +332,7 @@ python scripts/set_user_role.py --env prd A10054 admin           # 승격 (강�
 
 ### 4.5 PostgreSQL 연결 수에는 예산이 있다
 
-- 문제: DB의 연결 한도는 150이고 사내 서비스형 DB라 우리가 올릴 수 없습니다. 한도는 서버 단위라서 dev와 prd의 gaia-api-service, executor, batch가 모두 이 한도를 나눠 씁니다. 우리 인스턴스 하나는 최대 14(앱 풀 6 + 그래프 풀 8)입니다.
+- 문제: DB의 연결 한도(`max_connections`, 현재 150)는 사내 서비스형 DB가 정하므로 우리가 올릴 수 없습니다. 한도는 서버 단위라서 dev와 prd의 gaia-api-service, executor, batch가 모두 이 한도를 나눠 씁니다. 우리 인스턴스 하나는 최대 `DB_POOL_SIZE × 2 + CHECKPOINT_POOL_SIZE`(기본 14 = 앱 풀 6 + 그래프 풀 8)입니다.
 - 교체 배포(롤링 업데이트) 중에는 옛 인스턴스와 새 인스턴스가 함께 떠 있어 연결이 일시적으로 늘어납니다.
 
 | 우리 인스턴스 수 | 평소 | 하나씩 교체 중 | 한꺼번에 교체 중 |
@@ -311,7 +341,7 @@ python scripts/set_user_role.py --env prd A10054 admin           # 승격 (강�
 | 3 | 42 | 56 | 84 |
 | 4 | 56 | 70 | 112 |
 
-- 여기에 executor(인스턴스당 16), batch(인스턴스당 6), dev와 prd를 모두 더한 값이 150 아래여야 합니다. 예를 들어 prd(우리 2, executor 1, batch 1)와 dev(우리 1, executor 1, batch 1)이면 평소 86, prd의 우리 서비스를 한꺼번에 교체하는 동안 114입니다. 우리가 4개로 늘어난 상태에서 한꺼번에 교체하면 170으로 한도를 넘습니다.
+- 여기에 executor(인스턴스당 16, executor 설정), batch(인스턴스당 6, batch 설정), dev와 prd를 모두 더한 값이 `max_connections`(현재 150) 아래여야 합니다. 예를 들어 prd(우리 2, executor 1, batch 1)와 dev(우리 1, executor 1, batch 1)이면 평소 86, prd의 우리 서비스를 한꺼번에 교체하는 동안 114입니다. 우리가 4개로 늘어난 상태에서 한꺼번에 교체하면 170으로 한도를 넘습니다.
 - 증상: 넘으면 `too many connections` 오류가 같은 서버를 쓰는 모든 서비스에서 납니다. 새로 뜨는 인스턴스는 DB 연결에 실패해 시작하지 못하므로 배포가 멈춥니다.
 - 예방: 합계에 여유를 20 이상 남깁니다. 인스턴스가 3개 이상이면 하나씩 교체합니다. 인스턴스 수, `DB_POOL_SIZE`, `CHECKPOINT_POOL_SIZE`를 올리기 전에 다시 계산합니다. 계산식은 `인스턴스 수 × (DB_POOL_SIZE × 2 + CHECKPOINT_POOL_SIZE)`입니다.
 - 참고: 표는 모든 풀이 꽉 찬 최악의 경우입니다. 풀은 필요할 때만 연결을 열어 평소 실제 연결 수는 훨씬 적습니다.
@@ -346,10 +376,10 @@ python scripts/set_user_role.py --env prd A10054 admin           # 승격 (강�
 
 | 변경 | 요청을 받은 인스턴스 | 다른 인스턴스 | 설정 |
 | --- | --- | --- | --- |
-| 사용자 비활성화, 역할 변경 | 즉시 | 최대 30초 | 코드 상수 `USER_CACHE_SECONDS` |
+| 사용자 비활성화, 역할 변경 | 즉시 | 최대 30초 | 코드 고정 (`USER_CACHE_SECONDS` 상수) |
 | API 키 폐기, 재발급 | 즉시 | 최대 60초 | `API_CLIENT_CACHE_SECONDS` |
 
-유출된 키처럼 바로 막아야 하면 폐기한 뒤 60초를 기다리거나 인스턴스를 재시작합니다.
+유출된 키처럼 바로 막아야 하면 폐기한 뒤 `API_CLIENT_CACHE_SECONDS`(60초)만큼 기다리거나 인스턴스를 재시작합니다.
 
 ### 4.10 임베딩 모델이나 차원을 바꾸면 워크플로우 검색이 비어 보인다
 
@@ -386,13 +416,13 @@ python scripts/set_user_role.py --env prd A10054 admin           # 승격 (강�
 | --- | --- | --- | --- | --- |
 | 1 | 앱 프로세스 CPU (인스턴스당 1코어) | 읽기 API 초당 약 1,000건, 단순 대화 초당 14~24턴 (로컬, mock LLM) | 인스턴스 CPU 100%, 응답 지연 증가 | 인스턴스 수 증가(HPA) |
 | 2 | LLM 게이트웨이 동시 호출 | 인스턴스 수 × (`RUN_CONCURRENCY` 16 + `BATCH_REPORT_CONCURRENCY` 4) | LLM 응답 지연, 429·5xx, run 실패 | 두 설정을 낮춤 |
-| 3 | run 큐 | 인스턴스당 동시 16턴 | `queued` run이 계속 쌓임 | `RUN_CONCURRENCY` 또는 인스턴스 수 증가 |
+| 3 | run 큐 | 인스턴스당 `RUN_CONCURRENCY`(16)턴 | `queued` run이 계속 쌓임 | `RUN_CONCURRENCY` 또는 인스턴스 수 증가 |
 | 4 | executor 실행 제출 | 초당 3~7건, 동시 20건부터 응답 수 초 (로컬) | 분석 시작이 느려짐, 제출 시간 초과 | executor 쪽 조치 필요 |
 | 5 | executor 조회 게이트웨이 | 초당 약 310건 (로컬, 우리 앱과 executor 각 1코어 포화) | 조회 지연 | 우리 인스턴스와 executor 모두 증설 |
-| 6 | DB 앱 풀 | 인스턴스당 6 | 로그에 `QueuePool limit` | `DB_POOL_SIZE` 증가 (4.5절 예산 확인) |
-| 7 | DB 그래프 풀 | 인스턴스당 8, 대기 30초 | 턴이 풀 대기 시간 초과로 실패 | `CHECKPOINT_POOL_SIZE` 증가 (예산 확인) |
-| 8 | 배치 리포트 | 인스턴스당 동시 4건 | `QUEUED` 리포트 작업이 쌓임 | `BATCH_REPORT_CONCURRENCY` 증가 |
-| 9 | 이벤트 테이블 | 턴당 수십 행 | run_events 크기 증가, 보존 정리 지연 | 보존 기간 단축 |
+| 6 | DB 앱 풀 | 인스턴스당 `DB_POOL_SIZE` × 2 (기본 6) | 로그에 `QueuePool limit` | `DB_POOL_SIZE` 증가 (4.5절 예산 확인) |
+| 7 | DB 그래프 풀 | `CHECKPOINT_POOL_SIZE`(8), 대기는 `CHECKPOINT_POOL_TIMEOUT_SECONDS`(30초) | 턴이 풀 대기 시간 초과로 실패 | `CHECKPOINT_POOL_SIZE` 증가 (예산 확인) |
+| 8 | 배치 리포트 | 인스턴스당 `BATCH_REPORT_CONCURRENCY`(4)건 | `QUEUED` 리포트 작업이 쌓임 | `BATCH_REPORT_CONCURRENCY` 증가 |
+| 9 | 이벤트 테이블 | 턴당 수십 행 | run_events 크기 증가, 보존 정리 지연 | `RUN_EVENT_RETENTION_DAYS`(30일) 단축 |
 
 ### 5.2 앱 프로세스 CPU
 
@@ -504,16 +534,16 @@ python scripts/set_user_role.py --env prd A10054 admin           # 승격 (강�
 | 로그인은 되는데 곧 풀림 | Redis 상태, 세션 설정 | Redis 재시작·장애 전환, `SESSION_TTL_SECONDS`(30분 무활동), `SESSION_MAX_SECONDS`(12시간) | Redis 확인. 정상 만료면 조치 없음 |
 | 메시지를 보냈는데 답이 시작되지 않음 | run 상태 SQL, `run_claim_failed`, `/healthz` | 슬롯 부족(`queued` 적체), 스케줄러 루프 죽음, DB 오류 | 6.5절 |
 | 답이 중간에 멈춤 | 그 run의 `status`, `error`, 로그의 `run_lease_lost`, `run_heartbeat_failed` | 인스턴스 재시작(다른 인스턴스가 이어 감), LLM 지연, DB 일시 장애 | 6.5절 |
-| run이 `failed` | `runs.error`, 화면의 오류 ID로 로그 검색 | LLM 장애·한도·컨텍스트 초과, executor 장애, 재시도 5회 초과 | 원인 서비스 확인. 사용자는 다시 보내면 됨 |
+| run이 `failed` | `runs.error`, 화면의 오류 ID로 로그 검색 | LLM 장애·한도·컨텍스트 초과, executor 장애, `RUN_MAX_ATTEMPTS`(5회) 초과 | 원인 서비스 확인. 사용자는 다시 보내면 됨 |
 | 분석이 끝나지 않음 (계속 실행 중) | run이 `waiting_executor`인지, `executor_event_*` 로그, executor의 실행 상태 | executor 이벤트 미수신(Redis 불일치), executor에서 실제로 오래 걸림, executor 장애 | 6.6절 |
 | 화면이 실시간으로 갱신되지 않음, 새로 고치면 보임 | 앞단 설정, `event_fanout_reconnect` 로그 | 앞단 버퍼링·시간 제한(4.8절), Redis 구독 끊김 | 앞단 설정 확인. Redis 구독은 자동으로 다시 붙음 |
-| 413 | 요청 크기 | 32MB 초과, 또는 앞단이 먼저 끊음(응답 형식이 우리 것이 아니면 앞단) | 앞단 본문 크기 제한 확인 |
+| 413 | 요청 크기 | `REQUEST_MAX_BYTES`(32MB) 초과, 또는 앞단이 먼저 끊음(응답 형식이 우리 것이 아니면 앞단) | 앞단 본문 크기 제한 확인 |
 | 429 | 로그인 경로인지 | SSO 로그인 요청이 분당 30회(`SSO_RATE_LIMIT_PER_MINUTE`) 초과 | 반복 로그인 원인 확인. `Retry-After` 뒤 재시도 |
 | 502 `bad_gateway` | 로그의 `upstream_unreachable path=...` | executor 또는 batch가 응답하지 않음 | 경로로 어느 서비스인지 보고 그 서비스 확인 |
 | 503 (시스템 화면) | `EXECUTOR_ADMIN_API_KEY` 설정 | 운영 키가 비어 있음 | 키 설정 |
 | 키 호출이 401·403 | 감사 로그, 키 상태 | 키 폐기·재발급, `X-User-Id` 누락(400), 일반키로 다른 사용자 조회(403) | 키 목록에서 상태 확인. 6.7절 |
 | DB 연결 오류 | `QueuePool limit`, `too many connections`, 풀 대기 시간 초과 | 연결 예산 초과, 풀 부족, 중간 장비가 연결을 끊음 | 6.8절 |
-| 배치 리포트가 안 만들어짐 | `batch_report_jobs`의 `state`, `failed_stage`, `error`. 로그의 `batch_report_*` | 노트북 대기 시간 초과(30분), LLM 장애, 배치 소유자 없음(`batch_report_without_owner`) | 놓친 실행은 10분마다 복구 작업이 최근 14일분을 다시 확인해 작업을 만듦 |
+| 배치 리포트가 안 만들어짐 | `batch_report_jobs`의 `state`, `failed_stage`, `error`. 로그의 `batch_report_*` | 노트북 대기 시간 초과(`BATCH_REPORT_COLLECT_TIMEOUT_SECONDS`, 30분), LLM 장애, 배치 소유자 없음(`batch_report_without_owner`) | 놓친 실행은 `BATCH_REPORT_RECOVERY_INTERVAL_SECONDS`(10분)마다 복구 작업이 최근 `BATCH_REPORT_RECOVERY_LOOKBACK_DAYS`(14일)분을 다시 확인해 작업을 만듦 |
 | 워크플로우 추천이 안 나옴 | `workflows.index_state` | 임베딩 게이트웨이 장애(`failed`), 임베딩 미설정(`not_indexed`), 모델·차원 변경 | 4.10절 |
 | `/healthz`가 503 | 응답의 `stopped`, 로그의 `worker_loops_stopped` | 백그라운드 루프가 예외로 끝남 | 실행 환경이 이 응답을 보고 인스턴스를 재시작함. 반복되면 그 루프의 직전 예외 로그 확인 |
 | 프로젝트 메모리가 자동으로 정리되지 않음 | `memory_extraction_state`의 `last_error`, 로그의 `memory_extract_failed` | LLM 장애, `MEMORY_WORKER_ENABLED: false` | 원인 해소 후 자동 재시도 |
@@ -536,7 +566,7 @@ python scripts/set_user_role.py --env prd A10054 admin           # 승격 (강�
 | 502 `invalid login URL` | 로그인 주소의 origin이 허용 목록에 없음 | `sso_login_url_rejected origin=...`의 값을 `SSO_ALLOWED_ORIGINS`에 추가 |
 | 503 `SSO is unavailable` | SSO 확인 호출이 예외 | `sso_verify_failed error_type=...` |
 | 콜백에서 401 `could not verify` | SSO에서 돌아왔지만 SSO 쿠키가 오지 않음 | `sso_verify result=rejected cookies=...`. SSO 쿠키가 없으면 도메인 문제(우리 주소가 IdP 도메인 아래가 아님) |
-| 콜백에서 400 `Login flow expired` | 5분이 지났거나 같은 콜백을 다시 엶 | 처음부터 다시 로그인 |
+| 콜백에서 400 `Login flow expired` | `LOGIN_FLOW_TTL_SECONDS`(5분)이 지났거나 같은 콜백을 다시 엶 | 처음부터 다시 로그인 |
 | SSO와 우리 사이를 계속 왕복 | 복귀 주소를 잃어버림 | `sso_login_redirect`가 몇 번 찍히는지 |
 | 로그인 후 403 `disabled` | 비활성 사용자 | `users.is_active` |
 
@@ -556,15 +586,15 @@ FROM runs WHERE id = '<run id>';
 
 | 보이는 상태 | 뜻 | 조치 |
 | --- | --- | --- |
-| `queued`가 오래 유지 | 가져갈 슬롯이 없거나 스케줄러가 멈춤 | 전체 분포(6.9절)에서 `running` 수가 인스턴스 수 × 16에 닿았는지, 같은 사용자의 `running`이 4개인지 확인. `/healthz` 확인 |
+| `queued`가 오래 유지 | 가져갈 슬롯이 없거나 스케줄러가 멈춤 | 전체 분포(6.9절)에서 `running` 수가 인스턴스 수 × `RUN_CONCURRENCY`(16)에 닿았는지, 같은 사용자의 `running`이 `RUN_USER_CONCURRENCY`(4)개인지 확인. `/healthz` 확인 |
 | `running`인데 `lease_expires_at`이 과거 | 실행하던 인스턴스가 죽음 | 조치 없음. 다른 인스턴스가 5초 안에 가져가 이어 감 |
-| `running`이 오래 유지되고 lease는 갱신됨 | LLM 응답을 기다리는 중 | LLM 게이트웨이 상태 확인. 턴당 모델 호출 40회, 호출당 120초가 상한 |
+| `running`이 오래 유지되고 lease는 갱신됨 | LLM 응답을 기다리는 중 | LLM 게이트웨이 상태 확인. 턴당 `AGENT_MODEL_CALL_LIMIT`(40회), 호출당 `LLM_TIMEOUT_SECONDS`(120초)가 상한 |
 | `waiting_input` | 사용자의 확인을 기다림 | 정상. 화면에 질문이 떠 있음 |
 | `waiting_executor` | executor 실행을 기다림 | 6.6절 |
 | `failed` | `error`에 이유 | 원인 서비스 확인 |
 
 - 한 run은 멈춤 없이 연속 5번(`RUN_MAX_ATTEMPTS`) 가져갔는데도 결과가 없으면 `failed`로 끝납니다. 같은 run이 인스턴스를 계속 죽이는 것을 막기 위한 것입니다.
-- 실행 권한(lease)은 60초이고 20초마다 갱신합니다. DB 장애로 40초 동안 갱신하지 못하면 그 인스턴스는 턴을 스스로 멈춥니다(`run_lease_unrenewed`). 두 인스턴스가 같은 턴을 동시에 돌리지 않기 위해서입니다.
+- 실행 권한(lease)은 `RUN_LEASE_SECONDS`(60초) 동안 유효하고 그 1/3(20초)마다 갱신합니다. DB 장애로 2/3(40초) 동안 갱신하지 못하면 그 인스턴스는 턴을 스스로 멈춥니다(`run_lease_unrenewed`). 두 인스턴스가 같은 턴을 동시에 돌리지 않기 위해서입니다.
 - 세션에 진행 중인 run이 남아 새 메시지를 못 보내는 경우 `sessions.active_run_id`와 그 run의 상태를 함께 봅니다.
 
 ### 6.6 분석이 끝나지 않을 때 (executor 대기)
@@ -587,7 +617,7 @@ ORDER BY event_sequence;
 | executor에서도 실행 중 | 실제로 오래 걸리는 분석 | 기다리거나 사용자가 취소 |
 | executor에 그 실행이 없음 | executor 데이터가 지워졌거나 다른 executor를 가리킴 | 사용자가 취소하고 다시 요청 |
 
-놓친 이벤트 복구는 기다리기 시작한 지 120초(`EXECUTOR_EVENT_RECOVERY_SECONDS`)가 지난 run을 대상으로 합니다. 첫 1시간은 2분마다, 첫 하루는 10분마다, 그 뒤는 1시간마다 executor에 직접 물어 빠진 이벤트를 가져옵니다. Redis가 완전히 죽어도 분석은 결국 끝나지만 단계마다 2분 이상 늦어집니다.
+놓친 이벤트 복구는 기다리기 시작한 지 120초(`EXECUTOR_EVENT_RECOVERY_SECONDS`)가 지난 run을 대상으로 합니다. 첫 1시간은 2분마다, 첫 하루는 10분마다, 그 뒤는 1시간마다(코드 고정) executor에 직접 물어 빠진 이벤트를 가져옵니다. Redis가 완전히 죽어도 분석은 결국 끝나지만 단계마다 그만큼 늦어집니다.
 
 ### 6.7 키 호출 문제
 
@@ -680,7 +710,7 @@ GROUP BY 1, 2 ORDER BY 3 DESC;
 | `dtest_startup_failed` | 기동 실패. 바로 위 예외가 원인 |
 | `worker_loops_stopped loops=...` | 백그라운드 루프가 죽음. `/healthz`가 503이 되고 인스턴스가 재시작됨 |
 | `run_task_crashed` | 턴 실행이 실패 기록도 못 남기고 끝남(대개 DB 장애). lease 만료 뒤 다시 시도됨 |
-| `run_lease_unrenewed` | lease를 40초 동안 갱신하지 못해 턴을 멈춤 |
+| `run_lease_unrenewed` | lease를 `RUN_LEASE_SECONDS`의 2/3(40초) 동안 갱신하지 못해 턴을 멈춤 |
 | `run_claim_failed` | run 가져오기 실패 |
 | `executor_event_consumer_error`, `executor_event_failed` | executor 이벤트 처리 실패 |
 | `missed_event_recovery_error` | 놓친 이벤트 복구 루프 오류 |
@@ -790,9 +820,9 @@ Agent의 모델 호출, 도구 호출, middleware 단계를 Phoenix로 보냅니
 
 ### 9.1 주요 설정 키
 
-전체 목록과 설명은 `config.example.yml`에 있습니다. 운영에서 자주 보는 것만 추렸습니다.
+전체 목록과 설명은 `config.example.yml`에 있습니다. 운영에서 자주 보는 것만 추렸습니다. 값은 `config.yml`에 적힌 값이고, 환경 파일이 덮어쓰는 키는 2.1절의 "이 문서의 숫자 읽는 법"에 있습니다.
 
-| 분류 | 키 | 기본값 | 뜻 |
+| 분류 | 키 | config.yml 값 | 뜻 |
 | --- | --- | --- | --- |
 | 실행 | `APP_ENV` | (없음) | `dev`, `stg`, `prd`. 설정 파일 선택 |
 | 실행 | `RUN_MODE` | `all` | `all`, `api`, `worker`. API와 worker를 나눠 띄울 때 |
@@ -802,7 +832,7 @@ Agent의 모델 호출, 도구 호출, middleware 단계를 Phoenix로 보냅니
 | DB | `CHECKPOINT_POOL_TIMEOUT_SECONDS` | 30 | 그래프 풀 대기 한도 |
 | DB | `DB_KEEPALIVE_IDLE_SECONDS` | 60 | TCP keepalive 시작 시간 |
 | DB | `AUTO_MIGRATE` | true | 기동 시 마이그레이션 실행 |
-| Redis | `REDIS_MODE` | `standalone` | `standalone`, `sentinel` |
+| Redis | `REDIS_MODE` | `standalone` | `standalone`, `sentinel` (prd 파일은 `sentinel`) |
 | Redis | `REDIS_URL` | | standalone 주소 |
 | Redis | `REDIS_SENTINEL_HOST`, `_PORT`, `_MASTER_NAME`, `_USERNAME`, `_AUTH` | | Sentinel 접속 |
 | Redis | `REDIS_NAMESPACE` | `agentic` | 키와 채널 접두어 |
@@ -810,7 +840,7 @@ Agent의 모델 호출, 도구 호출, middleware 단계를 Phoenix로 보냅니
 | 인증 | `PUBLIC_API_ORIGIN`, `FRONTEND_ORIGIN` | | 브라우저가 보는 API 주소, 프론트 주소 |
 | 인증 | `SSO_ALLOWED_ORIGINS` | | SSO 로그인 페이지 origin 허용 목록 |
 | 인증 | `CORS_ORIGINS` | | 다른 도메인의 프론트가 부를 때 |
-| 인증 | `COOKIE_SECURE` | | https면 true (stg·prd 필수) |
+| 인증 | `COOKIE_SECURE` | false | https면 true (stg·prd 파일은 true) |
 | 인증 | `SESSION_TTL_SECONDS` | 1800 | 무활동 로그아웃 시간 |
 | 인증 | `SESSION_MAX_SECONDS` | 43200 | 로그인 최대 유지 시간 |
 | 인증 | `ADMIN_EMPLOYEE_IDS` | | 첫 로그인 때 관리자가 될 사번 |
@@ -863,15 +893,15 @@ Agent의 모델 호출, 도구 호출, middleware 단계를 Phoenix로 보냅니
 
 | 이름 | 하는 일 | 주기 |
 | --- | --- | --- |
-| `run-scheduler` | run을 가져와 Agent 실행 | Redis 신호 즉시, 5초 폴링 보조 |
+| `run-scheduler` | run을 가져와 Agent 실행. 동시에 `RUN_CONCURRENCY`(16)턴 | Redis 신호 즉시, `RUN_POLL_SECONDS`(5초) 폴링 보조 |
 | `executor-events` | executor 이벤트 스트림 소비 | 상시 |
-| `missed-executor-events` | 놓친 executor 이벤트 복구 | 60초 |
-| `batch-reports-0`~`3` | 배치 리포트 작성 | 상시 |
-| `batch-report-recovery` | 리포트 작업이 빠진 배치 실행 찾기 | 10분 |
-| `retention` | 보존 기간 지난 데이터 정리 | 1시간 |
-| `batch-disable-retry` | 비활성 사용자·폐기 tenant의 배치 끄기 재시도 | 주기적 |
-| `executor-cancel-retry` | executor 실행 취소 재시도 | 주기적 |
-| `memory-worker` | 프로젝트 메모리 정리 | 대화가 3분 조용하거나 5턴 쌓이면 |
+| `missed-executor-events` | `EXECUTOR_EVENT_RECOVERY_SECONDS`(120초) 넘게 기다린 run의 이벤트 복구 | 60초 (코드 고정) |
+| `batch-reports-0`~`N-1` | 배치 리포트 작성. N은 `BATCH_REPORT_CONCURRENCY`(4) | 상시 |
+| `batch-report-recovery` | 리포트 작업이 빠진 배치 실행 찾기. 최근 `BATCH_REPORT_RECOVERY_LOOKBACK_DAYS`(14일) | `BATCH_REPORT_RECOVERY_INTERVAL_SECONDS`(10분) |
+| `retention` | 보존 기간 지난 데이터 정리. 기간은 `*_RETENTION_DAYS` | 1시간 (코드 고정) |
+| `batch-disable-retry` | 비활성 사용자·폐기 tenant의 배치 끄기 재시도 | 5분 (코드 고정) |
+| `executor-cancel-retry` | executor 실행 취소 재시도 | 60초 (코드 고정) |
+| `memory-worker` | 프로젝트 메모리 정리 (`MEMORY_WORKER_ENABLED`) | `MEMORY_WORKER_QUIET_SECONDS`(3분) 조용하거나 `MEMORY_WORKER_MAX_TURNS`(5턴) 쌓이면 |
 
 ### 9.4 공용 DB 서버를 dev와 prd로 나눌 때
 
@@ -1008,12 +1038,12 @@ SELECT employee_id FROM users WHERE role = 'admin';
 | A. 가져감 | 가져감 | 문제없음. 세 DB를 같은 멈춘 시점에 덤프해야 함 |
 | B. 새로 시작 | 새로 시작 | 문제없음. 모두 처음부터 |
 | A. 가져감 | 새로 시작 | 피해야 함. 기다리던 run이 이어 가지 못하고 결과물, 노트북 링크가 깨짐. 배치 리포트도 원래 배치를 찾지 못함 |
-| B. 새로 시작 | 가져감 | 피해야 함. 기존 배치가 옛 사용자 ID에 묶여 보이지 않음. 리포트 복구 루프가 최근 14일(`BATCH_REPORT_RECOVERY_LOOKBACK_DAYS`)의 배치 실행 리포트를 한꺼번에 다시 만들어 LLM 호출이 몰림 |
+| B. 새로 시작 | 가져감 | 피해야 함. 기존 배치가 옛 사용자 ID에 묶여 보이지 않음. 리포트 복구 루프가 최근 `BATCH_REPORT_RECOVERY_LOOKBACK_DAYS`(14일)의 배치 실행 리포트를 한꺼번에 다시 만들어 LLM 호출이 몰림 |
 
 executor나 batch만 다른 날 옮길 때는 우리 서비스를 내리지 않아도 됩니다.
 
 - 접수를 멈춘 동안 새 분석은 받지 않고, 결과물과 배치 화면은 잠시 오류가 납니다.
-- 그동안 기다리던 run과 배치 리포트는 우리 복구 루프가 다시 시도합니다(이벤트 120초, 배치 리포트 600초 간격). 그쪽이 데이터를 가져갔다면 따로 할 일은 없습니다.
+- 그동안 기다리던 run과 배치 리포트는 우리 복구 루프가 다시 시도합니다(`EXECUTOR_EVENT_RECOVERY_SECONDS` 120초, `BATCH_REPORT_RECOVERY_INTERVAL_SECONDS` 600초). 그쪽이 데이터를 가져갔다면 따로 할 일은 없습니다.
 - batch가 접수 중지 중에 거부된 예약 실행을 어떻게 처리하는지는 batch 담당에게 확인합니다.
 - Redis는 이미 환경별로 나뉘어 있어 이 작업과 관계없습니다. `EXECUTOR_BASE_URL`, `BATCH_BASE_URL`이 바뀔 때만 우리 설정을 고칩니다.
 
@@ -1077,7 +1107,7 @@ executor가 분석 코드를 돌리는 Jupyter 런타임 목록입니다. 풀은
 
 ### 10.4 남겨진 커널 삭제
 
-실행에 묶이지 않은 커널은 커널 목록에서 "삭제"로 지웁니다. 커널 안의 변수와 실행 상태가 모두 사라지고 되돌릴 수 없습니다. executor는 실행이 잡고 있는 커널과 최근 15분 안에 활동이 있던 커널의 삭제를 거부합니다. 실행이 쓰는 커널은 여기서 지울 수 없고, 그 실행을 취소하면 정리됩니다.
+실행에 묶이지 않은 커널은 커널 목록에서 "삭제"로 지웁니다. 커널 안의 변수와 실행 상태가 모두 사라지고 되돌릴 수 없습니다. executor는 실행이 잡고 있는 커널과 최근 15분(executor 설정) 안에 활동이 있던 커널의 삭제를 거부합니다. 실행이 쓰는 커널은 여기서 지울 수 없고, 그 실행을 취소하면 정리됩니다.
 
 ### 10.5 점검
 
@@ -1112,12 +1142,12 @@ tenant 행을 누르면 항목을 최신순으로 볼 수 있고, 실행 ID를 �
 
 - 비활성화하면 로그인과 API 호출이 막히고, 진행 중인 대화와 코드 실행이 취소되며, 그 사람의 배치가 batch에서 꺼집니다.
 - 다시 활성화해도 배치는 자동으로 켜지지 않습니다. 사용자가 직접 다시 켭니다.
-- batch가 응답하지 않으면 배치 끄기를 5분 간격으로 다시 시도하고, 그동안 목록에 대기 표시가 붙습니다.
+- batch가 응답하지 않으면 배치 끄기를 5분 간격(코드 고정)으로 다시 시도하고, 그동안 목록에 대기 표시가 붙습니다.
 - 사용자별 배치 목록(batch 기준)을 읽기 전용으로 볼 수 있습니다.
 
 ### 10.8 API 키
 
-다른 서비스에 주는 `X-Api-Key`를 발급, 재발급, 폐기합니다. tenant와 kind의 뜻, 지킬 것은 3.3절에 있습니다. 키 원문은 발급 직후 한 번만 보이므로 그 자리에서 전달합니다. 폐기와 재발급은 다른 인스턴스에 최대 60초 늦게 반영됩니다(4.9절).
+다른 서비스에 주는 `X-Api-Key`를 발급, 재발급, 폐기합니다. tenant와 kind의 뜻, 지킬 것은 3.3절에 있습니다. 키 원문은 발급 직후 한 번만 보이므로 그 자리에서 전달합니다. 폐기와 재발급은 다른 인스턴스에 최대 `API_CLIENT_CACHE_SECONDS`(60초) 늦게 반영됩니다(4.9절).
 
 ### 10.9 API 호출 시험
 
