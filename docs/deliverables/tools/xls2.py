@@ -42,7 +42,6 @@ wb = Workbook()
 sheet(wb, "표지", "프로그램 목록 (Agent workflow)", ["항목", "내용"], [
     ("시스템", "pr-agentic-service (사내 데이터 분석 Agent 서비스)"),
     ("문서", "프로그램 목록 (Agent workflow)"),
-    ("기준", "master 브랜치, 2026-11-27"),
     ("목록 단위", "Agent workflow: LLM을 호출해 한 가지 일을 끝내는 처리 단위. ID는 AW-01부터 부여"),
     ("구성 요소", "workflow가 쓰는 그래프, middleware, Agent 도구, 프롬프트, skill·tool 자산, worker 루프를 시트별로 정리"),
     ("관련 문서", "03 프로그램 명세서 (Agent Graph), 그림 diagrams/02-agent-workflow.drawio"),

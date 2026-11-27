@@ -130,7 +130,7 @@ function note(s, text, y = 6.35) {
   s.addText("pr-agentic-service 운영자 메뉴얼", { placeholder: "title" });
   s.addText([
     { text: "사내 데이터 분석 Agent 서비스", options: { breakLine: true } },
-    { text: "기준: master 브랜치, 2026-11-27 · 초안 v0.2", options: {} },
+    { text: "초안 v0.2", options: {} },
   ], { placeholder: "body" });
 
   let t = slide("개정 이력");

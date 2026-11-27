@@ -4,7 +4,7 @@
 | --- | --- |
 | 시스템 | pr-agentic-service (사내 데이터 분석 Agent 서비스) |
 | 대상 | 시스템을 운영하는 담당자 |
-| 기준 | master 브랜치, 2026-11-27. 소스 경로는 `src/dtest/` 아래 |
+| 소스 경로 | `src/dtest/` 아래 |
 | 그림 원본 | `diagrams/08-ops-flow.drawio` |
 
 주소, 계정, 키 같은 환경별 실제 값은 적지 않고 서비스 이름과 설정 키 이름으로 가리킵니다. 실제 값은 `config.{dev,stg,prd}.yml`에 있습니다.
