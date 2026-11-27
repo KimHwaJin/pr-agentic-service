@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1380" height="1010" viewBox="0 0 1380 1010" font-family="'Noto Sans KR','Apple SD Gothic Neo','Malgun Gothic','WenQuanYi Zen Hei',sans-serif">
+<svg xmlns="http://www.w3.org/2000/svg" width="1380" height="1010" viewBox="0 0 1380 1010" font-family="'Noto Sans KR','Apple SD Gothic Neo','Malgun Gothic','WenQuanYi Zen Hei',sans-serif" xmlns:c2pa="http://c2pa.org/manifest">
 <defs><marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#333"/></marker></defs>
 <rect width="1380" height="1010" fill="#ffffff"/>
 <text x="40" y="38" font-size="18" font-weight="bold">논리 ERD (사용자, 대화, 실행, executor 연동, gaia 연동)</text>
@@ -7,190 +7,190 @@
 <text x="185.0" y="97" font-size="12" font-weight="bold" text-anchor="middle">users</text>
 <text x="185.0" y="113" font-size="10" text-anchor="middle">사용자</text>
 <text x="68" y="137" font-size="10" font-weight="bold">PK</text>
-<text x="87.2" y="137" font-size="11">id</text>
+<text x="87.2" y="137" font-size="11">사용자 ID</text>
 <text x="68" y="155" font-size="10" font-weight="bold">UK</text>
-<text x="87.2" y="155" font-size="11">employee_id</text>
-<text x="68" y="173" font-size="11">name</text>
-<text x="68" y="191" font-size="11">english_name</text>
-<text x="68" y="209" font-size="11">department</text>
-<text x="68" y="227" font-size="11">email</text>
-<text x="68" y="245" font-size="11">role</text>
-<text x="68" y="263" font-size="11">is_active</text>
-<text x="68" y="281" font-size="11">batches_disable_pending</text>
-<text x="68" y="299" font-size="11">created_at</text>
-<text x="68" y="317" font-size="11">updated_at</text>
+<text x="87.2" y="155" font-size="11">사번</text>
+<text x="68" y="173" font-size="11">이름</text>
+<text x="68" y="191" font-size="11">영문 이름</text>
+<text x="68" y="209" font-size="11">부서</text>
+<text x="68" y="227" font-size="11">메일</text>
+<text x="68" y="245" font-size="11">권한</text>
+<text x="68" y="263" font-size="11">활성 여부</text>
+<text x="68" y="281" font-size="11">배치 끄기 대기</text>
+<text x="68" y="299" font-size="11">생성 시각</text>
+<text x="68" y="317" font-size="11">수정 시각</text>
 <rect x="60" y="370" width="250" height="120" rx="5" fill="#ffffff" stroke="#6c8ebf"/>
 <path d="M60,412 v-37 a5,5 0 0 1 5,-5 h240 a5,5 0 0 1 5,5 v37 z" fill="#dae8fc" stroke="#6c8ebf"/>
 <text x="185.0" y="387" font-size="12" font-weight="bold" text-anchor="middle">project_members</text>
 <text x="185.0" y="403" font-size="10" text-anchor="middle">프로젝트 구성원</text>
 <text x="68" y="427" font-size="10" font-weight="bold">PK,FK</text>
-<text x="104.0" y="427" font-size="11">project_id</text>
+<text x="104.0" y="427" font-size="11">프로젝트 ID</text>
 <text x="68" y="445" font-size="10" font-weight="bold">PK,FK</text>
-<text x="104.0" y="445" font-size="11">user_id</text>
-<text x="68" y="463" font-size="11">role</text>
-<text x="68" y="481" font-size="11">created_at</text>
+<text x="104.0" y="445" font-size="11">사용자 ID</text>
+<text x="68" y="463" font-size="11">구성원 역할</text>
+<text x="68" y="481" font-size="11">생성 시각</text>
 <rect x="60" y="540" width="250" height="138" rx="5" fill="#ffffff" stroke="#6c8ebf"/>
 <path d="M60,582 v-37 a5,5 0 0 1 5,-5 h240 a5,5 0 0 1 5,5 v37 z" fill="#dae8fc" stroke="#6c8ebf"/>
 <text x="185.0" y="557" font-size="12" font-weight="bold" text-anchor="middle">gaia_sessions</text>
 <text x="185.0" y="573" font-size="10" text-anchor="middle">gaia 세션 대응</text>
 <text x="68" y="597" font-size="10" font-weight="bold">PK,FK</text>
-<text x="104.0" y="597" font-size="11">user_id</text>
+<text x="104.0" y="597" font-size="11">사용자 ID</text>
 <text x="68" y="615" font-size="10" font-weight="bold">PK</text>
-<text x="87.2" y="615" font-size="11">gaia_session_id</text>
+<text x="87.2" y="615" font-size="11">gaia 세션 ID</text>
 <text x="68" y="633" font-size="10" font-weight="bold">FK</text>
-<text x="87.2" y="633" font-size="11">session_id</text>
-<text x="68" y="651" font-size="11">created_at</text>
-<text x="68" y="669" font-size="11">updated_at</text>
+<text x="87.2" y="633" font-size="11">우리 세션 ID</text>
+<text x="68" y="651" font-size="11">생성 시각</text>
+<text x="68" y="669" font-size="11">수정 시각</text>
 <rect x="390" y="80" width="250" height="228" rx="5" fill="#ffffff" stroke="#6c8ebf"/>
 <path d="M390,122 v-37 a5,5 0 0 1 5,-5 h240 a5,5 0 0 1 5,5 v37 z" fill="#dae8fc" stroke="#6c8ebf"/>
 <text x="515.0" y="97" font-size="12" font-weight="bold" text-anchor="middle">projects</text>
 <text x="515.0" y="113" font-size="10" text-anchor="middle">프로젝트</text>
 <text x="398" y="137" font-size="10" font-weight="bold">PK</text>
-<text x="417.2" y="137" font-size="11">id</text>
-<text x="398" y="155" font-size="11">name</text>
-<text x="398" y="173" font-size="11">description</text>
-<text x="398" y="191" font-size="11">system_prompt</text>
-<text x="398" y="209" font-size="11">code_level</text>
-<text x="398" y="227" font-size="11">is_default</text>
+<text x="417.2" y="137" font-size="11">프로젝트 ID</text>
+<text x="398" y="155" font-size="11">프로젝트 이름</text>
+<text x="398" y="173" font-size="11">설명</text>
+<text x="398" y="191" font-size="11">프로젝트 지시문</text>
+<text x="398" y="209" font-size="11">기본 코드 생성 수준</text>
+<text x="398" y="227" font-size="11">기본 프로젝트 여부</text>
 <text x="398" y="245" font-size="10" font-weight="bold">FK</text>
-<text x="417.2" y="245" font-size="11">created_by</text>
-<text x="398" y="263" font-size="11">deleted_at</text>
-<text x="398" y="281" font-size="11">created_at</text>
-<text x="398" y="299" font-size="11">updated_at</text>
+<text x="417.2" y="245" font-size="11">생성자 ID</text>
+<text x="398" y="263" font-size="11">삭제 시각</text>
+<text x="398" y="281" font-size="11">생성 시각</text>
+<text x="398" y="299" font-size="11">수정 시각</text>
 <rect x="390" y="360" width="250" height="228" rx="5" fill="#ffffff" stroke="#6c8ebf"/>
 <path d="M390,402 v-37 a5,5 0 0 1 5,-5 h240 a5,5 0 0 1 5,5 v37 z" fill="#dae8fc" stroke="#6c8ebf"/>
 <text x="515.0" y="377" font-size="12" font-weight="bold" text-anchor="middle">sessions</text>
 <text x="515.0" y="393" font-size="10" text-anchor="middle">채팅 세션</text>
 <text x="398" y="417" font-size="10" font-weight="bold">PK</text>
-<text x="417.2" y="417" font-size="11">id</text>
+<text x="417.2" y="417" font-size="11">세션 ID</text>
 <text x="398" y="435" font-size="10" font-weight="bold">FK</text>
-<text x="417.2" y="435" font-size="11">project_id</text>
+<text x="417.2" y="435" font-size="11">프로젝트 ID</text>
 <text x="398" y="453" font-size="10" font-weight="bold">FK</text>
-<text x="417.2" y="453" font-size="11">user_id</text>
-<text x="398" y="471" font-size="11">title</text>
-<text x="398" y="489" font-size="11">title_source</text>
-<text x="398" y="507" font-size="11">code_level</text>
-<text x="398" y="525" font-size="11">active_run_id</text>
-<text x="398" y="543" font-size="11">deleted_at</text>
-<text x="398" y="561" font-size="11">created_at</text>
-<text x="398" y="579" font-size="11">updated_at</text>
+<text x="417.2" y="453" font-size="11">사용자 ID</text>
+<text x="398" y="471" font-size="11">제목</text>
+<text x="398" y="489" font-size="11">제목 출처</text>
+<text x="398" y="507" font-size="11">코드 생성 수준</text>
+<text x="398" y="525" font-size="11">진행 중 실행 ID</text>
+<text x="398" y="543" font-size="11">삭제 시각</text>
+<text x="398" y="561" font-size="11">생성 시각</text>
+<text x="398" y="579" font-size="11">수정 시각</text>
 <rect x="390" y="640" width="250" height="282" rx="5" fill="#ffffff" stroke="#6c8ebf"/>
 <path d="M390,682 v-37 a5,5 0 0 1 5,-5 h240 a5,5 0 0 1 5,5 v37 z" fill="#dae8fc" stroke="#6c8ebf"/>
 <text x="515.0" y="657" font-size="12" font-weight="bold" text-anchor="middle">images</text>
 <text x="515.0" y="673" font-size="10" text-anchor="middle">이미지</text>
 <text x="398" y="697" font-size="10" font-weight="bold">PK</text>
-<text x="417.2" y="697" font-size="11">id</text>
-<text x="398" y="715" font-size="11">user_id</text>
-<text x="398" y="733" font-size="11">project_id</text>
-<text x="398" y="751" font-size="11">session_id</text>
-<text x="398" y="769" font-size="11">run_id</text>
-<text x="398" y="787" font-size="11">name</text>
-<text x="398" y="805" font-size="11">mime_type</text>
-<text x="398" y="823" font-size="11">size_bytes</text>
-<text x="398" y="841" font-size="11">width</text>
-<text x="398" y="859" font-size="11">height</text>
-<text x="398" y="877" font-size="11">sha256</text>
-<text x="398" y="895" font-size="11">path</text>
-<text x="398" y="913" font-size="11">created_at</text>
+<text x="417.2" y="697" font-size="11">이미지 ID</text>
+<text x="398" y="715" font-size="11">사용자 ID</text>
+<text x="398" y="733" font-size="11">프로젝트 ID</text>
+<text x="398" y="751" font-size="11">세션 ID</text>
+<text x="398" y="769" font-size="11">실행 ID</text>
+<text x="398" y="787" font-size="11">파일 이름</text>
+<text x="398" y="805" font-size="11">형식</text>
+<text x="398" y="823" font-size="11">파일 크기</text>
+<text x="398" y="841" font-size="11">가로 크기</text>
+<text x="398" y="859" font-size="11">세로 크기</text>
+<text x="398" y="877" font-size="11">파일 해시</text>
+<text x="398" y="895" font-size="11">저장 경로</text>
+<text x="398" y="913" font-size="11">생성 시각</text>
 <rect x="720" y="80" width="250" height="174" rx="5" fill="#ffffff" stroke="#6c8ebf"/>
 <path d="M720,122 v-37 a5,5 0 0 1 5,-5 h240 a5,5 0 0 1 5,5 v37 z" fill="#dae8fc" stroke="#6c8ebf"/>
 <text x="845.0" y="97" font-size="12" font-weight="bold" text-anchor="middle">messages</text>
 <text x="845.0" y="113" font-size="10" text-anchor="middle">메시지</text>
 <text x="728" y="137" font-size="10" font-weight="bold">PK</text>
-<text x="747.2" y="137" font-size="11">id</text>
+<text x="747.2" y="137" font-size="11">메시지 ID</text>
 <text x="728" y="155" font-size="10" font-weight="bold">FK</text>
-<text x="747.2" y="155" font-size="11">session_id</text>
-<text x="728" y="173" font-size="11">run_id</text>
-<text x="728" y="191" font-size="11">role</text>
-<text x="728" y="209" font-size="11">content</text>
-<text x="728" y="227" font-size="11">attachments</text>
-<text x="728" y="245" font-size="11">created_at</text>
+<text x="747.2" y="155" font-size="11">세션 ID</text>
+<text x="728" y="173" font-size="11">실행 ID</text>
+<text x="728" y="191" font-size="11">작성 주체</text>
+<text x="728" y="209" font-size="11">본문</text>
+<text x="728" y="227" font-size="11">첨부</text>
+<text x="728" y="245" font-size="11">생성 시각</text>
 <rect x="720" y="300" width="250" height="372" rx="5" fill="#ffffff" stroke="#6c8ebf"/>
 <path d="M720,342 v-37 a5,5 0 0 1 5,-5 h240 a5,5 0 0 1 5,5 v37 z" fill="#dae8fc" stroke="#6c8ebf"/>
 <text x="845.0" y="317" font-size="12" font-weight="bold" text-anchor="middle">runs</text>
 <text x="845.0" y="333" font-size="10" text-anchor="middle">실행</text>
 <text x="728" y="357" font-size="10" font-weight="bold">PK</text>
-<text x="747.2" y="357" font-size="11">id</text>
+<text x="747.2" y="357" font-size="11">실행 ID</text>
 <text x="728" y="375" font-size="10" font-weight="bold">FK</text>
-<text x="747.2" y="375" font-size="11">session_id</text>
-<text x="728" y="393" font-size="11">project_id</text>
-<text x="728" y="411" font-size="11">user_id</text>
-<text x="728" y="429" font-size="11">status</text>
-<text x="728" y="447" font-size="11">model</text>
-<text x="728" y="465" font-size="11">input</text>
-<text x="728" y="483" font-size="11">resume</text>
-<text x="728" y="501" font-size="11">waiting</text>
-<text x="728" y="519" font-size="11">error</text>
-<text x="728" y="537" font-size="11">cancel_requested</text>
-<text x="728" y="555" font-size="11">lease_owner</text>
-<text x="728" y="573" font-size="11">lease_expires_at</text>
-<text x="728" y="591" font-size="11">attempts</text>
-<text x="728" y="609" font-size="11">finished_at</text>
-<text x="728" y="627" font-size="11">recovery_checked_at</text>
-<text x="728" y="645" font-size="11">created_at</text>
-<text x="728" y="663" font-size="11">updated_at</text>
+<text x="747.2" y="375" font-size="11">세션 ID</text>
+<text x="728" y="393" font-size="11">프로젝트 ID</text>
+<text x="728" y="411" font-size="11">사용자 ID</text>
+<text x="728" y="429" font-size="11">실행 상태</text>
+<text x="728" y="447" font-size="11">모델 별칭</text>
+<text x="728" y="465" font-size="11">입력</text>
+<text x="728" y="483" font-size="11">재개 값</text>
+<text x="728" y="501" font-size="11">대기 대상</text>
+<text x="728" y="519" font-size="11">실패 사유</text>
+<text x="728" y="537" font-size="11">취소 요청 여부</text>
+<text x="728" y="555" font-size="11">처리 인스턴스</text>
+<text x="728" y="573" font-size="11">처리 권한 만료 시각</text>
+<text x="728" y="591" font-size="11">가져간 횟수</text>
+<text x="728" y="609" font-size="11">종료 시각</text>
+<text x="728" y="627" font-size="11">이벤트 복구 확인 시각</text>
+<text x="728" y="645" font-size="11">생성 시각</text>
+<text x="728" y="663" font-size="11">수정 시각</text>
 <rect x="720" y="720" width="250" height="156" rx="5" fill="#ffffff" stroke="#6c8ebf"/>
 <path d="M720,762 v-37 a5,5 0 0 1 5,-5 h240 a5,5 0 0 1 5,5 v37 z" fill="#dae8fc" stroke="#6c8ebf"/>
 <text x="845.0" y="737" font-size="12" font-weight="bold" text-anchor="middle">run_requests</text>
 <text x="845.0" y="753" font-size="10" text-anchor="middle">실행 요청 키</text>
 <text x="728" y="777" font-size="10" font-weight="bold">PK</text>
-<text x="747.2" y="777" font-size="11">session_id</text>
+<text x="747.2" y="777" font-size="11">세션 ID</text>
 <text x="728" y="795" font-size="10" font-weight="bold">PK</text>
-<text x="747.2" y="795" font-size="11">key</text>
-<text x="728" y="813" font-size="11">request_hash</text>
-<text x="728" y="831" font-size="11">run_id</text>
-<text x="728" y="849" font-size="11">resumed</text>
-<text x="728" y="867" font-size="11">created_at</text>
+<text x="747.2" y="795" font-size="11">요청 키</text>
+<text x="728" y="813" font-size="11">요청 해시</text>
+<text x="728" y="831" font-size="11">실행 ID</text>
+<text x="728" y="849" font-size="11">재개 요청 여부</text>
+<text x="728" y="867" font-size="11">생성 시각</text>
 <rect x="1050" y="80" width="250" height="156" rx="5" fill="#ffffff" stroke="#6c8ebf"/>
 <path d="M1050,122 v-37 a5,5 0 0 1 5,-5 h240 a5,5 0 0 1 5,5 v37 z" fill="#dae8fc" stroke="#6c8ebf"/>
 <text x="1175.0" y="97" font-size="12" font-weight="bold" text-anchor="middle">run_events</text>
 <text x="1175.0" y="113" font-size="10" text-anchor="middle">실행 이벤트</text>
 <text x="1058" y="137" font-size="10" font-weight="bold">PK</text>
-<text x="1077.2" y="137" font-size="11">id</text>
-<text x="1058" y="155" font-size="11">session_id</text>
-<text x="1058" y="173" font-size="11">run_id</text>
-<text x="1058" y="191" font-size="11">type</text>
-<text x="1058" y="209" font-size="11">data</text>
-<text x="1058" y="227" font-size="11">created_at</text>
+<text x="1077.2" y="137" font-size="11">이벤트 번호</text>
+<text x="1058" y="155" font-size="11">세션 ID</text>
+<text x="1058" y="173" font-size="11">실행 ID</text>
+<text x="1058" y="191" font-size="11">이벤트 종류</text>
+<text x="1058" y="209" font-size="11">이벤트 내용</text>
+<text x="1058" y="227" font-size="11">생성 시각</text>
 <rect x="1050" y="290" width="250" height="156" rx="5" fill="#ffffff" stroke="#6c8ebf"/>
 <path d="M1050,332 v-37 a5,5 0 0 1 5,-5 h240 a5,5 0 0 1 5,5 v37 z" fill="#dae8fc" stroke="#6c8ebf"/>
 <text x="1175.0" y="307" font-size="12" font-weight="bold" text-anchor="middle">executor_inbox</text>
 <text x="1175.0" y="323" font-size="10" text-anchor="middle">executor 이벤트 보관함</text>
 <text x="1058" y="347" font-size="10" font-weight="bold">PK</text>
-<text x="1077.2" y="347" font-size="11">event_id</text>
-<text x="1058" y="365" font-size="11">execution_id</text>
-<text x="1058" y="383" font-size="11">event_type</text>
-<text x="1058" y="401" font-size="11">event_sequence</text>
-<text x="1058" y="419" font-size="11">payload</text>
-<text x="1058" y="437" font-size="11">received_at</text>
+<text x="1077.2" y="347" font-size="11">이벤트 ID</text>
+<text x="1058" y="365" font-size="11">executor 실행 ID</text>
+<text x="1058" y="383" font-size="11">이벤트 종류</text>
+<text x="1058" y="401" font-size="11">이벤트 순번</text>
+<text x="1058" y="419" font-size="11">이벤트 내용</text>
+<text x="1058" y="437" font-size="11">수신 시각</text>
 <rect x="1050" y="500" width="250" height="444" rx="5" fill="#ffffff" stroke="#6c8ebf"/>
 <path d="M1050,542 v-37 a5,5 0 0 1 5,-5 h240 a5,5 0 0 1 5,5 v37 z" fill="#dae8fc" stroke="#6c8ebf"/>
 <text x="1175.0" y="517" font-size="12" font-weight="bold" text-anchor="middle">code_sources</text>
 <text x="1175.0" y="533" font-size="10" text-anchor="middle">코드 파일 기록</text>
 <text x="1058" y="557" font-size="10" font-weight="bold">PK</text>
-<text x="1077.2" y="557" font-size="11">id</text>
-<text x="1058" y="575" font-size="11">user_id</text>
-<text x="1058" y="593" font-size="11">project_id</text>
-<text x="1058" y="611" font-size="11">session_id</text>
-<text x="1058" y="629" font-size="11">run_id</text>
-<text x="1058" y="647" font-size="11">tool_call_id</text>
+<text x="1077.2" y="557" font-size="11">코드 파일 ID</text>
+<text x="1058" y="575" font-size="11">사용자 ID</text>
+<text x="1058" y="593" font-size="11">프로젝트 ID</text>
+<text x="1058" y="611" font-size="11">세션 ID</text>
+<text x="1058" y="629" font-size="11">실행 ID</text>
+<text x="1058" y="647" font-size="11">도구 호출 ID</text>
 <text x="1058" y="665" font-size="10" font-weight="bold">UK</text>
-<text x="1077.2" y="665" font-size="11">path</text>
-<text x="1058" y="683" font-size="11">sha256</text>
-<text x="1058" y="701" font-size="11">size_bytes</text>
-<text x="1058" y="719" font-size="11">kind</text>
-<text x="1058" y="737" font-size="11">skill</text>
-<text x="1058" y="755" font-size="11">tool</text>
-<text x="1058" y="773" font-size="11">call_key</text>
-<text x="1058" y="791" font-size="11">tool_version</text>
-<text x="1058" y="809" font-size="11">purpose</text>
-<text x="1058" y="827" font-size="11">approved_by</text>
-<text x="1058" y="845" font-size="11">edited</text>
-<text x="1058" y="863" font-size="11">execution_id</text>
-<text x="1058" y="881" font-size="11">operation_id</text>
-<text x="1058" y="899" font-size="11">step_id</text>
-<text x="1058" y="917" font-size="11">created_at</text>
-<text x="1058" y="935" font-size="11">file_deleted_at</text>
+<text x="1077.2" y="665" font-size="11">파일 경로</text>
+<text x="1058" y="683" font-size="11">파일 해시</text>
+<text x="1058" y="701" font-size="11">파일 크기</text>
+<text x="1058" y="719" font-size="11">코드 종류</text>
+<text x="1058" y="737" font-size="11">skill 이름</text>
+<text x="1058" y="755" font-size="11">tool 이름</text>
+<text x="1058" y="773" font-size="11">호출 키</text>
+<text x="1058" y="791" font-size="11">tool 버전</text>
+<text x="1058" y="809" font-size="11">목적</text>
+<text x="1058" y="827" font-size="11">승인자 ID</text>
+<text x="1058" y="845" font-size="11">사용자 수정 여부</text>
+<text x="1058" y="863" font-size="11">executor 실행 ID</text>
+<text x="1058" y="881" font-size="11">executor 작업 ID</text>
+<text x="1058" y="899" font-size="11">executor 단계 ID</text>
+<text x="1058" y="917" font-size="11">생성 시각</text>
+<text x="1058" y="935" font-size="11">파일 삭제 시각</text>
 <text x="60" y="989.9" font-size="11" text-anchor="start">실선: 외래키(FK) 제약이 있는 관계  /  점선: 제약 없이 값으로만 참조하는 관계  /  두 줄 표시 쪽이 부모(1), 까치발 쪽이 자식(0..N)</text>
 <path d="M390.0,190.0 L310.0,190.0" fill="none" stroke="#333333" stroke-width="1.2"/>
 <circle cx="376.0" cy="190.0" r="3.5" fill="#fff" stroke="#333333"/><path d="M380.0,190.0 L390.0,195.0 M380.0,190.0 L390.0,185.0" fill="none" stroke="#333333" stroke-width="1.2"/>
@@ -237,4 +237,4 @@
 <path d="M1050.0,580.0 L970.0,580.0" fill="none" stroke="#333333" stroke-width="1.2" stroke-dasharray="5 4"/>
 <circle cx="1036.0" cy="580.0" r="3.5" fill="#fff" stroke="#333333"/><path d="M1040.0,580.0 L1050.0,585.0 M1040.0,580.0 L1050.0,575.0" fill="none" stroke="#333333" stroke-width="1.2"/>
 <path d="M976.0,575.0 L976.0,585.0 M980.0,575.0 L980.0,585.0" fill="none" stroke="#333333" stroke-width="1.2"/>
-</svg>
+<metadata><c2pa:manifest>AAAWgmp1bWIAAAAeanVtZGMycGEAEQAQgAAAqgA4m3EDYzJwYQAAABZcanVtYgAAAEdqdW1kYzJtYQARABCAAACqADibcQN1cm46YzJwYTo0ZGYwYTA5Zi00MmVkLTQ2MzgtYTVmYS0wNWU3M2U4MmEzNWIAAAADl2p1bWIAAAApanVtZGMyYXMAEQAQgAAAqgA4m3EDYzJwYS5hc3NlcnRpb25zAAAAALxqdW1iAAAARGp1bWRjYm9yABEAEIAAAKoAOJtxE2MycGEuaW5ncmVkaWVudC52MwAAAAAYYzJzaOdsowgHGtw8T4NxLyJorJUAAABwY2JvcqNpZGM6Zm9ybWF0bWltYWdlL3N2Zyt4bWxqaW5zdGFuY2VJRHgseG1wOmlpZDpjZjU1NmU4NC00NmM5LTQ1OTgtOWViNi1hMTgwZDk0M2M3YTFscmVsYXRpb25zaGlwaHBhcmVudE9mAAAB4mp1bWIAAABBanVtZGNib3IAEQAQgAAAqgA4m3ETYzJwYS5hY3Rpb25zLnYyAAAAABhjMnNoAOA5PxKJQgXZ7kdjmbWBuQAAAZljYm9yomdhY3Rpb25zgqJmYWN0aW9ua2MycGEub3BlbmVkanBhcmFtZXRlcnOha2luZ3JlZGllbnRzgaJjdXJseC1zZWxmI2p1bWJmPWMycGEuYXNzZXJ0aW9ucy9jMnBhLmluZ3JlZGllbnQudjNkaGFzaFgg+G518KXR8lHtpjRjZSNUpfrHhNHdsdoGK2tjoduesnikZmFjdGlvbngdY29tLmFudGhyb3BpYy5jbGF1ZGUucHJvdmlkZWRqcGFyYW1ldGVyc6F4H2NvbS5hbnRocm9waWMub3JpZ2luLWNvbmZpZGVuY2VndW5rbm93bmtkZXNjcmlwdGlvbnhmQ2xhdWRlIHByb3ZpZGVkIHRoaXMgZmlsZSBhdCB0aGUgcmVxdWVzdCBvZiBhIHVzZXIgYW5kIG1heSBoYXZlIGNyZWF0ZWQgb3IgbW9kaWZpZWQgdGhlIGZpbGUgY29udGVudHMubXNvZnR3YXJlQWdlbnShZG5hbWVmQ2xhdWRlcmFsbEFjdGlvbnNJbmNsdWRlZPUAAADIanVtYgAAAEBqdW1kY2JvcgARABCAAACqADibcRNjMnBhLmhhc2guZGF0YQAAAAAYYzJzaJuALaJEbEfbDkZpDM4TQggAAACAY2JvcqVjYWxnZnNoYTI1NmNwYWRMAAAAAAAAAAAAAAAAZGhhc2hYIOasdjzAVsCT8mAUQ+zu6Xgy+HMTfjYoJVf9g9Do6aEOZG5hbWVuanVtYmYgbWFuaWZlc3RqZXhjbHVzaW9uc4GiZXN0YXJ0GU0KZmxlbmd0aBkeBAAAAj5qdW1iAAAAJ2p1bWRjMmNsABEAEIAAAKoAOJtxA2MycGEuY2xhaW0udjIAAAACD2Nib3KlY2FsZ2ZzaGEyNTZpc2lnbmF0dXJleE1zZWxmI2p1bWJmPS9jMnBhL3VybjpjMnBhOjRkZjBhMDlmLTQyZWQtNDYzOC1hNWZhLTA1ZTczZTgyYTM1Yi9jMnBhLnNpZ25hdHVyZWppbnN0YW5jZUlEeCx4bXA6aWlkOjY0OTE3NmUzLTMzNmMtNDcyMi1hMWJhLWU5YjYzNDE5Mjg5NHJjcmVhdGVkX2Fzc2VydGlvbnODomN1cmx4LXNlbGYjanVtYmY9YzJwYS5hc3NlcnRpb25zL2MycGEuaW5ncmVkaWVudC52M2RoYXNoWCD4bnXwpdHyUe2mNGNlI1Sl+seE0d2x2gYra2Oh256yeKJjdXJseCpzZWxmI2p1bWJmPWMycGEuYXNzZXJ0aW9ucy9jMnBhLmFjdGlvbnMudjJkaGFzaFgg0RgABgwG8YkS7jA0lXkRb54GOTvkZvlrPiEiGR1i+CSiY3VybHgpc2VsZiNqdW1iZj1jMnBhLmFzc2VydGlvbnMvYzJwYS5oYXNoLmRhdGFkaGFzaFggdBFMCth2RDomZl16CAr1pYEiULIdFykMDsLsVqhfEYl0Y2xhaW1fZ2VuZXJhdG9yX2luZm+jZG5hbWVvQW50aHJvcGljIEZpbGVzZ3ZlcnNpb25lMS4wLjBrc3BlY1ZlcnNpb25lMi40LjAAABA4anVtYgAAAChqdW1kYzJjcwARABCAAACqADibcQNjMnBhLnNpZ25hdHVyZQAAABAIY2JvctKEWQISogEmGCFZAgowggIGMIIBjaADAgECAhRA5aAK7sI50L64g/oGQgU9Z1UTADAKBggqhkjOPQQDAzBJMRcwFQYDVQQKEw5BbnRocm9waWMsIFBCQzEuMCwGA1UEAxMlQW50aHJvcGljIENvbnRlbnQgQ3JlZGVudGlhbHMgUm9vdCBDQTAeFw0yNjA4MDcxODQzNTZaFw0yODA4MDYxOTQzNTZaMEQxFzAVBgNVBAoTDkFudGhyb3BpYywgUEJDMSkwJwYDVQQDEyBBbnRocm9waWMgQ2xhdWRlIENvbnRlbnQgU2lnbmluZzBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABJh6CmvLUBgFFNU0vUKlOVtE6djd17L5SuwX0LemFisBM3dkd/3cyjxFA3Qo5S46fX0/ihY0VZ7mfb9KF703t5OjWDBWMA4GA1UdDwEB/wQEAwIHgDAVBgNVHSUEDjAMBgorBgEEAYPoXgIBMAwGA1UdEwEB/wQCMAAwHwYDVR0jBBgwFoAUzlHiBIFOZFsj+OPEz5o+nMHXXMIwCgYIKoZIzj0EAwMDZwAwZAIwMXMdFJ4BetLLVY7ORuE9noqbbAZOZn/aArXyTwFAZfKrPzxF2vPoJNf1+UCdg1XGAjBwX1zd9WGqYkqmL5SFqw1QySjr1zJfpJM9+1rdDwSPLMOPOjKuiXjoU/pUUeG9RwmhY3BhZFkNngAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAPZYQEUngeTtWERSMJGC4JAw7NUXT+i9qq6l0vUFUdRJkC/i5LXoqTmSD8hJZiFDSUMjg4kxJCGGbJ7Yg34GYFNbMcc=</c2pa:manifest></metadata></svg>

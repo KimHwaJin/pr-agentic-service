@@ -1,8 +1,8 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="880" viewBox="0 0 1400 880" font-family="'Noto Sans KR','Apple SD Gothic Neo','Malgun Gothic','WenQuanYi Zen Hei',sans-serif">
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="1000" viewBox="0 0 1400 1000" font-family="'Noto Sans KR','Apple SD Gothic Neo','Malgun Gothic','WenQuanYi Zen Hei',sans-serif" xmlns:c2pa="http://c2pa.org/manifest">
 <defs><marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#333"/></marker></defs>
-<rect width="1400" height="880" fill="#ffffff"/>
+<rect width="1400" height="1000" fill="#ffffff"/>
 <text x="40" y="38" font-size="18" font-weight="bold">물리 ERD (워크플로우, 배치 리포트, 프로젝트 메모리, 서비스 간 인증)</text>
-<rect x="60" y="90" width="250" height="102" rx="5" fill="#ffffff" stroke="#666666"/>
+<rect x="60" y="90" width="250" height="246" rx="5" fill="#ffffff" stroke="#666666"/>
 <path d="M60,132 v-37 a5,5 0 0 1 5,-5 h240 a5,5 0 0 1 5,5 v37 z" fill="#f5f5f5" stroke="#666666"/>
 <text x="185.0" y="107" font-size="12" font-weight="bold" text-anchor="middle">users</text>
 <text x="185.0" y="123" font-size="10" text-anchor="middle">사용자</text>
@@ -12,42 +12,59 @@
 <text x="68" y="165" font-size="10" font-weight="bold">UK</text>
 <text x="87.2" y="165" font-size="11">employee_id</text>
 <text x="164.95999999999998" y="165" font-size="11" fill="#888888">varchar(64)</text>
-<text x="68" y="183" font-size="11">… (1페이지 참조)</text>
-<rect x="60" y="252" width="250" height="300" rx="5" fill="#ffffff" stroke="#6c8ebf"/>
-<path d="M60,294 v-37 a5,5 0 0 1 5,-5 h240 a5,5 0 0 1 5,5 v37 z" fill="#dae8fc" stroke="#6c8ebf"/>
-<text x="185.0" y="269" font-size="12" font-weight="bold" text-anchor="middle">api_clients</text>
-<text x="185.0" y="285" font-size="10" text-anchor="middle">API 클라이언트</text>
-<text x="68" y="309" font-size="10" font-weight="bold">PK</text>
-<text x="87.2" y="309" font-size="11">id</text>
-<text x="109.52000000000001" y="309" font-size="11" fill="#888888">varchar(36)</text>
-<text x="68" y="327" font-size="10" font-weight="bold">UK</text>
-<text x="87.2" y="327" font-size="11">name</text>
-<text x="121.84" y="327" font-size="11" fill="#888888">varchar(64)</text>
-<text x="68" y="345" font-size="11">tenant</text>
-<text x="114.96000000000001" y="345" font-size="11" fill="#888888">varchar(64)</text>
-<text x="68" y="363" font-size="11">key_prefix</text>
-<text x="139.6" y="363" font-size="11" fill="#888888">varchar(32)</text>
-<text x="68" y="381" font-size="10" font-weight="bold">UK</text>
-<text x="87.2" y="381" font-size="11">key_sha256</text>
-<text x="158.8" y="381" font-size="11" fill="#888888">varchar(64)</text>
-<text x="68" y="399" font-size="11">status</text>
-<text x="114.96000000000001" y="399" font-size="11" fill="#888888">varchar(16)</text>
-<text x="68" y="417" font-size="11">kind</text>
-<text x="102.64" y="417" font-size="11" fill="#888888">varchar(16)</text>
-<text x="68" y="435" font-size="11">description</text>
-<text x="145.76" y="435" font-size="11" fill="#888888">text</text>
-<text x="68" y="453" font-size="11">created_by</text>
-<text x="139.6" y="453" font-size="11" fill="#888888">varchar(36)</text>
-<text x="68" y="471" font-size="11">revoked_at</text>
-<text x="139.6" y="471" font-size="11" fill="#888888">timestamptz</text>
-<text x="68" y="489" font-size="11">last_used_at</text>
-<text x="151.92" y="489" font-size="11" fill="#888888">timestamptz</text>
-<text x="68" y="507" font-size="11">batches_disable_pending</text>
-<text x="219.67999999999995" y="507" font-size="11" fill="#888888">boolean</text>
-<text x="68" y="525" font-size="11">created_at</text>
-<text x="139.6" y="525" font-size="11" fill="#888888">timestamptz</text>
-<text x="68" y="543" font-size="11">updated_at</text>
-<text x="139.6" y="543" font-size="11" fill="#888888">timestamptz</text>
+<text x="68" y="183" font-size="11">name</text>
+<text x="102.64" y="183" font-size="11" fill="#888888">varchar(200)</text>
+<text x="68" y="201" font-size="11">english_name</text>
+<text x="151.92" y="201" font-size="11" fill="#888888">varchar(200)</text>
+<text x="68" y="219" font-size="11">department</text>
+<text x="139.6" y="219" font-size="11" fill="#888888">varchar(200)</text>
+<text x="68" y="237" font-size="11">email</text>
+<text x="108.8" y="237" font-size="11" fill="#888888">varchar(320)</text>
+<text x="68" y="255" font-size="11">role</text>
+<text x="102.64" y="255" font-size="11" fill="#888888">varchar(16)</text>
+<text x="68" y="273" font-size="11">is_active</text>
+<text x="133.44" y="273" font-size="11" fill="#888888">boolean</text>
+<text x="68" y="291" font-size="11">batches_disable_pending</text>
+<text x="219.67999999999995" y="291" font-size="11" fill="#888888">boolean</text>
+<text x="68" y="309" font-size="11">created_at</text>
+<text x="139.6" y="309" font-size="11" fill="#888888">timestamptz</text>
+<text x="68" y="327" font-size="11">updated_at</text>
+<text x="139.6" y="327" font-size="11" fill="#888888">timestamptz</text>
+<rect x="60" y="396" width="250" height="300" rx="5" fill="#ffffff" stroke="#6c8ebf"/>
+<path d="M60,438 v-37 a5,5 0 0 1 5,-5 h240 a5,5 0 0 1 5,5 v37 z" fill="#dae8fc" stroke="#6c8ebf"/>
+<text x="185.0" y="413" font-size="12" font-weight="bold" text-anchor="middle">api_clients</text>
+<text x="185.0" y="429" font-size="10" text-anchor="middle">API 클라이언트</text>
+<text x="68" y="453" font-size="10" font-weight="bold">PK</text>
+<text x="87.2" y="453" font-size="11">id</text>
+<text x="109.52000000000001" y="453" font-size="11" fill="#888888">varchar(36)</text>
+<text x="68" y="471" font-size="10" font-weight="bold">UK</text>
+<text x="87.2" y="471" font-size="11">name</text>
+<text x="121.84" y="471" font-size="11" fill="#888888">varchar(64)</text>
+<text x="68" y="489" font-size="11">tenant</text>
+<text x="114.96000000000001" y="489" font-size="11" fill="#888888">varchar(64)</text>
+<text x="68" y="507" font-size="11">key_prefix</text>
+<text x="139.6" y="507" font-size="11" fill="#888888">varchar(32)</text>
+<text x="68" y="525" font-size="10" font-weight="bold">UK</text>
+<text x="87.2" y="525" font-size="11">key_sha256</text>
+<text x="158.8" y="525" font-size="11" fill="#888888">varchar(64)</text>
+<text x="68" y="543" font-size="11">status</text>
+<text x="114.96000000000001" y="543" font-size="11" fill="#888888">varchar(16)</text>
+<text x="68" y="561" font-size="11">kind</text>
+<text x="102.64" y="561" font-size="11" fill="#888888">varchar(16)</text>
+<text x="68" y="579" font-size="11">description</text>
+<text x="145.76" y="579" font-size="11" fill="#888888">text</text>
+<text x="68" y="597" font-size="11">created_by</text>
+<text x="139.6" y="597" font-size="11" fill="#888888">varchar(36)</text>
+<text x="68" y="615" font-size="11">revoked_at</text>
+<text x="139.6" y="615" font-size="11" fill="#888888">timestamptz</text>
+<text x="68" y="633" font-size="11">last_used_at</text>
+<text x="151.92" y="633" font-size="11" fill="#888888">timestamptz</text>
+<text x="68" y="651" font-size="11">batches_disable_pending</text>
+<text x="219.67999999999995" y="651" font-size="11" fill="#888888">boolean</text>
+<text x="68" y="669" font-size="11">created_at</text>
+<text x="139.6" y="669" font-size="11" fill="#888888">timestamptz</text>
+<text x="68" y="687" font-size="11">updated_at</text>
+<text x="139.6" y="687" font-size="11" fill="#888888">timestamptz</text>
 <rect x="390" y="90" width="250" height="318" rx="5" fill="#ffffff" stroke="#6c8ebf"/>
 <path d="M390,132 v-37 a5,5 0 0 1 5,-5 h240 a5,5 0 0 1 5,5 v37 z" fill="#dae8fc" stroke="#6c8ebf"/>
 <text x="515.0" y="107" font-size="12" font-weight="bold" text-anchor="middle">workflows</text>
@@ -165,7 +182,7 @@
 <text x="762.64" y="661" font-size="11" fill="#888888">jsonb</text>
 <text x="728" y="679" font-size="11">created_at</text>
 <text x="799.6" y="679" font-size="11" fill="#888888">timestamptz</text>
-<rect x="1050" y="90" width="250" height="102" rx="5" fill="#ffffff" stroke="#666666"/>
+<rect x="1050" y="90" width="250" height="228" rx="5" fill="#ffffff" stroke="#666666"/>
 <path d="M1050,132 v-37 a5,5 0 0 1 5,-5 h240 a5,5 0 0 1 5,5 v37 z" fill="#f5f5f5" stroke="#666666"/>
 <text x="1175.0" y="107" font-size="12" font-weight="bold" text-anchor="middle">projects</text>
 <text x="1175.0" y="123" font-size="10" text-anchor="middle">프로젝트</text>
@@ -174,62 +191,78 @@
 <text x="1099.52" y="147" font-size="11" fill="#888888">varchar(36)</text>
 <text x="1058" y="165" font-size="11">name</text>
 <text x="1092.64" y="165" font-size="11" fill="#888888">varchar(200)</text>
-<text x="1058" y="183" font-size="11">… (1페이지 참조)</text>
-<rect x="1050" y="248" width="250" height="246" rx="5" fill="#ffffff" stroke="#6c8ebf"/>
-<path d="M1050,290 v-37 a5,5 0 0 1 5,-5 h240 a5,5 0 0 1 5,5 v37 z" fill="#dae8fc" stroke="#6c8ebf"/>
-<text x="1175.0" y="265" font-size="12" font-weight="bold" text-anchor="middle">memory_history</text>
-<text x="1175.0" y="281" font-size="10" text-anchor="middle">메모리 변경 이력</text>
-<text x="1058" y="305" font-size="10" font-weight="bold">PK</text>
-<text x="1077.2" y="305" font-size="11">id</text>
-<text x="1099.52" y="305" font-size="11" fill="#888888">bigint</text>
-<text x="1058" y="323" font-size="11">project_id</text>
-<text x="1129.6" y="323" font-size="11" fill="#888888">varchar(36)</text>
-<text x="1058" y="341" font-size="11">item_id</text>
-<text x="1111.12" y="341" font-size="11" fill="#888888">varchar(64)</text>
-<text x="1058" y="359" font-size="11">action</text>
-<text x="1104.96" y="359" font-size="11" fill="#888888">varchar(16)</text>
-<text x="1058" y="377" font-size="11">before</text>
-<text x="1104.96" y="377" font-size="11" fill="#888888">jsonb</text>
-<text x="1058" y="395" font-size="11">after</text>
-<text x="1098.8" y="395" font-size="11" fill="#888888">jsonb</text>
-<text x="1058" y="413" font-size="11">actor_type</text>
-<text x="1129.6" y="413" font-size="11" fill="#888888">varchar(16)</text>
-<text x="1058" y="431" font-size="11">actor_id</text>
-<text x="1117.28" y="431" font-size="11" fill="#888888">varchar(64)</text>
-<text x="1058" y="449" font-size="11">session_id</text>
+<text x="1058" y="183" font-size="11">description</text>
+<text x="1135.76" y="183" font-size="11" fill="#888888">text</text>
+<text x="1058" y="201" font-size="11">system_prompt</text>
+<text x="1148.08" y="201" font-size="11" fill="#888888">text</text>
+<text x="1058" y="219" font-size="11">code_level</text>
+<text x="1129.6" y="219" font-size="11" fill="#888888">integer</text>
+<text x="1058" y="237" font-size="11">is_default</text>
+<text x="1129.6" y="237" font-size="11" fill="#888888">boolean</text>
+<text x="1058" y="255" font-size="10" font-weight="bold">FK</text>
+<text x="1077.2" y="255" font-size="11">created_by</text>
+<text x="1148.8" y="255" font-size="11" fill="#888888">varchar(36)</text>
+<text x="1058" y="273" font-size="11">deleted_at</text>
+<text x="1129.6" y="273" font-size="11" fill="#888888">timestamptz</text>
+<text x="1058" y="291" font-size="11">created_at</text>
+<text x="1129.6" y="291" font-size="11" fill="#888888">timestamptz</text>
+<text x="1058" y="309" font-size="11">updated_at</text>
+<text x="1129.6" y="309" font-size="11" fill="#888888">timestamptz</text>
+<rect x="1050" y="374" width="250" height="246" rx="5" fill="#ffffff" stroke="#6c8ebf"/>
+<path d="M1050,416 v-37 a5,5 0 0 1 5,-5 h240 a5,5 0 0 1 5,5 v37 z" fill="#dae8fc" stroke="#6c8ebf"/>
+<text x="1175.0" y="391" font-size="12" font-weight="bold" text-anchor="middle">memory_history</text>
+<text x="1175.0" y="407" font-size="10" text-anchor="middle">메모리 변경 이력</text>
+<text x="1058" y="431" font-size="10" font-weight="bold">PK</text>
+<text x="1077.2" y="431" font-size="11">id</text>
+<text x="1099.52" y="431" font-size="11" fill="#888888">bigint</text>
+<text x="1058" y="449" font-size="11">project_id</text>
 <text x="1129.6" y="449" font-size="11" fill="#888888">varchar(36)</text>
-<text x="1058" y="467" font-size="11">run_id</text>
-<text x="1104.96" y="467" font-size="11" fill="#888888">varchar(36)</text>
-<text x="1058" y="485" font-size="11">created_at</text>
-<text x="1129.6" y="485" font-size="11" fill="#888888">timestamptz</text>
-<rect x="1050" y="548" width="250" height="246" rx="5" fill="#ffffff" stroke="#6c8ebf"/>
-<path d="M1050,590 v-37 a5,5 0 0 1 5,-5 h240 a5,5 0 0 1 5,5 v37 z" fill="#dae8fc" stroke="#6c8ebf"/>
-<text x="1175.0" y="565" font-size="12" font-weight="bold" text-anchor="middle">memory_extraction_state</text>
-<text x="1175.0" y="581" font-size="10" text-anchor="middle">메모리 정리 상태</text>
-<text x="1058" y="605" font-size="10" font-weight="bold">PK</text>
-<text x="1077.2" y="605" font-size="11">project_id</text>
-<text x="1148.8" y="605" font-size="11" fill="#888888">varchar(36)</text>
-<text x="1058" y="623" font-size="11">processed_until_at</text>
-<text x="1178.8799999999999" y="623" font-size="11" fill="#888888">timestamptz</text>
-<text x="1058" y="641" font-size="11">processed_until_id</text>
-<text x="1178.8799999999999" y="641" font-size="11" fill="#888888">varchar(36)</text>
-<text x="1058" y="659" font-size="11">dirty</text>
-<text x="1098.8" y="659" font-size="11" fill="#888888">boolean</text>
-<text x="1058" y="677" font-size="11">last_activity_at</text>
-<text x="1166.56" y="677" font-size="11" fill="#888888">timestamptz</text>
-<text x="1058" y="695" font-size="11">pending_turns</text>
-<text x="1148.08" y="695" font-size="11" fill="#888888">integer</text>
-<text x="1058" y="713" font-size="11">lease_owner</text>
-<text x="1135.76" y="713" font-size="11" fill="#888888">varchar(128)</text>
-<text x="1058" y="731" font-size="11">lease_expires_at</text>
-<text x="1166.56" y="731" font-size="11" fill="#888888">timestamptz</text>
-<text x="1058" y="749" font-size="11">attempts</text>
-<text x="1117.28" y="749" font-size="11" fill="#888888">integer</text>
-<text x="1058" y="767" font-size="11">last_error</text>
-<text x="1129.6" y="767" font-size="11" fill="#888888">text</text>
-<text x="1058" y="785" font-size="11">updated_at</text>
-<text x="1129.6" y="785" font-size="11" fill="#888888">timestamptz</text>
-<text x="60" y="859.9" font-size="11" text-anchor="start">실선: 외래키(FK) 제약이 있는 관계  /  점선: 제약 없이 값으로만 참조하는 관계  /  두 줄 표시 쪽이 부모(1), 까치발 쪽이 자식(0..N)   회색: 다른 페이지의 테이블</text>
+<text x="1058" y="467" font-size="11">item_id</text>
+<text x="1111.12" y="467" font-size="11" fill="#888888">varchar(64)</text>
+<text x="1058" y="485" font-size="11">action</text>
+<text x="1104.96" y="485" font-size="11" fill="#888888">varchar(16)</text>
+<text x="1058" y="503" font-size="11">before</text>
+<text x="1104.96" y="503" font-size="11" fill="#888888">jsonb</text>
+<text x="1058" y="521" font-size="11">after</text>
+<text x="1098.8" y="521" font-size="11" fill="#888888">jsonb</text>
+<text x="1058" y="539" font-size="11">actor_type</text>
+<text x="1129.6" y="539" font-size="11" fill="#888888">varchar(16)</text>
+<text x="1058" y="557" font-size="11">actor_id</text>
+<text x="1117.28" y="557" font-size="11" fill="#888888">varchar(64)</text>
+<text x="1058" y="575" font-size="11">session_id</text>
+<text x="1129.6" y="575" font-size="11" fill="#888888">varchar(36)</text>
+<text x="1058" y="593" font-size="11">run_id</text>
+<text x="1104.96" y="593" font-size="11" fill="#888888">varchar(36)</text>
+<text x="1058" y="611" font-size="11">created_at</text>
+<text x="1129.6" y="611" font-size="11" fill="#888888">timestamptz</text>
+<rect x="1050" y="674" width="250" height="246" rx="5" fill="#ffffff" stroke="#6c8ebf"/>
+<path d="M1050,716 v-37 a5,5 0 0 1 5,-5 h240 a5,5 0 0 1 5,5 v37 z" fill="#dae8fc" stroke="#6c8ebf"/>
+<text x="1175.0" y="691" font-size="12" font-weight="bold" text-anchor="middle">memory_extraction_state</text>
+<text x="1175.0" y="707" font-size="10" text-anchor="middle">메모리 정리 상태</text>
+<text x="1058" y="731" font-size="10" font-weight="bold">PK</text>
+<text x="1077.2" y="731" font-size="11">project_id</text>
+<text x="1148.8" y="731" font-size="11" fill="#888888">varchar(36)</text>
+<text x="1058" y="749" font-size="11">processed_until_at</text>
+<text x="1178.8799999999999" y="749" font-size="11" fill="#888888">timestamptz</text>
+<text x="1058" y="767" font-size="11">processed_until_id</text>
+<text x="1178.8799999999999" y="767" font-size="11" fill="#888888">varchar(36)</text>
+<text x="1058" y="785" font-size="11">dirty</text>
+<text x="1098.8" y="785" font-size="11" fill="#888888">boolean</text>
+<text x="1058" y="803" font-size="11">last_activity_at</text>
+<text x="1166.56" y="803" font-size="11" fill="#888888">timestamptz</text>
+<text x="1058" y="821" font-size="11">pending_turns</text>
+<text x="1148.08" y="821" font-size="11" fill="#888888">integer</text>
+<text x="1058" y="839" font-size="11">lease_owner</text>
+<text x="1135.76" y="839" font-size="11" fill="#888888">varchar(128)</text>
+<text x="1058" y="857" font-size="11">lease_expires_at</text>
+<text x="1166.56" y="857" font-size="11" fill="#888888">timestamptz</text>
+<text x="1058" y="875" font-size="11">attempts</text>
+<text x="1117.28" y="875" font-size="11" fill="#888888">integer</text>
+<text x="1058" y="893" font-size="11">last_error</text>
+<text x="1129.6" y="893" font-size="11" fill="#888888">text</text>
+<text x="1058" y="911" font-size="11">updated_at</text>
+<text x="1129.6" y="911" font-size="11" fill="#888888">timestamptz</text>
+<text x="60" y="979.9" font-size="11" text-anchor="start">실선: 외래키(FK) 제약이 있는 관계  /  점선: 제약 없이 값으로만 참조하는 관계  /  두 줄 표시 쪽이 부모(1), 까치발 쪽이 자식(0..N)   회색: 다른 페이지의 테이블</text>
 <path d="M390.0,135.0 L310.0,135.0" fill="none" stroke="#333333" stroke-width="1.2"/>
 <circle cx="376.0" cy="135.0" r="3.5" fill="#fff" stroke="#333333"/><path d="M380.0,135.0 L390.0,140.0 M380.0,135.0 L390.0,130.0" fill="none" stroke="#333333" stroke-width="1.2"/>
 <path d="M316.0,130.0 L316.0,140.0 M320.0,130.0 L320.0,140.0" fill="none" stroke="#333333" stroke-width="1.2"/>
@@ -242,13 +275,13 @@
 <path d="M845.0,550.0 L845.0,498.0" fill="none" stroke="#333333" stroke-width="1.2" stroke-dasharray="5 4"/>
 <circle cx="845.0" cy="536.0" r="3.5" fill="#fff" stroke="#333333"/><path d="M845.0,540.0 L840.0,550.0 M845.0,540.0 L850.0,550.0" fill="none" stroke="#333333" stroke-width="1.2"/>
 <path d="M850.0,504.0 L840.0,504.0 M850.0,508.0 L840.0,508.0" fill="none" stroke="#333333" stroke-width="1.2"/>
-<path d="M185.0,252.0 L185.0,192.0" fill="none" stroke="#333333" stroke-width="1.2" stroke-dasharray="5 4"/>
-<circle cx="185.0" cy="238.0" r="3.5" fill="#fff" stroke="#333333"/><path d="M185.0,242.0 L180.0,252.0 M185.0,242.0 L190.0,252.0" fill="none" stroke="#333333" stroke-width="1.2"/>
-<path d="M190.0,198.0 L180.0,198.0 M190.0,202.0 L180.0,202.0" fill="none" stroke="#333333" stroke-width="1.2"/>
-<path d="M1175.0,248.0 L1175.0,192.0" fill="none" stroke="#333333" stroke-width="1.2" stroke-dasharray="5 4"/>
-<circle cx="1175.0" cy="234.0" r="3.5" fill="#fff" stroke="#333333"/><path d="M1175.0,238.0 L1170.0,248.0 M1175.0,238.0 L1180.0,248.0" fill="none" stroke="#333333" stroke-width="1.2"/>
-<path d="M1180.0,198.0 L1170.0,198.0 M1180.0,202.0 L1170.0,202.0" fill="none" stroke="#333333" stroke-width="1.2"/>
-<path d="M1300.0,648.0 L1340.0,648.0 L1340.0,135.0 L1300.0,135.0" fill="none" stroke="#333333" stroke-width="1.2" stroke-dasharray="5 4"/>
-<circle cx="1314.0" cy="648.0" r="3.5" fill="#fff" stroke="#333333"/><path d="M1306.0,643.0 L1306.0,653.0" fill="none" stroke="#333333" stroke-width="1.2"/>
+<path d="M185.0,396.0 L185.0,336.0" fill="none" stroke="#333333" stroke-width="1.2" stroke-dasharray="5 4"/>
+<circle cx="185.0" cy="382.0" r="3.5" fill="#fff" stroke="#333333"/><path d="M185.0,386.0 L180.0,396.0 M185.0,386.0 L190.0,396.0" fill="none" stroke="#333333" stroke-width="1.2"/>
+<path d="M190.0,342.0 L180.0,342.0 M190.0,346.0 L180.0,346.0" fill="none" stroke="#333333" stroke-width="1.2"/>
+<path d="M1175.0,374.0 L1175.0,318.0" fill="none" stroke="#333333" stroke-width="1.2" stroke-dasharray="5 4"/>
+<circle cx="1175.0" cy="360.0" r="3.5" fill="#fff" stroke="#333333"/><path d="M1175.0,364.0 L1170.0,374.0 M1175.0,364.0 L1180.0,374.0" fill="none" stroke="#333333" stroke-width="1.2"/>
+<path d="M1180.0,324.0 L1170.0,324.0 M1180.0,328.0 L1170.0,328.0" fill="none" stroke="#333333" stroke-width="1.2"/>
+<path d="M1300.0,774.0 L1340.0,774.0 L1340.0,135.0 L1300.0,135.0" fill="none" stroke="#333333" stroke-width="1.2" stroke-dasharray="5 4"/>
+<circle cx="1314.0" cy="774.0" r="3.5" fill="#fff" stroke="#333333"/><path d="M1306.0,769.0 L1306.0,779.0" fill="none" stroke="#333333" stroke-width="1.2"/>
 <path d="M1306.0,130.0 L1306.0,140.0 M1310.0,130.0 L1310.0,140.0" fill="none" stroke="#333333" stroke-width="1.2"/>
-</svg>
+<metadata><c2pa:manifest>AAAWgmp1bWIAAAAeanVtZGMycGEAEQAQgAAAqgA4m3EDYzJwYQAAABZcanVtYgAAAEdqdW1kYzJtYQARABCAAACqADibcQN1cm46YzJwYTpkZTUwODg0Zi1lNDQwLTQzMjctOGMxOS1hZDMyZjg4ZGNiZjYAAAADl2p1bWIAAAApanVtZGMyYXMAEQAQgAAAqgA4m3EDYzJwYS5hc3NlcnRpb25zAAAAALxqdW1iAAAARGp1bWRjYm9yABEAEIAAAKoAOJtxE2MycGEuaW5ncmVkaWVudC52MwAAAAAYYzJzaIBw7xnc6IRtIiego5VbzxkAAABwY2JvcqNpZGM6Zm9ybWF0bWltYWdlL3N2Zyt4bWxqaW5zdGFuY2VJRHgseG1wOmlpZDozYzRmZGM2ZS1lYTRlLTQyNWEtODZhMS0yYTY2NjI0MTJlOWRscmVsYXRpb25zaGlwaHBhcmVudE9mAAAB4mp1bWIAAABBanVtZGNib3IAEQAQgAAAqgA4m3ETYzJwYS5hY3Rpb25zLnYyAAAAABhjMnNo1iVaQi3EFz0QfoGauVHfCQAAAZljYm9yomdhY3Rpb25zgqJmYWN0aW9ua2MycGEub3BlbmVkanBhcmFtZXRlcnOha2luZ3JlZGllbnRzgaJjdXJseC1zZWxmI2p1bWJmPWMycGEuYXNzZXJ0aW9ucy9jMnBhLmluZ3JlZGllbnQudjNkaGFzaFggUz62uz56r6lK0QmzMeY3umBFAifPts6+Yf6ijY7HlCukZmFjdGlvbngdY29tLmFudGhyb3BpYy5jbGF1ZGUucHJvdmlkZWRqcGFyYW1ldGVyc6F4H2NvbS5hbnRocm9waWMub3JpZ2luLWNvbmZpZGVuY2VndW5rbm93bmtkZXNjcmlwdGlvbnhmQ2xhdWRlIHByb3ZpZGVkIHRoaXMgZmlsZSBhdCB0aGUgcmVxdWVzdCBvZiBhIHVzZXIgYW5kIG1heSBoYXZlIGNyZWF0ZWQgb3IgbW9kaWZpZWQgdGhlIGZpbGUgY29udGVudHMubXNvZnR3YXJlQWdlbnShZG5hbWVmQ2xhdWRlcmFsbEFjdGlvbnNJbmNsdWRlZPUAAADIanVtYgAAAEBqdW1kY2JvcgARABCAAACqADibcRNjMnBhLmhhc2guZGF0YQAAAAAYYzJzaM8pLMzipZSeOf1YQw/vqvIAAACAY2JvcqVjYWxnZnNoYTI1NmNwYWRMAAAAAAAAAAAAAAAAZGhhc2hYIDv0taUZ5jsEb9hld0/8GfnQJmd0CmLsOX2yJfKJ83WXZG5hbWVuanVtYmYgbWFuaWZlc3RqZXhjbHVzaW9uc4GiZXN0YXJ0GVQCZmxlbmd0aBkeBAAAAj5qdW1iAAAAJ2p1bWRjMmNsABEAEIAAAKoAOJtxA2MycGEuY2xhaW0udjIAAAACD2Nib3KlY2FsZ2ZzaGEyNTZpc2lnbmF0dXJleE1zZWxmI2p1bWJmPS9jMnBhL3VybjpjMnBhOmRlNTA4ODRmLWU0NDAtNDMyNy04YzE5LWFkMzJmODhkY2JmNi9jMnBhLnNpZ25hdHVyZWppbnN0YW5jZUlEeCx4bXA6aWlkOmMyZGJlZWUyLWI5YzctNDllNS1iZWJiLWZjNjFjNzM0NmI0NHJjcmVhdGVkX2Fzc2VydGlvbnODomN1cmx4LXNlbGYjanVtYmY9YzJwYS5hc3NlcnRpb25zL2MycGEuaW5ncmVkaWVudC52M2RoYXNoWCBTPra7PnqvqUrRCbMx5je6YEUCJ8+2zr5h/qKNjseUK6JjdXJseCpzZWxmI2p1bWJmPWMycGEuYXNzZXJ0aW9ucy9jMnBhLmFjdGlvbnMudjJkaGFzaFggkw58qBpsf+CoOC+BjWnyy/5wlt4mj1821cNNc9Qlw+WiY3VybHgpc2VsZiNqdW1iZj1jMnBhLmFzc2VydGlvbnMvYzJwYS5oYXNoLmRhdGFkaGFzaFggUUV2NSolJgAAQWaUeDDby/hox6YJfk+Maf1lAFjMVN90Y2xhaW1fZ2VuZXJhdG9yX2luZm+jZG5hbWVvQW50aHJvcGljIEZpbGVzZ3ZlcnNpb25lMS4wLjBrc3BlY1ZlcnNpb25lMi40LjAAABA4anVtYgAAAChqdW1kYzJjcwARABCAAACqADibcQNjMnBhLnNpZ25hdHVyZQAAABAIY2JvctKEWQISogEmGCFZAgowggIGMIIBjaADAgECAhRA5aAK7sI50L64g/oGQgU9Z1UTADAKBggqhkjOPQQDAzBJMRcwFQYDVQQKEw5BbnRocm9waWMsIFBCQzEuMCwGA1UEAxMlQW50aHJvcGljIENvbnRlbnQgQ3JlZGVudGlhbHMgUm9vdCBDQTAeFw0yNjA4MDcxODQzNTZaFw0yODA4MDYxOTQzNTZaMEQxFzAVBgNVBAoTDkFudGhyb3BpYywgUEJDMSkwJwYDVQQDEyBBbnRocm9waWMgQ2xhdWRlIENvbnRlbnQgU2lnbmluZzBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABJh6CmvLUBgFFNU0vUKlOVtE6djd17L5SuwX0LemFisBM3dkd/3cyjxFA3Qo5S46fX0/ihY0VZ7mfb9KF703t5OjWDBWMA4GA1UdDwEB/wQEAwIHgDAVBgNVHSUEDjAMBgorBgEEAYPoXgIBMAwGA1UdEwEB/wQCMAAwHwYDVR0jBBgwFoAUzlHiBIFOZFsj+OPEz5o+nMHXXMIwCgYIKoZIzj0EAwMDZwAwZAIwMXMdFJ4BetLLVY7ORuE9noqbbAZOZn/aArXyTwFAZfKrPzxF2vPoJNf1+UCdg1XGAjBwX1zd9WGqYkqmL5SFqw1QySjr1zJfpJM9+1rdDwSPLMOPOjKuiXjoU/pUUeG9RwmhY3BhZFkNngAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAPZYQOU8cGNkrqJhT31dgwN3aGqnHgcKvnH2IKgXRmG5uyKBrbTuZ0d7W/x0xREzCgtNqFJje037zr3RJ1babOwchcU=</c2pa:manifest></metadata></svg>

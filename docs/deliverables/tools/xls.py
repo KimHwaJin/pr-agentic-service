@@ -2,10 +2,10 @@ import os, re, sys
 from openpyxl import Workbook
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
-from schema import load
+from names import full_schema
 
 H = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "handover") + os.sep
-S = load(H + "03-db-physical.md")
+S = full_schema(H + "03-db-physical.md")
 T = S["tables"]
 logical = open(H + "02-db-logical.md", encoding="utf-8").read().replace("pr-agentic-service", "gaia-api-service").replace("pr-batch", "batch")
 DESC = {}
@@ -81,8 +81,10 @@ widths(ws, [18, 100])
 ws = wb.create_sheet("개정 이력")
 title(ws, "개정 이력", 4)
 header(ws, 3, ["버전", "일자", "내용", "작성"])
-for i, v in enumerate(["0.1", "2026-11-25", "초안 작성 (마이그레이션 0008 기준)", ""], 1):
-    cell(ws, 4, i, v)
+for r_, row in enumerate([["0.1", "2026-11-25", "초안 작성 (마이그레이션 0008 기준)", ""],
+                          ["0.2", "2026-11-27", "모든 컬럼에 한글명 추가, LangGraph 체크포인트·store와 alembic_version 테이블의 컬럼 정의 추가", ""]], 4):
+    for i, v in enumerate(row, 1):
+        cell(ws, r_, i, v)
 widths(ws, [10, 14, 60, 16])
 
 # ---- 테이블 목록
@@ -100,66 +102,65 @@ for i, n in enumerate(S["order"]):
 r = 4 + len(S["order"]) + 1
 cell(ws, r, 1, "앱 테이블 밖의 테이블 (같은 데이터베이스)", bold=True, fill=HEAD)
 ws.merge_cells(start_row=r, start_column=1, end_row=r, end_column=8)
-others = [("alembic_version", "Alembic 버전", "마이그레이션", "version_num", "1행", "Alembic이 관리"),
-          ("checkpoints, checkpoint_writes, checkpoint_blobs, checkpoint_migrations", "LangGraph 체크포인트",
-           "Agent 대화 상태", "LangGraph 정의", "턴의 그래프 단계마다", "쉬는 세션은 최신 1개만 남김"),
-          ("store, store_migrations", "LangGraph store", "프로젝트 메모리 본문", "LangGraph 정의",
-           "프로젝트 메모리 주제 수", "없음")]
-for i, (n, ko, area, pk, g, cl) in enumerate(others, r + 1):
-    for c, v in enumerate(["-", n, ko, area, pk, "", g, cl], 1):
+for i, n in enumerate(S["extra_order"], r + 1):
+    t = T[n]
+    vals = ["-", n, t["ko"], t["area"], t["pk"], len(t["cols"]), t["growth"], t["cleanup"]]
+    for c, v in enumerate(vals, 1):
         cell(ws, i, c, v, align="center" if c in (1, 6) else "left")
+    ws.cell(row=i, column=2).hyperlink = f"#'{n}'!A1"
+    ws.cell(row=i, column=2).font = Font(name=FONT, size=10, color="0563C1", underline="single")
 widths(ws, [6, 30, 24, 18, 26, 9, 34, 28])
 ws.freeze_panes = "A4"
 
 # ---- 테이블별 시트
-for n in S["order"]:
+for n in S["order"] + S["extra_order"]:
     t = T[n]
     ws = wb.create_sheet(n)
-    title(ws, f"{n} ({t['ko']})", 7)
+    title(ws, f"{n} ({t['ko']})", 8)
     meta = [("테이블명", n), ("한글명", t["ko"]), ("영역", t["area"]), ("기본키", t["pk"]),
-            ("설명", DESC.get(n, "")), ("행 증가", t["growth"]), ("자동 정리", t["cleanup"])]
+            ("설명", t.get("about") or DESC.get(n, "")), ("행 증가", t["growth"]), ("자동 정리", t["cleanup"])]
     for i, (k, v) in enumerate(meta, 3):
         cell(ws, i, 1, k, bold=True, fill=LABEL)
-        ws.merge_cells(start_row=i, start_column=2, end_row=i, end_column=7)
+        ws.merge_cells(start_row=i, start_column=2, end_row=i, end_column=8)
         cell(ws, i, 2, v)
-        for c in range(3, 8):
+        for c in range(3, 9):
             ws.cell(row=i, column=c).border = BORDER
         if k == "설명":
             ws.row_dimensions[i].height = max(18, 15 * (len(v) // 60 + 1))
     r0 = 3 + len(meta) + 1
-    header(ws, r0, ["No", "컬럼명", "데이터 타입", "NULL", "키", "기본값", "설명"])
+    header(ws, r0, ["No", "컬럼명", "한글명", "데이터 타입", "NULL", "키", "기본값", "설명"])
     for i, c in enumerate(t["cols"], 1):
-        vals = [i, c["name"], c["type"], c["null"], c["key"], c["default"], c["desc"]]
+        vals = [i, c["name"], c["ko"], c["type"], c["null"], c["key"], c["default"], c["desc"]]
         for j, v in enumerate(vals, 1):
-            cell(ws, r0 + i, j, v, align="center" if j in (1, 4, 5) else "left")
+            cell(ws, r0 + i, j, v, align="center" if j in (1, 5, 6) else "left")
     r = r0 + len(t["cols"]) + 2
-    idx = [x for x in S["indexes"] if x["table"] == n]
-    cell(ws, r, 1, "인덱스 (기본키와 UNIQUE 제약의 인덱스는 생략)", bold=True, fill=HEAD)
-    ws.merge_cells(start_row=r, start_column=1, end_row=r, end_column=7)
+    idx = [x for x in S["indexes"] + S["extra_indexes"] if x["table"] == n]
+    cell(ws, r, 1, "인덱스 (기본키와 UNIQUE 제약이 만드는 인덱스는 위 표의 PK, UK 컬럼)", bold=True, fill=HEAD)
+    ws.merge_cells(start_row=r, start_column=1, end_row=r, end_column=8)
     if idx:
-        for j, hname in enumerate(["No", "인덱스명", "컬럼", "", "", "", "받치는 조회"], 1):
+        for j, hname in enumerate(["No", "인덱스명", "컬럼", "", "", "", "", "받치는 조회"], 1):
             cell(ws, r + 1, j, hname, bold=True, fill=LABEL, align="center")
-        ws.merge_cells(start_row=r + 1, start_column=3, end_row=r + 1, end_column=6)
+        ws.merge_cells(start_row=r + 1, start_column=3, end_row=r + 1, end_column=7)
         for i, x in enumerate(idx, 1):
             rr = r + 1 + i
             cell(ws, rr, 1, i, align="center"); cell(ws, rr, 2, x["name"]); cell(ws, rr, 3, x["cols"])
-            for c in (4, 5, 6):
+            for c in (4, 5, 6, 7):
                 cell(ws, rr, c, "")
-            ws.merge_cells(start_row=rr, start_column=3, end_row=rr, end_column=6)
-            cell(ws, rr, 7, x["use"])
+            ws.merge_cells(start_row=rr, start_column=3, end_row=rr, end_column=7)
+            cell(ws, rr, 8, x["use"])
     else:
         cell(ws, r + 1, 1, "없음")
-        ws.merge_cells(start_row=r + 1, start_column=1, end_row=r + 1, end_column=7)
-    back = ws.cell(row=1, column=8, value="← 테이블 목록")
+        ws.merge_cells(start_row=r + 1, start_column=1, end_row=r + 1, end_column=8)
+    back = ws.cell(row=1, column=9, value="← 테이블 목록")
     back.hyperlink = "#'테이블 목록'!A1"
     back.font = Font(name=FONT, size=10, color="0563C1", underline="single")
-    widths(ws, [8, 26, 16, 7, 8, 18, 70, 14])
+    widths(ws, [8, 26, 22, 16, 7, 8, 18, 66, 14])
 
 # ---- 인덱스
 ws = wb.create_sheet("인덱스")
 title(ws, "인덱스 목록", 5)
 header(ws, 3, ["No", "테이블", "인덱스명", "컬럼", "받치는 조회"])
-for i, x in enumerate(S["indexes"], 1):
+for i, x in enumerate(S["indexes"] + S["extra_indexes"], 1):
     for j, v in enumerate([i, x["table"], x["name"], x["cols"], x["use"]], 1):
         cell(ws, 3 + i, j, v, align="center" if j == 1 else "left")
 widths(ws, [6, 26, 56, 56, 46])
@@ -195,8 +196,8 @@ ws = wb.create_sheet("부록 (LangGraph, Redis)")
 title(ws, "부록: 앱 테이블 밖의 데이터", 4)
 header(ws, 3, ["데이터", "테이블", "키", "내용"])
 lg = [("대화 상태", "checkpoints, checkpoint_writes, checkpoint_blobs", "thread_id = 세션 id",
-       "Agent가 보는 메시지 이력, 분석 계획, 진행 위치. run이 멈췄다 이어 갈 때 읽음"),
-      ("프로젝트 메모리", "store", "namespace에 프로젝트 id", "주제 목록과 주제별 본문")]
+       "Agent가 보는 메시지 이력, 분석 계획, 진행 위치. run이 멈췄다 이어 갈 때 읽음. 컬럼은 각 테이블 시트"),
+      ("store", "store", "prefix = 이름공간", "project_memory.{project_id}: 프로젝트 메모리 본문, tool_effects.{run_id}: 도구의 executor 요청 결과, batch_memory.{batch_id}: 배치 리포트 요약")]
 for i, row in enumerate(lg, 4):
     for j, v in enumerate(row, 1):
         cell(ws, i, j, v)
