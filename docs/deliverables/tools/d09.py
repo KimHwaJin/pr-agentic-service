@@ -16,7 +16,7 @@ for i, (t, sub) in enumerate([("웹 브라우저", "웹 화면 (HTML, JavaScript
 
 layer(2, "Application 계층: gaia-api-service (컨테이너, 인스턴스 N개)", 190, 300, kind="group")
 s.node("a_rt", "실행 환경", 70, 230, 250, 240, "note",
-       sub="Python 3.11\nuvicorn (worker 1개)\ngaia 템플릿 app.py\nHCP 라이브러리\n\n포트 8080\nUID/GID 1000", size=12)
+       sub="Python 3.11\nuvicorn (worker 1개)\ngaia 템플릿 app.py\nHCP 라이브러리\n\n포트 5000\nUID/GID 1000", size=12)
 apps = [("웹·API", "FastAPI (0.137 미만)\nSSE 실시간 이벤트\nPydantic Settings\nhttpx"),
         ("Agent", "LangGraph 1.2\nLangChain 1.4\nlangchain-openai\nskill, tool, 프롬프트 파일"),
         ("데이터 접근", "SQLAlchemy 2.1 (async)\npsycopg 3\nAlembic\nlanggraph-checkpoint-postgres 3.1.3\npgvector, redis-py 7"),
