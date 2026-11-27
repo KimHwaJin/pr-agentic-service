@@ -84,7 +84,7 @@ gaia-api-service는 사용자, 프로젝트, 세션 계층을 가진 채팅 서�
 
 | 자원 | 구성 |
 | --- | --- |
-| 서비스 인스턴스 | 프로세스 1개(uvicorn worker 1개). 포트 8080. `RUN_MODE=all`로 API와 worker를 함께 실행. 실행 계정 UID 1000, GID 1000 |
+| 서비스 인스턴스 | 프로세스 1개(uvicorn worker 1개). 포트 5000(사내 앱서버 정책). `RUN_MODE=all`로 API와 worker를 함께 실행. 실행 계정 UID 1000, GID 1000 |
 | PostgreSQL | 사내 서비스형 DB. `vector` 확장 필요. dev와 prd가 같은 서버를 쓰고 데이터베이스 이름으로 나뉨(dev `dtest`, prd `dtestprd`). 같은 서버에 executor와 batch의 데이터베이스도 있음. 연결 한도 150을 함께 사용. prd 서버 분리 예정 |
 | Redis | dev와 prd가 분리되어 있음. `REDIS_MODE`로 standalone과 Sentinel 중 선택. 그 환경의 executor와 같은 서버, 같은 DB 번호여야 함 |
 | 공유 저장소 | executor와 같은 저장소를 `/mnt/data`에 마운트 |

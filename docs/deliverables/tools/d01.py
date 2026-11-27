@@ -83,7 +83,7 @@ def env(prefix, name, x, cfg):
     q.group(prefix, f"{name} 환경", x, y, 640, 440)
     q.node(prefix + "rt", "앞단 라우팅 (사내 플랫폼)", x + 30, y + 44, 580, 40, "infra")
     q.node(prefix + "inst", "gaia-api-service 인스턴스 × N", x + 30, y + 130, 260, 110, "ours",
-           sub=f"APP_ENV={cfg} · config.yml + config.{cfg}.yml\n포트 8080 · UID/GID 1000\n"
+           sub=f"APP_ENV={cfg} · config.yml + config.{cfg}.yml\n포트 5000 · UID/GID 1000\n"
                "RUN_MODE=all (API + worker)")
     q.node(prefix + "ex", "executor", x + 350, y + 130, 250, 46, "related")
     q.node(prefix + "bt", "batch", x + 350, y + 194, 250, 46, "related")

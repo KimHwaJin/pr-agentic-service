@@ -317,7 +317,7 @@ section("3. 서비스 관리", ["3.1 인터페이스 흐름도 · 3.2 서버 디
   table(s, ["항목", "내용"], [
     ["서비스 이름", "gaia-api-service (컨테이너 이미지 하나, 인스턴스 N개)"],
     ["실행 명령", "python app.py. gaia 템플릿이 uvicorn worker 1개를 띄움"],
-    ["포트", "8080 (config.yml의 PORT)"],
+    ["포트", "5000. 사내 정책상 앱서버는 모두 5000번으로 뜸 (PORT 설정)"],
     ["실행 방식", "RUN_MODE=all (API + worker). api, worker로 나눠 띄울 수도 있음"],
     ["실행 계정", "UID 1000, GID 1000. executor와 같아야 공유 저장소를 같이 읽고 씀"],
     ["자원", "인스턴스 하나가 CPU 약 1코어 사용. 배포 예시의 메모리 한도 2Gi"],
@@ -858,13 +858,13 @@ section("5. 유지보수 가이드", ["5.1 개발자 개발 환경 setting 정�
   code(s, [
     "cp .env.example .env    # DB, executor 경로 수정",
     "uv sync",
-    "uv run python -m src.dtest.local   # 포트 8080",
+    "uv run python -m src.dtest.local   # 로컬 포트 8080",
     "",
     "# 내부망에서는",
     "uv run python app.py",
   ].join("\n"), { x: MX + hw + 0.3, y: Y0 + 0.45, w: hw, h: 1.7 });
   table(s, ["하는 일", "명령 또는 주소"], [
-    ["웹 화면", "http://localhost:8080/dev/"],
+    ["웹 화면 (로컬)", "http://localhost:8080/dev/"],
     ["API 문서 (로컬만)", "http://localhost:8080/docs"],
     ["단위 테스트", "uv run pytest"],
     ["정적 검사", "uv run ruff format, uv run ruff check, uv run ty check"],

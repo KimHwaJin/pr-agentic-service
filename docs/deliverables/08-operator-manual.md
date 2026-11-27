@@ -69,7 +69,7 @@ gaia-api-service는 사내 데이터 분석 Agent의 채팅 API이자 Agent 실�
 | 항목 | 내용 |
 | --- | --- |
 | 실행 명령 | `python app.py`. gaia 템플릿이 uvicorn worker 1개를 띄움. worker 수를 늘리지 않음(4.7절) |
-| 포트 | 8080 (`config.yml`의 `PORT`) |
+| 포트 | 5000. 사내 정책상 앱서버는 모두 5000번으로 뜸(`PORT` 설정) |
 | 준비 확인 | `GET /api/admin/appReady` (gaia 제공). 우리 쪽 시작이 끝나야 응답함 |
 | 생존 확인 | `GET /api/v1/healthz`. 백그라운드 루프가 하나라도 죽으면 503. 이때 인스턴스를 재시작해야 함 |
 | 종료 대기 | 종료 신호 뒤 정리에 최대 약 45초(2.7절). 그 전에 강제 종료하지 않아야 함 |
