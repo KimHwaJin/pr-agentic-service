@@ -7,7 +7,7 @@
 | 그림 원본 | `diagrams/05-erd-physical.drawio` (페이지 3장) |
 | 모델 정의 | `src/dtest/core/models.py`, `src/dtest/gaia_bridge/models.py` |
 
-모든 테이블의 모든 컬럼은 6절에 있습니다. 컬럼 설명까지 담은 정의는 `06-table-definition.md`, `06-table-definition.xlsx`(Table 정의서)에 있습니다. 연결 풀, 용량, 백업은 운영자 메뉴얼에서 다룹니다.
+모든 테이블의 모든 컬럼은 6절, 테이블 사이의 모든 참조와 조인 조건은 7절에 있습니다. 컬럼 설명까지 담은 정의는 `06-table-definition.md`, `06-table-definition.xlsx`(Table 정의서)에 있습니다. 연결 풀, 용량, 백업은 운영자 메뉴얼에서 다룹니다.
 
 ## 1. DB 구성
 
@@ -191,7 +191,7 @@ UPDATE alembic_version SET version_num = '0001';
 
 ## 6. 테이블별 컬럼
 
-모든 테이블의 모든 컬럼입니다. NULL이 N이면 NOT NULL, 기본값의 (앱)은 DB가 아니라 애플리케이션이 넣는 값입니다. 설명까지 담은 정의는 `06-table-definition.md`에 있습니다.
+모든 테이블의 모든 컬럼입니다. NULL이 N이면 NOT NULL, 기본값의 (앱)은 DB가 아니라 애플리케이션이 넣는 값입니다. 참조의 (FK)는 외래키 제약이 있는 것, (값만)은 제약 없이 값으로만 가리키는 것, DB 밖은 다른 시스템의 값입니다. 조인 조건은 7절에 있습니다. 설명까지 담은 정의는 `06-table-definition.md`에 있습니다.
 
 ### 6.1 users (사용자)
 
@@ -223,7 +223,7 @@ UPDATE alembic_version SET version_num = '0001';
 | 4 | `system_prompt` | text | N |  | (앱) 빈 문자열 |  |
 | 5 | `code_level` | integer | Y |  |  |  |
 | 6 | `is_default` | boolean | N |  | (앱) false |  |
-| 7 | `created_by` | varchar(36) | N | FK |  | users.id |
+| 7 | `created_by` | varchar(36) | N | FK |  | users.id (FK) |
 | 8 | `deleted_at` | timestamptz | Y |  |  |  |
 | 9 | `created_at` | timestamptz | N |  | (앱) |  |
 | 10 | `updated_at` | timestamptz | N |  | (앱) |  |
@@ -234,8 +234,8 @@ UPDATE alembic_version SET version_num = '0001';
 
 | No | 컬럼 | 데이터 타입 | NULL | 키 | 기본값 | 참조 |
 | --- | --- | --- | --- | --- | --- | --- |
-| 1 | `project_id` | varchar(36) | N | PK,FK |  | projects.id |
-| 2 | `user_id` | varchar(36) | N | PK,FK |  | users.id |
+| 1 | `project_id` | varchar(36) | N | PK,FK |  | projects.id (FK) |
+| 2 | `user_id` | varchar(36) | N | PK,FK |  | users.id (FK) |
 | 3 | `role` | varchar(16) | N |  | (앱) owner |  |
 | 4 | `created_at` | timestamptz | N |  | (앱) |  |
 
@@ -246,12 +246,12 @@ UPDATE alembic_version SET version_num = '0001';
 | No | 컬럼 | 데이터 타입 | NULL | 키 | 기본값 | 참조 |
 | --- | --- | --- | --- | --- | --- | --- |
 | 1 | `id` | varchar(36) | N | PK | (앱) UUID |  |
-| 2 | `project_id` | varchar(36) | N | FK |  | projects.id |
-| 3 | `user_id` | varchar(36) | N | FK |  | users.id |
+| 2 | `project_id` | varchar(36) | N | FK |  | projects.id (FK) |
+| 3 | `user_id` | varchar(36) | N | FK |  | users.id (FK) |
 | 4 | `title` | varchar(200) | N |  | (앱) 새 대화 |  |
 | 5 | `title_source` | varchar(16) | N |  | initial |  |
 | 6 | `code_level` | integer | Y |  |  |  |
-| 7 | `active_run_id` | varchar(36) | Y |  |  |  |
+| 7 | `active_run_id` | varchar(36) | Y |  |  | runs.id (값만) |
 | 8 | `deleted_at` | timestamptz | Y |  |  |  |
 | 9 | `created_at` | timestamptz | N |  | (앱) |  |
 | 10 | `updated_at` | timestamptz | N |  | (앱) |  |
@@ -263,8 +263,8 @@ UPDATE alembic_version SET version_num = '0001';
 | No | 컬럼 | 데이터 타입 | NULL | 키 | 기본값 | 참조 |
 | --- | --- | --- | --- | --- | --- | --- |
 | 1 | `id` | varchar(36) | N | PK | (앱) UUID |  |
-| 2 | `session_id` | varchar(36) | N | FK |  | sessions.id |
-| 3 | `run_id` | varchar(36) | Y |  |  |  |
+| 2 | `session_id` | varchar(36) | N | FK |  | sessions.id (FK) |
+| 3 | `run_id` | varchar(36) | Y |  |  | runs.id (값만) |
 | 4 | `role` | varchar(16) | N |  |  |  |
 | 5 | `content` | text | N |  |  |  |
 | 6 | `attachments` | jsonb | N |  | (앱) [] |  |
@@ -277,14 +277,14 @@ UPDATE alembic_version SET version_num = '0001';
 | No | 컬럼 | 데이터 타입 | NULL | 키 | 기본값 | 참조 |
 | --- | --- | --- | --- | --- | --- | --- |
 | 1 | `id` | varchar(36) | N | PK | (앱) UUID |  |
-| 2 | `session_id` | varchar(36) | N | FK |  | sessions.id |
+| 2 | `session_id` | varchar(36) | N | FK |  | sessions.id (FK) |
 | 3 | `project_id` | varchar(36) | N |  |  | projects.id (값만) |
 | 4 | `user_id` | varchar(36) | N |  |  | users.id (값만) |
 | 5 | `status` | varchar(24) | N |  |  |  |
 | 6 | `model` | varchar(64) | N |  |  |  |
 | 7 | `input` | jsonb | N |  |  |  |
 | 8 | `resume` | jsonb | Y |  |  |  |
-| 9 | `waiting` | jsonb | Y |  |  |  |
+| 9 | `waiting` | jsonb | Y |  |  | executor_inbox.execution_id (값만, waiting->>'execution_id') |
 | 10 | `error` | text | Y |  |  |  |
 | 11 | `cancel_requested` | boolean | N |  | (앱) false |  |
 | 12 | `lease_owner` | varchar(128) | Y |  |  |  |
@@ -314,10 +314,10 @@ UPDATE alembic_version SET version_num = '0001';
 
 | No | 컬럼 | 데이터 타입 | NULL | 키 | 기본값 | 참조 |
 | --- | --- | --- | --- | --- | --- | --- |
-| 1 | `session_id` | varchar(36) | N | PK |  |  |
+| 1 | `session_id` | varchar(36) | N | PK |  | sessions.id (값만) |
 | 2 | `key` | varchar(128) | N | PK |  |  |
 | 3 | `request_hash` | varchar(64) | N |  |  |  |
-| 4 | `run_id` | varchar(36) | N |  |  |  |
+| 4 | `run_id` | varchar(36) | N |  |  | runs.id (값만) |
 | 5 | `resumed` | boolean | N |  |  |  |
 | 6 | `created_at` | timestamptz | N |  | (앱) |  |
 
@@ -327,10 +327,10 @@ UPDATE alembic_version SET version_num = '0001';
 
 | No | 컬럼 | 데이터 타입 | NULL | 키 | 기본값 | 참조 |
 | --- | --- | --- | --- | --- | --- | --- |
-| 1 | `event_id` | varchar(36) | N | PK |  |  |
-| 2 | `execution_id` | varchar(36) | N |  |  |  |
+| 1 | `event_id` | varchar(36) | N | PK |  | DB 밖: executor가 보낸 이벤트 id와 실행 안 순번 |
+| 2 | `execution_id` | varchar(36) | N |  |  | DB 밖: executor의 실행 id |
 | 3 | `event_type` | varchar(64) | N |  |  |  |
-| 4 | `event_sequence` | integer | N |  |  |  |
+| 4 | `event_sequence` | integer | N |  |  | DB 밖: executor가 보낸 이벤트 id와 실행 안 순번 |
 | 5 | `payload` | jsonb | N |  |  |  |
 | 6 | `received_at` | timestamptz | N |  | (앱) |  |
 
@@ -345,7 +345,7 @@ UPDATE alembic_version SET version_num = '0001';
 | 3 | `project_id` | varchar(36) | N |  |  | projects.id (값만) |
 | 4 | `session_id` | varchar(36) | N |  |  | sessions.id (값만) |
 | 5 | `run_id` | varchar(36) | N |  |  | runs.id (값만) |
-| 6 | `tool_call_id` | varchar(128) | N |  |  |  |
+| 6 | `tool_call_id` | varchar(128) | N |  |  | DB 밖: Agent 대화 안의 도구 호출 id (체크포인트의 메시지에 있음) |
 | 7 | `path` | varchar(1024) | N | UK |  |  |
 | 8 | `sha256` | varchar(64) | N |  |  |  |
 | 9 | `size_bytes` | integer | N |  |  |  |
@@ -355,11 +355,11 @@ UPDATE alembic_version SET version_num = '0001';
 | 13 | `call_key` | varchar(32) | Y |  |  |  |
 | 14 | `tool_version` | varchar(64) | Y |  |  |  |
 | 15 | `purpose` | text | Y |  |  |  |
-| 16 | `approved_by` | varchar(36) | Y |  |  |  |
+| 16 | `approved_by` | varchar(36) | Y |  |  | users.id (값만) |
 | 17 | `edited` | boolean | Y |  |  |  |
-| 18 | `execution_id` | varchar(36) | Y |  |  |  |
-| 19 | `operation_id` | varchar(36) | Y |  |  |  |
-| 20 | `step_id` | varchar(36) | Y |  |  |  |
+| 18 | `execution_id` | varchar(36) | Y |  |  | DB 밖: executor의 실행 id |
+| 19 | `operation_id` | varchar(36) | Y |  |  | DB 밖: executor의 작업(operation)과 단계(step) id |
+| 20 | `step_id` | varchar(36) | Y |  |  | DB 밖: executor의 작업(operation)과 단계(step) id |
 | 21 | `created_at` | timestamptz | N |  | (앱) |  |
 | 22 | `file_deleted_at` | timestamptz | Y |  |  |  |
 
@@ -373,7 +373,7 @@ UPDATE alembic_version SET version_num = '0001';
 | 2 | `user_id` | varchar(36) | N |  |  | users.id (값만) |
 | 3 | `project_id` | varchar(36) | N |  |  | projects.id (값만) |
 | 4 | `session_id` | varchar(36) | N |  |  | sessions.id (값만) |
-| 5 | `run_id` | varchar(36) | Y |  |  |  |
+| 5 | `run_id` | varchar(36) | Y |  |  | runs.id (값만) |
 | 6 | `name` | varchar(255) | Y |  |  |  |
 | 7 | `mime_type` | varchar(32) | N |  |  |  |
 | 8 | `size_bytes` | integer | N |  |  |  |
@@ -396,9 +396,9 @@ UPDATE alembic_version SET version_num = '0001';
 | 5 | `before` | jsonb | Y |  |  |  |
 | 6 | `after` | jsonb | Y |  |  |  |
 | 7 | `actor_type` | varchar(16) | N |  |  |  |
-| 8 | `actor_id` | varchar(64) | N |  |  |  |
-| 9 | `session_id` | varchar(36) | Y |  |  |  |
-| 10 | `run_id` | varchar(36) | Y |  |  |  |
+| 8 | `actor_id` | varchar(64) | N |  |  | users.id 또는 runs.id (값만, actor_type에 따라) |
+| 9 | `session_id` | varchar(36) | Y |  |  | sessions.id (값만) |
+| 10 | `run_id` | varchar(36) | Y |  |  | runs.id (값만) |
 | 11 | `created_at` | timestamptz | N |  | (앱) |  |
 
 ### 6.13 memory_extraction_state (메모리 정리 상태)
@@ -407,9 +407,9 @@ UPDATE alembic_version SET version_num = '0001';
 
 | No | 컬럼 | 데이터 타입 | NULL | 키 | 기본값 | 참조 |
 | --- | --- | --- | --- | --- | --- | --- |
-| 1 | `project_id` | varchar(36) | N | PK |  |  |
+| 1 | `project_id` | varchar(36) | N | PK |  | projects.id (값만) |
 | 2 | `processed_until_at` | timestamptz | Y |  |  |  |
-| 3 | `processed_until_id` | varchar(36) | N |  | 빈 문자열 |  |
+| 3 | `processed_until_id` | varchar(36) | N |  | 빈 문자열 | messages.id (값만) |
 | 4 | `dirty` | boolean | N |  | false |  |
 | 5 | `last_activity_at` | timestamptz | N |  | (앱) |  |
 | 6 | `pending_turns` | integer | N |  | 0 |  |
@@ -432,9 +432,9 @@ UPDATE alembic_version SET version_num = '0001';
 | 5 | `user_queries` | jsonb | N |  | (앱) [] |  |
 | 6 | `tags` | jsonb | N |  | (앱) [] |  |
 | 7 | `lifecycle` | varchar(16) | N |  | (앱) candidate |  |
-| 8 | `author_id` | varchar(36) | N | FK |  | users.id |
-| 9 | `source_run_id` | varchar(36) | Y |  |  |  |
-| 10 | `source_workflow_id` | varchar(36) | Y |  |  |  |
+| 8 | `author_id` | varchar(36) | N | FK |  | users.id (FK) |
+| 9 | `source_run_id` | varchar(36) | Y |  |  | runs.id (값만) |
+| 10 | `source_workflow_id` | varchar(36) | Y |  |  | workflows.id (값만) |
 | 11 | `revision` | integer | N |  | (앱) 1 |  |
 | 12 | `index_state` | varchar(16) | N |  | (앱) not_indexed |  |
 | 13 | `deleted_at` | timestamptz | Y |  |  |  |
@@ -448,7 +448,7 @@ UPDATE alembic_version SET version_num = '0001';
 | No | 컬럼 | 데이터 타입 | NULL | 키 | 기본값 | 참조 |
 | --- | --- | --- | --- | --- | --- | --- |
 | 1 | `id` | bigint | N | PK | 자동 증가 |  |
-| 2 | `workflow_id` | varchar(36) | N | FK |  | workflows.id |
+| 2 | `workflow_id` | varchar(36) | N | FK |  | workflows.id (FK) |
 | 3 | `revision` | integer | N |  |  |  |
 | 4 | `query` | text | N |  |  |  |
 | 5 | `model` | varchar(200) | N |  |  |  |
@@ -463,17 +463,17 @@ UPDATE alembic_version SET version_num = '0001';
 | --- | --- | --- | --- | --- | --- | --- |
 | 1 | `id` | varchar(36) | N | PK | (앱) UUID |  |
 | 2 | `idempotency_key` | varchar(200) | N | UK |  |  |
-| 3 | `owner_id` | varchar(64) | N |  |  |  |
-| 4 | `execution_id` | varchar(36) | N |  |  |  |
-| 5 | `batch_id` | varchar(64) | Y |  |  |  |
-| 6 | `batch_run_id` | varchar(64) | Y |  |  |  |
+| 3 | `owner_id` | varchar(64) | N |  |  | users.id (값만) |
+| 4 | `execution_id` | varchar(36) | N |  |  | DB 밖: executor의 실행 id |
+| 5 | `batch_id` | varchar(64) | Y |  |  | DB 밖: batch 서비스의 배치 id와 배치 실행 id |
+| 6 | `batch_run_id` | varchar(64) | Y |  |  | DB 밖: batch 서비스의 배치 id와 배치 실행 id |
 | 7 | `execution` | jsonb | N |  |  |  |
 | 8 | `state` | varchar(16) | N |  | (앱) QUEUED |  |
 | 9 | `failed_stage` | varchar(16) | Y |  |  |  |
 | 10 | `title` | varchar(200) | Y |  |  |  |
 | 11 | `markdown` | text | Y |  |  |  |
 | 12 | `summary` | text | Y |  |  |  |
-| 13 | `artifact_id` | varchar(36) | Y |  |  |  |
+| 13 | `artifact_id` | varchar(36) | Y |  |  | DB 밖: executor에 저장된 리포트 Artifact id |
 | 14 | `error` | text | Y |  |  |  |
 | 15 | `lease_owner` | varchar(128) | Y |  |  |  |
 | 16 | `lease_expires_at` | timestamptz | Y |  |  |  |
@@ -489,7 +489,7 @@ UPDATE alembic_version SET version_num = '0001';
 | No | 컬럼 | 데이터 타입 | NULL | 키 | 기본값 | 참조 |
 | --- | --- | --- | --- | --- | --- | --- |
 | 1 | `id` | bigint | N | PK | 자동 증가 |  |
-| 2 | `job_id` | varchar(36) | N |  |  |  |
+| 2 | `job_id` | varchar(36) | N |  |  | batch_report_jobs.id (값만) |
 | 3 | `type` | varchar(40) | N |  |  |  |
 | 4 | `data` | jsonb | N |  |  |  |
 | 5 | `created_at` | timestamptz | N |  | (앱) |  |
@@ -502,13 +502,13 @@ UPDATE alembic_version SET version_num = '0001';
 | --- | --- | --- | --- | --- | --- | --- |
 | 1 | `id` | varchar(36) | N | PK | (앱) UUID |  |
 | 2 | `name` | varchar(64) | N | UK |  |  |
-| 3 | `tenant` | varchar(64) | N |  |  |  |
+| 3 | `tenant` | varchar(64) | N |  |  | DB 밖: executor tenant 이름 |
 | 4 | `key_prefix` | varchar(32) | N |  |  |  |
 | 5 | `key_sha256` | varchar(64) | N | UK |  |  |
 | 6 | `status` | varchar(16) | N |  | (앱) active |  |
 | 7 | `kind` | varchar(16) | N |  | standard |  |
 | 8 | `description` | text | Y |  |  |  |
-| 9 | `created_by` | varchar(36) | N |  |  |  |
+| 9 | `created_by` | varchar(36) | N |  |  | users.id (값만) |
 | 10 | `revoked_at` | timestamptz | Y |  |  |  |
 | 11 | `last_used_at` | timestamptz | Y |  |  |  |
 | 12 | `batches_disable_pending` | boolean | N |  | false |  |
@@ -521,9 +521,9 @@ UPDATE alembic_version SET version_num = '0001';
 
 | No | 컬럼 | 데이터 타입 | NULL | 키 | 기본값 | 참조 |
 | --- | --- | --- | --- | --- | --- | --- |
-| 1 | `user_id` | varchar(36) | N | PK,FK |  | users.id |
-| 2 | `gaia_session_id` | varchar(200) | N | PK |  |  |
-| 3 | `session_id` | varchar(36) | N | FK |  | sessions.id |
+| 1 | `user_id` | varchar(36) | N | PK,FK |  | users.id (FK) |
+| 2 | `gaia_session_id` | varchar(200) | N | PK |  | DB 밖: gaia 채팅 화면의 세션 id |
+| 3 | `session_id` | varchar(36) | N | FK |  | sessions.id (FK) |
 | 4 | `created_at` | timestamptz | N |  | (앱) |  |
 | 5 | `updated_at` | timestamptz | N |  | (앱) |  |
 
@@ -552,7 +552,7 @@ UPDATE alembic_version SET version_num = '0001';
 | 1 | `thread_id` | text | N | PK |  | sessions.id (값만) |
 | 2 | `checkpoint_ns` | text | N | PK | '' |  |
 | 3 | `checkpoint_id` | text | N | PK |  |  |
-| 4 | `parent_checkpoint_id` | text | Y |  |  |  |
+| 4 | `parent_checkpoint_id` | text | Y |  |  | checkpoints.checkpoint_id (값만) |
 | 5 | `type` | text | Y |  |  |  |
 | 6 | `checkpoint` | jsonb | N |  |  |  |
 | 7 | `metadata` | jsonb | N |  | '{}' |  |
@@ -578,7 +578,7 @@ UPDATE alembic_version SET version_num = '0001';
 | --- | --- | --- | --- | --- | --- | --- |
 | 1 | `thread_id` | text | N | PK |  | sessions.id (값만) |
 | 2 | `checkpoint_ns` | text | N | PK | '' |  |
-| 3 | `checkpoint_id` | text | N | PK |  |  |
+| 3 | `checkpoint_id` | text | N | PK |  | checkpoints.checkpoint_id (값만) |
 | 4 | `task_id` | text | N | PK |  |  |
 | 5 | `idx` | integer | N | PK |  |  |
 | 6 | `channel` | text | N |  |  |  |
@@ -600,7 +600,7 @@ UPDATE alembic_version SET version_num = '0001';
 
 | No | 컬럼 | 데이터 타입 | NULL | 키 | 기본값 | 참조 |
 | --- | --- | --- | --- | --- | --- | --- |
-| 1 | `prefix` | text | N | PK |  |  |
+| 1 | `prefix` | text | N | PK |  | 접두어 + projects.id, runs.id, batch_id (값만) |
 | 2 | `key` | text | N | PK |  |  |
 | 3 | `value` | jsonb | N |  |  |  |
 | 4 | `created_at` | timestamptz | Y |  | CURRENT_TIMESTAMP |  |
@@ -608,3 +608,71 @@ UPDATE alembic_version SET version_num = '0001';
 | 6 | `expires_at` | timestamptz | Y |  |  |  |
 | 7 | `ttl_minutes` | integer | Y |  |  |  |
 
+## 7. 참조 관계와 조인 조건
+
+테이블 사이의 모든 참조를 한 줄에 하나씩 적었습니다. 조인 조건은 그대로 SQL에 쓸 수 있는 형태입니다. FK 제약이 없음인 관계는 DB가 값을 검사하지 않으므로, 부모 행이 지워졌거나 값이 비어 있을 수 있습니다(LEFT JOIN 권장). FK 제약은 모두 ON DELETE 지정이 없어(NO ACTION) 부모 행을 지우기 전에 자식 행을 먼저 지워야 합니다. 다만 프로젝트, 세션, 워크플로우는 실제로 지우지 않고 deleted_at만 적습니다.
+
+| 부모 | 자식 | 관계 | 조인 조건 | FK 제약 | 비고 |
+| --- | --- | --- | --- | --- | --- |
+| users | projects | 1:N | `projects.created_by = users.id` | 있음 | 프로젝트를 만든 사용자 |
+| projects | project_members | 1:N | `project_members.project_id = projects.id` | 있음 | users와 projects의 N:M 연결 테이블. 현재는 프로젝트당 owner 1명 |
+| users | project_members | 1:N | `project_members.user_id = users.id` | 있음 |  |
+| projects | sessions | 1:N | `sessions.project_id = projects.id` | 있음 |  |
+| users | sessions | 1:N | `sessions.user_id = users.id` | 있음 |  |
+| sessions | messages | 1:N | `messages.session_id = sessions.id` | 있음 |  |
+| sessions | runs | 1:N | `runs.session_id = sessions.id` | 있음 |  |
+| runs | sessions | 1:0..1 | `sessions.active_run_id = runs.id` | 없음 | 지금 진행 중인 run. 세션당 1개, 없으면 NULL |
+| projects | runs | 1:N | `runs.project_id = projects.id` | 없음 | 조회용 사본. runs.session_id로 찾은 세션의 project_id와 같음 |
+| users | runs | 1:N | `runs.user_id = users.id` | 없음 | 조회용 사본 |
+| runs | messages | 1:N | `messages.run_id = runs.id` | 없음 | 한 턴의 사용자 메시지와 답변. 비어 있을 수 있음 |
+| runs | run_events | 1:N | `run_events.run_id = runs.id` | 없음 |  |
+| sessions | run_events | 1:N | `run_events.session_id = sessions.id` | 없음 |  |
+| sessions | run_requests | 1:N | `run_requests.session_id = sessions.id` | 없음 | 기본키 (session_id, key)의 앞부분 |
+| runs | run_requests | 1:N | `run_requests.run_id = runs.id` | 없음 | 그 요청 키로 처음 만든 run |
+| runs | executor_inbox | 1:N | `runs.waiting->>'execution_id' = executor_inbox.execution_id` | 없음 | executor를 기다리는 run만. runs.waiting은 jsonb |
+| runs | code_sources | 1:N | `code_sources.run_id = runs.id` | 없음 |  |
+| sessions | code_sources | 1:N | `code_sources.session_id = sessions.id` | 없음 |  |
+| projects | code_sources | 1:N | `code_sources.project_id = projects.id` | 없음 |  |
+| users | code_sources | 1:N | `code_sources.user_id = users.id` | 없음 | 코드를 만든 사용자 |
+| users | code_sources | 1:N | `code_sources.approved_by = users.id` | 없음 | 승인한 사용자. 승인 전에는 NULL |
+| sessions | images | 1:N | `images.session_id = sessions.id` | 없음 |  |
+| projects | images | 1:N | `images.project_id = projects.id` | 없음 |  |
+| users | images | 1:N | `images.user_id = users.id` | 없음 |  |
+| runs | images | 1:N | `images.run_id = runs.id` | 없음 | 이미지를 처음 쓴 run. 비어 있을 수 있음 |
+| projects | memory_history | 1:N | `memory_history.project_id = projects.id` | 없음 |  |
+| sessions | memory_history | 1:N | `memory_history.session_id = sessions.id` | 없음 | Agent가 바꾼 경우만 |
+| runs | memory_history | 1:N | `memory_history.run_id = runs.id` | 없음 | Agent가 바꾼 경우만 |
+| users | memory_history | 1:N | `memory_history.actor_id = users.id (actor_type = 'user')` | 없음 | actor_type이 agent이면 actor_id는 run id |
+| projects | memory_extraction_state | 1:1 | `memory_extraction_state.project_id = projects.id` | 없음 | 기본키가 project_id |
+| messages | memory_extraction_state | 1:N | `memory_extraction_state.processed_until_id = messages.id` | 없음 | 정리를 마친 마지막 메시지. 처음에는 빈 문자열 |
+| users | workflows | 1:N | `workflows.author_id = users.id` | 있음 |  |
+| runs | workflows | 1:N | `workflows.source_run_id = runs.id` | 없음 | 워크플로우를 만든 대화의 run |
+| workflows | workflows | 1:N | `workflows.source_workflow_id = workflows.id` | 없음 | 복사해 온 원본 워크플로우 |
+| workflows | workflow_query_vectors | 1:N | `workflow_query_vectors.workflow_id = workflows.id` | 있음 |  |
+| users | batch_report_jobs | 1:N | `batch_report_jobs.owner_id = users.id` | 없음 | 배치를 만든 사용자. 그 사용자만 리포트를 봄 |
+| batch_report_jobs | batch_report_events | 1:N | `batch_report_events.job_id = batch_report_jobs.id` | 없음 |  |
+| users | gaia_sessions | 1:N | `gaia_sessions.user_id = users.id` | 있음 |  |
+| sessions | gaia_sessions | 1:N | `gaia_sessions.session_id = sessions.id` | 있음 |  |
+| users | api_clients | 1:N | `api_clients.created_by = users.id` | 없음 | 키를 발급한 관리자 |
+| sessions | checkpoints | 1:N | `checkpoints.thread_id = sessions.id` | 없음 | LangGraph 테이블 |
+| checkpoints | checkpoints | 1:N | `checkpoints.parent_checkpoint_id = checkpoints.checkpoint_id (같은 thread_id, checkpoint_ns)` | 없음 | 바로 앞 체크포인트 |
+| checkpoints | checkpoint_blobs | 1:N | `checkpoint_blobs.(thread_id, checkpoint_ns) = checkpoints.(thread_id, checkpoint_ns), channel과 version은 checkpoints.checkpoint의 channel_versions 값` | 없음 | 같은 버전의 값은 여러 체크포인트가 함께 참조 |
+| checkpoints | checkpoint_writes | 1:N | `checkpoint_writes.(thread_id, checkpoint_ns, checkpoint_id) = checkpoints.(thread_id, checkpoint_ns, checkpoint_id)` | 없음 |  |
+| projects | store | 1:N | `store.prefix = CONCAT('project_memory.', projects.id)` | 없음 | 프로젝트 메모리 본문 |
+| runs | store | 1:N | `store.prefix = CONCAT('tool_effects.', runs.id)` | 없음 | 도구 실행 결과 |
+| batch_report_jobs | store | 1:N | `store.prefix = CONCAT('batch_memory.', batch_report_jobs.batch_id)` | 없음 | 배치 리포트 요약. batch_id는 batch 서비스의 배치 id |
+
+### 7.1 DB 밖을 가리키는 식별자
+
+아래 컬럼은 우리 DB의 다른 테이블이 아니라 다른 시스템의 값을 담습니다. 우리 DB 안에서는 조인 대상이 없습니다.
+
+| 컬럼 | 가리키는 것 |
+| --- | --- |
+| `executor_inbox.execution_id, code_sources.execution_id, batch_report_jobs.execution_id, runs.waiting->>'execution_id'` | executor의 실행 id |
+| `executor_inbox.event_id, executor_inbox.event_sequence` | executor가 보낸 이벤트 id와 실행 안 순번 |
+| `code_sources.operation_id, code_sources.step_id` | executor의 작업(operation)과 단계(step) id |
+| `batch_report_jobs.artifact_id` | executor에 저장된 리포트 Artifact id |
+| `batch_report_jobs.batch_id, batch_report_jobs.batch_run_id` | batch 서비스의 배치 id와 배치 실행 id |
+| `gaia_sessions.gaia_session_id` | gaia 채팅 화면의 세션 id |
+| `code_sources.tool_call_id` | Agent 대화 안의 도구 호출 id (체크포인트의 메시지에 있음) |
+| `api_clients.tenant` | executor tenant 이름 |

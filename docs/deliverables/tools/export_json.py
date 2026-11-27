@@ -30,7 +30,7 @@ for n in G.ALL:
     t = G.T[n]
     tables.append(dict(name=n, ko=t["ko"], area=t["area"], pk=t["pk"], growth=t["growth"], cleanup=t["cleanup"],
                        no=t["no"], about=G.about(n), group=t["group"],
-                       cols=[{k: c[k] for k in ("name", "ko", "type", "null", "key", "default", "desc", "fk")} for c in t["cols"]]))
+                       cols=[{k: c[k] for k in ("name", "ko", "type", "null", "key", "default", "desc", "fk", "ref")} for c in t["cols"]]))
 out = dict(tables=tables, indexes=G.IDX,
            areas=md_table(D + "04-erd-logical.md", "## 2. 데이터 영역"),
            rels=md_table(D + "04-erd-logical.md", "## 5. 관계와 카디널리티"),
