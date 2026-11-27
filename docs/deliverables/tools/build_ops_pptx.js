@@ -176,7 +176,7 @@ section("1. 개요", ["1.1 문서 개요", "1.2 서비스 개요"]);
     ["run", "사용자 메시지 하나를 Agent가 처리하는 작업 단위. queued, running, waiting_input, waiting_executor, succeeded, failed, cancelled"],
     ["executor", "분석 코드를 Jupyter 런타임에서 실행하는 연관 서비스"],
     ["tenant", "executor와 batch가 호출자를 구분하는 단위. 우리 서비스는 EXECUTOR_TENANT_ID"],
-    ["lease", "인스턴스가 run을 실행할 권한. 60초이고 20초마다 갱신"],
+    ["lease", "인스턴스가 run을 실행할 권한. RUN_LEASE_SECONDS(60초) 동안 유효하고 그 1/3마다 갱신"],
   ], [2.0, 10.33], { y: 3.95 });
 
   s = slide("1.2 서비스 개요");
@@ -267,7 +267,7 @@ section("3. 서비스 관리", ["3.1 인터페이스 흐름도 · 3.2 서버 디
     ["IF-10", "Phoenix", "추적 전송 (선택)", "Agent 실행 추적", "영향 없음"],
     ["IF-11", "PostgreSQL", "SQL", "앱 데이터, run 큐, 체크포인트, 벡터", "모든 요청 실패. run 실행 중단"],
     ["IF-12", "Redis", "명령, pub/sub", "로그인 세션, 실시간 이벤트 전달", "로그인 확인 실패로 모든 요청 실패"],
-    ["IF-13", "Redis 스트림", "XREADGROUP", "executor가 쓴 실행 이벤트 수신 (executor.events.{tenant})", "복구 절차가 대신 가져옴. 단계마다 2분 이상 지연"],
+    ["IF-13", "Redis 스트림", "XREADGROUP", "executor가 쓴 실행 이벤트 수신 (executor.events.{tenant})", "복구 절차가 대신 가져옴. 단계마다 EXECUTOR_EVENT_RECOVERY_SECONDS(2분) 이상 지연"],
     ["IF-14", "공유 저장소 (PV)", "파일", "executor와 코드·결과 파일 주고받기", "분석 코드 제출과 결과 읽기 실패"],
   ], [0.8, 2.0, 2.4, 3.5, 3.63], { fontSize: 12 });
 
@@ -334,16 +334,17 @@ section("3. 서비스 관리", ["3.1 인터페이스 흐름도 · 3.2 서버 디
   s = slide("3.3 서비스 목록: 백그라운드 루프");
   lead(s, "인스턴스 안에서 도는 작업입니다. /healthz의 stopped와 로그에 아래 이름으로 나옵니다. 하나라도 죽으면 /healthz가 503이 되고 인스턴스가 재시작됩니다.", Y0, 0.75);
   table(s, ["이름", "하는 일", "주기"], [
-    ["run-scheduler", "run을 가져와 Agent 실행", "Redis 신호 즉시, 5초 폴링 보조"],
+    ["run-scheduler", "run을 가져와 Agent 실행. 동시에 RUN_CONCURRENCY(16)턴", "Redis 신호 즉시, RUN_POLL_SECONDS(5초) 폴링 보조"],
     ["executor-events", "executor 이벤트 스트림 소비", "상시"],
-    ["missed-executor-events", "놓친 executor 이벤트 복구", "60초"],
-    ["batch-reports-0 ~ 3", "배치 리포트 작성", "상시"],
-    ["batch-report-recovery", "리포트 작업이 빠진 배치 실행 찾기", "10분"],
-    ["retention", "보존 기간 지난 데이터 정리", "1시간"],
-    ["batch-disable-retry", "비활성 사용자·폐기 tenant의 배치 끄기 재시도", "주기적"],
-    ["executor-cancel-retry", "executor 실행 취소 재시도", "주기적"],
-    ["memory-worker", "프로젝트 메모리 정리", "대화가 3분 조용하거나 5턴 쌓이면"],
-  ], [3.2, 5.4, 3.73], { y: 2.1, mono: [0] });
+    ["missed-executor-events", "EXECUTOR_EVENT_RECOVERY_SECONDS(120초) 넘게 기다린 run의 이벤트 복구", "60초 (코드 고정)"],
+    ["batch-reports-0 ~ N-1", "배치 리포트 작성. N은 BATCH_REPORT_CONCURRENCY(4)", "상시"],
+    ["batch-report-recovery", "리포트 작업이 빠진 배치 실행 찾기. 최근 BATCH_REPORT_RECOVERY_LOOKBACK_DAYS(14일)", "BATCH_REPORT_RECOVERY_INTERVAL_SECONDS(10분)"],
+    ["retention", "보존 기간 지난 데이터 정리. 기간은 *_RETENTION_DAYS", "1시간 (코드 고정)"],
+    ["batch-disable-retry", "비활성 사용자·폐기 tenant의 배치 끄기 재시도", "5분 (코드 고정)"],
+    ["executor-cancel-retry", "executor 실행 취소 재시도", "60초 (코드 고정)"],
+    ["memory-worker", "프로젝트 메모리 정리 (MEMORY_WORKER_ENABLED)", "MEMORY_WORKER_QUIET_SECONDS(3분) 조용하거나 MEMORY_WORKER_MAX_TURNS(5턴) 쌓이면"],
+  ], [3.0, 5.0, 4.33], { y: 2.0, mono: [0], fontSize: 12 });
+  note(s, "괄호 안 숫자는 config.yml 값입니다. \"코드 고정\"은 설정으로 바꿀 수 없고 패치가 필요합니다 (3.4 숫자 읽는 법).", 6.45);
 
   s = slide("3.4 서비스 환경설정값: 읽는 순서");
   steps(s, [
@@ -360,6 +361,21 @@ section("3. 서비스 관리", ["3.1 인터페이스 흐름도 · 3.2 서버 디
     "설정에 <...> 모양의 자리 표시가 남아 있으면 기동을 거부합니다. 빠뜨린 키를 이 검사가 알려 줍니다.",
   ], { y: 3.15, h: 3.5, fontSize: 13 });
 
+  s = slide("3.4 서비스 환경설정값: 이 문서의 숫자 읽는 법");
+  lead(s, "이 문서의 숫자는 세 종류입니다. 운영 중에 바꿀 수 있는지가 달라서 표기를 나눴습니다.", Y0, 0.45);
+  table(s, ["종류", "표기", "예", "바꾸는 방법"], [
+    ["config 키로 정해지는 값", "키 이름(값). 값은 config.yml 값", "SESSION_TTL_SECONDS(30분), RUN_CONCURRENCY(16)", "config.{APP_ENV}.yml이나 같은 이름의 환경변수로 덮어쓰고 배포"],
+    ["코드에 고정된 값", "값(코드 고정)", "사용자 캐시 30초, 놓친 이벤트 확인 60초, 보존 정리 1시간, 종료 정리 20초", "코드를 고쳐 패치 (5.2)"],
+    ["다른 서비스나 인프라가 정하는 값", "값(누구 설정)", "DB max_connections 150, executor 풀 16, batch 풀 6, 커널 삭제 보호 15분", "그 서비스 담당이나 플랫폼 배포 설정"],
+  ], [2.6, 2.6, 3.9, 3.23], { y: 1.75, fontSize: 12 });
+  table(s, ["환경 파일이 config.yml 값을 덮어쓰는 키", "dev", "stg", "prd"], [
+    ["REDIS_MODE", "standalone", "standalone", "sentinel"],
+    ["COOKIE_SECURE", "false", "true", "true"],
+    ["WEB_CONSOLE_ENABLED", "(없음, 환경으로 판단)", "(없음, 환경으로 판단)", "true"],
+    ["SERVICE_ID, ADMIN_EMPLOYEE_IDS, MODELS", "환경마다", "환경마다", "환경마다"],
+  ], [4.6, 2.6, 2.6, 2.53], { y: 4.1, fontSize: 12, mono: [0] });
+  note(s, "주소, 계정, 키 말고 시간, 개수, 한도 같은 숫자 값은 지금 세 환경 모두 config.yml 값을 그대로 씁니다. 한 환경만 바꾸면 이 표에 추가합니다.", 6.35);
+
   const keys1 = [
     ["실행", "APP_ENV", "(없음)", "dev, stg, prd. 설정 파일 선택"],
     ["실행", "RUN_MODE", "all", "all, api, worker"],
@@ -368,12 +384,12 @@ section("3. 서비스 관리", ["3.1 인터페이스 흐름도 · 3.2 서버 디
     ["DB", "CHECKPOINT_POOL_SIZE", "8", "그래프 풀 크기"],
     ["DB", "DB_KEEPALIVE_IDLE_SECONDS", "60", "TCP keepalive 시작 시간"],
     ["DB", "AUTO_MIGRATE", "true", "기동 시 마이그레이션 자동 실행"],
-    ["Redis", "REDIS_MODE", "standalone", "standalone, sentinel"],
+    ["Redis", "REDIS_MODE", "standalone", "standalone, sentinel (prd 파일은 sentinel)"],
     ["Redis", "REDIS_URL / REDIS_SENTINEL_*", "", "접속 정보"],
     ["인증", "SSO_ADAPTER", "idp", "idp, dev(로컬 전용)"],
     ["인증", "PUBLIC_API_ORIGIN, FRONTEND_ORIGIN", "", "브라우저가 보는 API 주소, 프론트 주소"],
     ["인증", "SSO_ALLOWED_ORIGINS, CORS_ORIGINS", "", "SSO 로그인 origin 허용 목록, 다른 도메인 프론트"],
-    ["인증", "COOKIE_SECURE", "", "https면 true (stg·prd 필수)"],
+    ["인증", "COOKIE_SECURE", "false", "https면 true (stg·prd 파일은 true)"],
     ["인증", "SESSION_TTL_SECONDS / SESSION_MAX_SECONDS", "1800 / 43200", "무활동 로그아웃, 로그인 최대 유지"],
     ["인증", "ADMIN_EMPLOYEE_IDS", "", "첫 로그인 때 관리자가 될 사번"],
   ];
@@ -395,9 +411,9 @@ section("3. 서비스 관리", ["3.1 인터페이스 흐름도 · 3.2 서버 디
     ["기타", "DOCS_ENABLED, PHOENIX_ENDPOINT", "false, (없음)", "API 문서 노출, Phoenix 추적"],
   ];
   s = slide("3.4 서비스 환경설정값: 주요 키 (1/2)");
-  table(s, ["분류", "키", "기본값", "뜻"], keys1, [1.1, 4.7, 1.9, 4.63], { fontSize: 12, mono: [1] });
+  table(s, ["분류", "키", "config.yml 값", "뜻"], keys1, [1.1, 4.7, 1.9, 4.63], { fontSize: 12, mono: [1] });
   s = slide("3.4 서비스 환경설정값: 주요 키 (2/2)");
-  table(s, ["분류", "키", "기본값", "뜻"], keys2, [1.1, 5.4, 1.9, 3.93], { fontSize: 12, mono: [1] });
+  table(s, ["분류", "키", "config.yml 값", "뜻"], keys2, [1.1, 5.4, 1.9, 3.93], { fontSize: 12, mono: [1] });
 
   s = slide("3.4 서비스 환경설정값: Redis 접속 방식");
   lead(s, "접속 방식은 REDIS_MODE로 고르고 그 환경의 Redis 구성과 맞아야 합니다. 어느 방식이든 그 환경의 executor가 쓰는 Redis와 같은 서버, 같은 DB 번호여야 합니다.", Y0, 0.75);
@@ -447,14 +463,14 @@ section("3. 서비스 관리", ["3.1 인터페이스 흐름도 · 3.2 서버 디
   s = slide("3.5 서비스 종료 방법");
   lead(s, "인스턴스는 종료 신호(SIGTERM)를 받으면 아래 순서로 정리합니다. 합계 최대 약 45초가 걸리므로 그 전에 강제 종료하지 않아야 합니다.", Y0, 0.75);
   steps(s, [
-    ["연결 정리", "uvicorn이 열린 연결을 최대 20초 기다림. SSE 연결이 있으면 끝까지 기다림"],
-    ["작업 마무리", "worker가 새 run을 받지 않고, 진행 중인 턴과 메모리 작업을 최대 20초 동안 마무리"],
+    ["연결 정리", "uvicorn이 열린 연결을 최대 20초 기다림(실행 명령의 --timeout-graceful-shutdown). SSE 연결이 있으면 끝까지 기다림"],
+    ["작업 마무리", "worker가 새 run을 받지 않고, 진행 중인 턴과 메모리 작업을 최대 20초(코드 고정) 동안 마무리"],
     ["run 반납", "끝나지 않은 run은 lease를 반납해 queued로 돌림. 다른 인스턴스가 체크포인트에서 이어 감"],
   ], { y: 2.15, h: 1.7, fontSize: 12 });
   bullets(s, [
     "진행 중이던 턴은 잃지 않습니다. 이어 가는 인스턴스가 마지막 체크포인트 이후의 LLM 호출을 다시 하므로 그만큼 시간이 더 걸립니다.",
-    "정리가 끝나기 전에 강제 종료되어도 lease가 60초 뒤 만료되어 같은 방식으로 이어 갑니다.",
-    "배포 예시는 종료 대기 60초, 종료 전 5초 대기(앞단이 라우팅을 먼저 끊도록)로 되어 있습니다.",
+    "정리가 끝나기 전에 강제 종료되어도 lease가 RUN_LEASE_SECONDS(60초) 뒤 만료되어 같은 방식으로 이어 갑니다.",
+    "배포 예시(deploy/kubernetes/deployment.yml)는 terminationGracePeriodSeconds 60초, preStop 5초 대기(앞단이 라우팅을 먼저 끊도록)입니다. 실제 값은 플랫폼 배포 설정을 따릅니다.",
     "executor까지 함께 내릴 때는 시스템 화면의 점검 탭에서 새 실행 접수를 먼저 중지합니다(3.10).",
   ], { y: 4.15, h: 2.4, fontSize: 13 });
 
@@ -512,7 +528,7 @@ section("3. 서비스 관리", ["3.1 인터페이스 흐름도 · 3.2 서버 디
     ["dtest_startup_failed", "기동 실패. 바로 위 예외가 원인"],
     ["worker_loops_stopped loops=...", "백그라운드 루프가 죽음. /healthz가 503이 되고 인스턴스가 재시작됨"],
     ["run_task_crashed", "턴 실행이 실패 기록도 못 남기고 끝남(대개 DB 장애). lease 만료 뒤 다시 시도됨"],
-    ["run_lease_unrenewed", "lease를 40초 동안 갱신하지 못해 턴을 멈춤"],
+    ["run_lease_unrenewed", "lease를 RUN_LEASE_SECONDS의 2/3(40초) 동안 갱신하지 못해 턴을 멈춤"],
     ["run_claim_failed", "run 가져오기 실패"],
     ["executor_event_consumer_error, executor_event_failed", "executor 이벤트 처리 실패"],
     ["missed_event_recovery_error", "놓친 이벤트 복구 루프 오류"],
@@ -556,15 +572,15 @@ section("3. 서비스 관리", ["3.1 인터페이스 흐름도 · 3.2 서버 디
   s = slide("3.8 관제 정보: 부하를 받는 지점과 조정");
   table(s, ["구간", "한계", "포화 신호", "조정"], [
     ["앱 프로세스 CPU", "인스턴스당 1코어", "CPU 100%, 응답 지연 증가", "인스턴스 수 증가"],
-    ["LLM 동시 호출", "인스턴스 수 × (16 + 4)", "LLM 응답 지연, 429·5xx, run 실패", "RUN_CONCURRENCY, BATCH_REPORT_CONCURRENCY를 낮춤"],
-    ["run 큐", "인스턴스당 동시 16턴", "queued run이 계속 쌓임", "RUN_CONCURRENCY 또는 인스턴스 수 증가"],
+    ["LLM 동시 호출", "인스턴스 수 × (RUN_CONCURRENCY 16 + BATCH_REPORT_CONCURRENCY 4)", "LLM 응답 지연, 429·5xx, run 실패", "RUN_CONCURRENCY, BATCH_REPORT_CONCURRENCY를 낮춤"],
+    ["run 큐", "인스턴스당 RUN_CONCURRENCY(16)턴", "queued run이 계속 쌓임", "RUN_CONCURRENCY 또는 인스턴스 수 증가"],
     ["executor 실행 제출", "초당 3~7건 (로컬 측정)", "분석 시작이 느려짐", "executor 쪽 조치 필요"],
-    ["DB 앱 풀", "인스턴스당 6", "로그에 QueuePool limit", "DB_POOL_SIZE 증가"],
-    ["DB 그래프 풀", "인스턴스당 8, 대기 30초", "턴이 풀 대기 시간 초과로 실패", "CHECKPOINT_POOL_SIZE 증가"],
-    ["배치 리포트", "인스턴스당 동시 4건", "QUEUED 리포트 작업이 쌓임", "BATCH_REPORT_CONCURRENCY 증가"],
-    ["이벤트 테이블", "턴당 수십 행", "run_events 크기 증가", "보존 기간 단축"],
-  ], [2.3, 2.7, 3.5, 3.83], { fontSize: 12 });
-  s.addText("인스턴스 수나 풀 크기를 올리기 전에 DB 연결 예산을 다시 계산합니다. 인스턴스 하나가 최대 14개 연결을 쓰고 서버 한도는 150입니다(4.4).", { x: MX, y: 5.75, w: CW, h: 0.7, fontSize: 12, color: C.accent2, margin: 0, valign: "top", isTextBox: true, objectName: "caution" });
+    ["DB 앱 풀", "인스턴스당 DB_POOL_SIZE × 2 (기본 6)", "로그에 QueuePool limit", "DB_POOL_SIZE 증가"],
+    ["DB 그래프 풀", "CHECKPOINT_POOL_SIZE(8), 대기는 CHECKPOINT_POOL_TIMEOUT_SECONDS(30초)", "턴이 풀 대기 시간 초과로 실패", "CHECKPOINT_POOL_SIZE 증가"],
+    ["배치 리포트", "인스턴스당 BATCH_REPORT_CONCURRENCY(4)건", "QUEUED 리포트 작업이 쌓임", "BATCH_REPORT_CONCURRENCY 증가"],
+    ["이벤트 테이블", "턴당 수십 행", "run_events 크기 증가", "RUN_EVENT_RETENTION_DAYS(30일) 단축"],
+  ], [1.9, 4.3, 2.9, 3.23], { fontSize: 11 });
+  s.addText("인스턴스 수나 풀 크기를 올리기 전에 DB 연결 예산을 다시 계산합니다. 인스턴스 하나가 최대 DB_POOL_SIZE × 2 + CHECKPOINT_POOL_SIZE(기본 14)개 연결을 쓰고, 서버 한도는 DB 서버의 max_connections(현재 150)입니다(4.4). 괄호 안 숫자는 config.yml 값입니다.", { x: MX, y: 5.0, w: CW, h: 0.7, fontSize: 12, color: C.accent2, margin: 0, valign: "top", isTextBox: true, objectName: "caution" });
 
   s = slide("3.8 관제 정보: Phoenix 추적");
   lead(s, "Agent의 모델 호출, 도구 호출, middleware 단계를 Phoenix로 보냅니다. \"왜 이런 답을 했나\"를 볼 때 씁니다.", Y0, 0.45);
@@ -597,7 +613,7 @@ section("3. 서비스 관리", ["3.1 인터페이스 흐름도 · 3.2 서버 디
     "python scripts/set_user_role.py --env prd <사번> admin             # 승격 (강등은 user)",
   ].join("\n"), { y: 4.15, h: 1.0, fontSize: 11 });
   table(s, ["변경", "요청을 받은 인스턴스", "다른 인스턴스"], [
-    ["사용자 비활성화, 역할 변경", "즉시", "최대 30초"],
+    ["사용자 비활성화, 역할 변경", "즉시", "최대 30초 (코드 고정)"],
     ["API 키 폐기, 재발급", "즉시", "최대 60초 (API_CLIENT_CACHE_SECONDS)"],
   ], [4.4, 3.6, 4.33], { y: 5.4, fontSize: 12 });
 
@@ -640,7 +656,7 @@ section("3. 서비스 관리", ["3.1 인터페이스 흐름도 · 3.2 서버 디
     "자원을 너무 많이 쓰는 실행은 \"실행 취소\"로 소유자와 tenant에 관계없이 취소할 수 있습니다.",
     "취소하면 돌던 코드가 멈추고 커널의 변수가 모두 사라집니다. 되돌릴 수 없습니다.",
     "채팅 분석 실행이면 기다리던 대화 작업도 함께 중지됩니다.",
-    "실행이 없는 \"남겨진 커널\"은 \"삭제\"로 지웁니다. 최근 15분 안에 활동이 있던 커널은 삭제가 거부됩니다.",
+    "실행이 없는 \"남겨진 커널\"은 \"삭제\"로 지웁니다. 최근 15분(executor 설정) 안에 활동이 있던 커널은 삭제가 거부됩니다.",
   ], { x: 8.4, w: 4.43, h: 5.3, fontSize: 12.5 });
 
   s = slide("3.10 관리자 화면: 이벤트 스트림");
@@ -682,19 +698,19 @@ section("4. 장애처리", ["4.1 장애처리 절차", "4.2 장애 유형별 조
     ["인스턴스가 뜨지 않고 재시작을 반복", "기동 로그의 ValueError, dtest_startup_failed", "설정 검사 실패(3.5), 마이그레이션 실패, DB·Redis 접속 불가, Sentinel 복호화 실패", "메시지에 나온 설정 키를 고침. 마이그레이션이면 이전 이미지로 되돌리고 원인 확인"],
     ["모든 요청이 401 Access key is required", "기동 로그에 gaia_auth_skipped_on_own_paths가 있는지", "gaia 접근 키 검사가 우리 경로에 걸림", "gaia 템플릿 버전과 attach 호출 위치 확인"],
     ["로그인이 안 됨", "sso_ 로 시작하는 로그", "SSO 주소, 허용 origin, 쿠키 도메인, Redis", "로그인(SSO) 문제 표"],
-    ["로그인은 되는데 곧 풀림", "Redis 상태, 세션 설정", "Redis 재시작·장애 전환, 30분 무활동, 12시간 경과", "Redis 확인. 정상 만료면 조치 없음"],
+    ["로그인은 되는데 곧 풀림", "Redis 상태, 세션 설정", "Redis 재시작·장애 전환, SESSION_TTL_SECONDS(30분) 무활동, SESSION_MAX_SECONDS(12시간) 경과", "Redis 확인. 정상 만료면 조치 없음"],
     ["메시지를 보냈는데 답이 시작되지 않음", "run 상태 SQL, run_claim_failed, /healthz", "슬롯 부족(queued 적체), 스케줄러 루프 죽음, DB 오류", "run이 멈출 때 표"],
     ["답이 중간에 멈춤", "그 run의 status, error. run_lease_lost, run_heartbeat_failed", "인스턴스 재시작(다른 인스턴스가 이어 감), LLM 지연, DB 일시 장애", "run이 멈출 때 표"],
-    ["run이 failed", "runs.error, 화면의 오류 ID로 로그 검색", "LLM 장애·한도·컨텍스트 초과, executor 장애, 재시도 5회 초과", "원인 서비스 확인. 사용자는 다시 보내면 됨"],
+    ["run이 failed", "runs.error, 화면의 오류 ID로 로그 검색", "LLM 장애·한도·컨텍스트 초과, executor 장애, RUN_MAX_ATTEMPTS(5회) 초과", "원인 서비스 확인. 사용자는 다시 보내면 됨"],
     ["분석이 끝나지 않음", "run이 waiting_executor인지, executor_event_* 로그", "executor 이벤트 미수신(Redis 불일치), 실제로 오래 걸림, executor 장애", "분석이 끝나지 않을 때 표"],
     ["화면이 실시간으로 갱신되지 않음", "앞단 설정, event_fanout_reconnect 로그", "앞단 버퍼링·시간 제한, Redis 구독 끊김", "앞단 설정 확인. Redis 구독은 자동으로 다시 붙음"],
-    ["413", "요청 크기", "32MB 초과, 또는 앞단이 먼저 끊음", "응답 형식이 우리 것이 아니면 앞단 본문 크기 제한 확인"],
-    ["429", "로그인 경로인지", "SSO 로그인 요청이 분당 30회 초과", "반복 로그인 원인 확인. Retry-After 뒤 재시도"],
+    ["413", "요청 크기", "REQUEST_MAX_BYTES(32MB) 초과, 또는 앞단이 먼저 끊음", "응답 형식이 우리 것이 아니면 앞단 본문 크기 제한 확인"],
+    ["429", "로그인 경로인지", "SSO 로그인 요청이 분당 SSO_RATE_LIMIT_PER_MINUTE(30회) 초과", "반복 로그인 원인 확인. Retry-After 뒤 재시도"],
     ["502 bad_gateway", "로그의 upstream_unreachable path=...", "executor 또는 batch가 응답하지 않음", "경로로 어느 서비스인지 보고 그 서비스 확인"],
     ["503 (시스템 화면)", "EXECUTOR_ADMIN_API_KEY 설정", "운영 키가 비어 있음", "키 설정"],
     ["키 호출이 401·403", "감사 로그, 키 상태", "키 폐기·재발급, X-User-Id 누락(400), 일반키로 다른 사용자 조회(403)", "키 목록에서 상태 확인"],
     ["DB 연결 오류", "QueuePool limit, too many connections", "연결 예산 초과, 풀 부족, 중간 장비가 연결을 끊음", "DB 문제 표"],
-    ["배치 리포트가 안 만들어짐", "batch_report_jobs의 state, failed_stage, error", "노트북 대기 시간 초과(30분), LLM 장애, 배치 소유자 없음", "10분마다 복구 작업이 최근 14일분을 다시 확인"],
+    ["배치 리포트가 안 만들어짐", "batch_report_jobs의 state, failed_stage, error", "노트북 대기 시간 초과(BATCH_REPORT_COLLECT_TIMEOUT_SECONDS, 30분), LLM 장애, 배치 소유자 없음", "BATCH_REPORT_RECOVERY_INTERVAL_SECONDS(10분)마다 최근 BATCH_REPORT_RECOVERY_LOOKBACK_DAYS(14일)분을 다시 확인"],
     ["워크플로우 추천이 안 나옴", "workflows.index_state", "임베딩 게이트웨이 장애, 임베딩 미설정, 모델·차원 변경", "원인 해소 후 다시 색인 (4.4)"],
     ["/healthz가 503", "응답의 stopped, worker_loops_stopped 로그", "백그라운드 루프가 예외로 끝남", "실행 환경이 재시작함. 반복되면 그 루프의 직전 예외 로그 확인"],
     ["프로젝트 메모리가 정리되지 않음", "memory_extraction_state의 last_error", "LLM 장애, MEMORY_WORKER_ENABLED: false", "원인 해소 후 자동 재시도"],
@@ -703,6 +719,15 @@ section("4. 장애처리", ["4.1 장애처리 절차", "4.2 장애 유형별 조
   parts.forEach((p, i) => {
     s = slide(`4.2 장애 유형별 조치: 증상별 대응표 (${i + 1}/3)`);
     table(s, ["증상", "먼저 볼 곳", "흔한 원인", "조치"], p, [2.6, 3.2, 3.5, 3.03], { fontSize: 12 });
+    if (i === 1) {
+      table(s, ["한도에 걸릴 때 조정하는 키", "알아 둘 점"], [
+        ["SESSION_TTL_SECONDS, SESSION_MAX_SECONDS", "바꾸면 이미 로그인한 사용자에게도 다음 요청부터 적용됨"],
+        ["REQUEST_MAX_BYTES", "올릴 때 앞단의 본문 크기 제한도 같이 올림. 이미지는 IMAGE_MAX_BYTES(10MB), IMAGE_MAX_TOTAL_BYTES(20MB)가 따로 있음"],
+        ["SSO_RATE_LIMIT_PER_MINUTE", "클라이언트 주소별, 인스턴스별로 1분 동안 셈. 0이면 끔. 여러 사용자가 같은 주소로 보이면 함께 셈"],
+        ["RUN_MAX_ATTEMPTS", "늘리면 실패한 턴을 더 오래 다시 시도하고, 그만큼 LLM 호출도 늘어남"],
+      ], [4.4, 7.93], { y: 5.0, fontSize: 11.5, mono: [0] });
+    }
+    if (i === 2) note(s, "노트북이 늦게 끝나는 배치가 많으면 BATCH_REPORT_COLLECT_TIMEOUT_SECONDS를 늘립니다. 복구 주기와 범위는 BATCH_REPORT_RECOVERY_* 키로 바꿉니다.", 6.3);
   });
 
   s = slide("4.2 장애 유형별 조치: 로그인(SSO) 문제");
@@ -713,25 +738,26 @@ section("4. 장애처리", ["4.1 장애처리 절차", "4.2 장애 유형별 조
     ["502 invalid login URL", "로그인 주소의 origin이 허용 목록에 없음", "sso_login_url_rejected origin=...의 값을 SSO_ALLOWED_ORIGINS에 추가"],
     ["503 SSO is unavailable", "SSO 확인 호출이 예외", "sso_verify_failed error_type=..."],
     ["콜백에서 401 could not verify", "SSO에서 돌아왔지만 SSO 쿠키가 오지 않음", "쿠키가 없으면 도메인 문제(우리 주소가 IdP 도메인 아래가 아님, 또는 http)"],
-    ["콜백에서 400 Login flow expired", "5분이 지났거나 같은 콜백을 다시 엶", "처음부터 다시 로그인"],
+    ["콜백에서 400 Login flow expired", "LOGIN_FLOW_TTL_SECONDS(5분)이 지났거나 같은 콜백을 다시 엶", "처음부터 다시 로그인"],
     ["SSO와 우리 사이를 계속 왕복", "복귀 주소를 잃어버림", "sso_login_redirect가 몇 번 찍히는지"],
     ["로그인 후 403 disabled", "비활성 사용자", "users.is_active"],
   ], [3.6, 4.0, 4.73], { y: 1.8, fontSize: 12 });
 
   s = slide("4.2 장애 유형별 조치: run이 시작되지 않거나 멈출 때");
   table(s, ["보이는 상태", "뜻", "조치"], [
-    ["queued가 오래 유지", "가져갈 슬롯이 없거나 스케줄러가 멈춤", "running 수가 인스턴스 수 × 16에 닿았는지, 같은 사용자의 running이 4개인지 확인. /healthz 확인"],
-    ["running인데 lease_expires_at이 과거", "실행하던 인스턴스가 죽음", "조치 없음. 다른 인스턴스가 5초 안에 가져가 이어 감"],
-    ["running이 오래 유지되고 lease는 갱신됨", "LLM 응답을 기다리는 중", "LLM 게이트웨이 상태 확인. 턴당 모델 호출 40회, 호출당 120초가 상한"],
+    ["queued가 오래 유지", "가져갈 슬롯이 없거나 스케줄러가 멈춤", "running 수가 인스턴스 수 × RUN_CONCURRENCY(16)에 닿았는지, 같은 사용자의 running이 RUN_USER_CONCURRENCY(4)개인지 확인. /healthz 확인"],
+    ["running인데 lease_expires_at이 과거", "실행하던 인스턴스가 죽음", "조치 없음. 다른 인스턴스가 RUN_POLL_SECONDS(5초) 안에 가져가 이어 감"],
+    ["running이 오래 유지되고 lease는 갱신됨", "LLM 응답을 기다리는 중", "LLM 게이트웨이 상태 확인. 턴당 AGENT_MODEL_CALL_LIMIT(40회), 호출당 LLM_TIMEOUT_SECONDS(120초)가 상한"],
     ["waiting_input", "사용자의 확인을 기다림", "정상. 화면에 질문이 떠 있음"],
     ["waiting_executor", "executor 실행을 기다림", "분석이 끝나지 않을 때 표"],
     ["failed", "error에 이유", "원인 서비스 확인"],
   ], [3.6, 3.6, 5.13], { fontSize: 12 });
   bullets(s, [
     "한 run이 연속 5번(RUN_MAX_ATTEMPTS) 실행되고도 결과가 없으면 failed로 끝납니다.",
-    "DB 장애로 lease를 40초 동안 갱신하지 못하면 그 인스턴스는 턴을 스스로 멈춥니다(run_lease_unrenewed).",
+    "DB 장애로 lease를 RUN_LEASE_SECONDS의 2/3(기본 40초) 동안 갱신하지 못하면 그 인스턴스는 턴을 스스로 멈춥니다(run_lease_unrenewed).",
     "세션에 진행 중인 run이 남아 새 메시지를 못 보내면 sessions.active_run_id와 그 run의 상태를 함께 봅니다.",
-  ], { y: 4.85, h: 1.7, fontSize: 12.5 });
+  ], { y: 4.85, h: 1.35, fontSize: 12.5 });
+  note(s, "RUN_LEASE_SECONDS를 늘리면 죽은 인스턴스의 run을 이어 받기까지 더 걸리고, 줄이면 짧은 DB 장애에도 턴이 쉽게 멈춥니다. 바꿀 때는 DB 장애 시간을 기준으로 정합니다.", 6.2);
 
   s = slide("4.2 장애 유형별 조치: 분석이 끝나지 않을 때 (executor 대기)");
   steps(s, [
@@ -746,7 +772,7 @@ section("4. 장애처리", ["4.1 장애처리 절차", "4.2 장애 유형별 조
     ["executor에서도 실행 중", "실제로 오래 걸리는 분석", "기다리거나 사용자가 취소. 자원을 너무 쓰면 관리자가 실행 취소"],
     ["executor에 그 실행이 없음", "executor 데이터가 지워졌거나 다른 executor를 가리킴", "사용자가 취소하고 다시 요청"],
   ], [4.6, 3.6, 4.13], { y: 3.0, fontSize: 12 });
-  note(s, "놓친 이벤트 복구는 기다린 지 120초가 지난 run부터 합니다. Redis가 완전히 죽어도 분석은 끝나지만 단계마다 2분 이상 늦어집니다.", 6.4);
+  note(s, "놓친 이벤트 복구는 기다린 지 EXECUTOR_EVENT_RECOVERY_SECONDS(120초)가 지난 run부터 하고, 그 뒤 첫 1시간은 2분, 첫 하루는 10분, 이후 1시간 간격(코드 고정)으로 다시 확인합니다. Redis가 완전히 죽어도 분석은 끝나지만 단계마다 그만큼 늦어집니다.", 6.4);
 
   s = slide("4.2 장애 유형별 조치: DB와 Redis");
   table(s, ["로그 또는 상황", "뜻", "조치"], [
@@ -791,15 +817,15 @@ section("4. 장애처리", ["4.1 장애처리 절차", "4.2 장애 유형별 조
   note(s, "연락처는 담당자가 직접 작성합니다.", 6.4);
 
   const cautions = [
-    ["Redis는 executor와 같은 서버, 같은 DB 번호", "다르면 오류 없이 이벤트가 오지 않아 모든 분석이 단계마다 2분씩 느려짐. executor_event_recovered가 계속 찍힘", "REDIS_URL 또는 REDIS_SENTINEL_*을 executor 설정과 똑같이 맞춤"],
+    ["Redis는 executor와 같은 서버, 같은 DB 번호", "다르면 오류 없이 이벤트가 오지 않아 모든 분석이 단계마다 EXECUTOR_EVENT_RECOVERY_SECONDS(2분)씩 느려짐. executor_event_recovered가 계속 찍힘", "REDIS_URL 또는 REDIS_SENTINEL_*을 executor 설정과 똑같이 맞춤"],
     ["Sentinel 노드를 REDIS_URL로 직접 가리키지 않음", "장애 전환으로 그 노드가 레플리카가 되면 READONLY 오류로 멈춤", "Sentinel 환경은 반드시 REDIS_MODE: sentinel"],
-    ["dev와 prd가 같은 DB 서버를 씀", "연결 한도 150과 서버 자원을 함께 씀. DATABASE_URL의 데이터베이스 이름을 잘못 적으면 오류 없이 다른 환경에 붙음", "설정의 데이터베이스 이름 확인. 직접 접속하면 SELECT current_database()로 먼저 확인 (분리 절차는 부록 C)"],
+    ["dev와 prd가 같은 DB 서버를 씀", "연결 한도(max_connections, 현재 150)와 서버 자원을 함께 씀. DATABASE_URL의 데이터베이스 이름을 잘못 적으면 오류 없이 다른 환경에 붙음", "설정의 데이터베이스 이름 확인. 직접 접속하면 SELECT current_database()로 먼저 확인 (분리 절차는 부록 C)"],
     ["마이그레이션 실패 시 모든 인스턴스가 뜨지 못함", "AUTO_MIGRATE: true(기본)라서 기동 때 자동 실행. 실패하면 새 인스턴스가 뜨지 못하고, 옛 인스턴스가 이미 내려갔다면 서비스가 멈춤", "dev, stg에서 먼저 적용된 것만 prd로 올림. 하나씩 교체. 실패하면 이전 버전으로 되돌림"],
-    ["PostgreSQL 연결 수에는 예산이 있음", "인스턴스 하나가 최대 14. 넘으면 같은 서버의 모든 서비스에서 too many connections", "합계에 여유 20 이상. 인스턴스 3개 이상이면 하나씩 교체. 올리기 전에 다시 계산"],
+    ["PostgreSQL 연결 수에는 예산이 있음", "인스턴스 하나가 최대 DB_POOL_SIZE × 2 + CHECKPOINT_POOL_SIZE(기본 14). 넘으면 같은 서버의 모든 서비스에서 too many connections", "합계에 여유 20 이상. 인스턴스 3개 이상이면 하나씩 교체. 올리기 전에 다시 계산"],
     ["중간 장비가 조용한 연결을 끊음", "쉬던 연결이 끊겨 다음 턴이 server closed the connection으로 실패", "DB_KEEPALIVE_IDLE_SECONDS를 장비의 idle 제한보다 짧게"],
     ["인스턴스 하나에 uvicorn worker는 1개", "늘리면 백그라운드 루프와 DB 풀이 곱해져 연결 예산이 깨짐", "처리량이 필요하면 인스턴스 수를 늘림"],
     ["큰 요청과 긴 연결을 쓰는 서비스", "앞단이 본문 크기를 줄이거나 응답을 버퍼링하거나 연결을 끊으면 서비스 문제처럼 보임", "413 응답 형식, 이벤트 도착 방식, SSE 끊김 간격으로 앞단 문제를 구분"],
-    ["사용자와 키 변경은 조금 늦게 반영", "다른 인스턴스에 사용자 30초, 키 60초", "바로 막아야 하면 폐기 뒤 60초를 기다리거나 재시작"],
+    ["사용자와 키 변경은 조금 늦게 반영", "다른 인스턴스에 사용자 30초(코드 고정), 키 API_CLIENT_CACHE_SECONDS(60초)", "바로 막아야 하면 폐기 뒤 API_CLIENT_CACHE_SECONDS만큼 기다리거나 재시작"],
     ["임베딩 모델이나 차원 변경", "기존 벡터가 검색에서 빠져 워크플로우 추천이 비어 보임", "바꾼 뒤 POST /api/v1/workflows/{id}/reindex로 다시 색인"],
     ["공유 저장소의 경로와 계정", "마운트 경로나 UID가 다르면 파일을 못 읽음", "STORAGE_ROOT, STORAGE_EXECUTOR_PATH, EXECUTOR_RESULT_ROOT를 executor와 맞춤. UID 1000"],
     ["키는 설정 파일에 있음", "config.{env}.yml에 키와 비밀번호가 들어 있음", "내부망 깃랩 밖으로 실제 값을 옮기지 않음"],
@@ -808,6 +834,7 @@ section("4. 장애처리", ["4.1 장애처리 절차", "4.2 장애 유형별 조
   [cautions.slice(0, 7), cautions.slice(7)].forEach((p, i) => {
     s = slide(`4.4 운영 시 주의사항 (${i + 1}/2)`);
     table(s, ["항목", "문제와 증상", "예방"], p, [3.4, 4.9, 4.03], { fontSize: 12 });
+    if (i === 1) card(s, MX, 5.15, CW, 1.45, "숫자 설정을 바꿀 때", "모든 환경에 같은 값이면 config.yml, 한 환경만이면 config.{APP_ENV}.yml에 넣고 배포합니다. 급하면 같은 이름의 환경변수로 넣을 수 있지만 다음 배포 때 파일에도 반영합니다. 환경마다 값이 달라지면 3.4 \"숫자 읽는 법\"의 덮어쓰는 키 표에 적습니다.", { fontSize: 12 });
   });
 
   s = slide("4.4 운영 시 주의사항: DB 연결 예산");
@@ -818,7 +845,7 @@ section("4. 장애처리", ["4.1 장애처리 절차", "4.2 장애 유형별 조
     ["4", "56", "70", "112"],
   ], [3.2, 3.0, 3.0, 3.13], { y: 1.8 });
   bullets(s, [
-    "여기에 executor(인스턴스당 16), batch(인스턴스당 6), dev와 prd를 모두 더한 값이 150 아래여야 합니다.",
+    "여기에 executor(인스턴스당 16, executor 설정), batch(인스턴스당 6, batch 설정), dev와 prd를 모두 더한 값이 DB 서버의 max_connections(현재 150) 아래여야 합니다.",
     "예: prd(우리 2, executor 1, batch 1)와 dev(우리 1, executor 1, batch 1)이면 평소 86, prd의 우리 서비스를 한꺼번에 교체하는 동안 114입니다.",
     "우리가 4개로 늘어난 상태에서 한꺼번에 교체하면 170으로 한도를 넘습니다.",
     "표는 모든 풀이 꽉 찬 최악의 경우입니다. 평소 실제 연결 수는 훨씬 적습니다.",
@@ -1128,11 +1155,11 @@ section("5. 유지보수 가이드", ["5.1 개발자 개발 환경 setting 정�
     ["A. 가져감", "가져감", "문제없음. 세 DB를 같은 멈춘 시점에 덤프해야 함"],
     ["B. 새로 시작", "새로 시작", "문제없음. 모두 처음부터"],
     ["A. 가져감", "새로 시작", "피해야 함. 기다리던 run이 이어 가지 못하고 결과물, 노트북 링크가 깨짐. 배치 리포트도 원래 배치를 찾지 못함"],
-    ["B. 새로 시작", "가져감", "피해야 함. 기존 배치가 옛 사용자 ID에 묶여 보이지 않음. 리포트 복구 루프가 최근 14일의 배치 실행 리포트를 한꺼번에 다시 만들어 LLM 호출이 몰림"],
+    ["B. 새로 시작", "가져감", "피해야 함. 기존 배치가 옛 사용자 ID에 묶여 보이지 않음. 리포트 복구 루프가 최근 BATCH_REPORT_RECOVERY_LOOKBACK_DAYS(14일)의 배치 실행 리포트를 한꺼번에 다시 만들어 LLM 호출이 몰림"],
   ], [2.2, 2.6, 7.53], { y: Y0, fontSize: 12 });
   bullets(s, [
     "executor, batch만 다른 날 옮길 때: 우리 서비스는 내리지 않아도 됩니다. 접수를 멈춘 동안 새 분석은 받지 않고, 결과물과 배치 화면은 잠시 오류가 납니다.",
-    "그동안 기다리던 run과 배치 리포트는 우리 복구 루프가 다시 시도합니다 (이벤트 120초, 배치 리포트 600초 간격). 그쪽이 데이터를 가져갔다면 따로 할 일은 없습니다.",
+    "그동안 기다리던 run과 배치 리포트는 우리 복구 루프가 다시 시도합니다 (EXECUTOR_EVENT_RECOVERY_SECONDS 120초, BATCH_REPORT_RECOVERY_INTERVAL_SECONDS 600초). 그쪽이 데이터를 가져갔다면 따로 할 일은 없습니다.",
     "batch가 접수 중지 중에 거부된 예약 실행을 어떻게 처리하는지는 batch 담당에게 확인합니다.",
   ], { y: 4.55, h: 1.9, fontSize: 12 });
   note(s, "Redis는 이미 환경별로 나뉘어 있어 이 작업과 관계없습니다. EXECUTOR_BASE_URL, BATCH_BASE_URL이 바뀔 때만 우리 설정을 고칩니다.", 6.55);
