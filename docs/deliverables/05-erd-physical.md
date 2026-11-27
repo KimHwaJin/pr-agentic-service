@@ -3,7 +3,7 @@
 | 항목 | 내용 |
 | --- | --- |
 | 시스템 | pr-agentic-service (사내 데이터 분석 Agent 서비스) |
-| 기준 | master 브랜치, 마이그레이션 0008, 2026-11-27 |
+| 기준 | 마이그레이션 0008 |
 | 그림 원본 | `diagrams/05-erd-physical.drawio` (페이지 2장) |
 | 모델 정의 | `src/dtest/core/models.py`, `src/dtest/gaia_bridge/models.py` |
 
